@@ -17,3 +17,11 @@ services:
       POSTGRES_DB: lacmdb
     ports:
       - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'      # Limita a 0.5 CPU cores (~3% de Ryzen 9 7940HS)
+          memory: 1G       # Limita a 1GB de RAM
+        reservations:
+          cpus: '0.1'      # Reserva mínima de 0.1 CPU cores
+          memory: 256M     # Reserva mínima de 256MB de RAM
