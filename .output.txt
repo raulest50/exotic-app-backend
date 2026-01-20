@@ -1,0 +1,2340 @@
+
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                .github
+d-----         1/19/2026   6:33 PM                .gradle
+d-----         1/20/2026   3:27 PM                .idea
+d-----         1/17/2026   9:27 PM                .junie
+d-----         1/19/2026   6:33 PM                build
+d-----         1/20/2026   2:08 PM                data
+d-----         1/17/2026   9:27 PM                gradle
+d-----         1/17/2026   9:27 PM                src
+-a----         1/17/2026   9:27 PM            211 .aiignore
+-a----         1/17/2026   9:27 PM            921 .gitignore
+-a----         1/17/2026   9:27 PM           3067 build.gradle.kts
+-a----         1/19/2026   6:15 PM            887 docker-compose-only-dev.yml
+-a----         1/17/2026   9:27 PM           1176 Dockerfile
+-a----         1/17/2026   9:27 PM           8941 gradlew
+-a----         1/17/2026   9:27 PM           2918 gradlew.bat
+-a----         1/17/2026   9:27 PM           8580 migrationProveedor.md
+-a----         1/17/2026   9:27 PM           3494 README.md
+-a----         1/17/2026   9:27 PM          12344 scanEndpoints.jsh
+-a----         1/17/2026   9:27 PM           1625 scanEntities.jsh
+-a----         1/17/2026   9:27 PM             33 settings.gradle.kts
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.github
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                workflows
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.github\workflows
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            637 gradle-build.yml
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/18/2026   3:18 PM                8.7
+d-----         1/19/2026   6:33 PM                buildOutputCleanup
+d-----         1/18/2026   3:18 PM                vcs-1
+-a----         1/20/2026  11:15 AM              8 file-system.probe
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\8.7
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/18/2026   3:13 PM                checksums
+d-----         1/18/2026   3:18 PM                dependencies-accessors
+d-----         1/19/2026   6:33 PM                executionHistory
+d-----         1/18/2026   3:13 PM                expanded
+d-----         1/18/2026   3:18 PM                fileChanges
+d-----         1/19/2026   6:33 PM                fileHashes
+d-----         1/18/2026   3:13 PM                vcsMetadata
+-a----         1/19/2026   6:33 PM              0 gc.properties
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\8.7\checksums
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   3:28 PM             17 checksums.lock
+-a----         1/18/2026   3:18 PM          37247 md5-checksums.bin
+-a----         1/20/2026   3:19 PM          94631 sha1-checksums.bin
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\8.7\
+    dependencies-accessors
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM              0 gc.properties
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\8.7\
+    executionHistory
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   2:12 PM         254832 executionHistory.bin
+-a----         1/20/2026   3:28 PM             17 executionHistory.lock
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\8.7\fileChanges
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   3:28 PM              1 last-build.bin
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\8.7\fileHashes
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   3:18 PM          76165 fileHashes.bin
+-a----         1/20/2026   3:28 PM             17 fileHashes.lock
+-a----         1/20/2026   2:12 PM          28153 resourceHashesCache.bin
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\buil
+    dOutputCleanup
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   3:28 PM             17 buildOutputCleanup.lock
+-a----         1/18/2026   3:13 PM             51 cache.properties
+-a----         1/20/2026   3:28 PM          18911 outputFiles.bin
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.gradle\vcs-1
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM              0 gc.properties
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.idea
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026  11:33 AM            238 .gitignore
+-a----         1/18/2026   6:49 PM             10 .name
+-a----         1/18/2026   6:49 PM            762 compiler.xml
+-a----         1/19/2026  11:33 AM            527 gradle.xml
+-a----         1/18/2026   6:49 PM            278 misc.xml
+-a----         1/18/2026   6:49 PM            172 vcs.xml
+-a----         1/20/2026   3:27 PM           5894 workspace.xml
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.junie
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                SQL_OUTPUT
+-a----         1/17/2026   9:27 PM           2343 guidelines.md
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\.junie\SQL_OUTPUT
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM             76 tables.csv
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                classes
+d-----         1/19/2026   6:33 PM                generated
+d-----         1/20/2026   3:19 PM                resources
+d-----         1/19/2026   6:33 PM                tmp
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classes
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   3:19 PM                java
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classes\java
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                main
+d-----         1/20/2026   3:19 PM                test
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classes\java\main
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                exotic
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                app
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                planta
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                config
+d-----         1/19/2026   6:33 PM                dto
+d-----         1/19/2026   6:33 PM                model
+d-----         1/19/2026   6:33 PM                repo
+d-----         1/19/2026   6:33 PM                resource
+d-----         1/19/2026   6:33 PM                security
+d-----         1/19/2026   6:33 PM                service
+-a----         1/19/2026   6:33 PM            841 ExoticManufactureApplication.
+                                                  class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\config
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1181 AuthenticationConfig.class
+-a----         1/19/2026   6:33 PM           9911 CargaMasiva.class
+-a----         1/19/2026   6:33 PM           2502 CorsConfig.class
+-a----         1/19/2026   6:33 PM           2892 CuentasInitializer.class
+-a----         1/19/2026   6:33 PM           2982 DataBaseInitializer.class
+-a----         1/19/2026   6:33 PM           1254 JacksonConfig.class
+-a----         1/19/2026   6:33 PM           3507 MasterDirectiveInitializer.cl
+                                                  ass
+-a----         1/19/2026   6:33 PM           3126 PasswordConfig$Argon2Password
+                                                  Encoder.class
+-a----         1/19/2026   6:33 PM           2826 PasswordConfig.class
+-a----         1/19/2026   6:33 PM            669 RestTemplateConfig.class
+-a----         1/19/2026   6:33 PM           7632 SecurityConfig.class
+-a----         1/19/2026   6:33 PM           1985 StorageProperties.class
+-a----         1/19/2026   6:33 PM           2466 UsersInitializer.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           3837 AreaProduccionDTO.class
+-a----         1/19/2026   6:33 PM           3263 ErrorResponse.class
+-a----         1/19/2026   6:33 PM           9240 ProcesoProduccionDTO.class
+-a----         1/19/2026   6:33 PM           3951 RecursoProduccionDTO.class
+-a----         1/19/2026   6:33 PM           1827 SearchAreaProduccionDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                activos
+d-----         1/19/2026   6:33 PM                commons
+d-----         1/19/2026   6:33 PM                compras
+d-----         1/19/2026   6:33 PM                contabilidad
+d-----         1/19/2026   6:33 PM                cronograma
+d-----         1/19/2026   6:33 PM                inventarios
+d-----         1/19/2026   6:33 PM                master
+d-----         1/19/2026   6:33 PM                organigrama
+d-----         1/19/2026   6:33 PM                personal
+d-----         1/19/2026   6:33 PM                produccion
+d-----         1/19/2026   6:33 PM                producto
+d-----         1/19/2026   6:33 PM                users
+d-----         1/19/2026   6:33 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                compras
+d-----         1/19/2026   6:33 PM                dto
+d-----         1/19/2026   6:33 PM                gestion
+-a----         1/19/2026   6:33 PM           1485 ActivoFijo$TipoActivo.class
+-a----         1/19/2026   6:33 PM           1661 ActivoFijo$UnidadesCapacidad.
+                                                  class
+-a----         1/19/2026   6:33 PM          12461 ActivoFijo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\activos\fijos\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           4652 FacturaCompraActivo.class
+-a----         1/19/2026   6:33 PM           3403 ItemOrdenCompraActivo.class
+-a----         1/19/2026   6:33 PM           6797 OrdenCompraActivo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\activos\fijos\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1701 DTO_SearchActivoFijo$TipoActi
+                                                  voBusqueda.class
+-a----         1/19/2026   6:33 PM           1789 DTO_SearchActivoFijo$TipoBusq
+                                                  ueda.class
+-a----         1/19/2026   6:33 PM           3267 DTO_SearchActivoFijo.class
+-a----         1/19/2026   6:33 PM           1341 DTO_SearchActivoFijoDisponibl
+                                                  e.class
+-a----         1/19/2026   6:33 PM           1739 GrupoActivosDto.class
+-a----         1/19/2026   6:33 PM           2417 IncorporacionActivoDto.class
+-a----         1/19/2026   6:33 PM           1675 UpdateEstadoOrdenCompraAFRequ
+                                                  est$TipoEnvio.class
+-a----         1/19/2026   6:33 PM           3225 UpdateEstadoOrdenCompraAFRequ
+                                                  est.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\activos\fijos\gestion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1642 DepreciacionActivo$MetodoDepr
+                                                  eciacion.class
+-a----         1/19/2026   6:33 PM           3684 DepreciacionActivo.class
+-a----         1/19/2026   6:33 PM           5142 DocumentoBajaActivo.class
+-a----         1/19/2026   6:33 PM           1694 IncorporacionActivoHeader$Est
+                                                  adoContable.class
+-a----         1/19/2026   6:33 PM           6266 IncorporacionActivoHeader.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           4447 IncorporacionActivoLine.class
+-a----         1/19/2026   6:33 PM           1736 MantenimientoActivo$EstadoMan
+                                                  tenimiento.class
+-a----         1/19/2026   6:33 PM           1666 MantenimientoActivo$TipoMante
+                                                  nimiento.class
+-a----         1/19/2026   6:33 PM           5016 MantenimientoActivo.class
+-a----         1/19/2026   6:33 PM           3977 TrasladoActivo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                divisas
+d-----         1/19/2026   6:33 PM                dto
+d-----         1/19/2026   6:33 PM                notificaciones
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\commons\divisas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1387 Divisas$DIVISAS.class
+-a----         1/19/2026   6:33 PM           1000 Divisas.class
+-a----         1/19/2026   6:33 PM           4097 TRM.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\commons\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                bulkupload
+d-----         1/19/2026   6:33 PM                email
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\commons\dto\bulkupload
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           4832 BulkUploadResponseDTO$BulkUpl
+                                                  oadResponseDTOBuilder.class
+-a----         1/19/2026   6:33 PM           2014 BulkUploadResponseDTO$ErrorRe
+                                                  cord$ErrorRecordBuilder.class
+-a----         1/19/2026   6:33 PM           2757 BulkUploadResponseDTO$ErrorRe
+                                                  cord.class
+-a----         1/19/2026   6:33 PM           2032 BulkUploadResponseDTO$Success
+                                                  Record$SuccessRecordBuilder.c
+                                                  lass
+-a----         1/19/2026   6:33 PM           2740 BulkUploadResponseDTO$Success
+                                                  Record.class
+-a----         1/19/2026   6:33 PM           7505 BulkUploadResponseDTO.class
+-a----         1/19/2026   6:33 PM           3822 MaterialBulkUploadMappingDTO.
+                                                  class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\commons\dto\email
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2831 EmailRequestDTO.class
+-a----         1/19/2026   6:33 PM           2896 HtmlEmailRequestDTO.class
+-a----         1/19/2026   6:33 PM           3037 MultipleRecipientsEmailReques
+                                                  tDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\commons\notificaciones
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2972 ModuleNotificationDTA.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           4559 FacturaCompra.class
+-a----         1/19/2026   6:33 PM           2612 ItemFacturaCompra.class
+-a----         1/19/2026   6:33 PM           3760 ItemOrdenCompra.class
+-a----         1/19/2026   6:33 PM           7038 OrdenCompraMateriales.class
+-a----         1/19/2026   6:33 PM           5794 Proveedor.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\compras\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                recepcion
+d-----         1/19/2026   6:33 PM                search
+-a----         1/19/2026   6:33 PM           1617 UpdateEstadoOrdenCompraReques
+                                                  t$TipoEnvio.class
+-a----         1/19/2026   6:33 PM           3166 UpdateEstadoOrdenCompraReques
+                                                  t.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\compras\dto\recepcion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            611 OCMReceptionInfoDTO.class
+-a----         1/19/2026   6:33 PM           1527 SearchOCMFilterDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\compras\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1539 DTO_SearchProveedor$SearchTyp
+                                                  e.class
+-a----         1/19/2026   6:33 PM           1917 DTO_SearchProveedor.class
+-a----         1/19/2026   6:33 PM           2188 SearchOrdenCompraRequest.clas
+                                                  s
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           1539 AsientoContable$EstadoAsiento
+                                                  .class
+-a----         1/19/2026   6:33 PM           4553 AsientoContable.class
+-a----         1/19/2026   6:33 PM           1449 CuentaContable$SaldoNormal.cl
+                                                  ass
+-a----         1/19/2026   6:33 PM           1592 CuentaContable$TipoCuenta.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           2882 CuentaContable.class
+-a----         1/19/2026   6:33 PM           2092 CuentaContableCodigo.class
+-a----         1/19/2026   6:33 PM           2804 LineaAsientoContable.class
+-a----         1/19/2026   6:33 PM           1480 PeriodoContable$EstadoPeriodo
+                                                  .class
+-a----         1/19/2026   6:33 PM           3663 PeriodoContable.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\contabilidad\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                search
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\contabilidad\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           3030 DTO_SearchIncorporacionActivo
+                                                  .class
+-a----         1/19/2026   6:33 PM           2620 DTO_SearchTransaccionAlmacen.
+                                                  class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\cronograma
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2025 AvanceTarea.class
+-a----         1/19/2026   6:33 PM           4148 Tarea.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   2:12 PM                dto
+d-----         1/19/2026   6:33 PM                reserva
+-a----         1/19/2026   6:33 PM           3149 Lote.class
+-a----         1/19/2026   6:33 PM           1505 Movimiento$Almacen.class
+-a----         1/19/2026   6:33 PM           1653 Movimiento$TipoMovimiento.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           5292 Movimiento.class
+-a----         1/19/2026   6:33 PM           1568 TransaccionAlmacen$EstadoCont
+                                                  able.class
+-a----         1/19/2026   6:33 PM           1679 TransaccionAlmacen$TipoEntida
+                                                  dCausante.class
+-a----         1/19/2026   6:33 PM           7711 TransaccionAlmacen.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\inventarios\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2028 AjusteInventarioDTO.class
+-a----         1/19/2026   6:33 PM           2134 AjusteItemDTO.class
+-a----         1/19/2026   6:33 PM           1848 BackflushMultipleNoPlanificad
+                                                  oDTO.class
+-a----         1/19/2026   6:33 PM           1519 BackflushNoPlanificadoDTO.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           1588 BackflushNoPlanificadoItemDTO
+                                                  .class
+-a----         1/19/2026   6:33 PM           1736 ConsolidadoOCMResponseDTO.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           2851 DispensacionDTO.class
+-a----         1/19/2026   6:33 PM           1837 DispensacionItemDTO.class
+-a----         1/19/2026   6:33 PM           1845 DispensacionNoPlanificadaDTO.
+                                                  class
+-a----         1/19/2026   6:33 PM           1349 DispensacionNoPlanificadaItem
+                                                  DTO.class
+-a----         1/19/2026   6:33 PM           3318 DispensacionResumenDTO.class
+-a----         1/19/2026   6:33 PM           2888 FiltroHistDispensacionDTO.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           4091 IngresoOCM_DTA.class
+-a----         1/19/2026   6:33 PM           2457 InsumoDesglosadoDTO.class
+-a----         1/19/2026   6:33 PM           3630 InsumoRecursivoDTO.class
+-a----         1/19/2026   6:33 PM           1718 InsumosDesglosadosResponseDTO
+                                                  .class
+-a----         1/19/2026   6:33 PM           2928 InventarioExcelRequestDTO.cla
+                                                  ss
+-a----         1/20/2026   2:12 PM           8163 KardexMovimientoRowDTO.class
+-a----         1/20/2026   2:12 PM           5769 KardexMovimientosPageDTO.clas
+                                                  s
+-a----         1/20/2026   2:12 PM           4131 KardexMovimientosRequestDTO.c
+                                                  lass
+-a----         1/19/2026   6:33 PM           1596 LoteConsolidadoDTO.class
+-a----         1/19/2026   6:33 PM           2792 LoteDisponiblePageResponseDTO
+                                                  .class
+-a----         1/19/2026   6:33 PM           1836 LoteDisponibleResponseDTO.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           2179 LoteRecomendadoDTO.class
+-a----         1/19/2026   6:33 PM           2318 MaterialConsolidadoDTO.class
+-a----         1/19/2026   6:33 PM           3460 MovimientoDetalleDTO.class
+-a----         1/19/2026   6:33 PM           3130 MovimientoExcelRequestDTO.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           1156 RecomendacionLotesMultipleReq
+                                                  uestDTO.class
+-a----         1/19/2026   6:33 PM           1032 RecomendacionLotesRequestDTO.
+                                                  class
+-a----         1/19/2026   6:33 PM           4027 TransaccionAlmacenDetalleDTO.
+                                                  class
+-a----         1/19/2026   6:33 PM           1264 TransaccionAlmacenResponseDTO
+                                                  $UsuarioAprobadorDTO.class
+-a----         1/19/2026   6:33 PM           2990 TransaccionAlmacenResponseDTO
+                                                  .class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\inventarios\reserva
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1487 MovimientoReserva$Tipo.class
+-a----         1/19/2026   6:33 PM           2641 MovimientoReserva.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           1397 MasterDirective$GRUPO.class
+-a----         1/19/2026   6:33 PM           1669 MasterDirective$TipoDato.clas
+                                                  s
+-a----         1/19/2026   6:33 PM           3310 MasterDirective.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\master\configs\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1181 DTO_All_MasterDirectives.clas
+                                                  s
+-a----         1/19/2026   6:33 PM           1252 DTO_MasterD_Update.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           3228 Cargo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\personal
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2325 DocTranDePersonal$TipoDocTran
+                                                  .class
+-a----         1/19/2026   6:33 PM           5178 DocTranDePersonal.class
+-a----         1/19/2026   6:33 PM           1479 IntegrantePersonal$Departamen
+                                                  to.class
+-a----         1/19/2026   6:33 PM           1427 IntegrantePersonal$Estado.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           4940 IntegrantePersonal.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           7264 OrdenProduccion.class
+-a----         1/19/2026   6:33 PM           4812 OrdenSeguimiento.class
+-a----         1/19/2026   6:33 PM           3994 PlanificacionProduccion.class
+-a----         1/19/2026   6:33 PM           4387 RecursoAsignadoOrden.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\produccion\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2579 DispensacionDTO.class
+-a----         1/19/2026   6:33 PM           1816 DispensacionFormularioDTO.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           2561 InsumoDTO.class
+-a----         1/19/2026   6:33 PM           3670 InventarioEnTransitoDTO.class
+-a----         1/19/2026   6:33 PM           2271 ODP_Data4PDF.class
+-a----         1/19/2026   6:33 PM          10165 OrdenProduccionDTO.class
+-a----         1/19/2026   6:33 PM           2907 OrdenProduccionDTO_save.class
+-a----         1/19/2026   6:33 PM           3027 OrdenSeguimientoDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+d-----         1/19/2026   6:33 PM                manufacturing
+-a----         1/19/2026   6:33 PM           1489 Categoria.class
+-a----         1/19/2026   6:33 PM           1463 Familia.class
+-a----         1/19/2026   6:33 PM           1244 Material.class
+-a----         1/19/2026   6:33 PM           5180 Producto.class
+-a----         1/19/2026   6:33 PM           2402 SemiTerminado.class
+-a----         1/19/2026   6:33 PM           4070 Terminado.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                procdef
+d-----         1/19/2026   6:33 PM                procdesigner
+d-----         1/19/2026   6:33 PM                search
+-a----         1/19/2026   6:33 PM           1533 InsumoWithStockDTO$TipoProduc
+                                                  to.class
+-a----         1/19/2026   6:33 PM           6205 InsumoWithStockDTO.class
+-a----         1/19/2026   6:33 PM           2568 ProductoStockDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\dto\procdef
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2728 ReProdModDto.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\dto\procdesigner
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2620 InsumoDTO.class
+-a----         1/19/2026   6:33 PM           2136 ProductoDTO.class
+-a----         1/19/2026   6:33 PM           5361 TargetDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1620 DTO_SearchRecursoProduccion$T
+                                                  ipoBusqueda.class
+-a----         1/19/2026   6:33 PM           3796 DTO_SearchRecursoProduccion.c
+                                                  lass
+-a----         1/19/2026   6:33 PM           1548 DTO_SearchTerminado$TipoBusqu
+                                                  eda.class
+-a----         1/19/2026   6:33 PM           3711 DTO_SearchTerminado.class
+-a----         1/19/2026   6:33 PM           3825 ProductoSearchCriteria.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                packaging
+d-----         1/19/2026   6:33 PM                procesos
+d-----         1/19/2026   6:33 PM                receta
+d-----         1/19/2026   6:33 PM                snapshots
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing\packaging
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           3536 CasePack.class
+-a----         1/19/2026   6:33 PM           1587 InsumoEmpaque$NivelEmpaque.cl
+                                                  ass
+-a----         1/19/2026   6:33 PM           3255 InsumoEmpaque.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing\packaging\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           5731 CasePackResponseDTO.class
+-a----         1/19/2026   6:33 PM           2875 InsumoEmpaqueDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                nodo
+-a----         1/19/2026   6:33 PM           1824 AreaProduccion.class
+-a----         1/19/2026   6:33 PM           1749 ProcesoProduccion$TimeModelTy
+                                                  pe.class
+-a----         1/19/2026   6:33 PM           8856 ProcesoProduccion.class
+-a----         1/19/2026   6:33 PM           4793 ProcesoProduccionCompleto.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           5296 ProcesoRecurso.class
+-a----         1/19/2026   6:33 PM           4656 RecursoProduccion.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing\procesos\nodo
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1776 NodeConnection.class
+-a----         1/19/2026   6:33 PM           3462 NodeHandle.class
+-a----         1/19/2026   6:33 PM           1789 ProcesoProduccionNode$HandleP
+                                                  osition.class
+-a----         1/19/2026   6:33 PM           1669 ProcesoProduccionNode$HandleT
+                                                  ype.class
+-a----         1/19/2026   6:33 PM           3140 ProcesoProduccionNode.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing\receta
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1932 Insumo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\producto\manufacturing\snapshots
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2859 ManufacturingVersions.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                auth
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           2366 Acceso$AccesoBuilder.class
+-a----         1/19/2026   6:33 PM           2473 Acceso$Modulo.class
+-a----         1/19/2026   6:33 PM           2572 Acceso.class
+-a----         1/19/2026   6:33 PM           3875 User$UserBuilder.class
+-a----         1/19/2026   6:33 PM           4674 User.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\users\auth
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2408 PasswordResetToken.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\users\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1466 SearchUserDTO$SearchType.clas
+                                                  s
+-a----         1/19/2026   6:33 PM           2648 SearchUserDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                dto
+-a----         1/19/2026   6:33 PM           3517 Cliente.class
+-a----         1/19/2026   6:33 PM           4546 FacturaVenta.class
+-a----         1/19/2026   6:33 PM           2599 ItemFacturaVenta.class
+-a----         1/19/2026   6:33 PM           2771 ItemOrdenVenta.class
+-a----         1/19/2026   6:33 PM           3988 OrdenVenta.class
+-a----         1/19/2026   6:33 PM           2972 Vendedor$VendedorBuilder.clas
+                                                  s
+-a----         1/19/2026   6:33 PM           3357 Vendedor.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\ventas\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                search
+-a----         1/19/2026   6:33 PM           2690 CrearVendedorDTO.class
+-a----         1/19/2026   6:33 PM           1453 SearchVendedorDTO$SearchType.
+                                                  class
+-a----         1/19/2026   6:33 PM           2686 SearchVendedorDTO.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\model\ventas\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1512 DTO_SearchCliente$SearchType.
+                                                  class
+-a----         1/19/2026   6:33 PM           1947 DTO_SearchCliente.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                activos
+d-----         1/19/2026   6:33 PM                compras
+d-----         1/19/2026   6:33 PM                contabilidad
+d-----         1/20/2026   2:12 PM                inventarios
+d-----         1/19/2026   6:33 PM                master
+d-----         1/19/2026   6:33 PM                organigrama
+d-----         1/19/2026   6:33 PM                personal
+d-----         1/19/2026   6:33 PM                produccion
+d-----         1/19/2026   6:33 PM                producto
+d-----         1/19/2026   6:33 PM                usuarios
+d-----         1/19/2026   6:33 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                compras
+d-----         1/19/2026   6:33 PM                gestion
+-a----         1/19/2026   6:33 PM           1772 ActivoFijoRepo.class
+-a----         1/19/2026   6:33 PM           1138 ItemOrdenCompraActivoRepo.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           1318 OrdenCompraActivoRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\activos\fijos\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            503 FacturaCompraActivoRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\activos\fijos\gestion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1139 DepreciacionActivoRepo.class
+-a----         1/19/2026   6:33 PM           2074 IncorporacionActivoHeaderRepo
+                                                  .class
+-a----         1/19/2026   6:33 PM            512 IncorporacionActivoLineRepo.c
+                                                  lass
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            872 FacturaCompraRepo.class
+-a----         1/19/2026   6:33 PM            383 ItemFacturaCompraRepo.class
+-a----         1/19/2026   6:33 PM            482 ItemOrdenCompraRepo.class
+-a----         1/19/2026   6:33 PM           4113 OrdenCompraRepo.class
+-a----         1/19/2026   6:33 PM           2101 ProveedorRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            470 AsientoContableRepo.class
+-a----         1/19/2026   6:33 PM            469 CuentaContableRepo.class
+-a----         1/19/2026   6:33 PM            485 LineaAsientoContableRepo.clas
+                                                  s
+-a----         1/19/2026   6:33 PM           1361 PeriodoContableRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            486 LoteRepo.class
+-a----         1/19/2026   6:33 PM           8093 TransaccionAlmacenHeaderRepo.
+                                                  class
+-a----         1/20/2026   2:12 PM           4189 TransaccionAlmacenRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            688 MasterDirectiveRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            462 CargoOrganigramaRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\personal
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            382 DocTranDePersonalRepo.class
+-a----         1/19/2026   6:33 PM           2242 IntegrantePersonalRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2705 OrdenProduccionRepo.class
+-a----         1/19/2026   6:33 PM            933 OrdenSeguimientoRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\producto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                manufacturing
+d-----         1/19/2026   6:33 PM                procesos
+-a----         1/19/2026   6:33 PM            663 CategoriaRepo.class
+-a----         1/19/2026   6:33 PM            649 FamiliaRepo.class
+-a----         1/19/2026   6:33 PM            602 InsumoRepo.class
+-a----         1/19/2026   6:33 PM           1489 MaterialRepo.class
+-a----         1/19/2026   6:33 PM            827 ProductoRepo.class
+-a----         1/19/2026   6:33 PM           1755 SemiTerminadoRepo.class
+-a----         1/19/2026   6:33 PM            886 TerminadoRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\producto\manufacturing
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                snapshots
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\producto\manufacturing\snapshots
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            759 ManufacturingVersionRepo.clas
+                                                  s
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\producto\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            936 AreaProduccionRepo.class
+-a----         1/19/2026   6:33 PM            750 ProcesoProduccionCompletoRepo
+                                                  .class
+-a----         1/19/2026   6:33 PM            951 ProcesoProduccionRepo.class
+-a----         1/19/2026   6:33 PM            703 ProcesoRecursoRepo.class
+-a----         1/19/2026   6:33 PM            948 RecursoProduccionRepo.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\usuarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            852 AccesoRepository.class
+-a----         1/19/2026   6:33 PM           1067 PasswordResetTokenRepository.
+                                                  class
+-a----         1/19/2026   6:33 PM            908 UserRepository.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\repo\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1804 ClienteRepo.class
+-a----         1/19/2026   6:33 PM           1145 FacturaVentaRepo.class
+-a----         1/19/2026   6:33 PM           1119 OrdenVentaRepo.class
+-a----         1/19/2026   6:33 PM           1115 VendedorRepository.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                activos
+d-----         1/20/2026   2:12 PM                commons
+d-----         1/20/2026   2:12 PM                compras
+d-----         1/19/2026   6:33 PM                contabilidad
+d-----         1/20/2026   2:12 PM                inventarios
+d-----         1/19/2026   6:33 PM                master
+d-----         1/19/2026   6:33 PM                organigrama
+d-----         1/20/2026   2:12 PM                produccion
+d-----         1/20/2026   2:12 PM                productos
+d-----         1/19/2026   6:33 PM                rehumanos
+d-----         1/19/2026   6:33 PM                users
+d-----         1/19/2026   6:33 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM          11214 ActivoFijoResource.class
+-a----         1/19/2026   6:33 PM          10701 OCAFResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                notificaciones
+-a----         1/19/2026   6:33 PM           2380 BackendInformationResource.cl
+                                                  ass
+-a----         1/20/2026   2:12 PM           3846 BulkUploadResource.class
+-a----         1/19/2026   6:33 PM           3006 DocumentPdfResource.class
+-a----         1/19/2026   6:33 PM           6462 EmailResource.class
+-a----         1/19/2026   6:33 PM           2524 TRMResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\commons\notificaciones
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1928 NotificacionesModulosResource
+                                                  .class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   2:12 PM           9959 ComprasResource.class
+-a----         1/19/2026   6:33 PM           8087 ProveedorResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           7236 ContabilidadController.class
+-a----         1/19/2026   6:33 PM          11039 ContabilidadResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           5814 IngresoAlmacenResource.class
+-a----         1/20/2026   2:12 PM           4209 InventarioResource.class
+-a----         1/20/2026   2:12 PM           9373 MovimientosResource.class
+-a----         1/20/2026   2:12 PM           9425 SalidaAlmacenResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           5390 MasterDirectiveResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           8087 CargoOrganigramaResource.clas
+                                                  s
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   2:12 PM           9894 ProduccionResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\productos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                exceptions
+d-----         1/19/2026   6:33 PM                procesos
+-a----         1/19/2026   6:33 PM           9308 CategoriaResource.class
+-a----         1/19/2026   6:33 PM           9189 FamiliaResource.class
+-a----         1/20/2026   2:12 PM          18952 ProductoResource.class
+-a----         1/20/2026   2:12 PM           6691 SemiTerResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\productos\exceptions
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            761 CategoriaExceptions$Duplicate
+                                                  IdException.class
+-a----         1/19/2026   6:33 PM            767 CategoriaExceptions$Duplicate
+                                                  NameException.class
+-a----         1/19/2026   6:33 PM            758 CategoriaExceptions$EmptyFiel
+                                                  dException.class
+-a----         1/19/2026   6:33 PM           1108 CategoriaExceptions$ErrorResp
+                                                  onse.class
+-a----         1/19/2026   6:33 PM            667 CategoriaExceptions$Validatio
+                                                  nException.class
+-a----         1/19/2026   6:33 PM           1044 CategoriaExceptions.class
+-a----         1/19/2026   6:33 PM            751 FamiliaExceptions$DuplicateId
+                                                  Exception.class
+-a----         1/19/2026   6:33 PM            757 FamiliaExceptions$DuplicateNa
+                                                  meException.class
+-a----         1/19/2026   6:33 PM            748 FamiliaExceptions$EmptyFieldE
+                                                  xception.class
+-a----         1/19/2026   6:33 PM           1100 FamiliaExceptions$ErrorRespon
+                                                  se.class
+-a----         1/19/2026   6:33 PM            659 FamiliaExceptions$ValidationE
+                                                  xception.class
+-a----         1/19/2026   6:33 PM           1028 FamiliaExceptions.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\productos\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           5482 AreaProduccionResource.class
+-a----         1/19/2026   6:33 PM           3323 ProcesoProduccionCompletoReso
+                                                  urce.class
+-a----         1/19/2026   6:33 PM           8785 ProcesoProduccionResource.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           6533 ProcesoRecursoResource.class
+-a----         1/19/2026   6:33 PM           7395 RecursoProduccionResource.cla
+                                                  ss
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\rehumanos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           7294 IntegrantePersonalResource.cl
+                                                  ass
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            855 AuthResource$EmailRequest.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM            966 AuthResource$LoginRequest.cla
+                                                  ss
+-a----         1/19/2026   6:33 PM           1110 AuthResource$PasswordResetReq
+                                                  uest.class
+-a----         1/19/2026   6:33 PM          10372 AuthResource.class
+-a----         1/19/2026   6:33 PM           8361 UserManagementResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\resource\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM          10368 ClienteResource.class
+-a----         1/19/2026   6:33 PM           4225 VendedorResource.class
+-a----         1/19/2026   6:33 PM           7146 VentasResource.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\security
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           2890 JwtAuthenticationFilter.class
+-a----         1/19/2026   6:33 PM           7115 JwtTokenProvider.class
+-a----         1/19/2026   6:33 PM           5202 MigrationAuthenticationProvid
+                                                  er.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                activos
+d-----         1/20/2026   2:12 PM                commons
+d-----         1/20/2026   2:12 PM                compras
+d-----         1/19/2026   6:33 PM                contabilidad
+d-----         1/20/2026   2:12 PM                inventarios
+d-----         1/19/2026   6:33 PM                master
+d-----         1/19/2026   6:33 PM                organigrama
+d-----         1/20/2026   2:12 PM                produccion
+d-----         1/20/2026   2:12 PM                productos
+d-----         1/19/2026   6:33 PM                rehumanos
+d-----         1/19/2026   6:33 PM                users
+d-----         1/19/2026   6:33 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1278 ActivoFijoService$1.class
+-a----         1/19/2026   6:33 PM          19369 ActivoFijoService.class
+-a----         1/19/2026   6:33 PM           1134 OCAFService$1.class
+-a----         1/19/2026   6:33 PM          19790 OCAFService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                notificaciones
+-a----         1/19/2026   6:33 PM          13853 BackendInformationService.cla
+                                                  ss
+-a----         1/20/2026   2:12 PM            897 BulkUploadService$1.class
+-a----         1/20/2026   2:12 PM          34683 BulkUploadService.class
+-a----         1/19/2026   6:33 PM          13930 DocumentPdfService.class
+-a----         1/19/2026   6:33 PM           7298 EmailService.class
+-a----         1/19/2026   6:33 PM           5100 FileStorageService.class
+-a----         1/19/2026   6:33 PM           1690 TRMService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\commons\notificaciones
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1934 NotificacionesModulosService$
+                                                  1.class
+-a----         1/19/2026   6:33 PM           9740 NotificacionesModulosService.
+                                                  class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   2:12 PM           1091 ComprasService$1.class
+-a----         1/20/2026   2:12 PM          27059 ComprasService.class
+-a----         1/19/2026   6:33 PM           8539 ProveedorService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           3907 AsientoContableService.class
+-a----         1/19/2026   6:33 PM          12392 ContabilidadService.class
+-a----         1/19/2026   6:33 PM           1726 CuentaContableService.class
+-a----         1/19/2026   6:33 PM           1044 DepreciacionScheduler$1.class
+-a----         1/19/2026   6:33 PM          11948 DepreciacionScheduler.class
+-a----         1/19/2026   6:33 PM           4639 PeriodoContableService.class
+-a----         1/19/2026   6:33 PM           1417 ReporteContableService$Cuenta
+                                                  Saldo.class
+-a----         1/19/2026   6:33 PM           2383 ReporteContableService$GrupoC
+                                                  uentas.class
+-a----         1/19/2026   6:33 PM           2382 ReporteContableService$Movimi
+                                                  entoLibroMayor.class
+-a----         1/19/2026   6:33 PM           2316 ReporteContableService$SaldoC
+                                                  uenta.class
+-a----         1/19/2026   6:33 PM           8396 ReporteContableService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM          15216 IngresoAlmacenService.class
+-a----         1/20/2026   2:12 PM          15474 InventarioService.class
+-a----         1/20/2026   2:12 PM          37509 MovimientosService.class
+-a----         1/20/2026   2:12 PM          44588 SalidaAlmacenService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           3905 MasterDirectiveService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           5937 CargoOrganigramaService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1364 MPSService.class
+-a----         1/20/2026   2:12 PM          32623 ProduccionService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\productos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                procesos
+-a----         1/19/2026   6:33 PM           7863 CategoriaService.class
+-a----         1/19/2026   6:33 PM           7765 FamiliaService.class
+-a----         1/20/2026   2:12 PM          30903 ProductoService.class
+-a----         1/20/2026   2:12 PM          14628 SemiTerService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\productos\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           8903 AreaProduccionService.class
+-a----         1/19/2026   6:33 PM           2617 ProcesoProduccionCompletoServ
+                                                  ice.class
+-a----         1/19/2026   6:33 PM           1260 ProcesoProduccionService$1.cl
+                                                  ass
+-a----         1/19/2026   6:33 PM          17057 ProcesoProduccionService.clas
+                                                  s
+-a----         1/19/2026   6:33 PM           2908 ProcesoRecursoService.class
+-a----         1/19/2026   6:33 PM           9454 RecursoProduccionService.clas
+                                                  s
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\rehumanos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           4911 IntegrantePersonalService.cla
+                                                  ss
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM            823 AuthService$1.class
+-a----         1/19/2026   6:33 PM           9394 AuthService.class
+-a----         1/19/2026   6:33 PM           4164 UserDetailsServiceImpl.class
+-a----         1/19/2026   6:33 PM           1010 UserManagementService$1.class
+-a----         1/19/2026   6:33 PM          13553 UserManagementService.class
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\classe
+    s\java\main\exotic\app\planta\service\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           8908 ClienteService.class
+-a----         1/19/2026   6:33 PM            973 VendedorService$1.class
+-a----         1/19/2026   6:33 PM           6795 VendedorService.class
+-a----         1/19/2026   6:33 PM           6140 VentasService.class
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\generated
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                sources
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\generated\sources
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                annotationProcessor
+d-----         1/19/2026   6:33 PM                headers
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\genera
+    ted\sources\annotationProcessor
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\genera
+    ted\sources\annotationProcessor\java
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                main
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\genera
+    ted\sources\headers
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\genera
+    ted\sources\headers\java
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                main
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\resources
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                main
+d-----         1/20/2026   3:19 PM                test
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\resources\main
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                db
+-a----         1/19/2026   6:33 PM            127 application-jwt.properties
+-a----         1/19/2026   6:33 PM           1095 application.properties
+-a----         1/19/2026   6:33 PM           1503 application.yml
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\resources\main\db
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/19/2026   6:33 PM                migration
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\resour
+    ces\main\db\migration
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           1740 eliminar_material.sql
+-a----         1/19/2026   6:33 PM           1945 eliminar_terminados.sql
+-a----         1/19/2026   6:33 PM           2374 proveedor_surrogate_pk_migrat
+                                                  ion.sql
+-a----         1/19/2026   6:33 PM           1528 V003__add_usuarios_to_transac
+                                                  cion_almacen.sql
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\tmp
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   2:12 PM                compileJava
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\tmp\compileJava
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   2:12 PM                compileTransaction
+-a----         1/20/2026   2:12 PM         296901 previous-compilation-data.bin
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\tmp\co
+    mpileJava\compileTransaction
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   2:12 PM                backup-dir
+da----         1/20/2026   2:12 PM                stash-dir
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\build\tmp\co
+    mpileJava\compileTransaction\stash-dir
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/19/2026   6:33 PM           3846 BulkUploadResource.class.uniq
+                                                  ueId2
+-a----         1/19/2026   6:33 PM            897 BulkUploadService$1.class.uni
+                                                  queId13
+-a----         1/19/2026   6:33 PM          34683 BulkUploadService.class.uniqu
+                                                  eId7
+-a----         1/19/2026   6:33 PM           9959 ComprasResource.class.uniqueI
+                                                  d16
+-a----         1/19/2026   6:33 PM           1091 ComprasService$1.class.unique
+                                                  Id17
+-a----         1/19/2026   6:33 PM          27059 ComprasService.class.uniqueId
+                                                  8
+-a----         1/19/2026   6:33 PM           2586 InventarioResource.class.uniq
+                                                  ueId0
+-a----         1/19/2026   6:33 PM           5050 InventarioService.class.uniqu
+                                                  eId1
+-a----         1/19/2026   6:33 PM           9373 MovimientosResource.class.uni
+                                                  queId6
+-a----         1/19/2026   6:33 PM          37509 MovimientosService.class.uniq
+                                                  ueId3
+-a----         1/19/2026   6:33 PM           9894 ProduccionResource.class.uniq
+                                                  ueId10
+-a----         1/19/2026   6:33 PM          32623 ProduccionService.class.uniqu
+                                                  eId15
+-a----         1/19/2026   6:33 PM          18952 ProductoResource.class.unique
+                                                  Id4
+-a----         1/19/2026   6:33 PM          30903 ProductoService.class.uniqueI
+                                                  d14
+-a----         1/19/2026   6:33 PM           9425 SalidaAlmacenResource.class.u
+                                                  niqueId11
+-a----         1/19/2026   6:33 PM          44588 SalidaAlmacenService.class.un
+                                                  iqueId5
+-a----         1/19/2026   6:33 PM           6691 SemiTerResource.class.uniqueI
+                                                  d12
+-a----         1/19/2026   6:33 PM          14628 SemiTerService.class.uniqueId
+                                                  9
+-a----         1/19/2026   6:33 PM           3084 TransaccionAlmacenRepo.class.
+                                                  uniqueId18
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\data
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   2:08 PM                20260120
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\data\20260120
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/20/2026   2:08 PM          93903 4024435a-cf5a-4c3c-a553-2a416
+                                                  dbc3772_Screenshot
+                                                  2026-01-19 133519.png
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\gradle
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                wrapper
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\gradle\wrapper
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          43453 gradle-wrapper.jar
+-a----         1/17/2026   9:27 PM            257 gradle-wrapper.properties
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                main
+d-----         1/17/2026   9:27 PM                test
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                java
+d-----         1/19/2026   6:31 PM                resources
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\java
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                exotic
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\java\exotic
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                app
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                planta
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                config
+d-----         1/17/2026   9:27 PM                dto
+d-----         1/17/2026   9:27 PM                model
+d-----         1/17/2026   9:27 PM                repo
+d-----         1/17/2026   9:27 PM                resource
+d-----         1/17/2026   9:27 PM                security
+d-----         1/17/2026   9:27 PM                service
+-a----         1/17/2026   9:27 PM            432 ExoticManufactureApplication.
+                                                  java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\config
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            812 AuthenticationConfig.java
+-a----         1/17/2026   9:27 PM          14449 CargaMasiva.java
+-a----         1/17/2026   9:27 PM           2035 CorsConfig.java
+-a----         1/17/2026   9:27 PM           2654 CuentasInitializer.java
+-a----         1/17/2026   9:27 PM           1684 DataBaseInitializer.java
+-a----         1/17/2026   9:27 PM           1247 JacksonConfig.java
+-a----         1/17/2026   9:27 PM           2904 MasterDirectiveInitializer.ja
+                                                  va
+-a----         1/17/2026   9:27 PM           4691 PasswordConfig.java
+-a----         1/17/2026   9:27 PM            598 RestTemplateConfig.java
+-a----         1/17/2026   9:27 PM           4808 SecurityConfig.java
+-a----         1/17/2026   9:27 PM           1349 StorageProperties.java
+-a----         1/17/2026   9:27 PM           1027 UsersInitializer.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            657 AreaProduccionDTO.java
+-a----         1/17/2026   9:27 PM            546 ErrorResponse.java
+-a----         1/17/2026   9:27 PM           1353 ProcesoProduccionDTO.java
+-a----         1/17/2026   9:27 PM            796 RecursoProduccionDTO.java
+-a----         1/17/2026   9:27 PM            232 SearchAreaProduccionDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                activos
+d-----         1/17/2026   9:27 PM                commons
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                contabilidad
+d-----         1/17/2026   9:27 PM                cronograma
+d-----         1/17/2026   9:27 PM                inventarios
+d-----         1/17/2026   9:27 PM                master
+d-----         1/17/2026   9:27 PM                organigrama
+d-----         1/17/2026   9:27 PM                personal
+d-----         1/17/2026   9:27 PM                produccion
+d-----         1/17/2026   9:27 PM                producto
+d-----         1/17/2026   9:27 PM                users
+d-----         1/17/2026   9:27 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                dto
+d-----         1/17/2026   9:27 PM                gestion
+-a----         1/17/2026   9:27 PM           4007 ActivoFijo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\activos\fijos\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1842 FacturaCompraActivo.java
+-a----         1/17/2026   9:27 PM           1652 ItemOrdenCompraActivo.java
+-a----         1/17/2026   9:27 PM           2527 OrdenCompraActivo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\activos\fijos\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2298 DTO_SearchActivoFijo.java
+-a----         1/17/2026   9:27 PM            784 DTO_SearchActivoFijoDisponibl
+                                                  e.java
+-a----         1/17/2026   9:27 PM            517 GrupoActivosDto.java
+-a----         1/17/2026   9:27 PM            481 IncorporacionActivoDto.java
+-a----         1/17/2026   9:27 PM            911 UpdateEstadoOrdenCompraAFRequ
+                                                  est.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\activos\fijos\gestion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1711 DepreciacionActivo.java
+-a----         1/17/2026   9:27 PM           2531 DocumentoBajaActivo.java
+-a----         1/17/2026   9:27 PM           2840 IncorporacionActivoHeader.jav
+                                                  a
+-a----         1/17/2026   9:27 PM           1867 IncorporacionActivoLine.java
+-a----         1/17/2026   9:27 PM           2186 MantenimientoActivo.java
+-a----         1/17/2026   9:27 PM           1720 TrasladoActivo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                divisas
+d-----         1/17/2026   9:27 PM                dto
+d-----         1/17/2026   9:27 PM                notificaciones
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\commons\divisas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            174 Divisas.java
+-a----         1/17/2026   9:27 PM            597 TRM.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\commons\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                bulkupload
+d-----         1/17/2026   9:27 PM                email
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\commons\dto\bulkupload
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2589 BulkUploadResponseDTO.java
+-a----         1/17/2026   9:27 PM           1175 MaterialBulkUploadMappingDTO.
+                                                  java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\commons\dto\email
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            370 EmailRequestDTO.java
+-a----         1/17/2026   9:27 PM            379 HtmlEmailRequestDTO.java
+-a----         1/17/2026   9:27 PM            408 MultipleRecipientsEmailReques
+                                                  tDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\commons\notificaciones
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            365 ModuleNotificationDTA.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM           1744 FacturaCompra.java
+-a----         1/17/2026   9:27 PM            926 ItemFacturaCompra.java
+-a----         1/17/2026   9:27 PM           1633 ItemOrdenCompra.java
+-a----         1/17/2026   9:27 PM           3031 OrdenCompraMateriales.java
+-a----         1/17/2026   9:27 PM           3424 Proveedor.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\compras\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                recepcion
+d-----         1/17/2026   9:27 PM                search
+-a----         1/17/2026   9:27 PM            904 UpdateEstadoOrdenCompraReques
+                                                  t.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\compras\dto\recepcion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            374 OCMReceptionInfoDTO.java
+-a----         1/17/2026   9:27 PM            545 SearchOCMFilterDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\compras\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            789 DTO_SearchProveedor.java
+-a----         1/17/2026   9:27 PM            680 SearchOrdenCompraRequest.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM           1130 AsientoContable.java
+-a----         1/17/2026   9:27 PM           2185 CuentaContable.java
+-a----         1/17/2026   9:27 PM            872 CuentaContableCodigo.java
+-a----         1/17/2026   9:27 PM            852 LineaAsientoContable.java
+-a----         1/17/2026   9:27 PM           1214 PeriodoContable.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\contabilidad\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                search
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\contabilidad\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1715 DTO_SearchIncorporacionActivo
+                                                  .java
+-a----         1/17/2026   9:27 PM           1768 DTO_SearchTransaccionAlmacen.
+                                                  java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\cronograma
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            598 AvanceTarea.java
+-a----         1/17/2026   9:27 PM           1101 Tarea.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/20/2026   2:07 PM                dto
+d-----         1/17/2026   9:27 PM                reserva
+-a----         1/17/2026   9:27 PM           1549 Lote.java
+-a----         1/17/2026   9:27 PM           3364 Movimiento.java
+-a----         1/17/2026   9:27 PM           4624 TransaccionAlmacen.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\inventarios\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            706 AjusteInventarioDTO.java
+-a----         1/17/2026   9:27 PM            879 AjusteItemDTO.java
+-a----         1/17/2026   9:27 PM            638 BackflushMultipleNoPlanificad
+                                                  oDTO.java
+-a----         1/17/2026   9:27 PM           1000 BackflushNoPlanificadoDTO.jav
+                                                  a
+-a----         1/17/2026   9:27 PM            779 BackflushNoPlanificadoItemDTO
+                                                  .java
+-a----         1/17/2026   9:27 PM            593 ConsolidadoOCMResponseDTO.jav
+                                                  a
+-a----         1/17/2026   9:27 PM           1541 DispensacionDTO.java
+-a----         1/17/2026   9:27 PM           1467 DispensacionItemDTO.java
+-a----         1/17/2026   9:27 PM            581 DispensacionNoPlanificadaDTO.
+                                                  java
+-a----         1/17/2026   9:27 PM            538 DispensacionNoPlanificadaItem
+                                                  DTO.java
+-a----         1/17/2026   9:27 PM            701 DispensacionResumenDTO.java
+-a----         1/17/2026   9:27 PM           1905 FiltroHistDispensacionDTO.jav
+                                                  a
+-a----         1/17/2026   9:27 PM            530 IngresoOCM_DTA.java
+-a----         1/17/2026   9:27 PM            916 InsumoDesglosadoDTO.java
+-a----         1/17/2026   9:27 PM            676 InsumoRecursivoDTO.java
+-a----         1/17/2026   9:27 PM            483 InsumosDesglosadosResponseDTO
+                                                  .java
+-a----         1/17/2026   9:27 PM            333 InventarioExcelRequestDTO.jav
+                                                  a
+-a----         1/20/2026   2:07 PM            949 KardexMovimientoRowDTO.java
+-a----         1/20/2026   2:07 PM            631 KardexMovimientosPageDTO.java
+-a----         1/20/2026   2:07 PM            424 KardexMovimientosRequestDTO.j
+                                                  ava
+-a----         1/17/2026   9:27 PM            586 LoteConsolidadoDTO.java
+-a----         1/17/2026   9:27 PM           1329 LoteDisponiblePageResponseDTO
+                                                  .java
+-a----         1/17/2026   9:27 PM            889 LoteDisponibleResponseDTO.jav
+                                                  a
+-a----         1/17/2026   9:27 PM            674 LoteRecomendadoDTO.java
+-a----         1/17/2026   9:27 PM            677 MaterialConsolidadoDTO.java
+-a----         1/17/2026   9:27 PM            889 MovimientoDetalleDTO.java
+-a----         1/17/2026   9:27 PM            366 MovimientoExcelRequestDTO.jav
+                                                  a
+-a----         1/17/2026   9:27 PM            543 RecomendacionLotesMultipleReq
+                                                  uestDTO.java
+-a----         1/17/2026   9:27 PM            436 RecomendacionLotesRequestDTO.
+                                                  java
+-a----         1/17/2026   9:27 PM            745 TransaccionAlmacenDetalleDTO.
+                                                  java
+-a----         1/17/2026   9:27 PM           1039 TransaccionAlmacenResponseDTO
+                                                  .java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\inventarios\reserva
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1478 MovimientoReserva.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM           1479 MasterDirective.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\master\configs\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            543 DTO_All_MasterDirectives.java
+-a----         1/17/2026   9:27 PM            557 DTO_MasterD_Update.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            902 Cargo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\personal
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4688 DocTranDePersonal.java
+-a----         1/17/2026   9:27 PM           1444 IntegrantePersonal.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM           5361 OrdenProduccion.java
+-a----         1/17/2026   9:27 PM           1763 OrdenSeguimiento.java
+-a----         1/17/2026   9:27 PM           1612 PlanificacionProduccion.java
+-a----         1/17/2026   9:27 PM           1443 RecursoAsignadoOrden.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\produccion\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            769 DispensacionDTO.java
+-a----         1/17/2026   9:27 PM            542 DispensacionFormularioDTO.jav
+                                                  a
+-a----         1/17/2026   9:27 PM            613 InsumoDTO.java
+-a----         1/17/2026   9:27 PM            406 InventarioEnTransitoDTO.java
+-a----         1/17/2026   9:27 PM            647 ODP_Data4PDF.java
+-a----         1/17/2026   9:27 PM           1267 OrdenProduccionDTO.java
+-a----         1/17/2026   9:27 PM            708 OrdenProduccionDTO_save.java
+-a----         1/17/2026   9:27 PM            547 OrdenSeguimientoDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+d-----         1/17/2026   9:27 PM                manufacturing
+-a----         1/17/2026   9:27 PM            574 Categoria.java
+-a----         1/17/2026   9:27 PM            564 Familia.java
+-a----         1/17/2026   9:27 PM            768 Material.java
+-a----         1/17/2026   9:27 PM           3033 Producto.java
+-a----         1/17/2026   9:27 PM            960 SemiTerminado.java
+-a----         1/17/2026   9:27 PM           1397 Terminado.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                procdef
+d-----         1/17/2026   9:27 PM                procdesigner
+d-----         1/17/2026   9:27 PM                search
+-a----         1/17/2026   9:27 PM            928 InsumoWithStockDTO.java
+-a----         1/17/2026   9:27 PM            335 ProductoStockDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\dto\procdef
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            309 ReProdModDto.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\dto\procdesigner
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1339 InsumoDTO.java
+-a----         1/17/2026   9:27 PM            421 ProductoDTO.java
+-a----         1/17/2026   9:27 PM           2086 TargetDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1013 DTO_SearchRecursoProduccion.j
+                                                  ava
+-a----         1/17/2026   9:27 PM           1147 DTO_SearchTerminado.java
+-a----         1/17/2026   9:27 PM            637 ProductoSearchCriteria.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                packaging
+d-----         1/17/2026   9:27 PM                procesos
+d-----         1/17/2026   9:27 PM                receta
+d-----         1/17/2026   9:27 PM                snapshots
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing\packaging
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM           1257 CasePack.java
+-a----         1/17/2026   9:27 PM           1976 InsumoEmpaque.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing\packaging\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1499 CasePackResponseDTO.java
+-a----         1/17/2026   9:27 PM            338 InsumoEmpaqueDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                nodo
+-a----         1/17/2026   9:27 PM            539 AreaProduccion.java
+-a----         1/17/2026   9:27 PM           2593 ProcesoProduccion.java
+-a----         1/17/2026   9:27 PM           1456 ProcesoProduccionCompleto.jav
+                                                  a
+-a----         1/17/2026   9:27 PM            956 ProcesoRecurso.java
+-a----         1/17/2026   9:27 PM           1326 RecursoProduccion.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing\procesos\nodo
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            545 NodeConnection.java
+-a----         1/17/2026   9:27 PM            801 NodeHandle.java
+-a----         1/17/2026   9:27 PM           1238 ProcesoProduccionNode.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing\receta
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            809 Insumo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\producto\manufacturing\snapshots
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4023 ManufacturingVersions.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                auth
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM           1192 Acceso.java
+-a----         1/17/2026   9:27 PM           1148 User.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\users\auth
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1232 PasswordResetToken.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\users\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            380 SearchUserDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                dto
+-a----         1/17/2026   9:27 PM            907 Cliente.java
+-a----         1/17/2026   9:27 PM           1316 FacturaVenta.java
+-a----         1/17/2026   9:27 PM            915 ItemFacturaVenta.java
+-a----         1/17/2026   9:27 PM            918 ItemOrdenVenta.java
+-a----         1/17/2026   9:27 PM           1252 OrdenVenta.java
+-a----         1/17/2026   9:27 PM           1258 Vendedor.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\ventas\dto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                search
+-a----         1/17/2026   9:27 PM            632 CrearVendedorDTO.java
+-a----         1/17/2026   9:27 PM            305 SearchVendedorDTO.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\model\ventas\dto\search
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            751 DTO_SearchCliente.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                activos
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                contabilidad
+d-----         1/17/2026   9:27 PM                inventarios
+d-----         1/17/2026   9:27 PM                master
+d-----         1/17/2026   9:27 PM                organigrama
+d-----         1/17/2026   9:27 PM                personal
+d-----         1/17/2026   9:27 PM                produccion
+d-----         1/17/2026   9:27 PM                producto
+d-----         1/17/2026   9:27 PM                usuarios
+d-----         1/17/2026   9:27 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                gestion
+-a----         1/17/2026   9:27 PM           1949 ActivoFijoRepo.java
+-a----         1/17/2026   9:27 PM           1441 ItemOrdenCompraActivoRepo.jav
+                                                  a
+-a----         1/17/2026   9:27 PM           1837 OrdenCompraActivoRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\activos\fijos\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            360 FacturaCompraActivoRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\activos\fijos\gestion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1585 DepreciacionActivoRepo.java
+-a----         1/17/2026   9:27 PM           2182 IncorporacionActivoHeaderRepo
+                                                  .java
+-a----         1/17/2026   9:27 PM            369 IncorporacionActivoLineRepo.j
+                                                  ava
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            596 FacturaCompraRepo.java
+-a----         1/17/2026   9:27 PM            323 ItemFacturaCompraRepo.java
+-a----         1/17/2026   9:27 PM            319 ItemOrdenCompraRepo.java
+-a----         1/17/2026   9:27 PM           4774 OrdenCompraRepo.java
+-a----         1/17/2026   9:27 PM           2623 ProveedorRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            529 AsientoContableRepo.java
+-a----         1/17/2026   9:27 PM            470 CuentaContableRepo.java
+-a----         1/17/2026   9:27 PM            560 LineaAsientoContableRepo.java
+-a----         1/17/2026   9:27 PM           1684 PeriodoContableRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            579 LoteRepo.java
+-a----         1/17/2026   9:27 PM           9893 TransaccionAlmacenHeaderRepo.
+                                                  java
+-a----         1/20/2026   2:07 PM           4769 TransaccionAlmacenRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            470 MasterDirectiveRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            375 CargoOrganigramaRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\personal
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            966 DocTranDePersonalRepo.java
+-a----         1/17/2026   9:27 PM           1653 IntegrantePersonalRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           3415 OrdenProduccionRepo.java
+-a----         1/17/2026   9:27 PM            753 OrdenSeguimientoRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\producto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                manufacturing
+d-----         1/17/2026   9:27 PM                procesos
+-a----         1/17/2026   9:27 PM            822 CategoriaRepo.java
+-a----         1/17/2026   9:27 PM            794 FamiliaRepo.java
+-a----         1/17/2026   9:27 PM            556 InsumoRepo.java
+-a----         1/17/2026   9:27 PM           1301 MaterialRepo.java
+-a----         1/17/2026   9:27 PM            497 ProductoRepo.java
+-a----         1/17/2026   9:27 PM           1487 SemiTerminadoRepo.java
+-a----         1/17/2026   9:27 PM            622 TerminadoRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\producto\manufacturing
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                snapshots
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\producto\manufacturing\snapshots
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            500 ManufacturingVersionRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\producto\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            556 AreaProduccionRepo.java
+-a----         1/17/2026   9:27 PM            595 ProcesoProduccionCompletoRepo
+                                                  .java
+-a----         1/17/2026   9:27 PM            569 ProcesoProduccionRepo.java
+-a----         1/17/2026   9:27 PM            519 ProcesoRecursoRepo.java
+-a----         1/17/2026   9:27 PM            568 RecursoProduccionRepo.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\usuarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            477 AccesoRepository.java
+-a----         1/17/2026   9:27 PM           1206 PasswordResetTokenRepository.
+                                                  java
+-a----         1/17/2026   9:27 PM             85 RoleRepository.java
+-a----         1/17/2026   9:27 PM            705 UserRepository.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\repo\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1388 ClienteRepo.java
+-a----         1/17/2026   9:27 PM            828 FacturaVentaRepo.java
+-a----         1/17/2026   9:27 PM            798 OrdenVentaRepo.java
+-a----         1/17/2026   9:27 PM            755 VendedorRepository.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                activos
+d-----         1/17/2026   9:27 PM                commons
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                contabilidad
+d-----         1/17/2026   9:27 PM                inventarios
+d-----         1/17/2026   9:27 PM                master
+d-----         1/17/2026   9:27 PM                organigrama
+d-----         1/17/2026   9:27 PM                produccion
+d-----         1/17/2026   9:27 PM                productos
+d-----         1/17/2026   9:27 PM                rehumanos
+d-----         1/17/2026   9:27 PM                users
+d-----         1/17/2026   9:27 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           7764 ActivoFijoResource.java
+-a----         1/17/2026   9:27 PM          10844 OCAFResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                notificaciones
+-a----         1/17/2026   9:27 PM           1789 BackendInformationResource.ja
+                                                  va
+-a----         1/17/2026   9:27 PM           2930 BulkUploadResource.java
+-a----         1/17/2026   9:27 PM           1835 DocumentPdfResource.java
+-a----         1/17/2026   9:27 PM           5172 EmailResource.java
+-a----         1/17/2026   9:27 PM           1751 TRMResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\commons\notificaciones
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1230 NotificacionesModulosResource
+                                                  .java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           6407 ComprasResource.java
+-a----         1/17/2026   9:27 PM           5702 ProveedorResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          21716 ContabilidadController.java
+-a----         1/17/2026   9:27 PM           9008 ContabilidadResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4757 IngresoAlmacenResource.java
+-a----         1/20/2026   2:09 PM           2631 InventarioResource.java
+-a----         1/17/2026   9:27 PM           7250 MovimientosResource.java
+-a----         1/17/2026   9:27 PM           8336 SalidaAlmacenResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2790 MasterDirectiveResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           5992 CargoOrganigramaResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           8126 ProduccionResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\productos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                exceptions
+d-----         1/17/2026   9:27 PM                procesos
+-a----         1/17/2026   9:27 PM           6126 CategoriaResource.java
+-a----         1/17/2026   9:27 PM           5974 FamiliaResource.java
+-a----         1/17/2026   9:27 PM          14943 ProductoResource.java
+-a----         1/17/2026   9:27 PM           6354 SemiTerResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\productos\exceptions
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1740 CategoriaExceptions.java
+-a----         1/17/2026   9:27 PM           1736 FamiliaExceptions.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\productos\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           3482 AreaProduccionResource.java
+-a----         1/17/2026   9:27 PM           1549 ProcesoProduccionCompletoReso
+                                                  urce.java
+-a----         1/17/2026   9:27 PM           5976 ProcesoProduccionResource.jav
+                                                  a
+-a----         1/17/2026   9:27 PM           2994 ProcesoRecursoResource.java
+-a----         1/17/2026   9:27 PM           4698 RecursoProduccionResource.jav
+                                                  a
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\rehumanos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4515 IntegrantePersonalResource.ja
+                                                  va
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          10043 AuthResource.java
+-a----         1/17/2026   9:27 PM           5119 UserManagementResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\resource\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           8023 ClienteResource.java
+-a----         1/17/2026   9:27 PM           2115 VendedorResource.java
+-a----         1/17/2026   9:27 PM           3441 VentasResource.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\security
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1747 JwtAuthenticationFilter.java
+-a----         1/17/2026   9:27 PM           3503 JwtTokenProvider.java
+-a----         1/17/2026   9:27 PM           2476 MigrationAuthenticationProvid
+                                                  er.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                activos
+d-----         1/17/2026   9:27 PM                commons
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                contabilidad
+d-----         1/17/2026   9:27 PM                inventarios
+d-----         1/17/2026   9:27 PM                master
+d-----         1/17/2026   9:27 PM                organigrama
+d-----         1/17/2026   9:27 PM                produccion
+d-----         1/17/2026   9:27 PM                productos
+d-----         1/17/2026   9:27 PM                rehumanos
+d-----         1/17/2026   9:27 PM                users
+d-----         1/17/2026   9:27 PM                ventas
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                fijos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\activos\fijos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          16112 ActivoFijoService.java
+-a----         1/17/2026   9:27 PM          27300 OCAFService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                notificaciones
+-a----         1/17/2026   9:27 PM          12942 BackendInformationService.jav
+                                                  a
+-a----         1/17/2026   9:27 PM          48145 BulkUploadService.java
+-a----         1/17/2026   9:27 PM          15144 DocumentPdfService.java
+-a----         1/17/2026   9:27 PM           8605 EmailService.java
+-a----         1/17/2026   9:27 PM           7160 FileStorageService.java
+-a----         1/17/2026   9:27 PM           1266 TRMService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\commons\notificaciones
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          17965 NotificacionesModulosService.
+                                                  java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          31435 ComprasService.java
+-a----         1/17/2026   9:27 PM          10536 ProveedorService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          10896 AsientoContableService.java
+-a----         1/17/2026   9:27 PM          13592 ContabilidadService.java
+-a----         1/17/2026   9:27 PM           3000 CuentaContableService.java
+-a----         1/17/2026   9:27 PM          12460 DepreciacionScheduler.java
+-a----         1/17/2026   9:27 PM           8449 PeriodoContableService.java
+-a----         1/17/2026   9:27 PM          17543 ReporteContableService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          12784 IngresoAlmacenService.java
+-a----         1/20/2026   2:08 PM          12574 InventarioService.java
+-a----         1/17/2026   9:27 PM          34370 MovimientosService.java
+-a----         1/17/2026   9:27 PM          58872 SalidaAlmacenService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\master
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                configs
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\master\configs
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2799 MasterDirectiveService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\organigrama
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4843 CargoOrganigramaService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1784 MPSService.java
+-a----         1/17/2026   9:27 PM          38224 ProduccionService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\productos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                procesos
+-a----         1/17/2026   9:27 PM           5974 CategoriaService.java
+-a----         1/17/2026   9:27 PM           5685 FamiliaService.java
+-a----         1/17/2026   9:27 PM          24992 ProductoService.java
+-a----         1/17/2026   9:27 PM          14194 SemiTerService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\productos\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4771 AreaProduccionService.java
+-a----         1/17/2026   9:27 PM           1981 ProcesoProduccionCompletoServ
+                                                  ice.java
+-a----         1/17/2026   9:27 PM          15596 ProcesoProduccionService.java
+-a----         1/17/2026   9:27 PM           1585 ProcesoRecursoService.java
+-a----         1/17/2026   9:27 PM           6453 RecursoProduccionService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\rehumanos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4110 IntegrantePersonalService.jav
+                                                  a
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           9522 AuthService.java
+-a----         1/17/2026   9:27 PM           1889 UserDetailsServiceImpl.java
+-a----         1/17/2026   9:27 PM           9421 UserManagementService.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\jav
+    a\exotic\app\planta\service\ventas
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           8754 ClienteService.java
+-a----         1/17/2026   9:27 PM           3811 VendedorService.java
+-a----         1/17/2026   9:27 PM           2646 VentasService.java
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\resources
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                db
+-a----         5/23/2025   6:26 PM            127 application-jwt.properties
+-a----         7/30/2025  11:00 AM           1095 application.properties
+-a----         1/17/2026   9:27 PM           1503 application.yml
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\resources\db
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                migration
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\main\res
+    ources\db\migration
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1740 eliminar_material.sql
+-a----         1/17/2026   9:27 PM           1945 eliminar_terminados.sql
+-a----         1/17/2026   9:27 PM           2374 proveedor_surrogate_pk_migrat
+                                                  ion.sql
+-a----         1/17/2026   9:27 PM           1528 V003__add_usuarios_to_transac
+                                                  cion_almacen.sql
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                java
+d-----         1/17/2026   9:27 PM                resources
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\java
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                exotic
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\java\exotic
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                app
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                planta
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                jshell
+d-----         1/17/2026   9:27 PM                model
+d-----         1/17/2026   9:27 PM                service
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\jshell
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2508 TRMTest.jsh
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\model
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                producto
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\model\producto
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                procesos
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\model\producto\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2486 ProcesoRecursoTest.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\service
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                commons
+d-----         1/17/2026   9:27 PM                inventarios
+d-----         1/17/2026   9:27 PM                productos
+d-----         1/17/2026   9:27 PM                users
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\service\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           5759 BulkUploadServiceTest.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\service\inventarios
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           3523 MovimientosServiceTest.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\service\productos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           5937 SemiTerServiceTest.java
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\jav
+    a\exotic\app\planta\service\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4393 AuthServiceTest.java
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\resources
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                http
+    Directory:
+    C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\resources\http
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                activos
+d-----         1/17/2026   9:27 PM                commons
+d-----         1/17/2026   9:27 PM                compras
+d-----         1/17/2026   9:27 PM                contabilidad
+d-----         1/17/2026   9:27 PM                produccion
+d-----         1/17/2026   9:27 PM                productos
+d-----         1/17/2026   9:27 PM                scheduling_test1
+d-----         1/17/2026   9:27 PM                users
+-a----         1/17/2026   9:27 PM            340 http-client.env.json
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\activos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           4358 busqueda-activos-fijos.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\commons
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            826 backend-information.http
+-a----         1/17/2026   9:27 PM            658 document-pdf.http
+-a----         1/17/2026   9:27 PM           2677 email.http
+-a----         1/17/2026   9:27 PM           1065 notificaciones.http
+-a----         1/17/2026   9:27 PM            748 trm.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\compras
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM            688 orden-compra.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\contabilidad
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2363 actualizar-contabilidad.http
+-a----         1/17/2026   9:27 PM           4157 busqueda-transacciones-almace
+                                                  n.http
+-a----         1/17/2026   9:27 PM           2443 consulta-contabilidad.http
+-a----         1/17/2026   9:27 PM           6342 insertar-asientos.http
+-a----         1/17/2026   9:27 PM           4591 insertar-cuentas.http
+-a----         1/17/2026   9:27 PM           2421 insertar-periodos.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\produccion
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1071 produccion_resource.http
+-a----         1/17/2026   9:27 PM            955 search-within-range.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\productos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/17/2026   9:27 PM                procesos
+-a----         1/17/2026   9:27 PM           1855 consulta-productos.http
+-a----         1/17/2026   9:27 PM           7674 insertar-productos.http
+-a----         1/17/2026   9:27 PM           4284 search-terminados.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\productos\procesos
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           2006 area-produccion.http
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\scheduling_test1
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM          16288 insertar_datos_produccion.htt
+                                                  p
+    Directory: C:\Users\hardp\Desktop\exotic_ws\exotic-app-backend\src\test\res
+    ources\http\users
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         1/17/2026   9:27 PM           1481 auth.http

@@ -28,6 +28,42 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
 
     List<Movimiento> findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAsc(String productoId, LocalDateTime start, LocalDateTime end);
 
+    Page<Movimiento> findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
+            String productoId,
+            LocalDateTime start,
+            LocalDateTime end,
+            Pageable pageable
+    );
+
+    List<Movimiento> findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
+            String productoId,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    /**
+     * Suma cantidades dentro de un rango, antes de un cursor (fechaMovimiento, movimientoId).
+     * Se usa para calcular el saldo acumulado de páginas intermedias del kardex.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND (
+                   m.fechaMovimiento < :cursorFecha
+                   OR (m.fechaMovimiento = :cursorFecha AND m.movimientoId < :cursorId)
+              )
+            """)
+    Double sumCantidadInRangeBeforeCursor(
+            @Param("productoId") String productoId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("cursorFecha") LocalDateTime cursorFecha,
+            @Param("cursorId") int cursorId
+    );
+
     /**
      * Encuentra lotes con stock disponible para un producto específico,
      * ordenados únicamente por fecha de vencimiento (primero los más próximos a vencer).
