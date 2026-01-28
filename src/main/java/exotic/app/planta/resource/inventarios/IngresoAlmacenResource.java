@@ -25,7 +25,7 @@ public class IngresoAlmacenResource {
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
 
     @GetMapping("ocms_pendientes_ingreso")
-    public ResponseEntity<List<OrdenCompraMateriales>> ConsultarOCMsPendientesRecepcion(
+    public ResponseEntity<Page<OrdenCompraMateriales>> ConsultarOCMsPendientesRecepcion(
             @RequestParam int page,
             @RequestParam int size,
             @ModelAttribute SearchOCMFilterDTO filterDTO
@@ -35,11 +35,7 @@ public class IngresoAlmacenResource {
                 page,
                 size
         );
-        
-        // Convert Page to List for frontend compatibility
-        List<OrdenCompraMateriales> ordenes = pageResult.getContent();
-        
-        return ResponseEntity.ok(ordenes);
+        return ResponseEntity.ok(pageResult);
     }
 
 
