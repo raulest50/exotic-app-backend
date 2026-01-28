@@ -29,6 +29,7 @@ public class CorsConfig {
             // Staging
             "https://lac-manufacture-frontend-staging.onrender.com",
             "https://lac-manufacture-backend-staging.onrender.com",
+            "https://exotic-app-frontend-staging.onrender.com",
             // Producción
             "https://lac-manufacture-backend.onrender.com",
             "https://lac-manufacture-frontend.onrender.com"
