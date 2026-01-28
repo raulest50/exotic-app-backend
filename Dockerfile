@@ -40,5 +40,5 @@ COPY --from=builder /app/build/libs/exotic-app-v1.jar app.jar
 # Expose the port the app runs on
 EXPOSE 8080
 
-# Command to run the application with production profile
-ENTRYPOINT ["java", "-Dspring.profiles.active=prod", "-jar", "/app/app.jar"]
+# Command to run the application - profile controlled via SPRING_PROFILES_ACTIVE env var
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
