@@ -27,9 +27,8 @@ public class CorsConfig {
             "http://localhost:5173",
             "http://localhost:3000",
             // Staging
-            "https://lac-manufacture-frontend-staging.onrender.com",
-            "https://lac-manufacture-backend-staging.onrender.com",
             "https://exotic-app-frontend-staging.onrender.com",
+            "https://exotic-app-backend-staging.onrender.com",
             // Producción
             "https://lac-manufacture-backend.onrender.com",
             "https://lac-manufacture-frontend.onrender.com"
