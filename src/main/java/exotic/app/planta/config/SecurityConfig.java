@@ -49,6 +49,9 @@ public class SecurityConfig {
                 // Use stateless session management for JWT
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
+                    // Allow preflight (OPTIONS) requests without authentication
+                    auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll();
+
                     // Allow authentication endpoints without authentication
                     auth.requestMatchers("/api/auth/**").permitAll();
 
