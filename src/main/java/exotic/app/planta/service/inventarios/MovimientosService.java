@@ -388,7 +388,7 @@ public class MovimientosService {
     }
 
 
-    private void updateCostoCascade(Producto producto, Set<String> updatedProductIds) {
+    public void updateCostoCascade(Producto producto, Set<String> updatedProductIds) {
         // If we've already updated this product, return to prevent infinite recursion
         if (updatedProductIds.contains(producto.getProductoId())) {
             return;
