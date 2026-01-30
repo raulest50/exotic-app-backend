@@ -130,6 +130,10 @@ public class CargaMasivaService {
                     double nuevoCosto = getCellValueAsDouble(row, 5);
                     double costoActual = material.getCosto();
 
+                    if (cantidadASumar == -1.0 || cantidadASumar == -7.0) {
+                        continue;
+                    }
+
                     boolean hasChanges = false;
 
                     if (cantidadASumar != 0) {
