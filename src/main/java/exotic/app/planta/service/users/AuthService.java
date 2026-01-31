@@ -58,8 +58,8 @@ public class AuthService {
 
             User user = userOpt.get();
 
-            // Allow login for master even if inactive
-            if (!"master".equalsIgnoreCase(user.getUsername()) && user.getEstado() != 1) {
+            // Allow login for master and super_master even if inactive
+            if (!"master".equalsIgnoreCase(user.getUsername()) && !"super_master".equalsIgnoreCase(user.getUsername()) && user.getEstado() != 1) {
                 log.info("Login attempt for inactive user: {}", username);
 
                 throw new BadCredentialsException("User is inactive");

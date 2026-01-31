@@ -11,7 +11,6 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
 import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.producto.Material;
-import exotic.app.planta.model.master.configs.MasterDirective;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.OrdenSeguimiento;
 import exotic.app.planta.model.produccion.dto.DispensacionFormularioDTO;
@@ -20,7 +19,6 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
-import exotic.app.planta.repo.master.configs.MasterDirectiveRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.OrdenSeguimientoRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
@@ -58,7 +56,6 @@ public class SalidaAlmacenService {
     private final LoteRepo loteRepo;
     private final UserRepository userRepository;
     private final ContabilidadService contabilidadService;
-    private final MasterDirectiveRepo masterDirectiveRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final ProduccionService produccionService;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
@@ -584,72 +581,8 @@ public class SalidaAlmacenService {
      */
     @Transactional
     public TransaccionAlmacen createDispensacionNoPlanificada(DispensacionNoPlanificadaDTO dispensacionDTO) {
-        // Check if unplanned dispensation is allowed
-        MasterDirective directive = masterDirectiveRepo.findByNombre("Permitir Consumo No Planificado")
-                .orElseThrow(() -> new RuntimeException("Directiva de configuración no encontrada"));
-
-        if (!"true".equalsIgnoreCase(directive.getValor())) {
-            throw new RuntimeException("La dispensación no planificada no está permitida según la configuración del sistema");
-        }
-
-        // Create the warehouse transaction
-        TransaccionAlmacen transaccion = new TransaccionAlmacen();
-        transaccion.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.OAA); // Usar OAA (Orden de Ajuste de Almacén)
-        transaccion.setIdEntidadCausante(0); // No hay entidad causante específica, usamos 0 en lugar de null
-        transaccion.setObservaciones(dispensacionDTO.getObservaciones());
-
-        // Get the current user
-        User user = userRepository.findById(Long.valueOf(dispensacionDTO.getUsuarioId()))
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + dispensacionDTO.getUsuarioId()));
-        transaccion.setUsuarioAprobador(user);
-
-        // Create the movements
-        List<Movimiento> movimientos = new ArrayList<>();
-        for (DispensacionNoPlanificadaItemDTO item : dispensacionDTO.getItems()) {
-            // Get the product
-            Producto producto = productoRepo.findById(item.getProductoId())
-                    .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
-
-            // Create the movement
-            Movimiento movimiento = new Movimiento();
-            movimiento.setCantidad(-item.getCantidad()); // Negative because it's an output
-            movimiento.setProducto(producto);
-            movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.CONSUMO);
-            movimiento.setAlmacen(Movimiento.Almacen.GENERAL);
-            movimiento.setTransaccionAlmacen(transaccion);
-
-            // If a batch is specified, associate it
-            if (item.getLoteId() != null) {
-                Lote lote = loteRepo.findById(Long.valueOf(item.getLoteId()))
-                        .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
-                movimiento.setLote(lote);
-            }
-
-            movimientos.add(movimiento);
-        }
-
-        transaccion.setMovimientosTransaccion(movimientos);
-
-        // Create accounting entry
-        try {
-            BigDecimal montoTotal = BigDecimal.ZERO;
-            for (Movimiento movimiento : movimientos) {
-                montoTotal = montoTotal.add(
-                        BigDecimal.valueOf(Math.abs(movimiento.getCantidad()) * movimiento.getProducto().getCosto())
-                );
-            }
-
-            AsientoContable asiento = contabilidadService.registrarAsientoConsumoNoPlanificado(transaccion, montoTotal);
-            transaccion.setAsientoContable(asiento);
-            transaccion.setEstadoContable(TransaccionAlmacen.EstadoContable.CONTABILIZADA);
-        } catch (Exception e) {
-            // Log error but continue with the transaction
-            log.error("Error al registrar asiento contable para dispensación no planificada: " + e.getMessage(), e);
-            transaccion.setEstadoContable(TransaccionAlmacen.EstadoContable.PENDIENTE);
-        }
-
-        // Save the transaction
-        return transaccionAlmacenHeaderRepo.save(transaccion);
+        // Dispensación no planificada no permitida por defecto (directiva eliminada; ver Super Master si se reintroduce).
+        throw new RuntimeException("La dispensación no planificada no está permitida según la configuración del sistema");
     }
 
 

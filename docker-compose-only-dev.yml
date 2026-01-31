@@ -9,7 +9,7 @@
 
 services:
   db:
-    image: postgres:16
+    image: postgres:18
     restart: always
     environment:
       POSTGRES_USER: spring

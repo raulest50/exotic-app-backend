@@ -74,8 +74,8 @@ public class UserManagementService {
         User existing = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if ("master".equalsIgnoreCase(existing.getUsername())) {
-            throw new RuntimeException("Cannot deactivate master user");
+        if ("master".equalsIgnoreCase(existing.getUsername()) || "super_master".equalsIgnoreCase(existing.getUsername())) {
+            throw new RuntimeException("Cannot deactivate master or super_master user");
         }
 
         // Only deactivate if the user is active (estado = 1)
@@ -114,8 +114,8 @@ public class UserManagementService {
         User existing = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if ("master".equalsIgnoreCase(existing.getUsername())) {
-            throw new RuntimeException("Cannot delete master user");
+        if ("master".equalsIgnoreCase(existing.getUsername()) || "super_master".equalsIgnoreCase(existing.getUsername())) {
+            throw new RuntimeException("Cannot delete master or super_master user");
         }
 
         try {
@@ -149,8 +149,8 @@ public class UserManagementService {
     public User removeAccesoFromUser(Long userId, Long accesoId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        if ("master".equalsIgnoreCase(user.getUsername())) {
-            throw new RuntimeException("Cannot remove accesos from master user");
+        if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) {
+            throw new RuntimeException("Cannot remove accesos from master or super_master user");
         }
         user.getAccesos().removeIf(acceso -> acceso.getId().equals(accesoId));
         return userRepository.save(user);

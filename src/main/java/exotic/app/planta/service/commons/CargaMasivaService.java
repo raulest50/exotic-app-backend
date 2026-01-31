@@ -3,6 +3,7 @@ package exotic.app.planta.service.commons;
 import exotic.app.planta.model.commons.dto.BulkUpdateResponseDTO;
 import exotic.app.planta.model.commons.dto.ErrorRecord;
 import exotic.app.planta.model.inventarios.Movimiento;
+import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
 import exotic.app.planta.model.inventarios.dto.AjusteItemDTO;
 import exotic.app.planta.model.producto.Material;
@@ -50,7 +51,7 @@ public class CargaMasivaService {
             headerRow.createCell(1).setCellValue("nombre");
             headerRow.createCell(2).setCellValue("costo");
             headerRow.createCell(3).setCellValue("cantidad_consolidada");
-            headerRow.createCell(4).setCellValue("cantidad_a_sumar");
+            headerRow.createCell(4).setCellValue("nuevo_valor_absoluto");
             headerRow.createCell(5).setCellValue("nuevo_costo");
 
             int rowIdx = 1;
@@ -61,7 +62,7 @@ public class CargaMasivaService {
                 row.createCell(2).setCellValue(material.getCosto());
                 Double cantidadConsolidada = transaccionAlmacenRepo.findTotalCantidadByProductoId(material.getProductoId());
                 row.createCell(3).setCellValue(cantidadConsolidada != null ? cantidadConsolidada : 0);
-                // cantidad_a_sumar vacío
+                // nuevo_valor_absoluto vacío para completar
                 row.createCell(4).setCellValue("");
                 // nuevo_costo precargado con costo actual
                 row.createCell(5).setCellValue(material.getCosto());
@@ -126,20 +127,24 @@ public class CargaMasivaService {
                         continue;
                     }
 
-                    double cantidadASumar = getCellValueAsDouble(row, 4);
+                    double nuevoValorAbsoluto = getCellValueAsDouble(row, 4);
                     double nuevoCosto = getCellValueAsDouble(row, 5);
                     double costoActual = material.getCosto();
 
-                    if (cantidadASumar == -1.0 || cantidadASumar == -7.0) {
+                    if (nuevoValorAbsoluto == -1.0 || nuevoValorAbsoluto == -7.0) {
                         continue;
                     }
 
+                    Double actualConsolidado = transaccionAlmacenRepo.findTotalCantidadByProductoId(productoid);
+                    double actual = actualConsolidado != null ? actualConsolidado : 0.0;
+                    double delta = nuevoValorAbsoluto - actual;
+
                     boolean hasChanges = false;
 
-                    if (cantidadASumar != 0) {
+                    if (delta != 0) {
                         AjusteItemDTO ajusteItem = new AjusteItemDTO();
                         ajusteItem.setProductoId(productoid);
-                        ajusteItem.setCantidad(cantidadASumar);
+                        ajusteItem.setCantidad(delta);
                         ajusteItem.setAlmacen(Movimiento.Almacen.GENERAL);
                         ajusteItem.setMotivo("COMPRA");
                         ajusteItems.add(ajusteItem);
@@ -169,7 +174,7 @@ public class CargaMasivaService {
                 ajusteDTO.setUsername(username);
                 ajusteDTO.setObservaciones("Carga masiva de inventario");
                 ajusteDTO.setItems(ajusteItems);
-                movimientosService.createAjusteInventario(ajusteDTO);
+                movimientosService.createAjusteInventario(ajusteDTO, TransaccionAlmacen.TipoEntidadCausante.CM);
             }
 
             byte[] reportFile = generateReportExcel(sheet, errors, successCount);

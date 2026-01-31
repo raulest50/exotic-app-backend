@@ -106,6 +106,7 @@
             OTA, // orden de tranferencia de almacen
             OAA, // orden de ajuste de almacen
             OD, // orden de dispensacion
+            CM, // carga masiva de inventario
         }
 
         /**

@@ -16,6 +16,7 @@ public class DataBaseInitializer {
     private final CargaMasiva cargaMasiva;
     private final CuentasInitializer cuentasInitializer;
     private final MasterDirectiveInitializer masterDirectiveInitializer;
+    private final SuperMasterConfigInitializer superMasterConfigInitializer;
     private final AccesoRepository accesoRepository;
 
     private static final Logger log = LoggerFactory.getLogger(DataBaseInitializer.class);
@@ -23,6 +24,7 @@ public class DataBaseInitializer {
     @Bean
     CommandLineRunner initDatabase() {
         return args -> {
+            superMasterConfigInitializer.initializeSuperMasterConfig();
             // Check if the accesos table is empty (you can also check other key tables if desired)
             // this check is to see if db is already initialized.
             if (accesoRepository.count() == 0) { // if not initialized, then it does the carga masiva
