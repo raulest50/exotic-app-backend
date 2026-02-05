@@ -127,6 +127,12 @@ public class OrdenProduccion {
     @JsonManagedReference(value = "orden-planificacion")
     private PlanificacionProduccion planificacionProduccion;
 
+    /**
+     * Número de lote asignado a esta orden (redundante con Lote.batchNumber para consultas rápidas).
+     */
+    @Column(name = "lote_asignado", length = 50)
+    private String loteAsignado;
+
     public OrdenProduccion(Producto producto, String observaciones, double cantidadProducir) {
         this.producto = producto;
         this.observaciones = observaciones;

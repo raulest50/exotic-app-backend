@@ -10,6 +10,9 @@ import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.Empty
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,13 +93,10 @@ public class CategoriaService {
         log.info("Intentando eliminar categoría con ID: {}", categoriaId);
 
         // Verificar si la categoría existe
-        Optional<Categoria> categoriaOpt = categoriaRepo.findById(categoriaId);
-        if (categoriaOpt.isEmpty()) {
+        if (!categoriaRepo.existsById(categoriaId)) {
             log.error("No se encontró categoría con ID: {}", categoriaId);
             throw new ValidationException("No existe categoría con ID: " + categoriaId);
         }
-
-        Categoria categoria = categoriaOpt.get();
 
         // Verificar si hay productos terminados que referencian esta categoría
         Specification<Terminado> spec = (root, query, cb) -> 
@@ -123,5 +123,39 @@ public class CategoriaService {
      */
     public Optional<Categoria> getCategoriaById(int categoriaId) {
         return categoriaRepo.findById(categoriaId);
+    }
+
+    /**
+     * Busca categorías por nombre con coincidencia parcial (case-insensitive)
+     * @param nombre nombre o fragmento a buscar; null o vacío retorna todas las categorías
+     * @param page número de página (0-based)
+     * @param size tamaño de página
+     * @return página de categorías
+     */
+    public Page<Categoria> searchCategorias(String nombre, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        if (nombre == null || nombre.isBlank()) {
+            return categoriaRepo.findAll(pageable);
+        }
+        return categoriaRepo.findByCategoriaNombreContainingIgnoreCase(nombre.trim(), pageable);
+    }
+
+    /**
+     * Actualiza el tamaño de lote de una categoría
+     * @param categoriaId ID de la categoría
+     * @param loteSize nuevo tamaño de lote (debe ser >= 0)
+     * @return la categoría actualizada
+     * @throws ValidationException si la categoría no existe
+     * @throws IllegalArgumentException si loteSize es negativo
+     */
+    @Transactional
+    public Categoria updateLoteSize(int categoriaId, int loteSize) {
+        if (loteSize < 0) {
+            throw new IllegalArgumentException("El tamaño de lote debe ser mayor o igual a 0");
+        }
+        Categoria categoria = categoriaRepo.findById(categoriaId)
+                .orElseThrow(() -> new ValidationException("No se encontró categoría con ID: " + categoriaId));
+        categoria.setLoteSize(loteSize);
+        return categoriaRepo.save(categoria);
     }
 }

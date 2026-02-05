@@ -45,10 +45,13 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Year;
 import java.util.*;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -105,6 +108,8 @@ public class ProduccionService {
             lote.setBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
             lote.setOrdenProduccion(savedOrden);
             loteRepo.save(lote);
+            savedOrden.setLoteAsignado(lote.getBatchNumber());
+            ordenProduccionRepo.save(savedOrden);
         }
 
         List<OrdenSeguimiento> ordenesSeguimiento = savedOrden.getOrdenesSeguimiento();
@@ -124,7 +129,47 @@ public class ProduccionService {
         return savedOrden;
     }
 
+    /**
+     * Genera el siguiente número de lote para un producto terminado.
+     * Patrón: prefijoLote + "-" + número de 7 dígitos + "-" + año 2 dígitos (ej. TRK-0000001-26).
+     * El secuencial se calcula sobre lotes existentes del mismo producto y año.
+     *
+     * @param productoId ID del producto terminado
+     * @return Número de lote generado, o null si el producto no es terminado o no tiene prefijoLote
+     */
+    @Transactional(readOnly = true)
+    public String obtenerSiguienteNumeroLote(String productoId) {
+        Optional<Terminado> terminadoOpt = terminadoRepo.findById(productoId);
+        if (terminadoOpt.isEmpty()) {
+            throw new IllegalArgumentException("Producto no encontrado o no es un producto terminado: " + productoId);
+        }
+        Terminado terminado = terminadoOpt.get();
+        String prefijo = terminado.getPrefijoLote();
+        if (prefijo == null || prefijo.isBlank()) {
+            throw new IllegalArgumentException("El producto terminado no tiene prefijo de lote definido: " + productoId);
+        }
+        prefijo = prefijo.trim();
+        int year2 = Year.now().getValue() % 100;
+        String yearStr = String.format("%02d", year2);
 
+        List<Lote> lotes = loteRepo.findByOrdenProduccion_Producto_ProductoId(productoId);
+        Pattern regex = Pattern.compile("^" + Pattern.quote(prefijo) + "-(\\d+)-(\\d{2})$");
+        int max = 0;
+        for (Lote l : lotes) {
+            String bn = l.getBatchNumber();
+            if (bn == null) continue;
+            Matcher m = regex.matcher(bn);
+            if (m.matches()) {
+                int y = Integer.parseInt(m.group(2));
+                if (y == year2) {
+                    int n = Integer.parseInt(m.group(1));
+                    if (n > max) max = n;
+                }
+            }
+        }
+        int next = max + 1;
+        return prefijo + "-" + String.format("%07d", next) + "-" + yearStr;
+    }
 
     public Page<OrdenProduccionDTO> searchOrdenesProduccionByDateRangeAndEstadoOrden(
             LocalDateTime startDate,

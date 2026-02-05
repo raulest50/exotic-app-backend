@@ -44,4 +44,11 @@ public class Terminado extends Producto{
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
     private CasePack casePack;
 
+    /**
+     * Lo ideal: si el producto se llama Tratamiento Rizo Adulto,
+     * el prefijo ideal seria TRA. Debe ser unico entre todos los terminados.
+     */
+    @Column(unique = true, nullable = true, length = 20)
+    private String prefijoLote;
+
 }

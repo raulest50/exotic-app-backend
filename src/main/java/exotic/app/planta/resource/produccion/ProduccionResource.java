@@ -45,6 +45,19 @@ public class ProduccionResource {
         return ResponseEntity.created(URI.create("/ordenes/ordenID")).body(produccionService.saveOrdenProduccion(ordenProduccionDTO));
     }
 
+    /**
+     * Genera el siguiente número de lote para un producto terminado (prefijo + secuencial + año).
+     * Ejemplo: TRK-0000001-26.
+     */
+    @GetMapping("/next-lote")
+    public ResponseEntity<?> getNextLote(@RequestParam String productoId) {
+        try {
+            String lote = produccionService.obtenerSiguienteNumeroLote(productoId);
+            return ResponseEntity.ok(Map.of("lote", lote));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 
     @GetMapping("/search_within_range")
     public ResponseEntity<Page<OrdenProduccionDTO>> searchOrdenesProduccion(

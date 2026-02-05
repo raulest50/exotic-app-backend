@@ -208,6 +208,28 @@ public class ProductoService {
         return terminadoRepo.findById(productoId);
     }
 
+    /**
+     * Verifica si el prefijo de lote esta disponible (unico entre terminados).
+     * Si se pasa productoIdExcluir, el prefijo se considera valido si el unico
+     * terminado que lo tiene es ese producto (edicion).
+     */
+    @Transactional(readOnly = true)
+    public boolean isPrefijoLoteDisponible(String prefijoLote, String productoIdExcluir) {
+        if (prefijoLote == null || prefijoLote.isBlank()) {
+            return false;
+        }
+        String trimmed = prefijoLote.trim();
+        Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(trimmed);
+        if (existing.isEmpty()) {
+            return true;
+        }
+        if (productoIdExcluir != null && !productoIdExcluir.isBlank()
+                && existing.get().getProductoId().equals(productoIdExcluir)) {
+            return true;
+        }
+        return false;
+    }
+
     public Page<ProductoStockDTO> searchTerminadoAndSemiTerminadoWithStock(String searchTerm, String tipoBusqueda, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
 
@@ -504,8 +526,14 @@ public class ProductoService {
             log.info("Actualizando producto tipo SemiTerminado");
             return semiTerminadoRepo.save((SemiTerminado) productoOriginal);
         } else if (productoOriginal instanceof Terminado) {
+            Terminado terminadoOriginal = (Terminado) productoOriginal;
+            if (producto instanceof Terminado) {
+                Terminado terminadoRequest = (Terminado) producto;
+                terminadoOriginal.setPrefijoLote(terminadoRequest.getPrefijoLote());
+                log.info("Actualizando prefijo de lote: {}", terminadoRequest.getPrefijoLote());
+            }
             log.info("Actualizando producto tipo Terminado");
-            return terminadoRepo.save((Terminado) productoOriginal);
+            return terminadoRepo.save(terminadoOriginal);
         } else {
             log.info("Actualizando producto tipo genérico");
             return productoRepo.save(productoOriginal);

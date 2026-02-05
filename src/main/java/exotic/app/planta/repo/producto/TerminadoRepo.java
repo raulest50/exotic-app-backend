@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 
 // removed extend : , JpaSpecificationExecutor<Terminado>
@@ -15,5 +16,7 @@ import java.util.List;
 public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpecificationExecutor<Terminado> {
 
     List<Terminado> findByInsumos_Producto(Producto producto);
+
+    Optional<Terminado> findByPrefijoLote(String prefijoLote);
 
 }

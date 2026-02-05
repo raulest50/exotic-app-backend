@@ -147,6 +147,22 @@ public class ProductoResource {
         return ResponseEntity.ok().body(productos);
     }
 
+    /**
+     * Valida si el prefijo de lote esta disponible (unico entre productos terminados).
+     * productoId es opcional: al editar, pasarlo para excluir el producto actual.
+     */
+    @GetMapping("/prefijo-lote/valido")
+    public ResponseEntity<Map<String, Object>> isPrefijoLoteValido(
+            @RequestParam String prefijoLote,
+            @RequestParam(required = false) String productoId) {
+        boolean valido = productoService.isPrefijoLoteDisponible(prefijoLote, productoId);
+        if (valido) {
+            return ResponseEntity.ok(Map.of("valido", true));
+        }
+        return ResponseEntity.ok(Map.of("valido", false, "mensaje",
+                "El prefijo de lote ya esta asignado a otro producto terminado."));
+    }
+
     @GetMapping("/{productoId}")
     public ResponseEntity<Producto> getProductoById(@PathVariable String productoId) {
         return productoService.findProductoById(productoId)
