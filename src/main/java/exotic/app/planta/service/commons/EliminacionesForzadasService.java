@@ -82,6 +82,44 @@ public class EliminacionesForzadasService {
         return response;
     }
 
+    /**
+     * Ejecuta la eliminación forzada de una OrdenCompraMateriales y todas sus dependencias.
+     * Orden: desvincular asientos en transacciones, borrar transacciones (movimientos en cascade),
+     * desvincular lotes, borrar ítems, borrar OCM.
+     *
+     * @param ordenCompraId ID de la orden de compra
+     * @throws RuntimeException si la orden no existe
+     */
+    @Transactional
+    public void ejecutarEliminacionOrdenCompra(int ordenCompraId) {
+        if (!ordenCompraRepo.existsById(ordenCompraId)) {
+            throw new RuntimeException("OrdenCompraMateriales not found with id: " + ordenCompraId);
+        }
+
+        List<TransaccionAlmacen> transacciones = transaccionAlmacenHeaderRepo
+                .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
+                        TransaccionAlmacen.TipoEntidadCausante.OCM,
+                        ordenCompraId
+                );
+        for (TransaccionAlmacen ta : transacciones) {
+            ta.setAsientoContable(null);
+            transaccionAlmacenHeaderRepo.save(ta);
+            transaccionAlmacenHeaderRepo.delete(ta);
+        }
+
+        List<Lote> lotes = loteRepo.findByOrdenCompraMateriales_OrdenCompraId(ordenCompraId);
+        for (Lote lote : lotes) {
+            lote.setOrdenCompraMateriales(null);
+            loteRepo.save(lote);
+        }
+
+        List<ItemOrdenCompra> items = itemOrdenCompraRepo.findByOrdenCompraMateriales_OrdenCompraId(ordenCompraId);
+        itemOrdenCompraRepo.deleteAll(items);
+
+        ordenCompraRepo.deleteById(ordenCompraId);
+        log.info("Eliminación forzada ejecutada para OCM id: {}", ordenCompraId);
+    }
+
     private ItemOrdenCompraResumenDTO toItemResumen(ItemOrdenCompra item) {
         ItemOrdenCompraResumenDTO dto = new ItemOrdenCompraResumenDTO();
         dto.setItemOrdenId(item.getItemOrdenId());
