@@ -4,7 +4,6 @@ package exotic.app.planta.model.producto.manufacturing.procesos;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import exotic.app.planta.model.producto.Producto;
-import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
 import lombok.*;
 
@@ -31,10 +30,6 @@ public class ProcesoProduccionCompleto {
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "proceso_completo_id")
     private List<ProcesoProduccionNode> procesosProduccion;
-
-    @OneToOne(mappedBy = "procesoProduccionCompleto")
-    @JsonBackReference(value = "orden-proceso")
-    private OrdenProduccion ordenProduccion;
 
     @Column(name = "rendimiento_teorico")
     private double rendimientoTeorico;

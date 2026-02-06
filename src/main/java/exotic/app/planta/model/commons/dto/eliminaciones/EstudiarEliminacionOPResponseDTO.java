@@ -11,11 +11,11 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class EstudiarEliminacionOCMResponseDTO {
-    private int ordenCompraId;
-    /** Solo se puede ejecutar eliminación si no hay transacciones de almacén asociadas. */
+public class EstudiarEliminacionOPResponseDTO {
+    private int ordenProduccionId;
+    /** Solo se puede ejecutar eliminación si no hay transacciones asociadas. */
     private boolean eliminable;
-    private List<ItemOrdenCompraResumenDTO> itemsOrdenCompra;
+    private List<OrdenSeguimientoResumenDTO> ordenesSeguimiento;
     private List<LoteResumenDTO> lotes;
     private List<TransaccionAlmacenResumenDTO> transaccionesAlmacen;
     private List<AsientoContableResumenDTO> asientosContables;

@@ -38,4 +38,12 @@ public interface LoteRepo extends JpaRepository<Lote, Long> {
      */
     @Query("SELECT l FROM Lote l WHERE l.ordenProduccion IS NOT NULL AND l.ordenProduccion.producto.productoId = :productoId")
     List<Lote> findByOrdenProduccion_Producto_ProductoId(@Param("productoId") String productoId);
+
+    /**
+     * Busca todos los lotes asociados a una orden de producción por su ID.
+     *
+     * @param ordenId ID de la orden de producción (orden_id)
+     * @return Lista de lotes que referencian esa orden
+     */
+    List<Lote> findByOrdenProduccion_OrdenId(int ordenId);
 }
