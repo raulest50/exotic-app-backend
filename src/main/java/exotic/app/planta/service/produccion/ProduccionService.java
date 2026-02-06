@@ -254,6 +254,7 @@ public class ProduccionService {
         dto.setNumeroPedidoComercial(orden.getNumeroPedidoComercial());
         dto.setAreaOperativa(orden.getAreaOperativa());
         dto.setDepartamentoOperativo(orden.getDepartamentoOperativo());
+        dto.setLoteAsignado(orden.getLoteAsignado());
         if (orden.getVendedorResponsable() != null) {
             dto.setResponsableId(orden.getVendedorResponsable().getCedula());
         }
