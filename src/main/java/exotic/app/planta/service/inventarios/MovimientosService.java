@@ -158,6 +158,12 @@ public class MovimientosService {
     }
 
     public TransaccionAlmacen createAjusteInventario(AjusteInventarioDTO ajusteInventarioDTO, TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante) {
+        boolean isCargaMasiva = tipoEntidadCausante == TransaccionAlmacen.TipoEntidadCausante.CM;
+        if (isCargaMasiva) {
+            log.info("[CARGA_MASIVA-Movimientos] createAjusteInventario CM. Items={}", 
+                    ajusteInventarioDTO.getItems() != null ? ajusteInventarioDTO.getItems().size() : 0);
+        }
+
         TransaccionAlmacen transaccion = new TransaccionAlmacen();
         transaccion.setTipoEntidadCausante(tipoEntidadCausante);
         transaccion.setIdEntidadCausante(0);
@@ -177,6 +183,9 @@ public class MovimientosService {
         List<Movimiento> movimientos = new ArrayList<>();
         if (ajusteInventarioDTO.getItems() != null) {
             for (AjusteItemDTO item : ajusteInventarioDTO.getItems()) {
+                if (isCargaMasiva) {
+                    log.debug("[CARGA_MASIVA-Movimientos] Procesando item: productoId={}, cantidad={}", item.getProductoId(), item.getCantidad());
+                }
                 Producto producto = productoRepo.findByProductoId(item.getProductoId())
                         .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
 
@@ -206,7 +215,12 @@ public class MovimientosService {
         }
 
         transaccion.setMovimientosTransaccion(movimientos);
-        return transaccionAlmacenHeaderRepo.save(transaccion);
+        TransaccionAlmacen saved = transaccionAlmacenHeaderRepo.save(transaccion);
+        if (isCargaMasiva) {
+            log.info("[CARGA_MASIVA-Movimientos] Transacción guardada. transaccionId={}, movimientosCount={}", 
+                    saved.getTransaccionId(), movimientos.size());
+        }
+        return saved;
     }
 
 

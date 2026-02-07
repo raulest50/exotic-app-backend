@@ -29,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -88,6 +89,8 @@ public class CargaMasivaService {
         List<AjusteItemDTO> ajusteItems = new ArrayList<>();
         Set<String> updatedProductIds = new HashSet<>();
 
+        log.info("[CARGA_MASIVA] Inicio procesamiento. Archivo={}, usuario={}", file.getOriginalFilename(), username);
+
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheet("Carga masiva");
             if (sheet == null) {
@@ -98,46 +101,62 @@ public class CargaMasivaService {
                 throw new RuntimeException("El archivo Excel no contiene datos válidos");
             }
 
-            for (int rowNum = 2; rowNum <= sheet.getLastRowNum(); rowNum++) {
+            int totalRows = sheet.getLastRowNum() - 1 + 1;
+            log.info("[CARGA_MASIVA] Hoja '{}', filas de datos: {} (índices 1 a {})",
+                    sheet.getSheetName(), totalRows, sheet.getLastRowNum());
+
+            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
                 Row row = sheet.getRow(rowNum);
-                if (row == null) continue;
+                if (row == null) {
+                    log.debug("[CARGA_MASIVA] Fila {} (0-based={}): fila nula, omitiendo", rowNum + 1, rowNum);
+                    continue;
+                }
 
                 try {
                     String productoid = getCellValueAsString(row, 0);
                     if (productoid == null || productoid.trim().isEmpty()) {
+                        log.debug("[CARGA_MASIVA] Fila {} (0-based={}): productoid vacío, omitiendo", rowNum + 1, rowNum);
                         continue;
                     }
 
                     productoid = productoid.trim();
+                    double nuevoValorAbsoluto = getCellValueAsDouble(row, 4);
+                    double nuevoCosto = getCellValueAsDouble(row, 5);
+
                     Optional<Producto> productoOpt = productoRepo.findByProductoId(productoid);
                     if (productoOpt.isEmpty()) {
+                        log.warn("[CARGA_MASIVA] Fila {}: producto '{}' no encontrado", rowNum + 1, productoid);
                         errors.add(new ErrorRecord(rowNum + 1, productoid, "Producto no encontrado"));
                         continue;
                     }
 
                     Producto producto = productoOpt.get();
                     if (!(producto instanceof Material)) {
+                        log.warn("[CARGA_MASIVA] Fila {}: '{}' no es Material", rowNum + 1, productoid);
                         errors.add(new ErrorRecord(rowNum + 1, productoid, "El producto no es un Material"));
                         continue;
                     }
 
                     Material material = (Material) producto;
                     if (!material.isInventareable()) {
+                        log.warn("[CARGA_MASIVA] Fila {}: material '{}' no es inventariable", rowNum + 1, productoid);
                         errors.add(new ErrorRecord(rowNum + 1, productoid, "El material no es inventariable"));
                         continue;
                     }
 
-                    double nuevoValorAbsoluto = getCellValueAsDouble(row, 4);
-                    double nuevoCosto = getCellValueAsDouble(row, 5);
                     double costoActual = material.getCosto();
 
                     if (nuevoValorAbsoluto == -1.0 || nuevoValorAbsoluto == -7.0) {
+                        log.debug("[CARGA_MASIVA] Fila {}: '{}' nuevoValorAbsoluto={} (ignorar -1/-7)", rowNum + 1, productoid, nuevoValorAbsoluto);
                         continue;
                     }
 
                     Double actualConsolidado = transaccionAlmacenRepo.findTotalCantidadByProductoId(productoid);
                     double actual = actualConsolidado != null ? actualConsolidado : 0.0;
                     double delta = nuevoValorAbsoluto - actual;
+
+                    log.info("[CARGA_MASIVA] Fila {}: productoid={}, nuevoValorAbsoluto={}, actualConsolidado={}, delta={}, nuevoCosto={}, costoActual={}",
+                            rowNum + 1, productoid, nuevoValorAbsoluto, actual, delta, nuevoCosto, costoActual);
 
                     boolean hasChanges = false;
 
@@ -149,6 +168,7 @@ public class CargaMasivaService {
                         ajusteItem.setMotivo("COMPRA");
                         ajusteItems.add(ajusteItem);
                         hasChanges = true;
+                        log.info("[CARGA_MASIVA] Fila {}: agregado a ajusteItems. productoId={}, cantidad(delta)={}", rowNum + 1, productoid, delta);
                     }
 
                     if (nuevoCosto > 0 && nuevoCosto != costoActual) {
@@ -156,6 +176,7 @@ public class CargaMasivaService {
                         materialRepo.save(material);
                         updateCostoCascade(material, updatedProductIds);
                         hasChanges = true;
+                        log.info("[CARGA_MASIVA] Fila {}: actualizado costo de {} a {} para '{}'", rowNum + 1, costoActual, nuevoCosto, productoid);
                     }
 
                     if (hasChanges) {
@@ -163,18 +184,25 @@ public class CargaMasivaService {
                     }
                 } catch (Exception e) {
                     String productoid = getCellValueAsString(row, 0);
+                    log.error("[CARGA_MASIVA] Error procesando fila {} (productoid={}): {}", rowNum + 1, productoid, e.getMessage(), e);
                     errors.add(new ErrorRecord(rowNum + 1, productoid != null ? productoid : "N/A", 
                         "Error procesando fila: " + e.getMessage()));
-                    log.error("Error procesando fila {}: {}", rowNum + 1, e.getMessage(), e);
                 }
             }
 
+            log.info("[CARGA_MASIVA] Resumen iteración: successCount={}, ajusteItems.size()={}, errors.size()={}", successCount, ajusteItems.size(), errors.size());
+
             if (!ajusteItems.isEmpty()) {
+                log.info("[CARGA_MASIVA] Creando ajuste de inventario con {} items: {}", ajusteItems.size(),
+                        ajusteItems.stream().map(i -> i.getProductoId() + "=" + i.getCantidad()).collect(Collectors.joining(", ")));
                 AjusteInventarioDTO ajusteDTO = new AjusteInventarioDTO();
                 ajusteDTO.setUsername(username);
                 ajusteDTO.setObservaciones("Carga masiva de inventario");
                 ajusteDTO.setItems(ajusteItems);
-                movimientosService.createAjusteInventario(ajusteDTO, TransaccionAlmacen.TipoEntidadCausante.CM);
+                TransaccionAlmacen saved = movimientosService.createAjusteInventario(ajusteDTO, TransaccionAlmacen.TipoEntidadCausante.CM);
+                log.info("[CARGA_MASIVA] Transacción de almacén creada. transaccionId={}", saved.getTransaccionId());
+            } else {
+                log.info("[CARGA_MASIVA] No hay items de ajuste, no se crea transacción de almacén");
             }
 
             byte[] reportFile = generateReportExcel(sheet, errors, successCount);
@@ -184,6 +212,7 @@ public class CargaMasivaService {
             response.setErrors(errors);
             response.setReportFile(reportFile);
             response.setReportFileName("reporte_carga_masiva.xlsx");
+            log.info("[CARGA_MASIVA] Finalizado. successCount={}, failureCount={}", successCount, errors.size());
             return response;
 
         } catch (IOException e) {
