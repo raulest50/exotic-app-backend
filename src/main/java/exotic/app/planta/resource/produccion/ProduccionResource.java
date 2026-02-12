@@ -9,6 +9,7 @@ import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
 import exotic.app.planta.model.produccion.dto.OrdenSeguimientoDTO;
 import exotic.app.planta.service.produccion.ProduccionService;
+import exotic.app.planta.repo.inventarios.LoteRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -32,6 +33,7 @@ import java.util.Map;
 public class ProduccionResource {
 
     private final ProduccionService produccionService;
+    private final LoteRepo loteRepo;
 
     @GetMapping("/orden_produccion/{id}/insumos")
     public ResponseEntity<List<InsumoDTO>> getInsumosOrdenProduccion(@PathVariable int id) {
@@ -57,6 +59,22 @@ public class ProduccionResource {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * Verifica si un número de lote (batch number) está disponible (no existe en la base de datos).
+     * 
+     * @param batchNumber El número de lote a verificar
+     * @return ResponseEntity con un Map indicando si el lote está disponible
+     */
+    @GetMapping("/lote/disponible")
+    public ResponseEntity<Map<String, Object>> verificarDisponibilidadLote(
+            @RequestParam String batchNumber) {
+        boolean disponible = loteRepo.findByBatchNumber(batchNumber) == null;
+        return ResponseEntity.ok(Map.of(
+            "disponible", disponible,
+            "batchNumber", batchNumber
+        ));
     }
 
     @GetMapping("/search_within_range")
