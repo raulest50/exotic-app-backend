@@ -165,6 +165,10 @@ public class CargaMasivaTerminadoService {
             if (sheet == null) {
                 sheet = workbook.getSheetAt(workbook.getNumberOfSheets() > 1 ? 1 : 0);
             }
+            log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: hojaUsada={}, lastRowNum={}, totalHojas={}",
+                    sheet != null ? sheet.getSheetName() : "null",
+                    sheet != null ? sheet.getLastRowNum() : -1,
+                    workbook.getNumberOfSheets());
             if (sheet == null || sheet.getLastRowNum() < 1) {
                 errors.add(new ErrorRecord(0, "", "El archivo no contiene la hoja 'Datos' o no tiene filas de datos"));
                 return new ValidationResultDTO(false, errors, 0);
@@ -186,12 +190,17 @@ public class CargaMasivaTerminadoService {
             }
             Set<String> seenProductoIds = new HashSet<>();
             Set<String> seenPrefijos = new HashSet<>();
-            for (int rowNum = 2; rowNum <= sheet.getLastRowNum(); rowNum++) {
+            int lastRow = sheet.getLastRowNum();
+            log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: rangoBucle rowNum desde 1 hasta {} (lastRowNum={}), ¿bucleSeEjecutara?={}",
+                    lastRow, lastRow, 1 <= lastRow);
+            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
                 Row row = sheet.getRow(rowNum);
                 if (row == null) continue;
                 String productoId = getCellValueAsString(row, 0);
                 if (productoId == null || productoId.trim().isEmpty()) continue;
                 productoId = productoId.trim();
+                log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: procesando fila rowNum={} (Excel fila {}), productoId={}",
+                        rowNum, rowNum + 1, productoId);
                 rowCount++;
 
                 if (seenProductoIds.contains(productoId)) {
@@ -254,6 +263,8 @@ public class CargaMasivaTerminadoService {
                     errors.add(new ErrorRecord(rowNum + 1, productoId, "producto_id ya existe en la base de datos", "producto_id"));
                 }
             }
+            log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: fin validacion, rowCount={}, errorsCount={}",
+                    rowCount, errors.size());
             return new ValidationResultDTO(errors.isEmpty(), errors, rowCount);
         } catch (IOException e) {
             log.error("Error validando Excel de carga masiva terminados sin insumos", e);
@@ -265,6 +276,8 @@ public class CargaMasivaTerminadoService {
     @Transactional
     public ValidationResultDTO processBulkInsertSinInsumos(MultipartFile file) {
         ValidationResultDTO validation = validateExcelSinInsumos(file);
+        log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: validacion previa valid={}, rowCount={}",
+                validation.isValid(), validation.getRowCount());
         if (!validation.isValid()) {
             return validation;
         }
@@ -275,13 +288,22 @@ public class CargaMasivaTerminadoService {
             if (sheet == null) {
                 sheet = workbook.getSheetAt(workbook.getNumberOfSheets() > 1 ? 1 : 0);
             }
-            for (int rowNum = 2; rowNum <= sheet.getLastRowNum(); rowNum++) {
+            int lastRow = sheet.getLastRowNum();
+            log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: hojaUsada={}, lastRowNum={}, rangoBucle rowNum 1..{}, ¿bucleSeEjecutara?={}",
+                    sheet.getSheetName(), lastRow, lastRow, 1 <= lastRow);
+            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
                 Row row = sheet.getRow(rowNum);
-                if (row == null) continue;
+                if (row == null) {
+                    log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} (rowNum={}) es null, saltando", rowNum + 1, rowNum);
+                    continue;
+                }
                 String productoId = getCellValueAsString(row, 0);
-                if (productoId == null || productoId.trim().isEmpty()) continue;
+                if (productoId == null || productoId.trim().isEmpty()) {
+                    log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} (rowNum={}) producto_id vacio, saltando", rowNum + 1, rowNum);
+                    continue;
+                }
                 productoId = productoId.trim();
-
+                log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: procesando fila {} (rowNum={}), productoId={}", rowNum + 1, rowNum, productoId);
                 try {
                     Terminado terminado = new Terminado();
                     terminado.setProductoId(productoId);
@@ -306,11 +328,14 @@ public class CargaMasivaTerminadoService {
                     terminado.setInventareable(true);
                     terminadoRepo.save(terminado);
                     successCount++;
+                    log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} productoId={} INSERTADO OK", rowNum + 1, productoId);
                 } catch (Exception e) {
-                    log.warn("Error guardando fila {} producto_id {}: {}", rowNum + 1, productoId, e.getMessage());
+                    log.warn("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} productoId={} ERROR: {}", rowNum + 1, productoId, e.getMessage());
                     errors.add(new ErrorRecord(rowNum + 1, productoId, e.getMessage()));
                 }
             }
+            log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fin, successCount={}, errorsCount={}",
+                    successCount, errors.size());
             return new ValidationResultDTO(errors.isEmpty(), errors, successCount);
         } catch (IOException e) {
             log.error("Error procesando Excel de carga masiva terminados sin insumos", e);
@@ -324,9 +349,16 @@ public class CargaMasivaTerminadoService {
         var cell = row.getCell(cellIndex);
         if (cell == null) return null;
         if (cell.getCellType() == CellType.STRING) {
-            return cell.getStringCellValue().trim();
+            String v = cell.getStringCellValue();
+            if (v == null) {
+                log.debug("[CargaMasivaTerminados] getCellValueAsString: row={}, cellIndex={}, getStringCellValue=null (usando vacio)",
+                        row.getRowNum(), cellIndex);
+                return "";
+            }
+            return v.trim();
         }
-        return cell.toString().trim();
+        String v = cell.toString();
+        return (v == null) ? "" : v.trim();
     }
 
     private double getCellValueAsDouble(Row row, int cellIndex) {
@@ -338,9 +370,9 @@ public class CargaMasivaTerminadoService {
                 return cell.getNumericCellValue();
             }
             if (cell.getCellType() == CellType.STRING) {
-                String str = cell.getStringCellValue().trim();
-                if (str.isEmpty()) return 0;
-                return Double.parseDouble(str);
+                String str = cell.getStringCellValue();
+                if (str == null || str.trim().isEmpty()) return 0;
+                return Double.parseDouble(str.trim());
             }
         } catch (Exception e) {
             log.warn("Error parseando celda {} como número: {}", cellIndex, e.getMessage());

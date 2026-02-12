@@ -23,4 +23,10 @@
     <logger name="exotic.app.planta.service.inventarios.MovimientosService" level="DEBUG" additivity="true">
         <appender-ref ref="CARGA_MASIVA_FILE"/>
     </logger>
+    <logger name="exotic.app.planta.service.commons.CargaMasivaTerminadoService" level="DEBUG" additivity="true">
+        <appender-ref ref="CARGA_MASIVA_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.resource.commons.CargaMasivaTerminadoResource" level="DEBUG" additivity="true">
+        <appender-ref ref="CARGA_MASIVA_FILE"/>
+    </logger>
 </configuration>
