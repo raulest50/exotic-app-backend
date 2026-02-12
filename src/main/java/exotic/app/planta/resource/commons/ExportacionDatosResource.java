@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.commons;
 
 import exotic.app.planta.service.commons.ExportacionMaterialService;
+import exotic.app.planta.service.commons.ExportacionTerminadoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,12 +16,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class ExportacionDatosResource {
 
     private final ExportacionMaterialService exportacionMaterialService;
+    private final ExportacionTerminadoService exportacionTerminadoService;
 
     @GetMapping("/materiales/excel")
     public ResponseEntity<byte[]> exportarMaterialesExcel() {
         byte[] excel = exportacionMaterialService.exportarMaterialesExcel();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"exportacion_materiales.xlsx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
+
+    @GetMapping("/terminados/excel")
+    public ResponseEntity<byte[]> exportarTerminadosExcel() {
+        byte[] excel = exportacionTerminadoService.exportarTerminadosExcel();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"exportacion_terminados.xlsx\"")
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(excel);
     }
