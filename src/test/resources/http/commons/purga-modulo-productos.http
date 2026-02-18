@@ -1,0 +1,6 @@
+### Purga Módulo Productos - Estudio
+# Requiere login previo en auth.http para obtener auth_token
+# 1. Ejecutar POST login en src/test/resources/http/users/auth.http
+# 2. Ejecutar esta petición una sola vez para probar el endpoint sin frontend
+GET {{host}}/api/eliminaciones-forzadas/purga-modulo-productos/estudiar
+Authorization: Bearer {{auth_token}}
