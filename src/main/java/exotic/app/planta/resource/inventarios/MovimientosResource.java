@@ -4,8 +4,10 @@ package exotic.app.planta.resource.inventarios;
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO;
+import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionAlmacenDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.MovimientoExcelRequestDTO;
+import exotic.app.planta.model.inventarios.dto.TransaccionAlmacenResponseDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
@@ -143,8 +145,16 @@ public class MovimientosResource {
             .body(transaccion);
     }
 
-
-
+    /**
+     * Busca transacciones de almacen con filtros de tipo de entidad causante y rango de fechas.
+     * Retorna DTOs paginados para evitar problemas de serializacion JSON.
+     */
+    @PostMapping("/historial_transacciones_almacen")
+    public ResponseEntity<Page<TransaccionAlmacenResponseDTO>> buscarHistorialTransacciones(
+            @RequestBody FiltroHistorialTransaccionAlmacenDTO filtro) {
+        Page<TransaccionAlmacenResponseDTO> resultados = movimientoService.buscarHistorialTransacciones(filtro);
+        return ResponseEntity.ok(resultados);
+    }
 
 
 
