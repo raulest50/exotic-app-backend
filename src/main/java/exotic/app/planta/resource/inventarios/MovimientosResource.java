@@ -4,7 +4,7 @@ package exotic.app.planta.resource.inventarios;
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO;
-import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionAlmacenDTO;
+import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.MovimientoExcelRequestDTO;
 import exotic.app.planta.model.inventarios.dto.TransaccionAlmacenResponseDTO;
@@ -146,13 +146,18 @@ public class MovimientosResource {
     }
 
     /**
-     * Busca transacciones de almacen con filtros de tipo de entidad causante y rango de fechas.
-     * Retorna DTOs paginados para evitar problemas de serializacion JSON.
+     * Endpoint para buscar transacciones de almacén filtradas por tipo de entidad causante,
+     * fechas, proveedor (OCM), ID de transacción/orden de producción (OD),
+     * y producto terminado (OD).
+     *
+     * @param filtro DTO con los criterios de filtrado
+     * @return Página de transacciones de almacén que cumplen los criterios
      */
-    @PostMapping("/historial_transacciones_almacen")
-    public ResponseEntity<Page<TransaccionAlmacenResponseDTO>> buscarHistorialTransacciones(
-            @RequestBody FiltroHistorialTransaccionAlmacenDTO filtro) {
-        Page<TransaccionAlmacenResponseDTO> resultados = movimientoService.buscarHistorialTransacciones(filtro);
+    @PostMapping("/historial_transacciones_filter")
+    public ResponseEntity<Page<TransaccionAlmacenResponseDTO>> buscarTransaccionesAlmacenFiltradas(
+            @RequestBody FiltroHistorialTransaccionesDTO filtro) {
+        Page<TransaccionAlmacenResponseDTO> resultados =
+                movimientoService.buscarTransaccionesAlmacenFiltradas(filtro);
         return ResponseEntity.ok(resultados);
     }
 

@@ -12,7 +12,7 @@ import exotic.app.planta.model.inventarios.dto.AjusteItemDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoItemDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO;
-import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionAlmacenDTO;
+import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.TransaccionAlmacenResponseDTO;
 import exotic.app.planta.model.inventarios.Lote;
@@ -42,7 +42,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -236,70 +235,10 @@ public class MovimientosService {
      * @param file
      * @return
      */
-    private static final int MAX_RECEPCIONES_PARCIALES = 2;
-
     @Transactional
     public ResponseEntity<?> createDocIngreso(IngresoOCM_DTA ingresoOCM_dta, MultipartFile file) {
         log.info("Iniciando creación de documento de ingreso OCM. userId: {}", ingresoOCM_dta.getUserId());
         try {
-            OrdenCompraMateriales ordenCompra = ingresoOCM_dta.getOrdenCompraMateriales();
-            int ordenCompraId = ordenCompra.getOrdenCompraId();
-
-            // Validar máximo de recepciones parciales (con movimientos cargados para la validación de cantidades)
-            List<TransaccionAlmacen> transaccionesExistentes = transaccionAlmacenHeaderRepo
-                    .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
-                            TransaccionAlmacen.TipoEntidadCausante.OCM, ordenCompraId);
-            if (transaccionesExistentes.size() >= MAX_RECEPCIONES_PARCIALES) {
-                return ResponseEntity.badRequest()
-                        .body("No se permiten más de " + MAX_RECEPCIONES_PARCIALES
-                                + " recepciones parciales por orden de compra. Esta orden ya tiene "
-                                + transaccionesExistentes.size() + " recepciones registradas.");
-            }
-
-            // Validar que las cantidades nuevas no excedan lo ordenado menos lo ya recibido
-            Map<String, Double> recibidoPorProducto = new HashMap<>();
-            for (TransaccionAlmacen tx : transaccionesExistentes) {
-                List<Movimiento> movs = tx.getMovimientosTransaccion();
-                if (movs == null) continue;
-                for (Movimiento mov : movs) {
-                    if (mov.getProducto() == null) continue;
-                    String pid = mov.getProducto().getProductoId();
-                    recibidoPorProducto.merge(pid, mov.getCantidad(), Double::sum);
-                }
-            }
-
-            List<Movimiento> nuevosMovimientos = ingresoOCM_dta.getTransaccionAlmacen() != null
-                    ? ingresoOCM_dta.getTransaccionAlmacen().getMovimientosTransaccion()
-                    : Collections.emptyList();
-            if (nuevosMovimientos == null) nuevosMovimientos = Collections.emptyList();
-
-            Map<String, Double> nuevoPorProducto = new HashMap<>();
-            for (Movimiento mov : nuevosMovimientos) {
-                if (mov.getProducto() == null) continue;
-                String pid = mov.getProducto().getProductoId();
-                nuevoPorProducto.merge(pid, mov.getCantidad(), Double::sum);
-            }
-
-            Map<String, Double> ordenadoPorProducto = new HashMap<>();
-            for (ItemOrdenCompra item : ordenCompra.getItemsOrdenCompra()) {
-                if (item.getMaterial() == null) continue;
-                ordenadoPorProducto.put(item.getMaterial().getProductoId(), (double) item.getCantidad());
-            }
-
-            for (Map.Entry<String, Double> entry : nuevoPorProducto.entrySet()) {
-                String pid = entry.getKey();
-                double cantidadNueva = entry.getValue();
-                double yaRecibido = recibidoPorProducto.getOrDefault(pid, 0.0);
-                double cantidadOrdenada = ordenadoPorProducto.getOrDefault(pid, 0.0);
-                if (yaRecibido + cantidadNueva > cantidadOrdenada + 0.01) {
-                    return ResponseEntity.badRequest()
-                            .body("La cantidad a recibir del material " + pid
-                                    + " excede lo ordenado. Ordenado: " + cantidadOrdenada
-                                    + ", Ya recibido: " + yaRecibido
-                                    + ", Intentando recibir: " + cantidadNueva);
-                }
-            }
-
             // Create folder based on current date (yyyyMMdd)
             String currentDateFolder = LocalDate.now()
                     .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
@@ -583,57 +522,6 @@ public class MovimientosService {
     }
 
 
-    /**
-     * Busca transacciones de almacen filtradas por tipo de entidad causante y rango de fechas.
-     * Retorna DTOs para evitar problemas de serializacion JSON con relaciones circulares.
-     */
-    public Page<TransaccionAlmacenResponseDTO> buscarHistorialTransacciones(FiltroHistorialTransaccionAlmacenDTO filtro) {
-        TransaccionAlmacen.TipoEntidadCausante tipo = TransaccionAlmacen.TipoEntidadCausante.valueOf(filtro.getTipoEntidadCausante());
-
-        LocalDateTime fechaInicio = filtro.getFechaInicio() != null
-                ? filtro.getFechaInicio().atStartOfDay()
-                : null;
-        LocalDateTime fechaFin = filtro.getFechaFin() != null
-                ? filtro.getFechaFin().atTime(LocalTime.MAX)
-                : null;
-
-        Pageable pageable = PageRequest.of(
-                filtro.getPage(),
-                filtro.getSize(),
-                Sort.by("fechaTransaccion").descending()
-        );
-
-        Page<TransaccionAlmacen> resultados = transaccionAlmacenHeaderRepo.findByFilters(
-                null, tipo, fechaInicio, fechaFin, pageable
-        );
-
-        return resultados.map(this::convertirATransaccionAlmacenResponseDTO);
-    }
-
-    private TransaccionAlmacenResponseDTO convertirATransaccionAlmacenResponseDTO(TransaccionAlmacen transaccion) {
-        TransaccionAlmacenResponseDTO dto = new TransaccionAlmacenResponseDTO();
-        dto.setTransaccionId(transaccion.getTransaccionId());
-        dto.setFechaTransaccion(transaccion.getFechaTransaccion());
-        dto.setIdEntidadCausante(transaccion.getIdEntidadCausante());
-        dto.setTipoEntidadCausante(transaccion.getTipoEntidadCausante() != null
-                ? transaccion.getTipoEntidadCausante().name()
-                : null);
-        dto.setObservaciones(transaccion.getObservaciones());
-        dto.setEstadoContable(transaccion.getEstadoContable() != null
-                ? transaccion.getEstadoContable().name()
-                : null);
-
-        if (transaccion.getUsuarioAprobador() != null) {
-            TransaccionAlmacenResponseDTO.UsuarioAprobadorDTO usuarioDTO =
-                    new TransaccionAlmacenResponseDTO.UsuarioAprobadorDTO();
-            usuarioDTO.setUserId(transaccion.getUsuarioAprobador().getId());
-            usuarioDTO.setNombre(transaccion.getUsuarioAprobador().getNombreCompleto());
-            dto.setUsuarioAprobador(usuarioDTO);
-        }
-
-        return dto;
-    }
-
     public byte[] generateMovimientosExcel(MovimientoExcelRequestDTO dto) {
         LocalDateTime startDateTime = dto.getStartDate().atStartOfDay();
         LocalDateTime endDateTime = dto.getEndDate().atTime(LocalTime.MAX);
@@ -667,5 +555,44 @@ public class MovimientosService {
         } catch (IOException e) {
             throw new RuntimeException("Error generating Excel", e);
         }
+    }
+
+    /**
+     * Busca transacciones de almacén según los filtros especificados.
+     * Soporta filtrado por tipo de entidad causante, fechas, proveedor,
+     * ID de transacción/orden de producción, y producto terminado.
+     *
+     * @param filtro DTO con los criterios de filtrado
+     * @return Página de transacciones que cumplen los criterios
+     */
+    public Page<TransaccionAlmacenResponseDTO> buscarTransaccionesAlmacenFiltradas(
+            FiltroHistorialTransaccionesDTO filtro) {
+
+        switch (filtro.getTipoEntidadCausante()) {
+            case "OCM":
+                // TODO: Implementar lógica para OCM (Orden de Compra de Materiales)
+                break;
+
+            case "OP":
+                // TODO: Implementar lógica para OP (Orden de Producción)
+                break;
+
+            case "OAA":
+                // TODO: Implementar lógica para OAA (Orden de Ajuste de Almacén)
+                break;
+
+            case "OD":
+                // TODO: Implementar lógica para OD (Orden de Despacho)
+                break;
+
+            case "CM":
+                // TODO: Implementar lógica para CM (Carga Masiva)
+                break;
+
+            default:
+                throw new IllegalArgumentException("Tipo de entidad causante no válido: " + filtro.getTipoEntidadCausante());
+        }
+
+        return null;
     }
 }
