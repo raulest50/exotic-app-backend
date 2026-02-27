@@ -42,6 +42,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -568,31 +569,115 @@ public class MovimientosService {
     public Page<TransaccionAlmacenResponseDTO> buscarTransaccionesAlmacenFiltradas(
             FiltroHistorialTransaccionesDTO filtro) {
 
+        Page<TransaccionAlmacen> resultado;
+
         switch (filtro.getTipoEntidadCausante()) {
             case "OCM":
-                // TODO: Implementar lógica para OCM (Orden de Compra de Materiales)
+                resultado = buscarTransaccionesOCM(filtro);
                 break;
 
             case "OP":
                 // TODO: Implementar lógica para OP (Orden de Producción)
-                break;
+                throw new UnsupportedOperationException("Filtro OP aún no implementado");
 
             case "OAA":
                 // TODO: Implementar lógica para OAA (Orden de Ajuste de Almacén)
-                break;
+                throw new UnsupportedOperationException("Filtro OAA aún no implementado");
 
             case "OD":
                 // TODO: Implementar lógica para OD (Orden de Despacho)
-                break;
+                throw new UnsupportedOperationException("Filtro OD aún no implementado");
 
             case "CM":
                 // TODO: Implementar lógica para CM (Carga Masiva)
-                break;
+                throw new UnsupportedOperationException("Filtro CM aún no implementado");
 
             default:
                 throw new IllegalArgumentException("Tipo de entidad causante no válido: " + filtro.getTipoEntidadCausante());
         }
 
-        return null;
+        return resultado.map(this::convertirATransaccionAlmacenResponseDTO);
+    }
+
+    private Page<TransaccionAlmacen> buscarTransaccionesOCM(FiltroHistorialTransaccionesDTO filtro) {
+        Pageable pageable = PageRequest.of(
+                filtro.getPage(),
+                filtro.getSize(),
+                Sort.by("fechaTransaccion").descending()
+        );
+
+        boolean tieneFiltroProveedor = filtro.getProveedorId() != null && !filtro.getProveedorId().isBlank();
+        boolean tieneFiltroFecha = filtro.getTipoFiltroFecha() != null && filtro.getTipoFiltroFecha() > 0;
+
+        LocalDateTime fechaInicio = null;
+        LocalDateTime fechaFin = null;
+
+        if (tieneFiltroFecha) {
+            if (filtro.getTipoFiltroFecha() == 1) {
+                if (filtro.getFechaInicio() == null || filtro.getFechaFin() == null) {
+                    tieneFiltroFecha = false;
+                } else {
+                    if (filtro.getFechaInicio().isAfter(filtro.getFechaFin())) {
+                        throw new RuntimeException("La fecha de inicio no puede ser posterior a la fecha de fin");
+                    }
+                    fechaInicio = filtro.getFechaInicio().atStartOfDay();
+                    fechaFin = filtro.getFechaFin().atTime(23, 59, 59, 999999999);
+                }
+            } else if (filtro.getTipoFiltroFecha() == 2) {
+                if (filtro.getFechaEspecifica() == null) {
+                    tieneFiltroFecha = false;
+                } else {
+                    fechaInicio = filtro.getFechaEspecifica().atStartOfDay();
+                    fechaFin = filtro.getFechaEspecifica().atTime(23, 59, 59, 999999999);
+                }
+            }
+        }
+
+        if (!tieneFiltroProveedor && !tieneFiltroFecha) {
+            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
+                    TransaccionAlmacen.TipoEntidadCausante.OCM, pageable);
+        }
+
+        if (tieneFiltroProveedor && !tieneFiltroFecha) {
+            return transaccionAlmacenHeaderRepo.findOCMByProveedor(
+                    TransaccionAlmacen.TipoEntidadCausante.OCM,
+                    filtro.getProveedorId(), pageable);
+        }
+
+        if (!tieneFiltroProveedor && tieneFiltroFecha) {
+            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
+                    TransaccionAlmacen.TipoEntidadCausante.OCM,
+                    fechaInicio, fechaFin, pageable);
+        }
+
+        // Both filters active
+        return transaccionAlmacenHeaderRepo.findOCMByProveedorAndFechaBetween(
+                TransaccionAlmacen.TipoEntidadCausante.OCM,
+                filtro.getProveedorId(),
+                fechaInicio, fechaFin, pageable);
+    }
+
+    private TransaccionAlmacenResponseDTO convertirATransaccionAlmacenResponseDTO(TransaccionAlmacen transaccion) {
+        TransaccionAlmacenResponseDTO dto = new TransaccionAlmacenResponseDTO();
+        dto.setTransaccionId(transaccion.getTransaccionId());
+        dto.setFechaTransaccion(transaccion.getFechaTransaccion());
+        dto.setIdEntidadCausante(transaccion.getIdEntidadCausante());
+        dto.setTipoEntidadCausante(transaccion.getTipoEntidadCausante() != null
+                ? transaccion.getTipoEntidadCausante().name()
+                : null);
+        dto.setObservaciones(transaccion.getObservaciones());
+        dto.setEstadoContable(transaccion.getEstadoContable() != null
+                ? transaccion.getEstadoContable().name()
+                : null);
+
+        if (transaccion.getUsuarioAprobador() != null) {
+            TransaccionAlmacenResponseDTO.UsuarioAprobadorDTO usuarioDTO =
+                    new TransaccionAlmacenResponseDTO.UsuarioAprobadorDTO();
+            usuarioDTO.setUserId(transaccion.getUsuarioAprobador().getId());
+            usuarioDTO.setNombre(transaccion.getUsuarioAprobador().getNombreCompleto());
+            dto.setUsuarioAprobador(usuarioDTO);
+        }
+
+        return dto;
     }
 }

@@ -22,10 +22,21 @@ import java.util.List;
 @NoArgsConstructor
 public class OrdenProduccion {
 
+    /**
+     * A partir de ahora sera un surrogate key
+     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "orden_id", unique = true, updatable = false, nullable = false)
     private int ordenId;
+
+    /**
+     * se agrega unique para cumplir con pedido del cliente que el numero de lote
+     * sirva como id para la orden de produccion.
+     * Número de lote asignado a esta orden (redundante con Lote.batchNumber para consultas rápidas).
+     */
+    @Column(name = "lote_asignado", length = 50, unique = true)
+    private String loteAsignado;
 
     @ManyToOne
     @JoinColumn(name = "producto_id")
@@ -114,11 +125,6 @@ public class OrdenProduccion {
     @JoinColumn(name = "responsable_id")
     private Vendedor vendedorResponsable;
 
-    /**
-     * Número de lote asignado a esta orden (redundante con Lote.batchNumber para consultas rápidas).
-     */
-    @Column(name = "lote_asignado", length = 50)
-    private String loteAsignado;
 
     public OrdenProduccion(Producto producto, String observaciones, double cantidadProducir) {
         this.producto = producto;

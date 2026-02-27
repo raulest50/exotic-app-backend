@@ -16,6 +16,83 @@
     import java.util.List;
 
 
+    /**
+     * Representa una transacción de almacén que agrupa múltiples movimientos de inventario
+     * como una operación atómica.
+     *
+     * <p>Una transacción de almacén es el <strong>agregado raíz</strong> (DDD pattern) que encapsula
+     * uno o más {@link Movimiento}s de productos. Garantiza que todos los movimientos se ejecuten
+     * de forma atómica (ACID) y mantiene la trazabilidad hacia la entidad de negocio que causó
+     * la transacción.
+     *
+     * <h2>Decisión de Arquitectura: Múltiples Almacenes</h2>
+     * <p>Una {@code TransaccionAlmacen} <strong>PUEDE contener movimientos a diferentes almacenes</strong>
+     * en la misma transacción. Esto permite operaciones como:
+     *
+     * <ul>
+     *   <li><strong>Transferencias (OTA):</strong> Mover productos de {@code GENERAL} → {@code AVERIAS}
+     *       en una sola transacción atómica</li>
+     *   <li><strong>Producción con scrap (OP):</strong> Consumos en {@code GENERAL}, backflush a
+     *       {@code GENERAL}, y scrap directo a {@code AVERIAS}</li>
+     *   <li><strong>Ajustes con reclasificación (OAA):</strong> Ajustar cantidades moviendo productos
+     *       entre almacenes</li>
+     * </ul>
+     *
+     * <p>Esta decisión sigue los estándares de SAP (transacción MB1B) y Oracle WMS, donde una
+     * transferencia entre ubicaciones se registra como una única operación con múltiples líneas.
+     *
+     * <h3>Validaciones por Tipo</h3>
+     * <p>Aunque el modelo permite múltiples almacenes, cada {@link TipoEntidadCausante} tiene reglas
+     * específicas que deben validarse en el Service Layer:
+     *
+     * <table border="1">
+     *   <tr>
+     *     <th>Tipo</th>
+     *     <th>Almacenes Permitidos</th>
+     *     <th>Razón</th>
+     *   </tr>
+     *   <tr>
+     *     <td>OCM</td>
+     *     <td>Solo GENERAL</td>
+     *     <td>Las compras se reciben en un punto único</td>
+     *   </tr>
+     *   <tr>
+     *     <td>OD</td>
+     *     <td>Solo GENERAL</td>
+     *     <td>La dispensación se hace desde un almacén específico</td>
+     *   </tr>
+     *   <tr>
+     *     <td>OTA</td>
+     *     <td>Exactamente 2 diferentes</td>
+     *     <td>Transferencia origen → destino</td>
+     *   </tr>
+     *   <tr>
+     *     <td>OP</td>
+     *     <td>1 o más</td>
+     *     <td>Consumos y backflush en GENERAL, scrap opcional a AVERIAS</td>
+     *   </tr>
+     *   <tr>
+     *     <td>OAA</td>
+     *     <td>1 o más</td>
+     *     <td>Puede ser ajuste simple o reclasificación entre almacenes</td>
+     *   </tr>
+     * </table>
+     *
+     * <h3>Consistencia Contable</h3>
+     * <p>Cada transacción puede tener asociado un único {@link AsientoContable}, independientemente
+     * de cuántos almacenes o productos afecte. Esto garantiza la trazabilidad contable completa.
+     *
+     * <p><strong>📚 Documentación completa:</strong>
+     * <a href="../../../../../docs/adr/001-transaccion-almacen-multiples-ubicaciones.md">
+     * ADR 001: TransaccionAlmacen con Múltiples Almacenes
+     * </a>
+     *
+     * @see Movimiento
+     * @see TipoEntidadCausante
+     * @see Movimiento.Almacen
+     * @see AsientoContable
+     * @since 1.0
+     */
     @Entity
     @Table(name = "transaccion_almacen")
     @Getter
@@ -100,22 +177,68 @@
         }
 
 
+        /**
+         * Tipos de entidades de negocio que pueden causar una transacción de almacén.
+         *
+         * <p>Cada tipo determina el origen de la transacción y tiene reglas específicas sobre
+         * los almacenes que puede afectar. Las validaciones se implementan en el Service Layer.
+         *
+         * <h3>Reglas por Tipo</h3>
+         * <ul>
+         *   <li><strong>{@link #OCM}</strong>: Solo puede afectar almacén {@code GENERAL} (ingreso de compras)</li>
+         *   <li><strong>{@link #OD}</strong>: Solo puede afectar almacén {@code GENERAL} (dispensación)</li>
+         *   <li><strong>{@link #OTA}</strong>: Debe afectar exactamente 2 almacenes diferentes (transferencia)</li>
+         *   <li><strong>{@link #OP}</strong>: Puede afectar 1 o más almacenes (producción con scrap opcional)</li>
+         *   <li><strong>{@link #OAA}</strong>: Puede afectar 1 o más almacenes (ajustes/reclasificaciones)</li>
+         *   <li><strong>{@link #CM}</strong>: Típicamente afecta solo {@code GENERAL} (carga inicial)</li>
+         * </ul>
+         *
+         * <p><strong>📚 Ver:</strong>
+         * <a href="../../../../../docs/adr/001-transaccion-almacen-multiples-ubicaciones.md#validaciones-por-tipo">
+         * ADR 001 - Validaciones por Tipo
+         * </a>
+         *
+         * @see TransaccionAlmacen#idEntidadCausante
+         * @see Movimiento.Almacen
+         */
         public enum TipoEntidadCausante{
-            OCM, // orden de compra de materiales
-            OP, // orden de produccion
-            OTA, // orden de tranferencia de almacen
-            OAA, // orden de ajuste de almacen
-            OD, // orden de dispensacion
-            CM, // carga masiva de inventario
+            /** Orden de Compra de Materiales - siempre ingresa a almacén GENERAL */
+            OCM,
+
+            /** Orden de Producción - puede generar scrap en AVERIAS además del producto en GENERAL */
+            OP,
+
+            /** Orden de Transferencia de Almacén - mueve productos entre exactamente 2 almacenes */
+            OTA,
+
+            /** Orden de Ajuste de Almacén - puede reclasificar productos entre almacenes */
+            OAA,
+
+            /** Orden de Dispensación - siempre dispensa desde almacén GENERAL */
+            OD,
+
+            /** Carga Masiva de inventario - típicamente a GENERAL (carga inicial del sistema) */
+            CM
         }
 
         /**
-         * Estados posibles para la contabilización de una transacción
+         * Estados posibles para la contabilización de una transacción de almacén.
+         *
+         * <p>Controla el ciclo de vida contable de la transacción, desde su creación hasta
+         * su registro en el libro diario mediante un {@link AsientoContable}.
+         *
+         * @see AsientoContable
+         * @see TransaccionAlmacen#asientoContable
          */
         public enum EstadoContable {
-            PENDIENTE,      // No ha sido contabilizada
-            CONTABILIZADA,  // Ya tiene asiento contable
-            NO_APLICA       // No requiere contabilización
+            /** No ha sido contabilizada aún - pendiente de registro contable */
+            PENDIENTE,
+
+            /** Ya tiene asiento contable asociado - registro completado */
+            CONTABILIZADA,
+
+            /** No requiere contabilización - transacción que no afecta contabilidad */
+            NO_APLICA
         }
 
     }

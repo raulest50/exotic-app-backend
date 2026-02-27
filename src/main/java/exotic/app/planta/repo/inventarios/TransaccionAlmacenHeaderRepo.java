@@ -201,4 +201,40 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         @Param("fechaFin") LocalDateTime fechaFin,
         Pageable pageable
     );
+
+    // ==================== OCM Queries ====================
+
+    /**
+     * Busca transacciones OCM filtradas solo por proveedor NIT.
+     * Usa EXISTS con cross-entity join ya que TransaccionAlmacen.idEntidadCausante
+     * es un plain int (no una relación mapeada) que apunta a OrdenCompraMateriales.ordenCompraId.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT oc FROM OrdenCompraMateriales oc " +
+           "WHERE oc.ordenCompraId = t.idEntidadCausante AND oc.proveedor.id = :proveedorNit) " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findOCMByProveedor(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("proveedorNit") String proveedorNit,
+        Pageable pageable
+    );
+
+    /**
+     * Busca transacciones OCM filtradas por proveedor NIT y rango de fechas.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT oc FROM OrdenCompraMateriales oc " +
+           "WHERE oc.ordenCompraId = t.idEntidadCausante AND oc.proveedor.id = :proveedorNit) AND " +
+           "t.fechaTransaccion >= :fechaInicio AND " +
+           "t.fechaTransaccion <= :fechaFin " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findOCMByProveedorAndFechaBetween(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("proveedorNit") String proveedorNit,
+        @Param("fechaInicio") LocalDateTime fechaInicio,
+        @Param("fechaFin") LocalDateTime fechaFin,
+        Pageable pageable
+    );
 }

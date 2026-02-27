@@ -104,6 +104,15 @@ public class ProduccionService {
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
         if (ordenProduccionDTO.getLoteBatchNumber() != null && !ordenProduccionDTO.getLoteBatchNumber().isBlank()) {
+            // Validar que el batch number no exista previamente
+            Lote loteExistente = loteRepo.findByBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
+            if (loteExistente != null) {
+                throw new IllegalArgumentException(
+                    "El número de lote '" + ordenProduccionDTO.getLoteBatchNumber() +
+                    "' ya está asignado a otra orden de producción"
+                );
+            }
+
             Lote lote = new Lote();
             lote.setBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
             lote.setOrdenProduccion(savedOrden);

@@ -15,6 +15,47 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Representa un movimiento individual de inventario para un producto específico en un almacén.
+ *
+ * <p>Un movimiento es la línea de detalle de una {@link TransaccionAlmacen}. Registra:
+ * <ul>
+ *   <li>El producto que se mueve</li>
+ *   <li>La cantidad (positiva = entrada, negativa = salida)</li>
+ *   <li>El almacén donde ocurre el movimiento ({@link Almacen})</li>
+ *   <li>El tipo de movimiento ({@link TipoMovimiento})</li>
+ *   <li>El lote asociado ({@link Lote}) para trazabilidad</li>
+ * </ul>
+ *
+ * <h2>Múltiples Almacenes en una Transacción</h2>
+ * <p><strong>Importante:</strong> Una {@link TransaccionAlmacen} puede contener múltiples movimientos,
+ * cada uno con su propio {@code almacen}. Esto permite operaciones como:
+ *
+ * <ul>
+ *   <li><strong>Transferencias:</strong> Un movimiento negativo en {@code GENERAL} y otro positivo
+ *       en {@code AVERIAS} dentro de la misma transacción</li>
+ *   <li><strong>Producción con scrap:</strong> Consumos y backflush en {@code GENERAL}, scrap en {@code AVERIAS}</li>
+ * </ul>
+ *
+ * <p>El campo {@link #almacen} es <strong>individual por movimiento</strong>, no por transacción.
+ *
+ * <h3>Convención de Signos</h3>
+ * <ul>
+ *   <li><strong>Cantidad positiva (+):</strong> Entrada al almacén (incrementa stock)</li>
+ *   <li><strong>Cantidad negativa (-):</strong> Salida del almacén (decrementa stock)</li>
+ * </ul>
+ *
+ * <p><strong>📚 Documentación completa:</strong>
+ * <a href="../../../../../docs/adr/001-transaccion-almacen-multiples-ubicaciones.md">
+ * ADR 001: TransaccionAlmacen con Múltiples Almacenes
+ * </a>
+ *
+ * @see TransaccionAlmacen
+ * @see Almacen
+ * @see TipoMovimiento
+ * @see Lote
+ * @since 1.0
+ */
 @Entity
 @Table(name = "movimientos")
 @Getter
@@ -42,13 +83,26 @@ public class Movimiento {
     @JoinColumn(name = "producto_id")
     private Producto producto;
 
-    // causa del movimiento
-    // VENTA, COMPRA, AVERIA, USO_INTERNO, PROD_INTERNO, OTROS
+    /**
+     * Tipo de movimiento que describe la causa o naturaleza del movimiento de inventario.
+     *
+     * @see TipoMovimiento
+     */
     private TipoMovimiento tipoMovimiento;
 
     /**
-     * lugar donde se realiza el movimiento de suma o resta de cantidades.
-     * si se mueve de un almacen a otro, se resta en uno y se suma en otro
+     * Almacén donde se realiza este movimiento específico.
+     *
+     * <p><strong>Nota importante:</strong> Este campo es individual por movimiento. Una misma
+     * {@link TransaccionAlmacen} puede contener varios movimientos, cada uno con un almacén diferente.
+     * Por ejemplo, en una transferencia entre almacenes:
+     * <ul>
+     *   <li>Movimiento 1: cantidad = -10, almacen = {@code GENERAL} (salida)</li>
+     *   <li>Movimiento 2: cantidad = +10, almacen = {@code AVERIAS} (entrada)</li>
+     * </ul>
+     *
+     * @see Almacen
+     * @see TransaccionAlmacen#movimientosTransaccion
      */
     private Almacen almacen;
 
@@ -60,21 +114,94 @@ public class Movimiento {
     @CreationTimestamp
     private LocalDateTime fechaMovimiento;
 
-    /** Enum para causas de movimiento */
+    /**
+     * Tipos de movimientos de inventario según su causa o naturaleza.
+     *
+     * <p>Define la razón por la cual se está realizando el movimiento de inventario,
+     * lo cual es importante para reportes, auditorías y análisis de flujo de materiales.
+     *
+     * <h3>Convención de uso con almacenes:</h3>
+     * <ul>
+     *   <li>{@link #COMPRA}: Típicamente ingreso a {@code GENERAL}</li>
+     *   <li>{@link #CONSUMO}: Típicamente salida de {@code GENERAL} para producción</li>
+     *   <li>{@link #BACKFLUSH}: Típicamente ingreso a {@code GENERAL} de producto terminado</li>
+     *   <li>{@link #PERDIDA}: Típicamente ingreso a {@code AVERIAS}</li>
+     *   <li>{@link #BAJA}: Típicamente salida de {@code AVERIAS} para eliminación definitiva</li>
+     *   <li>{@link #VENTA}: Típicamente salida de {@code GENERAL} para despacho</li>
+     * </ul>
+     *
+     * @see TransaccionAlmacen.TipoEntidadCausante
+     */
     public enum TipoMovimiento {
-        COMPRA, // asociado a orden de compra OCM
-        BAJA, // salida de material del almancen de perdidas a eliminacion definitiva
-        CONSUMO, // asociado a una orden de produccion o work in progreso
-        BACKFLUSH, // cuando una OP se finaliza, ingreso de semiterminado o terminado
-        VENTA, // sale para venta producto terminado
-        PERDIDA, // se ingreso al almacen de perdidas.
+        /** Ingreso de material por compra - asociado a Orden de Compra (OCM) */
+        COMPRA,
+
+        /** Salida definitiva de material (eliminación física) - típicamente desde AVERIAS */
+        BAJA,
+
+        /** Consumo de material en proceso productivo - asociado a Orden de Producción (OP) */
+        CONSUMO,
+
+        /** Ingreso de producto terminado o semi-terminado al finalizar producción */
+        BACKFLUSH,
+
+        /** Salida para venta de producto terminado al cliente */
+        VENTA,
+
+        /** Ingreso a almacén de averías por daño, defecto o pérdida */
+        PERDIDA
     }
 
+    /**
+     * Tipos de almacenes disponibles en el sistema para gestionar diferentes categorías de inventario.
+     *
+     * <p>Cada almacén tiene un propósito específico en el flujo de materiales de la planta.
+     * Los productos pueden moverse entre almacenes mediante transacciones de tipo
+     * {@link TransaccionAlmacen.TipoEntidadCausante#OTA OTA} (Orden de Transferencia de Almacén).
+     *
+     * <h3>Flujos Típicos:</h3>
+     * <ul>
+     *   <li><strong>Ingreso de compras:</strong> Proveedor → {@code GENERAL}</li>
+     *   <li><strong>Producción normal:</strong> Consumo desde {@code GENERAL} → Producto a {@code GENERAL}</li>
+     *   <li><strong>Producto defectuoso:</strong> {@code GENERAL} → {@code AVERIAS}</li>
+     *   <li><strong>Control de calidad:</strong> {@code GENERAL} → {@code CALIDAD} → {@code GENERAL} o {@code AVERIAS}</li>
+     *   <li><strong>Devolución de cliente:</strong> Cliente → {@code DEVOLUCIONES} → {@code GENERAL} o {@code AVERIAS}</li>
+     *   <li><strong>Scrap de producción:</strong> Producción → {@code AVERIAS} directamente</li>
+     * </ul>
+     *
+     * <p><strong>Nota:</strong> Una {@link TransaccionAlmacen} puede contener movimientos a
+     * diferentes almacenes. Ver
+     * <a href="../../../../../docs/adr/001-transaccion-almacen-multiples-ubicaciones.md">
+     * ADR 001
+     * </a> para más detalles.
+     *
+     * @see TransaccionAlmacen.TipoEntidadCausante#OTA
+     * @see Movimiento#almacen
+     */
     public enum Almacen {
-        GENERAL, // donde se reciben compras, se dispensa material, se ingresa backflush
-        PERDIDAS, // scrap de OP's y perdidas de material por eventos fortuitos
-        CALIDAD, // producto para control de calidad
-        DEVOLUCIONES // terminados devuelto por clientes o materiales para devolverle a proveedor
+        /**
+         * Almacén principal donde se reciben compras, se dispensa material para producción,
+         * y se ingresa el producto terminado (backflush).
+         */
+        GENERAL,
+
+        /**
+         * Almacén de productos con averías, daños o defectos.
+         * Incluye scrap de órdenes de producción y productos dañados por eventos fortuitos.
+         */
+        AVERIAS,
+
+        /**
+         * Almacén temporal para productos en control de calidad.
+         * Los productos aquí están retenidos hasta aprobación o rechazo.
+         */
+        CALIDAD,
+
+        /**
+         * Almacén para productos terminados devueltos por clientes o materiales
+         * para devolverle al proveedor.
+         */
+        DEVOLUCIONES
     }
 
     /**
