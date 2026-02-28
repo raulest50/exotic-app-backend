@@ -208,6 +208,18 @@ public class ProduccionService {
         return new PageImpl<>(dtoList, pageable, page.getTotalElements());
     }
 
+    public Page<OrdenProduccionDTO> searchOrdenesProduccionByLoteAsignado(String loteAsignado, Pageable pageable) {
+        Page<OrdenProduccion> page = ordenProduccionRepo.findByLoteAsignadoContaining(loteAsignado, pageable);
+        page.getContent().forEach(orden -> {
+            Hibernate.initialize(orden.getOrdenesSeguimiento());
+            Hibernate.initialize(orden.getProducto());
+        });
+        List<OrdenProduccionDTO> dtoList = page.getContent().stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return new PageImpl<>(dtoList, pageable, page.getTotalElements());
+    }
+
     /**
      * Obtiene todas las órdenes de producción que no están terminadas (2) ni canceladas (-1).
      *

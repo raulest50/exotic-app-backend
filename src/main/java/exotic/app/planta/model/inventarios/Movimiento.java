@@ -2,6 +2,7 @@ package exotic.app.planta.model.inventarios;
 
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
@@ -18,43 +19,6 @@ import java.time.LocalDateTime;
 /**
  * Representa un movimiento individual de inventario para un producto específico en un almacén.
  *
- * <p>Un movimiento es la línea de detalle de una {@link TransaccionAlmacen}. Registra:
- * <ul>
- *   <li>El producto que se mueve</li>
- *   <li>La cantidad (positiva = entrada, negativa = salida)</li>
- *   <li>El almacén donde ocurre el movimiento ({@link Almacen})</li>
- *   <li>El tipo de movimiento ({@link TipoMovimiento})</li>
- *   <li>El lote asociado ({@link Lote}) para trazabilidad</li>
- * </ul>
- *
- * <h2>Múltiples Almacenes en una Transacción</h2>
- * <p><strong>Importante:</strong> Una {@link TransaccionAlmacen} puede contener múltiples movimientos,
- * cada uno con su propio {@code almacen}. Esto permite operaciones como:
- *
- * <ul>
- *   <li><strong>Transferencias:</strong> Un movimiento negativo en {@code GENERAL} y otro positivo
- *       en {@code AVERIAS} dentro de la misma transacción</li>
- *   <li><strong>Producción con scrap:</strong> Consumos y backflush en {@code GENERAL}, scrap en {@code AVERIAS}</li>
- * </ul>
- *
- * <p>El campo {@link #almacen} es <strong>individual por movimiento</strong>, no por transacción.
- *
- * <h3>Convención de Signos</h3>
- * <ul>
- *   <li><strong>Cantidad positiva (+):</strong> Entrada al almacén (incrementa stock)</li>
- *   <li><strong>Cantidad negativa (-):</strong> Salida del almacén (decrementa stock)</li>
- * </ul>
- *
- * <p><strong>📚 Documentación completa:</strong>
- * <a href="../../../../../docs/adr/001-transaccion-almacen-multiples-ubicaciones.md">
- * ADR 001: TransaccionAlmacen con Múltiples Almacenes
- * </a>
- *
- * @see TransaccionAlmacen
- * @see Almacen
- * @see TipoMovimiento
- * @see Lote
- * @since 1.0
  */
 @Entity
 @Table(name = "movimientos")
@@ -102,7 +66,7 @@ public class Movimiento {
      * </ul>
      *
      * @see Almacen
-     * @see TransaccionAlmacen#movimientosTransaccion
+     * @see TransaccionAlmacen
      */
     private Almacen almacen;
 
@@ -110,6 +74,15 @@ public class Movimiento {
     @ManyToOne
     @JoinColumn(name = "lote_id")
     private Lote lote;
+
+
+    /**
+     * creado para movimientos relacionados con averias, para reportar de que area operativa
+     * se reporta la averia.
+     */
+    @ManyToOne
+    @JoinColumn(name = "area_produccion_id")
+    private AreaProduccion areaProduccion;
 
     @CreationTimestamp
     private LocalDateTime fechaMovimiento;

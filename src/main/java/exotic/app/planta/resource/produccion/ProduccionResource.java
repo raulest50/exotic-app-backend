@@ -217,4 +217,15 @@ public class ProduccionResource {
         return ResponseEntity.ok(resultados);
     }
 
+    @GetMapping("/search_by_lote")
+    public ResponseEntity<Page<OrdenProduccionDTO>> searchOrdenesProduccionByLote(
+            @RequestParam String loteAsignado,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("fechaCreacion").descending());
+        Page<OrdenProduccionDTO> resultados = produccionService.searchOrdenesProduccionByLoteAsignado(loteAsignado, pageable);
+        return ResponseEntity.ok(resultados);
+    }
+
 }

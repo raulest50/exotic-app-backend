@@ -276,11 +276,110 @@ public void validarTransaccion(TransaccionAlmacen transaccion) {
 
 ---
 
+---
+
+## Decisión Complementaria: Campo `areaProduccion` en `Movimiento`
+
+**Fecha**: 2026-02-27 (Actualización)
+
+### Problema Adicional
+
+Durante la implementación de reportes de averías, surgió la necesidad de identificar **en qué área operativa específica** ocurrió cada movimiento de producción (consumo, backflush, scrap/avería).
+
+**Contexto**: Una `OrdenProduccion` atraviesa **múltiples áreas operativas** en secuencia (ej: Mezclado → Llenado → Etiquetado → Empaque). Las averías pueden ocurrir en cualquier área específica, y el cliente requiere reportes que muestren:
+- Qué área genera más averías
+- Responsable de cada área
+- Métricas de calidad por área (scrap rate, defect rate)
+
+### Alternativas Evaluadas
+
+#### ❌ Opción 1: Agregar a `OrdenProduccion`
+**Rechazada**: Una OP pasa por múltiples áreas, no tiene "un área". Esto imposibilita saber en qué área específica ocurrió cada avería.
+
+#### ❌ Opción 2: Agregar a `TransaccionAlmacen`
+**Rechazada**: Misma limitación. Una transacción puede tener movimientos en diferentes áreas dentro de la misma OP.
+
+#### ✅ Opción 3: Agregar a `Movimiento` (ELEGIDA)
+**Aceptada**: Cada movimiento registra su área específica. Granularidad precisa.
+
+### Decisión: Campo `areaProduccion` Nullable en `Movimiento`
+
+Se agregó el campo:
+```java
+@ManyToOne
+@JoinColumn(name = "area_produccion_id")
+private AreaProduccion areaProduccion; // nullable
+```
+
+### Justificación Basada en Estándares
+
+Esta decisión está respaldada por investigación de estándares de la industria:
+
+1. **SAP ERP**:
+   - Tabla `AFRU` (Order Confirmations): Campo `ARBID` (Work Center ID) es **nullable**
+   - Los movimientos de inventario (tabla `MSEG`) NO tienen work center directamente
+
+2. **Odoo MRP**:
+   - Work center en scrap es **opcional**
+   - Se registra solo cuando aplica
+
+3. **ISA-95 (Estándar Internacional)**:
+   - Define jerarquía: Enterprise → Site → **Area** → **Work Center** → Work Unit
+   - Asociación flexible según nivel de detalle necesario
+
+4. **MES (Manufacturing Execution Systems)**:
+   - Los defectos se rastrean con "what it occurred against" que puede ser operation, material, o tool
+   - **NO siempre es work center**
+
+### Por Qué es Nullable
+
+El campo es nullable porque **no todos los movimientos ocurren en un área de producción**:
+
+| Tipo Movimiento | ¿Tiene área? | Razón |
+|-----------------|--------------|-------|
+| COMPRA (OCM) | ❌ NULL | Material viene del proveedor |
+| CONSUMO (OP) | ✅ SÍ | Área específica consume material |
+| BACKFLUSH (OP) | ✅ SÍ | Área específica produce |
+| PERDIDA (OP→AVERIAS) | ✅ SÍ | Área donde ocurre defecto |
+| VENTA | ❌ NULL | Sale a cliente |
+| BAJA | ⚠️ OPCIONAL | Puede ser desde almacén sin área |
+
+### Beneficios
+
+1. **Granularidad precisa**: "5 unidades averiadas en Etiquetado, 3 en Envasado" (misma OP)
+2. **Reportes por área**: Scrap rate, defect rate, costo de averías por área
+3. **Responsabilidades claras**: Alertar al responsable del área específica
+4. **Sigue estándares**: SAP, Odoo, ISA-95, MES systems
+
+### Consideraciones de Normalización
+
+Según mejores prácticas de modelado de datos:
+- *"Optional foreign keys should be NULL, as entities without those relationships cannot populate that column with meaningful data"*
+- *"While it is possible to design a database that avoids even these NULLs, it would complicate the database (with more relations) for little gain"*
+- Crear tabla separada `MovimientoProduccion` sería over-engineering para un solo campo opcional
+
+### Validación Opcional
+
+Aunque no obligatorio, se puede implementar validación en Service Layer:
+
+```java
+// Warning si avería de producción no tiene área
+if (movimiento.getTipoMovimiento() == TipoMovimiento.PERDIDA &&
+    movimiento.getAlmacen() == Almacen.AVERIAS &&
+    movimiento.getAreaProduccion() == null &&
+    esDesdeProduccion(movimiento)) {
+    log.warn("Avería de producción sin área: {}", movimiento.getMovimientoId());
+}
+```
+
+---
+
 ## Relacionado
 
 - **Clases Java**:
   - `src/main/java/exotic/app/planta/model/inventarios/TransaccionAlmacen.java`
   - `src/main/java/exotic/app/planta/model/inventarios/Movimiento.java`
+  - `src/main/java/exotic/app/planta/model/producto/manufacturing/procesos/AreaProduccion.java`
 
 - **ADRs Futuros**:
   - ADR 002: Kardex filtrado por almacén (planeado)
@@ -293,3 +392,4 @@ public void validarTransaccion(TransaccionAlmacen transaccion) {
 | Fecha | Autor | Cambio |
 |-------|-------|--------|
 | 2026-02-27 | Equipo Exotic App | Creación inicial del ADR basado en investigación de estándares ERP |
+| 2026-02-27 | Equipo Exotic App | Agregada decisión complementaria sobre campo `areaProduccion` en `Movimiento` |

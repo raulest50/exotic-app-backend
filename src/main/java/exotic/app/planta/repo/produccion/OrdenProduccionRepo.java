@@ -75,4 +75,11 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
     @EntityGraph(attributePaths = {"ordenesSeguimiento", "producto"})
     @Query("SELECT o FROM OrdenProduccion o WHERE o.estadoOrden <> 2 AND o.estadoOrden <> -1 ORDER BY o.fechaCreacion DESC")
     Page<OrdenProduccion> findByEstadoOrdenOpenOrInProgress(Pageable pageable);
+
+    @EntityGraph(attributePaths = {"ordenesSeguimiento", "producto"})
+    @Query("SELECT o FROM OrdenProduccion o WHERE o.loteAsignado LIKE %:loteAsignado%")
+    Page<OrdenProduccion> findByLoteAsignadoContaining(
+            @Param("loteAsignado") String loteAsignado,
+            Pageable pageable
+    );
 }
