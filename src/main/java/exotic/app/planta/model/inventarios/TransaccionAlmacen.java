@@ -202,23 +202,13 @@
          * @see Movimiento.Almacen
          */
         public enum TipoEntidadCausante{
-            /** Orden de Compra de Materiales - siempre ingresa a almacén GENERAL */
-            OCM,
-
-            /** Orden de Producción - puede generar scrap en AVERIAS además del producto en GENERAL */
-            OP,
-
-            /** Orden de Transferencia de Almacén - mueve productos entre exactamente 2 almacenes */
-            OTA,
-
-            /** Orden de Ajuste de Almacén - puede reclasificar productos entre almacenes */
-            OAA,
-
-            /** Orden de Dispensación - siempre dispensa desde almacén GENERAL */
-            OD,
-
-            /** Carga Masiva de inventario - típicamente a GENERAL (carga inicial del sistema) */
-            CM
+            OCM, //Orden de Compra de Materiales - siempre ingresa a almacén GENERAL
+            OP, //Orden de Producción - puede generar scrap en AVERIAS además del producto en GENERAL
+            OTA, //Orden de Transferencia de Almacén - mueve productos entre exactamente 2 almacenes
+            OAA, // Orden de Ajuste de Almacén - puede reclasificar productos entre almacenes */
+            OD, // Orden de Dispensación - siempre dispensa desde almacén GENERAL
+            CM, // Carga Masiva de inventario - típicamente a GENERAL (carga inicial del sistema)
+            RA  // Reporte de Avería - para material ya dispensado que se reporta como averiado
         }
 
         /**

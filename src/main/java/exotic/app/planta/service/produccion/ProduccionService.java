@@ -129,7 +129,7 @@ public class ProduccionService {
                 Movimiento movimientoReal = new Movimiento();
                 movimientoReal.setCantidad(-insumo.getCantidadRequerida()); // Negative cantidad
                 movimientoReal.setProducto(insumo.getProducto());
-                movimientoReal.setTipoMovimiento(Movimiento.TipoMovimiento.CONSUMO);
+                movimientoReal.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
                 //movimiento.setObservaciones("Consumo para Orden de Producción ID: " + savedOrden.getOrdenId());
                 transaccionAlmacenRepo.save(movimientoReal);
             }
@@ -205,18 +205,6 @@ public class ProduccionService {
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
 
-        return new PageImpl<>(dtoList, pageable, page.getTotalElements());
-    }
-
-    public Page<OrdenProduccionDTO> searchOrdenesProduccionByLoteAsignado(String loteAsignado, Pageable pageable) {
-        Page<OrdenProduccion> page = ordenProduccionRepo.findByLoteAsignadoContaining(loteAsignado, pageable);
-        page.getContent().forEach(orden -> {
-            Hibernate.initialize(orden.getOrdenesSeguimiento());
-            Hibernate.initialize(orden.getProducto());
-        });
-        List<OrdenProduccionDTO> dtoList = page.getContent().stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
         return new PageImpl<>(dtoList, pageable, page.getTotalElements());
     }
 

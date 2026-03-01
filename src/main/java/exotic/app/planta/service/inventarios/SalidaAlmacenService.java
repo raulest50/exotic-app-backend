@@ -169,7 +169,7 @@ public class SalidaAlmacenService {
             Movimiento movimiento = new Movimiento();
             movimiento.setCantidad(-item.getCantidad()); // Negative because it's an output
             movimiento.setProducto(producto);
-            movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.CONSUMO);
+            movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
             movimiento.setAlmacen(Movimiento.Almacen.GENERAL);
             movimiento.setTransaccionAlmacen(transaccion);
 

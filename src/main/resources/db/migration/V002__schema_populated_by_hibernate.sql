@@ -1,0 +1,27 @@
+-- =====================================================================
+-- V002: Schema Populated by Hibernate (Baseline Version)
+-- =====================================================================
+-- Fecha: 2026-03-01
+-- Descripción: Marcador de versión para indicar que el esquema fue
+--              creado por Hibernate ddl-auto=update en versiones anteriores.
+--
+-- Esta es la versión baseline configurada en application.yml
+-- (baseline-version: 2). Todas las bases de datos existentes se
+-- considerarán en esta versión al iniciar Flyway por primera vez.
+--
+-- IMPORTANTE: Este script NO contiene DDL porque:
+-- - Tu base de datos actual ya tiene todas las tablas creadas por Hibernate
+-- - Las migraciones V003-V006 ya fueron aplicadas manualmente
+-- - Solo necesitas partir desde V007 en adelante
+--
+-- Contenido del esquema (ya existente en la BD):
+-- - Tablas de usuarios y autenticación
+-- - Tablas de productos (Material, Terminado, SemiTerminado)
+-- - Tablas de inventarios (Movimiento, TransaccionAlmacen, Lote, Stock)
+-- - Tablas de producción (OrdenProduccion, Receta, Proceso, etc.)
+-- - Tablas de compras (OrdenCompraMateriales, Proveedor, etc.)
+-- - Tablas de contabilidad (AsientoContable, etc.)
+-- - Todas las modificaciones de V003-V006
+-- =====================================================================
+
+-- Script vacío intencionalmente - ver descripción arriba

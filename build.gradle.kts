@@ -33,6 +33,9 @@ dependencies {
 
 	implementation("org.postgresql:postgresql")
 
+	// Flyway for database migrations (PostgreSQL support included in flyway-core 9.x)
+	implementation("org.flywaydb:flyway-core")
+
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 
 	compileOnly("org.projectlombok:lombok")

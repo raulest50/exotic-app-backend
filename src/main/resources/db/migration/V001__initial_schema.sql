@@ -1,0 +1,20 @@
+-- =====================================================================
+-- V001: Initial Schema Baseline
+-- =====================================================================
+-- Fecha: 2026-03-01
+-- Descripción: Baseline del esquema inicial de la base de datos.
+--              Este script asume que el esquema ya fue creado por
+--              Hibernate en versiones anteriores del proyecto.
+--
+-- IMPORTANTE: Este script está VACÍO porque usamos baseline-on-migrate=true
+--             en la configuración de Flyway. Flyway asumirá que cualquier
+--             base de datos existente está en la versión 2 (baseline-version=2)
+--             y solo ejecutará migraciones posteriores (V003+).
+--
+-- Si necesitas recrear la base de datos desde cero, deberás:
+-- 1. Generar el DDL completo desde tus entidades JPA
+-- 2. Colocar ese DDL aquí
+-- 3. Cambiar baseline-version a 1
+-- =====================================================================
+
+-- Script vacío intencionalmente - ver descripción arriba

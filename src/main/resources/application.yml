@@ -19,16 +19,25 @@ spring:
   jpa:
     #database-platform: org.hibernate.dialect.MySQL8Dialect
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-    generate-ddl: true
+    generate-ddl: false
     show-sql: true
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate  # Modo seguro - solo valida, no modifica
     properties:
       hibernate:
         globally_quoted_identifiers: true
         #dialect: org.hibernate.dialect.MySQL8Dialect
         #dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+
+  flyway:
+    enabled: true  # Habilitado con baseline configurado
+    baseline-on-migrate: true
+    baseline-version: 2
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    out-of-order: false
+    placeholder-replacement: false
   servlet:
     multipart:
       enabled: true
@@ -44,6 +53,11 @@ server:
     path: /error
     whitelabel:
       enabled: false
+
+logging:
+  level:
+    org.flywaydb: DEBUG
+    org.springframework.boot.autoconfigure.flyway: DEBUG
 
 #security:
 #  user:

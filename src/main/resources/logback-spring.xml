@@ -2,6 +2,52 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
+
+    <!-- Niveles de logging:
+    TRACE (más detallado),
+     DEBUG (depuración),
+      INFO (general),
+       WARN (advertencias),
+        ERROR (errores),
+         OFF (desactivado) -->
+
+    <!-- Variables de configuración de logging -->
+    <property name="FLYWAY_LOG_LEVEL" value="OFF"/>
+
+    <property name="DB_LOG_LEVEL" value="OFF"/>
+
+    <!-- Appender de consola para ver todos los logs -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Loggers para Flyway -->
+    <logger name="org.flywaydb" level="${FLYWAY_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="org.flywaydb.core" level="${FLYWAY_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="org.springframework.boot.autoconfigure.flyway" level="${FLYWAY_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Logger para ver errores de conexión a BD -->
+    <logger name="org.springframework.jdbc" level="${DB_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="com.zaxxer.hikari" level="${DB_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Root logger con salida a consola -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
     <!-- Appender para logs de carga masiva (archivo dedicado para diagnóstico) -->
     <property name="LOG_PATH" value="logs"/>
     <appender name="CARGA_MASIVA_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">

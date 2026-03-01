@@ -87,70 +87,45 @@ public class Movimiento {
     @CreationTimestamp
     private LocalDateTime fechaMovimiento;
 
-    /**
-     * Tipos de movimientos de inventario según su causa o naturaleza.
-     *
-     * <p>Define la razón por la cual se está realizando el movimiento de inventario,
-     * lo cual es importante para reportes, auditorías y análisis de flujo de materiales.
-     *
-     * <h3>Convención de uso con almacenes:</h3>
-     * <ul>
-     *   <li>{@link #COMPRA}: Típicamente ingreso a {@code GENERAL}</li>
-     *   <li>{@link #CONSUMO}: Típicamente salida de {@code GENERAL} para producción</li>
-     *   <li>{@link #BACKFLUSH}: Típicamente ingreso a {@code GENERAL} de producto terminado</li>
-     *   <li>{@link #PERDIDA}: Típicamente ingreso a {@code AVERIAS}</li>
-     *   <li>{@link #BAJA}: Típicamente salida de {@code AVERIAS} para eliminación definitiva</li>
-     *   <li>{@link #VENTA}: Típicamente salida de {@code GENERAL} para despacho</li>
-     * </ul>
-     *
-     * @see TransaccionAlmacen.TipoEntidadCausante
-     */
+
     public enum TipoMovimiento {
-        /** Ingreso de material por compra - asociado a Orden de Compra (OCM) */
-        COMPRA,
+        // ═══════════════════════════════════════════════════
+        // ENTRADAS
+        // ═══════════════════════════════════════════════════
 
-        /** Salida definitiva de material (eliminación física) - típicamente desde AVERIAS */
-        BAJA,
+        COMPRA, // Ingreso de material por compra - asociado a Orden de Compra (OCM)
 
-        /** Consumo de material en proceso productivo - asociado a Orden de Producción (OP) */
-        CONSUMO,
+        BACKFLUSH, // Ingreso de producto terminado o semi-terminado al finalizar producción
 
-        /** Ingreso de producto terminado o semi-terminado al finalizar producción */
-        BACKFLUSH,
+        AJUSTE_POSITIVO, // Aumento de inventario por corrección
 
-        /** Salida para venta de producto terminado al cliente */
-        VENTA,
 
-        /** Ingreso a almacén de averías por daño, defecto o pérdida */
-        PERDIDA
+        // ═══════════════════════════════════════════════════
+        // SALIDAS
+        // ═══════════════════════════════════════════════════
+
+        CONSUMO, // Consumo de material en proceso productivo - asociado a Orden de Producción (OP)
+
+        VENTA, // Salida para venta de producto terminado al cliente
+
+        DISPENSACION, // Salida de material para uso en producción o mantenimiento
+
+        BAJA, // Salida definitiva de material (eliminación física) - típicamente desde AVERIAS
+
+        AJUSTE_NEGATIVO, // Reducción de inventario por corrección o pérdida (shrinkage)
+
+
+        // ═══════════════════════════════════════════════════
+        // MOVIMIENTOS ESPECIALES
+        // ═══════════════════════════════════════════════════
+        /** Movimiento de material dañado, defectuoso o scrap hacia AVERIAS */
+        AVERIA,
+
+        /** Movimiento entre almacenes (OTA) */
+        TRANSFERENCIA
     }
 
-    /**
-     * Tipos de almacenes disponibles en el sistema para gestionar diferentes categorías de inventario.
-     *
-     * <p>Cada almacén tiene un propósito específico en el flujo de materiales de la planta.
-     * Los productos pueden moverse entre almacenes mediante transacciones de tipo
-     * {@link TransaccionAlmacen.TipoEntidadCausante#OTA OTA} (Orden de Transferencia de Almacén).
-     *
-     * <h3>Flujos Típicos:</h3>
-     * <ul>
-     *   <li><strong>Ingreso de compras:</strong> Proveedor → {@code GENERAL}</li>
-     *   <li><strong>Producción normal:</strong> Consumo desde {@code GENERAL} → Producto a {@code GENERAL}</li>
-     *   <li><strong>Producto defectuoso:</strong> {@code GENERAL} → {@code AVERIAS}</li>
-     *   <li><strong>Control de calidad:</strong> {@code GENERAL} → {@code CALIDAD} → {@code GENERAL} o {@code AVERIAS}</li>
-     *   <li><strong>Devolución de cliente:</strong> Cliente → {@code DEVOLUCIONES} → {@code GENERAL} o {@code AVERIAS}</li>
-     *   <li><strong>Scrap de producción:</strong> Producción → {@code AVERIAS} directamente</li>
-     * </ul>
-     *
-     * <p><strong>Nota:</strong> Una {@link TransaccionAlmacen} puede contener movimientos a
-     * diferentes almacenes. Ver
-     * <a href="../../../../../docs/adr/001-transaccion-almacen-multiples-ubicaciones.md">
-     * ADR 001
-     * </a> para más detalles.
-     *
-     * @see TransaccionAlmacen.TipoEntidadCausante#OTA
-     * @see Movimiento#almacen
-     */
+
     public enum Almacen {
         /**
          * Almacén principal donde se reciben compras, se dispensa material para producción,
@@ -184,7 +159,7 @@ public class Movimiento {
     public Movimiento(Insumo insumo){
         cantidad = insumo.getCantidadRequerida();
         producto = insumo.getProducto();
-        tipoMovimiento = TipoMovimiento.CONSUMO;
+        tipoMovimiento = TipoMovimiento.DISPENSACION;
     }
 
     /**
