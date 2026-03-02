@@ -1,6 +1,7 @@
 package exotic.app.planta.service.productos.procesos;
 
 import exotic.app.planta.dto.AreaProduccionDTO;
+import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
 import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
 import exotic.app.planta.model.users.User;
@@ -112,5 +113,49 @@ public class AreaProduccionService {
 
         // Ejecutar la búsqueda con la especificación y paginación
         return areaProduccionRepo.findAll(spec, pageable).getContent();
+    }
+
+    /**
+     * Busca áreas de producción con múltiples criterios (nombre, responsable, ID).
+     * Retorna Page para conservar metadata de paginación.
+     */
+    @Transactional(readOnly = true)
+    public Page<AreaProduccion> searchAreas(SearchAreaOperativaDTO searchDTO, Pageable pageable) {
+        log.info("Buscando áreas operativas - tipo: {}", searchDTO.getSearchType());
+
+        String searchType = searchDTO.getSearchType();
+        if (searchType == null || searchType.isBlank()) {
+            return areaProduccionRepo.findAll(pageable);
+        }
+
+        switch (searchType.toUpperCase()) {
+            case "NOMBRE": {
+                if (searchDTO.getNombre() == null || searchDTO.getNombre().trim().isEmpty()) {
+                    return areaProduccionRepo.findAll(pageable);
+                }
+                Specification<AreaProduccion> spec = (root, query, cb) ->
+                        cb.like(cb.lower(root.get("nombre")),
+                                "%" + searchDTO.getNombre().toLowerCase() + "%");
+                return areaProduccionRepo.findAll(spec, pageable);
+            }
+            case "RESPONSABLE": {
+                if (searchDTO.getResponsableId() == null) {
+                    return areaProduccionRepo.findAll(pageable);
+                }
+                Specification<AreaProduccion> spec = (root, query, cb) ->
+                        cb.equal(root.get("responsableArea").get("id"), searchDTO.getResponsableId());
+                return areaProduccionRepo.findAll(spec, pageable);
+            }
+            case "ID": {
+                if (searchDTO.getAreaId() == null) {
+                    return areaProduccionRepo.findAll(pageable);
+                }
+                Specification<AreaProduccion> spec = (root, query, cb) ->
+                        cb.equal(root.get("areaId"), searchDTO.getAreaId());
+                return areaProduccionRepo.findAll(spec, pageable);
+            }
+            default:
+                return areaProduccionRepo.findAll(pageable);
+        }
     }
 }

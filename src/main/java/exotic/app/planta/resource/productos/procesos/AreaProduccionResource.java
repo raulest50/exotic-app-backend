@@ -3,11 +3,13 @@ package exotic.app.planta.resource.productos.procesos;
 import jakarta.validation.Valid;
 import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.ErrorResponse;
+import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
 import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
 import exotic.app.planta.service.productos.procesos.AreaProduccionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -48,6 +50,24 @@ public class AreaProduccionResource {
             return ResponseEntity
                     .internalServerError()
                     .body(new ErrorResponse("Error interno del servidor", "Ocurrió un error inesperado"));
+        }
+    }
+
+    @PostMapping("/search")
+    public ResponseEntity<Page<AreaProduccion>> searchAreas(
+            @RequestBody SearchAreaOperativaDTO searchDTO,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        log.info("REST request para buscar áreas operativas - tipo: {}", searchDTO.getSearchType());
+
+        try {
+            PageRequest pageable = PageRequest.of(page, size);
+            Page<AreaProduccion> result = areaProduccionService.searchAreas(searchDTO, pageable);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error al buscar áreas operativas", e);
+            return ResponseEntity.internalServerError().build();
         }
     }
 
