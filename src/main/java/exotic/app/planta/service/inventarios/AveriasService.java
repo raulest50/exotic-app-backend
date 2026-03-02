@@ -2,13 +2,13 @@ package exotic.app.planta.service.inventarios;
 
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.inventarios.dto.HistorialAveriaDTO;
+import exotic.app.planta.model.inventarios.dto.HistorialAveriaItemDTO;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaItemDTO;
 import exotic.app.planta.model.produccion.OrdenProduccion;
-import exotic.app.planta.model.produccion.OrdenSeguimiento;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
-import exotic.app.planta.model.produccion.dto.OrdenSeguimientoDTO;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
 import exotic.app.planta.model.users.User;
@@ -41,7 +41,6 @@ public class AveriasService {
     public Page<OrdenProduccionDTO> searchOrdenesProduccionByLoteAsignado(String loteAsignado, Pageable pageable) {
         Page<OrdenProduccion> page = ordenProduccionRepo.findByLoteAsignadoContaining(loteAsignado, pageable);
         page.getContent().forEach(orden -> {
-            Hibernate.initialize(orden.getOrdenesSeguimiento());
             Hibernate.initialize(orden.getProducto());
         });
         List<OrdenProduccionDTO> dtoList = page.getContent().stream()
@@ -70,20 +69,6 @@ public class AveriasService {
             dto.setResponsableId(orden.getVendedorResponsable().getCedula());
         }
 
-        List<OrdenSeguimientoDTO> seguimientoDTOs = orden.getOrdenesSeguimiento().stream()
-                .map(this::convertSeguimientoToDto)
-                .collect(Collectors.toList());
-        dto.setOrdenesSeguimiento(seguimientoDTOs);
-
-        return dto;
-    }
-
-    private OrdenSeguimientoDTO convertSeguimientoToDto(OrdenSeguimiento seguimiento) {
-        OrdenSeguimientoDTO dto = new OrdenSeguimientoDTO();
-        dto.setSeguimientoId(seguimiento.getSeguimientoId());
-        dto.setInsumoNombre(seguimiento.getInsumo().getProducto().getNombre());
-        dto.setCantidadRequerida(seguimiento.getInsumo().getCantidadRequerida());
-        dto.setEstado(seguimiento.getEstado());
         return dto;
     }
 
@@ -132,6 +117,37 @@ public class AveriasService {
             }
         }
         return result;
+    }
+
+    public List<HistorialAveriaDTO> getHistorialAverias(int ordenProduccionId) {
+        List<TransaccionAlmacen> reportes = transaccionAlmacenHeaderRepo
+                .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
+                        TransaccionAlmacen.TipoEntidadCausante.RA, ordenProduccionId);
+
+        return reportes.stream().map(tx -> {
+            List<HistorialAveriaItemDTO> items = tx.getMovimientosTransaccion().stream()
+                    .map(mov -> new HistorialAveriaItemDTO(
+                            mov.getProducto().getProductoId(),
+                            mov.getProducto().getNombre(),
+                            mov.getProducto().getTipoUnidades(),
+                            Math.abs(mov.getCantidad())
+                    ))
+                    .collect(Collectors.toList());
+
+            String usuario = null;
+            if (tx.getUsuarioAprobador() != null) {
+                Hibernate.initialize(tx.getUsuarioAprobador());
+                usuario = tx.getUsuarioAprobador().getUsername();
+            }
+
+            return new HistorialAveriaDTO(
+                    tx.getTransaccionId(),
+                    tx.getFechaTransaccion(),
+                    tx.getObservaciones(),
+                    usuario,
+                    items
+            );
+        }).collect(Collectors.toList());
     }
 
     @Transactional

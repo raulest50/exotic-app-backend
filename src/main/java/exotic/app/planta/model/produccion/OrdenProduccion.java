@@ -1,7 +1,6 @@
 package exotic.app.planta.model.produccion;
 
 
-import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.ventas.Vendedor;
@@ -11,8 +10,6 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 
 @Entity
@@ -41,12 +38,6 @@ public class OrdenProduccion {
     @ManyToOne
     @JoinColumn(name = "producto_id")
     private Producto producto;
-
-    //@OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    //@JoinColumn(name = "orden_prod_id")
-    @OneToMany(mappedBy = "ordenProduccion", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonManagedReference
-    private List<OrdenSeguimiento> ordenesSeguimiento = new ArrayList<>();
 
     /**
      * Estados de la orden de producción:
@@ -131,7 +122,6 @@ public class OrdenProduccion {
         this.observaciones = observaciones;
         this.estadoOrden = 0;
         setCantidadProducir(cantidadProducir);
-        this.ordenesSeguimiento = new ArrayList<>();
     }
 
     // Mantener constructor anterior para compatibilidad

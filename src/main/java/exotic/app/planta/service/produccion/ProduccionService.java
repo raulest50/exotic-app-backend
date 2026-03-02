@@ -8,7 +8,6 @@ import exotic.app.planta.model.contabilidad.AsientoContable;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
-import exotic.app.planta.model.inventarios.dto.LoteRecomendadoDTO;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
@@ -17,27 +16,19 @@ import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.produccion.OrdenProduccion;
-import exotic.app.planta.model.produccion.OrdenSeguimiento;
-import exotic.app.planta.model.produccion.dto.DispensacionDTO;
-import exotic.app.planta.model.produccion.dto.DispensacionFormularioDTO;
-import exotic.app.planta.model.produccion.dto.InventarioEnTransitoDTO;
-import exotic.app.planta.model.produccion.dto.InsumoDTO;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
-import exotic.app.planta.model.produccion.dto.OrdenSeguimientoDTO;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
-import exotic.app.planta.repo.produccion.OrdenSeguimientoRepo;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -72,13 +63,6 @@ public class ProduccionService {
     private final LoteRepo loteRepo;
     //private final UserRepository userRepository;
     private final VendedorRepository vendedorRepository;
-
-    @Autowired
-    private final OrdenSeguimientoRepo ordenSeguimientoRepo;
-
-    @Autowired
-    private TransaccionAlmacenRepo transaccionAlmacenRepo;
-
 
     @Transactional(rollbackFor = Exception.class)
     public OrdenProduccion saveOrdenProduccion(OrdenProduccionDTO_save ordenProduccionDTO) {
@@ -119,20 +103,6 @@ public class ProduccionService {
             loteRepo.save(lote);
             savedOrden.setLoteAsignado(lote.getBatchNumber());
             ordenProduccionRepo.save(savedOrden);
-        }
-
-        List<OrdenSeguimiento> ordenesSeguimiento = savedOrden.getOrdenesSeguimiento();
-        if (ordenesSeguimiento != null && !ordenesSeguimiento.isEmpty()) {
-            // Create Movimiento entries for each Insumo
-            for (OrdenSeguimiento ordenSeguimiento : ordenesSeguimiento) {
-                Insumo insumo = ordenSeguimiento.getInsumo();
-                Movimiento movimientoReal = new Movimiento();
-                movimientoReal.setCantidad(-insumo.getCantidadRequerida()); // Negative cantidad
-                movimientoReal.setProducto(insumo.getProducto());
-                movimientoReal.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
-                //movimiento.setObservaciones("Consumo para Orden de Producción ID: " + savedOrden.getOrdenId());
-                transaccionAlmacenRepo.save(movimientoReal);
-            }
         }
 
         return savedOrden;
@@ -194,9 +164,7 @@ public class ProduccionService {
                 productoId,
                 pageable
         );
-        // Initialize necessary associations
         page.getContent().forEach(orden -> {
-            Hibernate.initialize(orden.getOrdenesSeguimiento());
             Hibernate.initialize(orden.getProducto());
         });
 
@@ -268,105 +236,7 @@ public class ProduccionService {
             dto.setResponsableId(orden.getVendedorResponsable().getCedula());
         }
 
-        List<OrdenSeguimientoDTO> seguimientoDTOs = orden.getOrdenesSeguimiento().stream()
-                .map(this::convertSeguimientoToDto)
-                .collect(Collectors.toList());
-        dto.setOrdenesSeguimiento(seguimientoDTOs);
-
         return dto;
-    }
-
-    // Helper method to map OrdenSeguimiento to OrdenSeguimientoDTO
-    private OrdenSeguimientoDTO convertSeguimientoToDto(OrdenSeguimiento seguimiento) {
-        OrdenSeguimientoDTO dto = new OrdenSeguimientoDTO();
-        dto.setSeguimientoId(seguimiento.getSeguimientoId());
-        dto.setInsumoNombre(seguimiento.getInsumo().getProducto().getNombre());
-        dto.setCantidadRequerida(seguimiento.getInsumo().getCantidadRequerida());
-        dto.setEstado(seguimiento.getEstado());
-        return dto;
-    }
-
-
-
-
-    public Page<InventarioEnTransitoDTO> getInventarioEnTransito(Pageable pageable) {
-        // Fetch all Ordenes de Producción with estadoOrden = 0
-        List<OrdenProduccion> ordenesProduccion = ordenProduccionRepo.findByEstadoOrden(0);
-
-        // Initialize necessary associations
-        for (OrdenProduccion orden : ordenesProduccion) {
-            Hibernate.initialize(orden.getOrdenesSeguimiento());
-            for (OrdenSeguimiento seguimiento : orden.getOrdenesSeguimiento()) {
-                Hibernate.initialize(seguimiento.getInsumo());
-                Hibernate.initialize(seguimiento.getInsumo().getProducto());
-            }
-        }
-
-        // Map to hold Producto ID and corresponding InventarioEnTransitoDTO
-        Map<String, InventarioEnTransitoDTO> inventarioMap = new HashMap<>();
-
-        // Process each Orden de Producción
-        for (OrdenProduccion orden : ordenesProduccion) {
-            int ordenProduccionId = orden.getOrdenId();
-            for (OrdenSeguimiento seguimiento : orden.getOrdenesSeguimiento()) {
-                Insumo insumo = seguimiento.getInsumo();
-                Producto producto = insumo.getProducto();
-                String productoId = producto.getProductoId();
-                String productoNombre = producto.getNombre();
-                double cantidadRequerida = insumo.getCantidadRequerida();
-
-                InventarioEnTransitoDTO inventarioDTO = inventarioMap.get(productoId);
-                if (inventarioDTO == null) {
-                    inventarioDTO = new InventarioEnTransitoDTO();
-                    inventarioDTO.setProductoId(productoId);
-                    inventarioDTO.setProductoNombre(productoNombre);
-                    inventarioDTO.setCantidadTotal(cantidadRequerida);
-                    inventarioDTO.setOrdenesProduccionIds(new ArrayList<>());
-                    inventarioDTO.getOrdenesProduccionIds().add(ordenProduccionId);
-                    inventarioMap.put(productoId, inventarioDTO);
-                } else {
-                    inventarioDTO.setCantidadTotal(inventarioDTO.getCantidadTotal() + cantidadRequerida);
-                    if (!inventarioDTO.getOrdenesProduccionIds().contains(ordenProduccionId)) {
-                        inventarioDTO.getOrdenesProduccionIds().add(ordenProduccionId);
-                    }
-                }
-            }
-        }
-
-        // Convert map values to a list
-        List<InventarioEnTransitoDTO> inventarioList = new ArrayList<>(inventarioMap.values());
-
-        // Apply sorting if needed (e.g., by productoNombre)
-        inventarioList.sort(Comparator.comparing(InventarioEnTransitoDTO::getProductoNombre));
-
-        // Implement pagination manually
-        int total = inventarioList.size();
-        int start = (int) pageable.getOffset();
-        int end = Math.min((start + pageable.getPageSize()), total);
-        List<InventarioEnTransitoDTO> output;
-        if (start <= end) {
-            output = inventarioList.subList(start, end);
-        } else {
-            output = new ArrayList<>();
-        }
-
-        return new PageImpl<>(output, pageable, total);
-    }
-
-
-
-    /**
-     * Update the estado of an OrdenSeguimiento.
-     */
-    @Transactional
-    public OrdenSeguimientoDTO updateEstadoOrdenSeguimiento(int seguimientoId, int estado) {
-        ordenSeguimientoRepo.updateEstadoById(seguimientoId, estado);
-
-        // Fetch updated OrdenSeguimiento
-        OrdenSeguimiento ordenSeguimiento = ordenSeguimientoRepo.findById(seguimientoId).orElseThrow(() -> new RuntimeException("OrdenSeguimiento not found"));
-
-        // Return updated DTO
-        return convertSeguimientoToDto(ordenSeguimiento);
     }
 
     /**
@@ -463,248 +333,6 @@ public class ProduccionService {
         return ordenProduccion.getEstadoOrden() == 0;
     }
 
-    /**
-     * Get the inputs (insumos) needed for a production order.
-     * Includes recommended batches for each input, prioritizing those with closest expiration date.
-     */
-    public List<InsumoDTO> getInsumosOrdenProduccion(int ordenId) {
-        OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId)
-            .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + ordenId));
-
-        return ordenProduccion.getOrdenesSeguimiento().stream()
-            .map(ordenSeguimiento -> {
-                Insumo insumo = ordenSeguimiento.getInsumo();
-                InsumoDTO insumoDTO = new InsumoDTO();
-                insumoDTO.setProductoId(insumo.getProducto().getProductoId());
-                insumoDTO.setNombreProducto(insumo.getProducto().getNombre());
-                insumoDTO.setCantidadRequerida(insumo.getCantidadRequerida());
-                insumoDTO.setEstadoSeguimiento(ordenSeguimiento.getEstado());
-                insumoDTO.setSeguimientoId(ordenSeguimiento.getSeguimientoId());
-                insumoDTO.setLotesRecomendados(new ArrayList<>());
-
-                // Obtener lotes con stock disponible para este producto
-                List<Object[]> lotesConStock;
-                try {
-                    // Intentar primero con la consulta JPQL
-                    lotesConStock = transaccionAlmacenRepo.findLotesWithStockByProductoIdOrderByExpirationDate(
-                        insumo.getProducto().getProductoId());
-                } catch (Exception e) {
-                    // Si falla, usar la consulta SQL nativa como alternativa
-                    log.warn("Error al ejecutar consulta JPQL para lotes, usando SQL nativo: " + e.getMessage());
-                    lotesConStock = transaccionAlmacenRepo.findLotesWithStockByProductoIdNative(
-                        insumo.getProducto().getProductoId());
-                }
-
-                // Mapear a DTOs y calcular cuánto tomar de cada lote
-                List<LoteRecomendadoDTO> lotesRecomendados = new ArrayList<>();
-                double cantidadRestante = insumo.getCantidadRequerida();
-
-                for (Object[] result : lotesConStock) {
-                    if (cantidadRestante <= 0) {
-                        break;
-                    }
-
-                    try {
-                        Lote lote;
-                        Double stockDisponible;
-
-                        // Intentar procesar como resultado de consulta JPQL
-                        if (result[0] instanceof Lote) {
-                            lote = (Lote) result[0];
-                            stockDisponible = (Double) result[1];
-                        } 
-                        // Procesar como resultado de consulta SQL nativa
-                        else {
-                            // Para SQL nativo, necesitamos buscar el lote por ID
-                            Long loteId = null;
-
-                            // El primer elemento podría ser un número (ID del lote)
-                            if (result[0] instanceof Number) {
-                                loteId = ((Number) result[0]).longValue();
-                            } 
-                            // O podría ser un mapa con los valores de las columnas
-                            else if (result[0] instanceof Map) {
-                                Map<String, Object> map = (Map<String, Object>) result[0];
-                                loteId = ((Number) map.get("id")).longValue();
-                            }
-
-                            // Si no pudimos obtener el ID del lote, continuamos con el siguiente
-                            if (loteId == null) {
-                                log.warn("No se pudo obtener el ID del lote del resultado de la consulta");
-                                continue;
-                            }
-
-                            // Buscar el lote por ID
-                            Optional<Lote> optionalLote = loteRepo.findById(loteId);
-                            if (!optionalLote.isPresent()) {
-                                log.warn("No se encontró el lote con ID: " + loteId);
-                                continue;
-                            }
-
-                            lote = optionalLote.get();
-
-                            // El stock disponible podría estar en diferentes posiciones según la consulta
-                            if (result.length > 1 && result[1] instanceof Number) {
-                                stockDisponible = ((Number) result[1]).doubleValue();
-                            } else {
-                                log.warn("No se pudo obtener el stock disponible del resultado de la consulta");
-                                continue;
-                            }
-                        }
-
-                        double cantidadAUsar = Math.min(stockDisponible, cantidadRestante);
-
-                        LoteRecomendadoDTO loteRecomendado = new LoteRecomendadoDTO();
-                        loteRecomendado.setLoteId(lote.getId());
-                        loteRecomendado.setBatchNumber(lote.getBatchNumber());
-                        loteRecomendado.setProductionDate(lote.getProductionDate());
-                        loteRecomendado.setExpirationDate(lote.getExpirationDate());
-                        loteRecomendado.setCantidadDisponible(stockDisponible);  // Cantidad total disponible en el lote
-                        loteRecomendado.setCantidadRecomendada(cantidadAUsar);   // Cantidad recomendada a tomar
-
-                        lotesRecomendados.add(loteRecomendado);
-
-                        cantidadRestante -= cantidadAUsar;
-                    } catch (Exception e) {
-                        log.error("Error al procesar lote recomendado: " + e.getMessage(), e);
-                        // Continuamos con el siguiente lote
-                    }
-                }
-
-                insumoDTO.setLotesRecomendados(lotesRecomendados);
-
-                return insumoDTO;
-            })
-            .collect(Collectors.toList());
-    }
-    /**
-     * Obtiene un formulario de dispensación para una orden de producción.
-     * Incluye todos los materiales necesarios y los lotes recomendados para cada uno,
-     * priorizando los lotes más próximos a vencer.
-     * 
-     * @param ordenId ID de la orden de producción
-     * @return DTO con la información del formulario de dispensación
-     */
-    public DispensacionFormularioDTO getFormularioDispensacion(int ordenId) {
-        OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId)
-            .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + ordenId));
-
-        // Crear el DTO del formulario
-        DispensacionFormularioDTO formulario = new DispensacionFormularioDTO();
-        formulario.setOrdenProduccionId(ordenId);
-        formulario.setProductoNombre(ordenProduccion.getProducto().getNombre());
-
-        // Obtener las dispensaciones para cada insumo
-        List<DispensacionDTO> dispensaciones = ordenProduccion.getOrdenesSeguimiento().stream()
-            .map(ordenSeguimiento -> {
-                Insumo insumo = ordenSeguimiento.getInsumo();
-                DispensacionDTO dispensacionDTO = new DispensacionDTO();
-                dispensacionDTO.setProductoId(insumo.getProducto().getProductoId());
-                dispensacionDTO.setNombreProducto(insumo.getProducto().getNombre());
-                dispensacionDTO.setCantidadRequerida(insumo.getCantidadRequerida());
-                dispensacionDTO.setEstadoSeguimiento(ordenSeguimiento.getEstado());
-                dispensacionDTO.setSeguimientoId(ordenSeguimiento.getSeguimientoId());
-                dispensacionDTO.setLotesRecomendados(new ArrayList<>());
-
-                // Obtener lotes con stock disponible para este producto
-                List<Object[]> lotesConStock;
-                try {
-                    // Intentar primero con la consulta JPQL
-                    lotesConStock = transaccionAlmacenRepo.findLotesWithStockByProductoIdOrderByExpirationDate(
-                        insumo.getProducto().getProductoId());
-                } catch (Exception e) {
-                    // Si falla, usar la consulta SQL nativa como alternativa
-                    log.warn("Error al ejecutar consulta JPQL para lotes, usando SQL nativo: " + e.getMessage());
-                    lotesConStock = transaccionAlmacenRepo.findLotesWithStockByProductoIdNative(
-                        insumo.getProducto().getProductoId());
-                }
-
-                // Mapear a DTOs y calcular cuánto tomar de cada lote
-                List<LoteRecomendadoDTO> lotesRecomendados = new ArrayList<>();
-                double cantidadRestante = insumo.getCantidadRequerida();
-
-                for (Object[] result : lotesConStock) {
-                    if (cantidadRestante <= 0) {
-                        break;
-                    }
-
-                    try {
-                        Lote lote;
-                        Double stockDisponible;
-
-                        // Intentar procesar como resultado de consulta JPQL
-                        if (result[0] instanceof Lote) {
-                            lote = (Lote) result[0];
-                            stockDisponible = (Double) result[1];
-                        } 
-                        // Procesar como resultado de consulta SQL nativa
-                        else {
-                            // Para SQL nativo, necesitamos buscar el lote por ID
-                            Long loteId = null;
-
-                            // El primer elemento podría ser un número (ID del lote)
-                            if (result[0] instanceof Number) {
-                                loteId = ((Number) result[0]).longValue();
-                            } 
-                            // O podría ser un mapa con los valores de las columnas
-                            else if (result[0] instanceof Map) {
-                                Map<String, Object> map = (Map<String, Object>) result[0];
-                                loteId = ((Number) map.get("id")).longValue();
-                            }
-
-                            // Si no pudimos obtener el ID del lote, continuamos con el siguiente
-                            if (loteId == null) {
-                                log.warn("No se pudo obtener el ID del lote del resultado de la consulta");
-                                continue;
-                            }
-
-                            // Buscar el lote por ID
-                            Optional<Lote> optionalLote = loteRepo.findById(loteId);
-                            if (!optionalLote.isPresent()) {
-                                log.warn("No se encontró el lote con ID: " + loteId);
-                                continue;
-                            }
-
-                            lote = optionalLote.get();
-
-                            // El stock disponible podría estar en diferentes posiciones según la consulta
-                            if (result.length > 1 && result[1] instanceof Number) {
-                                stockDisponible = ((Number) result[1]).doubleValue();
-                            } else {
-                                log.warn("No se pudo obtener el stock disponible del resultado de la consulta");
-                                continue;
-                            }
-                        }
-
-                        double cantidadAUsar = Math.min(stockDisponible, cantidadRestante);
-
-                        LoteRecomendadoDTO loteRecomendado = new LoteRecomendadoDTO();
-                        loteRecomendado.setLoteId(lote.getId());
-                        loteRecomendado.setBatchNumber(lote.getBatchNumber());
-                        loteRecomendado.setProductionDate(lote.getProductionDate());
-                        loteRecomendado.setExpirationDate(lote.getExpirationDate());
-                        loteRecomendado.setCantidadDisponible(stockDisponible);  // Cantidad total disponible en el lote
-                        loteRecomendado.setCantidadRecomendada(cantidadAUsar);   // Cantidad recomendada a tomar
-
-                        lotesRecomendados.add(loteRecomendado);
-
-                        cantidadRestante -= cantidadAUsar;
-                    } catch (Exception e) {
-                        log.error("Error al procesar lote recomendado: " + e.getMessage(), e);
-                        // Continuamos con el siguiente lote
-                    }
-                }
-
-                dispensacionDTO.setLotesRecomendados(lotesRecomendados);
-
-                return dispensacionDTO;
-            })
-            .collect(Collectors.toList());
-
-        formulario.setDispensaciones(dispensaciones);
-
-        return formulario;
-    }
     /**
      * Obtiene los datos necesarios para generar un PDF de un producto terminado.
      * Incluye el producto terminado, la lista de materiales, la lista de semiterminados

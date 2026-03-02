@@ -95,6 +95,16 @@ public class InventarioService {
         if (dto.getProductoId() == null || dto.getProductoId().trim().isEmpty()) {
             throw new IllegalArgumentException("productoId requerido");
         }
+        if (dto.getAlmacen() == null || dto.getAlmacen().trim().isEmpty()) {
+            throw new IllegalArgumentException("almacen requerido");
+        }
+
+        Movimiento.Almacen almacen;
+        try {
+            almacen = Movimiento.Almacen.valueOf(dto.getAlmacen().trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Almacén no válido: " + dto.getAlmacen());
+        }
 
         LocalDate startDate = dto.getStartDate();
         LocalDate endDate = dto.getEndDate();
@@ -117,21 +127,22 @@ public class InventarioService {
         Producto producto = productoService.findProductoById(dto.getProductoId())
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + dto.getProductoId()));
 
-        Double saldoInicialRaw = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndFechaMovimientoBefore(
-                dto.getProductoId(), startDateTime
+        Double saldoInicialRaw = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(
+                dto.getProductoId(), almacen, startDateTime
         );
         double saldoInicial = saldoInicialRaw != null ? saldoInicialRaw : 0.0;
 
         Page<Movimiento> movPage = transaccionAlmacenRepo
-                .findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
-                        dto.getProductoId(), startDateTime, endDateTime, pageable
+                .findByProducto_ProductoIdAndAlmacenAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
+                        dto.getProductoId(), almacen, startDateTime, endDateTime, pageable
                 );
 
         double deltaAntesDePagina = 0.0;
         if (movPage.getNumber() > 0 && !movPage.getContent().isEmpty()) {
             Movimiento cursor = movPage.getContent().get(0);
-            Double delta = transaccionAlmacenRepo.sumCantidadInRangeBeforeCursor(
+            Double delta = transaccionAlmacenRepo.sumCantidadInRangeBeforeCursorAndAlmacen(
                     dto.getProductoId(),
+                    almacen,
                     startDateTime,
                     endDateTime,
                     cursor.getFechaMovimiento(),
@@ -188,6 +199,16 @@ public class InventarioService {
         if (dto.getProductoId() == null || dto.getProductoId().trim().isEmpty()) {
             throw new IllegalArgumentException("productoId requerido");
         }
+        if (dto.getAlmacen() == null || dto.getAlmacen().trim().isEmpty()) {
+            throw new IllegalArgumentException("almacen requerido");
+        }
+
+        Movimiento.Almacen almacen;
+        try {
+            almacen = Movimiento.Almacen.valueOf(dto.getAlmacen().trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Almacén no válido: " + dto.getAlmacen());
+        }
 
         LocalDate startDate = dto.getStartDate();
         LocalDate endDate = dto.getEndDate();
@@ -204,14 +225,14 @@ public class InventarioService {
         Producto producto = productoService.findProductoById(dto.getProductoId())
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + dto.getProductoId()));
 
-        Double saldoInicialRaw = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndFechaMovimientoBefore(
-                dto.getProductoId(), startDateTime
+        Double saldoInicialRaw = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(
+                dto.getProductoId(), almacen, startDateTime
         );
         double saldoInicial = saldoInicialRaw != null ? saldoInicialRaw : 0.0;
 
         List<Movimiento> movimientos = transaccionAlmacenRepo
-                .findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
-                        dto.getProductoId(), startDateTime, endDateTime
+                .findByProducto_ProductoIdAndAlmacenAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
+                        dto.getProductoId(), almacen, startDateTime, endDateTime
                 );
 
         try (Workbook workbook = new XSSFWorkbook()) {

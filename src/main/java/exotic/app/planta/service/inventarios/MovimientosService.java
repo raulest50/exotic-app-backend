@@ -22,7 +22,6 @@ import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
-import exotic.app.planta.repo.produccion.OrdenSeguimientoRepo;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
@@ -86,7 +85,6 @@ public class MovimientosService {
     private final ContabilidadService contabilidadService;
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
-    private final OrdenSeguimientoRepo ordenSeguimientoRepo;
 
 
 

@@ -18,6 +18,9 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId AND m.fechaMovimiento < :fecha")
     Double findTotalCantidadByProductoIdAndFechaMovimientoBefore(@Param("productoId") String productoId, @Param("fecha") LocalDateTime fecha);
 
+    @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId AND m.almacen = :almacen AND m.fechaMovimiento < :fecha")
+    Double findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(@Param("productoId") String productoId, @Param("almacen") Movimiento.Almacen almacen, @Param("fecha") LocalDateTime fecha);
+
     List<Movimiento> findMovimientosByCantidad(Double cantidad);
 
     // Get movimientos filtered by product ID
@@ -35,8 +38,23 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             Pageable pageable
     );
 
+    Page<Movimiento> findByProducto_ProductoIdAndAlmacenAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
+            String productoId,
+            Movimiento.Almacen almacen,
+            LocalDateTime start,
+            LocalDateTime end,
+            Pageable pageable
+    );
+
     List<Movimiento> findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
             String productoId,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    List<Movimiento> findByProducto_ProductoIdAndAlmacenAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
+            String productoId,
+            Movimiento.Almacen almacen,
             LocalDateTime start,
             LocalDateTime end
     );
@@ -58,6 +76,27 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             """)
     Double sumCantidadInRangeBeforeCursor(
             @Param("productoId") String productoId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("cursorFecha") LocalDateTime cursorFecha,
+            @Param("cursorId") int cursorId
+    );
+
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.almacen = :almacen
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND (
+                   m.fechaMovimiento < :cursorFecha
+                   OR (m.fechaMovimiento = :cursorFecha AND m.movimientoId < :cursorId)
+              )
+            """)
+    Double sumCantidadInRangeBeforeCursorAndAlmacen(
+            @Param("productoId") String productoId,
+            @Param("almacen") Movimiento.Almacen almacen,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             @Param("cursorFecha") LocalDateTime cursorFecha,

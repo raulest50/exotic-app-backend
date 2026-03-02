@@ -3,7 +3,6 @@
 package exotic.app.planta.model.produccion.dto;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -28,5 +27,4 @@ public class OrdenProduccionDTO {
     private String departamentoOperativo; // departamento responsable de coordinar
     private String loteAsignado; // número de lote asignado a la orden
     private Long responsableId;
-    private List<OrdenSeguimientoDTO> ordenesSeguimiento;
 }

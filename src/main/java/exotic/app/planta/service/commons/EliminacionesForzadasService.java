@@ -6,13 +6,11 @@ import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.compras.ItemOrdenCompra;
 import exotic.app.planta.model.inventarios.Lote;
-import exotic.app.planta.model.produccion.OrdenSeguimiento;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
-import exotic.app.planta.repo.produccion.OrdenSeguimientoRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,7 +32,6 @@ public class EliminacionesForzadasService {
     private final LoteRepo loteRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
-    private final OrdenSeguimientoRepo ordenSeguimientoRepo;
 
     /**
      * Estudia qué registros bloquean la eliminación de una OrdenCompraMateriales por integridad referencial.
@@ -145,11 +142,6 @@ public class EliminacionesForzadasService {
             throw new RuntimeException("OrdenProduccion not found with id: " + ordenProduccionId);
         }
 
-        List<OrdenSeguimiento> seguimientos = ordenSeguimientoRepo.findByOrdenProduccion_OrdenId(ordenProduccionId);
-        List<OrdenSeguimientoResumenDTO> ordenesSeguimientoDto = seguimientos.stream()
-                .map(this::toOrdenSeguimientoResumen)
-                .collect(Collectors.toList());
-
         List<LoteResumenDTO> lotes = loteRepo.findByOrdenProduccion_OrdenId(ordenProduccionId)
                 .stream()
                 .map(this::toLoteResumen)
@@ -174,7 +166,6 @@ public class EliminacionesForzadasService {
         EstudiarEliminacionOPResponseDTO response = new EstudiarEliminacionOPResponseDTO();
         response.setOrdenProduccionId(ordenProduccionId);
         response.setEliminable(transacciones.isEmpty());
-        response.setOrdenesSeguimiento(ordenesSeguimientoDto);
         response.setLotes(lotes);
         response.setTransaccionesAlmacen(transaccionesDto);
         response.setAsientosContables(new ArrayList<>(asientosSet));
@@ -183,7 +174,7 @@ public class EliminacionesForzadasService {
 
     /**
      * Ejecuta la eliminación forzada de una Orden de Producción solo si no tiene TransaccionAlmacen asociadas.
-     * Orden: borrar lotes asociados a la OP (lote reservado FG), luego borrar OP (cascade OrdenSeguimiento y RecursoAsignadoOrden).
+     * Orden: borrar lotes asociados a la OP (lote reservado FG), luego borrar OP.
      *
      * @param ordenProduccionId ID de la orden de producción
      * @throws IllegalStateException si existe al menos una transacción de almacén asociada
@@ -212,16 +203,6 @@ public class EliminacionesForzadasService {
 
         ordenProduccionRepo.deleteById(ordenProduccionId);
         log.info("Eliminación forzada ejecutada para OP id: {}", ordenProduccionId);
-    }
-
-    private OrdenSeguimientoResumenDTO toOrdenSeguimientoResumen(OrdenSeguimiento seg) {
-        OrdenSeguimientoResumenDTO dto = new OrdenSeguimientoResumenDTO();
-        dto.setSeguimientoId(seg.getSeguimientoId());
-        dto.setEstado(seg.getEstado());
-        dto.setProductoId(seg.getInsumo() != null && seg.getInsumo().getProducto() != null
-                ? seg.getInsumo().getProducto().getProductoId()
-                : null);
-        return dto;
     }
 
     private ItemOrdenCompraResumenDTO toItemResumen(ItemOrdenCompra item) {

@@ -11,6 +11,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class KardexMovimientosRequestDTO {
     private String productoId;
+    private String almacen;
     private LocalDate startDate;
     private LocalDate endDate;
     private Integer page;

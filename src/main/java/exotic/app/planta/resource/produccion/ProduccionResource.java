@@ -2,12 +2,9 @@ package exotic.app.planta.resource.produccion;
 
 
 import exotic.app.planta.model.produccion.OrdenProduccion;
-import exotic.app.planta.model.produccion.dto.InventarioEnTransitoDTO;
-import exotic.app.planta.model.produccion.dto.InsumoDTO;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
-import exotic.app.planta.model.produccion.dto.OrdenSeguimientoDTO;
 import exotic.app.planta.service.produccion.ProduccionService;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -34,13 +30,6 @@ public class ProduccionResource {
 
     private final ProduccionService produccionService;
     private final LoteRepo loteRepo;
-
-    @GetMapping("/orden_produccion/{id}/insumos")
-    public ResponseEntity<List<InsumoDTO>> getInsumosOrdenProduccion(@PathVariable int id) {
-        List<InsumoDTO> insumos = produccionService.getInsumosOrdenProduccion(id);
-        return ResponseEntity.ok(insumos);
-    }
-
 
     @PostMapping("/save")
     public ResponseEntity<OrdenProduccion> saveOrdenProduccion(@RequestBody OrdenProduccionDTO_save ordenProduccionDTO){
@@ -97,29 +86,6 @@ public class ProduccionResource {
         return ResponseEntity.ok(resultados);
     }
 
-
-    @GetMapping("/inventario_en_transito")
-    public ResponseEntity<Page<InventarioEnTransitoDTO>> getInventarioEnTransito(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
-    ) {
-        Pageable pageable = PageRequest.of(page, size);
-        Page<InventarioEnTransitoDTO> inventarioEnTransito = produccionService.getInventarioEnTransito(pageable);
-        return ResponseEntity.ok(inventarioEnTransito);
-    }
-
-
-    /**
-     * Update estado of OrdenSeguimiento.
-     */
-    @PutMapping("/orden_seguimiento/{id}/update_estado")
-    public ResponseEntity<OrdenSeguimientoDTO> updateEstadoOrdenSeguimiento(
-            @PathVariable int id,
-            @RequestParam int estado
-    ) {
-        OrdenSeguimientoDTO updatedSeguimiento = produccionService.updateEstadoOrdenSeguimiento(id, estado);
-        return ResponseEntity.ok(updatedSeguimiento);
-    }
 
     /**
      * Update estadoOrden of OrdenProduccion.

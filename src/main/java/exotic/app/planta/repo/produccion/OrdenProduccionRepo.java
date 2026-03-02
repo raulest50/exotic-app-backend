@@ -47,7 +47,7 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
      * @param pageable    Pagination information.
      * @return Page of OrdenProduccion matching the criteria.
      */
-    @EntityGraph(attributePaths = {"ordenesSeguimiento", "producto"})
+    @EntityGraph(attributePaths = {"producto"})
     @Query("SELECT o FROM OrdenProduccion o WHERE o.fechaCreacion BETWEEN :startDate AND :endDate " +
             "AND (:estadoOrden = 2 OR o.estadoOrden = :estadoOrden) " +
             "AND (:productoId IS NULL OR :productoId = '' OR o.producto.productoId = :productoId) " +
@@ -72,11 +72,11 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
      * @param pageable Información de paginación
      * @return Página de órdenes de producción
      */
-    @EntityGraph(attributePaths = {"ordenesSeguimiento", "producto"})
+    @EntityGraph(attributePaths = {"producto"})
     @Query("SELECT o FROM OrdenProduccion o WHERE o.estadoOrden <> 2 AND o.estadoOrden <> -1 ORDER BY o.fechaCreacion DESC")
     Page<OrdenProduccion> findByEstadoOrdenOpenOrInProgress(Pageable pageable);
 
-    @EntityGraph(attributePaths = {"ordenesSeguimiento", "producto"})
+    @EntityGraph(attributePaths = {"producto"})
     @Query("SELECT o FROM OrdenProduccion o WHERE o.loteAsignado LIKE %:loteAsignado%")
     Page<OrdenProduccion> findByLoteAsignadoContaining(
             @Param("loteAsignado") String loteAsignado,

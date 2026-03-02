@@ -12,15 +12,12 @@ import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
 import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.produccion.OrdenProduccion;
-import exotic.app.planta.model.produccion.OrdenSeguimiento;
-import exotic.app.planta.model.produccion.dto.DispensacionFormularioDTO;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
-import exotic.app.planta.repo.produccion.OrdenSeguimientoRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
@@ -51,7 +48,6 @@ import java.util.stream.Collectors;
 public class SalidaAlmacenService {
 
     private final OrdenProduccionRepo ordenProduccionRepo;
-    private final OrdenSeguimientoRepo ordenSeguimientoRepo;
     private final ProductoRepo productoRepo;
     private final LoteRepo loteRepo;
     private final UserRepository userRepository;
@@ -60,17 +56,6 @@ public class SalidaAlmacenService {
     private final ProduccionService produccionService;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final ProductoService productoService;
-
-    /**
-     * Obtiene el formulario sugerido de dispensación delegando al servicio de producción.
-     *
-     * @param ordenProduccionId identificador de la orden de producción
-     * @return formulario con materiales y lotes recomendados
-     */
-    public DispensacionFormularioDTO getFormularioDispensacion(int ordenProduccionId) {
-        return produccionService.getFormularioDispensacion(ordenProduccionId);
-    }
-
 
     /**
      * Creates a dispensation transaction for a production order.
@@ -131,49 +116,22 @@ public class SalidaAlmacenService {
         // Create the movements
         List<Movimiento> movimientos = new ArrayList<>();
         for (DispensacionItemDTO item : dispensacionDTO.getItems()) {
-            // Get the product - from seguimiento if available, otherwise from lote or direct lookup
             Producto producto = null;
-            OrdenSeguimiento seguimiento = null;
 
-            // Try to get the seguimiento if seguimientoId is provided and valid (> 0)
-            if (item.getSeguimientoId() > 0) {
-                Optional<OrdenSeguimiento> seguimientoOpt = ordenSeguimientoRepo.findById(item.getSeguimientoId());
-                if (seguimientoOpt.isPresent()) {
-                    seguimiento = seguimientoOpt.get();
-                    producto = seguimiento.getInsumo().getProducto();
-                } else {
-                    log.warn("Seguimiento no encontrado con ID: {}. Se buscará el producto por otros medios.", item.getSeguimientoId());
-                }
+            if (item.getProductoId() != null && !item.getProductoId().isEmpty()) {
+                producto = productoRepo.findById(item.getProductoId())
+                    .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
+            } else {
+                throw new RuntimeException("Se requiere productoId válido para cada item de dispensación.");
             }
 
-            // If producto is still null, try to get it from productoId (when seguimientoId is 0)
-            if (producto == null && (item.getSeguimientoId() == 0 || item.getSeguimientoId() < 0)) {
-                if (item.getProductoId() != null && !item.getProductoId().isEmpty()) {
-                    Optional<Producto> productoOpt = productoRepo.findById(item.getProductoId());
-                    if (productoOpt.isPresent()) {
-                        producto = productoOpt.get();
-                    } else {
-                        throw new RuntimeException("Producto no encontrado con ID: " + item.getProductoId());
-                    }
-                } else {
-                    throw new RuntimeException("No se pudo determinar el producto para el item. Se requiere seguimientoId válido (> 0) o productoId válido cuando seguimientoId es 0.");
-                }
-            }
-
-            // If still null, we need to throw an error
-            if (producto == null) {
-                throw new RuntimeException("No se pudo determinar el producto para el item. Se requiere seguimientoId válido (> 0) o productoId válido.");
-            }
-
-            // Create the movement
             Movimiento movimiento = new Movimiento();
-            movimiento.setCantidad(-item.getCantidad()); // Negative because it's an output
+            movimiento.setCantidad(-item.getCantidad());
             movimiento.setProducto(producto);
             movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
             movimiento.setAlmacen(Movimiento.Almacen.GENERAL);
             movimiento.setTransaccionAlmacen(transaccion);
 
-            // If a batch is specified, associate it
             if (item.getLoteId() != null) {
                 Lote lote = loteRepo.findById(Long.valueOf(item.getLoteId()))
                         .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
@@ -181,13 +139,6 @@ public class SalidaAlmacenService {
             }
 
             movimientos.add(movimiento);
-
-            // Update the tracking status if necessary and seguimiento exists
-            if (seguimiento != null && item.isCompletarSeguimiento()) {
-                seguimiento.setEstado(1); // Finished
-                seguimiento.setFechaFinalizacion(LocalDateTime.now());
-                ordenSeguimientoRepo.save(seguimiento);
-            }
         }
 
         transaccion.setMovimientosTransaccion(movimientos);
@@ -744,7 +695,6 @@ public class SalidaAlmacenService {
                 : (material.getTipoUnidades() != null ? material.getTipoUnidades() : "U"));
             dto.setTipoProducto("MATERIAL_EMPAQUE"); // Diferenciador para materiales de empaque
             dto.setInventareable(material.isInventareable());
-            dto.setSeguimientoId(null); // Los materiales de empaque no tienen seguimientoId
 
             insumosEmpaque.add(dto);
         }
@@ -777,7 +727,6 @@ public class SalidaAlmacenService {
                     : (material.getTipoUnidades() != null ? material.getTipoUnidades() : "U"));
             dto.setTipoProducto("MATERIAL_EMPAQUE");
             dto.setInventareable(material.isInventareable());
-            dto.setSeguimientoId(null);
             insumosEmpaque.add(dto);
         }
 

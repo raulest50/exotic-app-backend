@@ -12,7 +12,6 @@ import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
-import exotic.app.planta.repo.produccion.OrdenSeguimientoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.repo.master.configs.MasterDirectiveRepo;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
@@ -42,12 +41,11 @@ class MovimientosServiceTest {
         ContabilidadService contService = Mockito.mock(ContabilidadService.class);
         ProduccionService produccionService = Mockito.mock(ProduccionService.class);
         OrdenProduccionRepo ordenProduccionRepo = Mockito.mock(OrdenProduccionRepo.class);
-        OrdenSeguimientoRepo ordenSeguimientoRepo = Mockito.mock(OrdenSeguimientoRepo.class);
         MasterDirectiveRepo masterDirectiveRepo = Mockito.mock(MasterDirectiveRepo.class);
 
         MovimientosService service = new MovimientosService(transRepo, prodRepo, headerRepo,
                 ordenRepo, semiRepo, termRepo, materialRepo,
-                loteRepo, userRepo, contService, produccionService, ordenProduccionRepo, ordenSeguimientoRepo, masterDirectiveRepo);
+                loteRepo, userRepo, contService, produccionService, ordenProduccionRepo, masterDirectiveRepo);
 
         Material producto = new Material();
         producto.setProductoId("P1");

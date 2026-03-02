@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.inventarios;
 
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.inventarios.dto.HistorialAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
@@ -40,6 +41,14 @@ public class AveriasResource {
     ) {
         List<ItemDispensadoAveriaDTO> items = averiasService.getItemsDispensadosParaAveria(ordenProduccionId);
         return ResponseEntity.ok(items);
+    }
+
+    @GetMapping("/orden/{ordenProduccionId}/historial")
+    public ResponseEntity<List<HistorialAveriaDTO>> getHistorialAverias(
+            @PathVariable int ordenProduccionId
+    ) {
+        List<HistorialAveriaDTO> historial = averiasService.getHistorialAverias(ordenProduccionId);
+        return ResponseEntity.ok(historial);
     }
 
     @PostMapping("/registrar")

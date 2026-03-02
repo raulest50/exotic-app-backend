@@ -4,7 +4,6 @@ package exotic.app.planta.resource.inventarios;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.*;
 
-import exotic.app.planta.model.produccion.dto.DispensacionFormularioDTO;
 import exotic.app.planta.service.inventarios.SalidaAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,21 +62,6 @@ public class SalidaAlmacenResource {
             @RequestParam(defaultValue = "10") int size) {
         LoteDisponiblePageResponseDTO lotesDisponibles = salidaAlmacenService.getLotesDisponiblesByProductoIdPaginated(productoId, page, size);
         return ResponseEntity.ok(lotesDisponibles);
-    }
-
-    /**
-     * Obtiene el formulario sugerido para la dispensación de una orden de producción.
-     * Este formulario incluye los materiales requeridos y los lotes recomendados para cada uno.
-     *
-     * @param ordenProduccionId identificador de la orden de producción
-     * @return formulario de dispensación sugerido para la orden
-     */
-    @GetMapping("/formulario_dispensacion_sugerida")
-    public ResponseEntity<DispensacionFormularioDTO> getDispensacionSugerida(
-            @RequestParam int ordenProduccionId) {
-        DispensacionFormularioDTO formulario = salidaAlmacenService.getFormularioDispensacion(ordenProduccionId);
-        // Ejemplo de respuesta: {"ordenProduccionId":101,"productoNombre":"Crema Facial","dispensaciones":[{"productoId":"MAT-001","nombreProducto":"Alcohol 70%","lotesRecomendados":[{"loteId":10,"batchNumber":"L001","cantidadRecomendada":5.0}]}]}
-        return ResponseEntity.ok(formulario);
     }
 
     /**

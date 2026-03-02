@@ -15,7 +15,6 @@ public class EstudiarEliminacionOPResponseDTO {
     private int ordenProduccionId;
     /** Solo se puede ejecutar eliminación si no hay transacciones asociadas. */
     private boolean eliminable;
-    private List<OrdenSeguimientoResumenDTO> ordenesSeguimiento;
     private List<LoteResumenDTO> lotes;
     private List<TransaccionAlmacenResumenDTO> transaccionesAlmacen;
     private List<AsientoContableResumenDTO> asientosContables;
