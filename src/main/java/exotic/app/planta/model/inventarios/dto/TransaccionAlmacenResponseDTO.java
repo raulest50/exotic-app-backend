@@ -22,6 +22,7 @@ public class TransaccionAlmacenResponseDTO {
     private String tipoEntidadCausante;
     private String observaciones;
     private String estadoContable;
+    private String loteAsignado;
     private UsuarioAprobadorDTO usuarioAprobador;
 
     /**

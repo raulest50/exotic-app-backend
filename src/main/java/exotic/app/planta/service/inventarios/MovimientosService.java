@@ -579,16 +579,16 @@ public class MovimientosService {
                 throw new UnsupportedOperationException("Filtro OP aún no implementado");
 
             case "OAA":
-                // TODO: Implementar lógica para OAA (Orden de Ajuste de Almacén)
-                throw new UnsupportedOperationException("Filtro OAA aún no implementado");
+                resultado = buscarTransaccionesSoloFecha(filtro, TransaccionAlmacen.TipoEntidadCausante.OAA);
+                break;
 
             case "OD":
-                // TODO: Implementar lógica para OD (Orden de Despacho)
-                throw new UnsupportedOperationException("Filtro OD aún no implementado");
+                resultado = buscarTransaccionesOD(filtro);
+                break;
 
             case "CM":
-                // TODO: Implementar lógica para CM (Carga Masiva)
-                throw new UnsupportedOperationException("Filtro CM aún no implementado");
+                resultado = buscarTransaccionesSoloFecha(filtro, TransaccionAlmacen.TipoEntidadCausante.CM);
+                break;
 
             default:
                 throw new IllegalArgumentException("Tipo de entidad causante no válido: " + filtro.getTipoEntidadCausante());
@@ -655,6 +655,118 @@ public class MovimientosService {
                 fechaInicio, fechaFin, pageable);
     }
 
+    private Page<TransaccionAlmacen> buscarTransaccionesOD(FiltroHistorialTransaccionesDTO filtro) {
+        Pageable pageable = PageRequest.of(
+                filtro.getPage(),
+                filtro.getSize(),
+                Sort.by("fechaTransaccion").descending()
+        );
+
+        boolean tieneFiltroLote = filtro.getLoteAsignado() != null && !filtro.getLoteAsignado().isBlank();
+        boolean tieneFiltroFecha = filtro.getTipoFiltroFecha() != null && filtro.getTipoFiltroFecha() > 0;
+        boolean tieneFiltroTerminado = filtro.getProductoTerminadoId() != null && !filtro.getProductoTerminadoId().isBlank();
+
+        LocalDateTime fechaInicio = null;
+        LocalDateTime fechaFin = null;
+
+        if (tieneFiltroFecha) {
+            if (filtro.getTipoFiltroFecha() == 1) {
+                if (filtro.getFechaInicio() == null || filtro.getFechaFin() == null) {
+                    tieneFiltroFecha = false;
+                } else {
+                    if (filtro.getFechaInicio().isAfter(filtro.getFechaFin())) {
+                        throw new RuntimeException("La fecha de inicio no puede ser posterior a la fecha de fin");
+                    }
+                    fechaInicio = filtro.getFechaInicio().atStartOfDay();
+                    fechaFin = filtro.getFechaFin().atTime(23, 59, 59, 999999999);
+                }
+            } else if (filtro.getTipoFiltroFecha() == 2) {
+                if (filtro.getFechaEspecifica() == null) {
+                    tieneFiltroFecha = false;
+                } else {
+                    fechaInicio = filtro.getFechaEspecifica().atStartOfDay();
+                    fechaFin = filtro.getFechaEspecifica().atTime(23, 59, 59, 999999999);
+                }
+            }
+        }
+
+        TransaccionAlmacen.TipoEntidadCausante tipo = TransaccionAlmacen.TipoEntidadCausante.OD;
+
+        // 8 combinations of 3 boolean flags
+        if (!tieneFiltroLote && !tieneFiltroFecha && !tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(tipo, pageable);
+        }
+        if (tieneFiltroLote && !tieneFiltroFecha && !tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findODByLote(tipo, filtro.getLoteAsignado(), pageable);
+        }
+        if (!tieneFiltroLote && tieneFiltroFecha && !tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(tipo, fechaInicio, fechaFin, pageable);
+        }
+        if (!tieneFiltroLote && !tieneFiltroFecha && tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findODByProductoTerminado(tipo, filtro.getProductoTerminadoId(), pageable);
+        }
+        if (tieneFiltroLote && tieneFiltroFecha && !tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findODByLoteAndFechaBetween(tipo, filtro.getLoteAsignado(), fechaInicio, fechaFin, pageable);
+        }
+        if (tieneFiltroLote && !tieneFiltroFecha && tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findODByLoteAndProductoTerminado(tipo, filtro.getLoteAsignado(), filtro.getProductoTerminadoId(), pageable);
+        }
+        if (!tieneFiltroLote && tieneFiltroFecha && tieneFiltroTerminado) {
+            return transaccionAlmacenHeaderRepo.findODByProductoTerminadoAndFechaBetween(tipo, filtro.getProductoTerminadoId(), fechaInicio, fechaFin, pageable);
+        }
+        // All three filters active
+        return transaccionAlmacenHeaderRepo.findODByLoteAndProductoTerminadoAndFechaBetween(
+                tipo, filtro.getLoteAsignado(), filtro.getProductoTerminadoId(), fechaInicio, fechaFin, pageable);
+    }
+
+    /**
+     * Busca transacciones filtrando solo por fecha. Reutilizable para CM, OAA, y cualquier
+     * tipo de entidad causante que no tenga filtros adicionales.
+     */
+    private Page<TransaccionAlmacen> buscarTransaccionesSoloFecha(
+            FiltroHistorialTransaccionesDTO filtro,
+            TransaccionAlmacen.TipoEntidadCausante tipo) {
+
+        Pageable pageable = PageRequest.of(
+                filtro.getPage(),
+                filtro.getSize(),
+                Sort.by("fechaTransaccion").descending()
+        );
+
+        boolean tieneFiltroFecha = filtro.getTipoFiltroFecha() != null && filtro.getTipoFiltroFecha() > 0;
+
+        LocalDateTime fechaInicio = null;
+        LocalDateTime fechaFin = null;
+
+        if (tieneFiltroFecha) {
+            if (filtro.getTipoFiltroFecha() == 1) {
+                if (filtro.getFechaInicio() == null || filtro.getFechaFin() == null) {
+                    tieneFiltroFecha = false;
+                } else {
+                    if (filtro.getFechaInicio().isAfter(filtro.getFechaFin())) {
+                        throw new RuntimeException("La fecha de inicio no puede ser posterior a la fecha de fin");
+                    }
+                    fechaInicio = filtro.getFechaInicio().atStartOfDay();
+                    fechaFin = filtro.getFechaFin().atTime(23, 59, 59, 999999999);
+                }
+            } else if (filtro.getTipoFiltroFecha() == 2) {
+                if (filtro.getFechaEspecifica() == null) {
+                    tieneFiltroFecha = false;
+                } else {
+                    fechaInicio = filtro.getFechaEspecifica().atStartOfDay();
+                    fechaFin = filtro.getFechaEspecifica().atTime(23, 59, 59, 999999999);
+                }
+            }
+        }
+
+        if (!tieneFiltroFecha) {
+            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(tipo, pageable);
+        }
+
+        return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
+                tipo, fechaInicio, fechaFin, pageable);
+    }
+
     private TransaccionAlmacenResponseDTO convertirATransaccionAlmacenResponseDTO(TransaccionAlmacen transaccion) {
         TransaccionAlmacenResponseDTO dto = new TransaccionAlmacenResponseDTO();
         dto.setTransaccionId(transaccion.getTransaccionId());
@@ -674,6 +786,11 @@ public class MovimientosService {
             usuarioDTO.setUserId(transaccion.getUsuarioAprobador().getId());
             usuarioDTO.setNombre(transaccion.getUsuarioAprobador().getNombreCompleto());
             dto.setUsuarioAprobador(usuarioDTO);
+        }
+
+        if (transaccion.getTipoEntidadCausante() == TransaccionAlmacen.TipoEntidadCausante.OD) {
+            ordenProduccionRepo.findById(transaccion.getIdEntidadCausante())
+                    .ifPresent(op -> dto.setLoteAsignado(op.getLoteAsignado()));
         }
 
         return dto;

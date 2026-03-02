@@ -202,6 +202,107 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         Pageable pageable
     );
 
+    // ==================== OD Queries ====================
+
+    /**
+     * Busca transacciones OD filtradas solo por lote de fabricación.
+     * Usa EXISTS con cross-entity join: TransaccionAlmacen.idEntidadCausante = OrdenProduccion.ordenId.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante AND op.loteAsignado = :lote) " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findODByLote(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("lote") String lote,
+        Pageable pageable
+    );
+
+    /**
+     * Busca transacciones OD filtradas solo por producto terminado.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante AND op.producto.productoId = :productoId) " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findODByProductoTerminado(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("productoId") String productoId,
+        Pageable pageable
+    );
+
+    /**
+     * Busca transacciones OD filtradas por lote de fabricación y rango de fechas.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante AND op.loteAsignado = :lote) AND " +
+           "t.fechaTransaccion >= :fechaInicio AND " +
+           "t.fechaTransaccion <= :fechaFin " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findODByLoteAndFechaBetween(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("lote") String lote,
+        @Param("fechaInicio") LocalDateTime fechaInicio,
+        @Param("fechaFin") LocalDateTime fechaFin,
+        Pageable pageable
+    );
+
+    /**
+     * Busca transacciones OD filtradas por lote de fabricación y producto terminado.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante AND op.loteAsignado = :lote AND op.producto.productoId = :productoId) " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findODByLoteAndProductoTerminado(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("lote") String lote,
+        @Param("productoId") String productoId,
+        Pageable pageable
+    );
+
+    /**
+     * Busca transacciones OD filtradas por producto terminado y rango de fechas.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante AND op.producto.productoId = :productoId) AND " +
+           "t.fechaTransaccion >= :fechaInicio AND " +
+           "t.fechaTransaccion <= :fechaFin " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findODByProductoTerminadoAndFechaBetween(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("productoId") String productoId,
+        @Param("fechaInicio") LocalDateTime fechaInicio,
+        @Param("fechaFin") LocalDateTime fechaFin,
+        Pageable pageable
+    );
+
+    /**
+     * Busca transacciones OD filtradas por lote, producto terminado y rango de fechas.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipo AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante AND op.loteAsignado = :lote AND op.producto.productoId = :productoId) AND " +
+           "t.fechaTransaccion >= :fechaInicio AND " +
+           "t.fechaTransaccion <= :fechaFin " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findODByLoteAndProductoTerminadoAndFechaBetween(
+        @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+        @Param("lote") String lote,
+        @Param("productoId") String productoId,
+        @Param("fechaInicio") LocalDateTime fechaInicio,
+        @Param("fechaFin") LocalDateTime fechaFin,
+        Pageable pageable
+    );
+
     // ==================== OCM Queries ====================
 
     /**

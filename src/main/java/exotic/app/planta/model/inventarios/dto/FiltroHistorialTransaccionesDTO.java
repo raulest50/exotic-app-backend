@@ -58,22 +58,26 @@ public class FiltroHistorialTransaccionesDTO {
 
     /**
      * Tipo de filtro de ID (opcional):
-     * 0 = sin filtro de ID
-     * 1 = filtrar por transaccionId
-     * 2 = filtrar por ordenProduccionId
-     * Solo aplica cuando tipoEntidadCausante = OD.
+     * 0 = sin filtro
+     * 1 = filtrar por lote de fabricación (OD)
      */
     private Integer tipoFiltroId;
 
     /**
+     * Lote de fabricación (loteAsignado de OrdenProduccion).
+     * Solo aplica cuando tipoEntidadCausante = OD y tipoFiltroId = 1.
+     */
+    private String loteAsignado;
+
+    /**
      * ID de la transacción de almacén (opcional).
-     * Se usa cuando tipoFiltroId = 1.
+     * Reservado para uso futuro.
      */
     private Integer transaccionId;
 
     /**
      * ID de la orden de producción asociada (opcional).
-     * Se usa cuando tipoFiltroId = 2.
+     * Reservado para uso futuro.
      */
     private Integer ordenProduccionId;
 
