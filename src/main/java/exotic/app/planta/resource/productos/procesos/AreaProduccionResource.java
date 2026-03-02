@@ -53,6 +53,29 @@ public class AreaProduccionResource {
         }
     }
 
+    @PutMapping("/{areaId}")
+    public ResponseEntity<?> updateAreaProduccion(
+            @PathVariable Integer areaId,
+            @Valid @RequestBody AreaProduccionDTO dto) {
+
+        log.info("REST request para actualizar área de producción con ID: {}", areaId);
+
+        try {
+            AreaProduccion result = areaProduccionService.updateAreaProduccion(areaId, dto);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            log.error("Error al actualizar área de producción: {}", e.getMessage());
+            return ResponseEntity
+                    .badRequest()
+                    .body(new ErrorResponse("Error al actualizar área", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error inesperado al actualizar área de producción", e);
+            return ResponseEntity
+                    .internalServerError()
+                    .body(new ErrorResponse("Error interno del servidor", "Ocurrió un error inesperado"));
+        }
+    }
+
     @PostMapping("/search")
     public ResponseEntity<Page<AreaProduccion>> searchAreas(
             @RequestBody SearchAreaOperativaDTO searchDTO,

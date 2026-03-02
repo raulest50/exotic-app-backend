@@ -115,6 +115,29 @@ public class AreaProduccionService {
         return areaProduccionRepo.findAll(spec, pageable).getContent();
     }
 
+    @Transactional
+    public AreaProduccion updateAreaProduccion(Integer areaId, AreaProduccionDTO dto) {
+        log.info("Actualizando área de producción con ID: {}", areaId);
+
+        AreaProduccion area = areaProduccionRepo.findById(areaId)
+            .orElseThrow(() -> new IllegalArgumentException("Área no encontrada con ID: " + areaId));
+
+        if (!area.getNombre().equals(dto.getNombre())) {
+            areaProduccionRepo.findByNombre(dto.getNombre()).ifPresent(existing -> {
+                throw new IllegalArgumentException("Ya existe un área con el nombre: " + dto.getNombre());
+            });
+        }
+
+        User responsable = userRepository.findById(dto.getResponsableId())
+            .orElseThrow(() -> new IllegalArgumentException("Usuario responsable no encontrado con ID: " + dto.getResponsableId()));
+
+        area.setNombre(dto.getNombre());
+        area.setDescripcion(dto.getDescripcion());
+        area.setResponsableArea(responsable);
+
+        return areaProduccionRepo.save(area);
+    }
+
     /**
      * Busca áreas de producción con múltiples criterios (nombre, responsable, ID).
      * Retorna Page para conservar metadata de paginación.
