@@ -3,18 +3,27 @@ package exotic.app.planta.service.inventarios;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteAveriaItemDTO;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.OrdenSeguimiento;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenSeguimientoDTO;
+import exotic.app.planta.model.producto.Producto;
+import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.repo.producto.ProductoRepo;
+import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,6 +34,9 @@ public class AveriasService {
 
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
+    private final ProductoRepo productoRepo;
+    private final AreaProduccionRepo areaProduccionRepo;
+    private final UserRepository userRepository;
 
     public Page<OrdenProduccionDTO> searchOrdenesProduccionByLoteAsignado(String loteAsignado, Pageable pageable) {
         Page<OrdenProduccion> page = ordenProduccionRepo.findByLoteAsignadoContaining(loteAsignado, pageable);
@@ -120,5 +132,39 @@ public class AveriasService {
             }
         }
         return result;
+    }
+
+    @Transactional
+    public TransaccionAlmacen crearReporteAveria(ReporteAveriaDTO dto) {
+        AreaProduccion area = areaProduccionRepo.findById(dto.getAreaProduccionId())
+                .orElseThrow(() -> new RuntimeException("Área de producción no encontrada con ID: " + dto.getAreaProduccionId()));
+
+        TransaccionAlmacen transaccion = new TransaccionAlmacen();
+        transaccion.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.RA);
+        transaccion.setIdEntidadCausante(dto.getOrdenProduccionId());
+        transaccion.setObservaciones(dto.getObservaciones());
+
+        if (dto.getUsername() != null && !dto.getUsername().isEmpty()) {
+            Optional<User> userOpt = userRepository.findByUsername(dto.getUsername());
+            userOpt.ifPresent(transaccion::setUsuarioAprobador);
+        }
+
+        List<Movimiento> movimientos = new ArrayList<>();
+        for (ReporteAveriaItemDTO item : dto.getItems()) {
+            Producto producto = productoRepo.findByProductoId(item.getProductoId())
+                    .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
+
+            Movimiento movimiento = new Movimiento();
+            movimiento.setCantidad(item.getCantidadAveria());
+            movimiento.setProducto(producto);
+            movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.AVERIA);
+            movimiento.setAlmacen(Movimiento.Almacen.AVERIAS);
+            movimiento.setAreaProduccion(area);
+            movimiento.setTransaccionAlmacen(transaccion);
+            movimientos.add(movimiento);
+        }
+
+        transaccion.setMovimientosTransaccion(movimientos);
+        return transaccionAlmacenHeaderRepo.save(transaccion);
     }
 }

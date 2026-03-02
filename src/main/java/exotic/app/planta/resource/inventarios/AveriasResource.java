@@ -1,6 +1,8 @@
 package exotic.app.planta.resource.inventarios;
 
+import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.service.inventarios.AveriasService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +13,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -37,5 +40,13 @@ public class AveriasResource {
     ) {
         List<ItemDispensadoAveriaDTO> items = averiasService.getItemsDispensadosParaAveria(ordenProduccionId);
         return ResponseEntity.ok(items);
+    }
+
+    @PostMapping("/registrar")
+    public ResponseEntity<TransaccionAlmacen> registrarAveria(@RequestBody ReporteAveriaDTO reporteAveriaDTO) {
+        TransaccionAlmacen transaccion = averiasService.crearReporteAveria(reporteAveriaDTO);
+        return ResponseEntity
+                .created(URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
+                .body(transaccion);
     }
 }
