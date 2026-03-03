@@ -12,5 +12,6 @@ import lombok.Setter;
 public class ReporteAveriaItemDTO {
 
     private String productoId;
+    private Long loteId;
     private double cantidadAveria;
 }

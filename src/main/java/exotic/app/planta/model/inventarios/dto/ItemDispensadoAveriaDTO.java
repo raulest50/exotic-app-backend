@@ -11,6 +11,8 @@ public class ItemDispensadoAveriaDTO {
     private String productoId;
     private String productoNombre;
     private String tipoUnidades;
+    private Long loteId;
+    private String batchNumber;
     private double cantidadDispensada;
     private double cantidadAveriadaPrevia;
     private double cantidadDisponibleAveria;

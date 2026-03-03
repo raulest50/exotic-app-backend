@@ -1,5 +1,6 @@
 package exotic.app.planta.service.inventarios;
 
+import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.HistorialAveriaDTO;
@@ -12,7 +13,9 @@ import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
+import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
@@ -34,6 +37,8 @@ public class AveriasService {
 
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
+    private final TransaccionAlmacenRepo transaccionAlmacenRepo;
+    private final LoteRepo loteRepo;
     private final ProductoRepo productoRepo;
     private final AreaProduccionRepo areaProduccionRepo;
     private final UserRepository userRepository;
@@ -77,17 +82,25 @@ public class AveriasService {
                 .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
                         TransaccionAlmacen.TipoEntidadCausante.OD, ordenProduccionId);
 
+        // aggregated[0] = cantidadDispensada, aggregated[1] = cantidadAveriadaPrevia
         Map<String, double[]> aggregated = new LinkedHashMap<>();
         Map<String, String> nombres = new HashMap<>();
         Map<String, String> unidades = new HashMap<>();
+        Map<String, Long> loteIds = new HashMap<>();
+        Map<String, String> batchNumbers = new HashMap<>();
 
         for (TransaccionAlmacen tx : dispensaciones) {
             for (Movimiento mov : tx.getMovimientosTransaccion()) {
+                if (mov.getLote() == null) continue;
                 String pid = mov.getProducto().getProductoId();
-                aggregated.computeIfAbsent(pid, k -> new double[2]);
-                aggregated.get(pid)[0] += Math.abs(mov.getCantidad());
-                nombres.putIfAbsent(pid, mov.getProducto().getNombre());
-                unidades.putIfAbsent(pid, mov.getProducto().getTipoUnidades());
+                Long lid = mov.getLote().getId();
+                String key = pid + "|" + lid;
+                aggregated.computeIfAbsent(key, k -> new double[2]);
+                aggregated.get(key)[0] += Math.abs(mov.getCantidad());
+                nombres.putIfAbsent(key, mov.getProducto().getNombre());
+                unidades.putIfAbsent(key, mov.getProducto().getTipoUnidades());
+                loteIds.putIfAbsent(key, lid);
+                batchNumbers.putIfAbsent(key, mov.getLote().getBatchNumber());
             }
         }
 
@@ -95,24 +108,51 @@ public class AveriasService {
                 .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
                         TransaccionAlmacen.TipoEntidadCausante.RA, ordenProduccionId);
 
+        Map<String, Double> legacyAveriaPorProducto = new HashMap<>();
         for (TransaccionAlmacen tx : reportesAveria) {
             for (Movimiento mov : tx.getMovimientosTransaccion()) {
                 String pid = mov.getProducto().getProductoId();
-                if (aggregated.containsKey(pid)) {
-                    aggregated.get(pid)[1] += Math.abs(mov.getCantidad());
+                if (mov.getLote() != null) {
+                    String key = pid + "|" + mov.getLote().getId();
+                    if (aggregated.containsKey(key)) {
+                        aggregated.get(key)[1] += Math.abs(mov.getCantidad());
+                    }
+                } else {
+                    legacyAveriaPorProducto.merge(pid, Math.abs(mov.getCantidad()), Double::sum);
+                }
+            }
+        }
+
+        if (!legacyAveriaPorProducto.isEmpty()) {
+            Map<String, Double> totalDispensadaPorProducto = new HashMap<>();
+            for (Map.Entry<String, double[]> entry : aggregated.entrySet()) {
+                String pid = entry.getKey().split("\\|")[0];
+                totalDispensadaPorProducto.merge(pid, entry.getValue()[0], Double::sum);
+            }
+            for (Map.Entry<String, double[]> entry : aggregated.entrySet()) {
+                String pid = entry.getKey().split("\\|")[0];
+                Double legacyTotal = legacyAveriaPorProducto.get(pid);
+                if (legacyTotal != null && legacyTotal > 0) {
+                    double totalDisp = totalDispensadaPorProducto.getOrDefault(pid, 0.0);
+                    if (totalDisp > 0) {
+                        double proportion = entry.getValue()[0] / totalDisp;
+                        entry.getValue()[1] += legacyTotal * proportion;
+                    }
                 }
             }
         }
 
         List<ItemDispensadoAveriaDTO> result = new ArrayList<>();
         for (Map.Entry<String, double[]> entry : aggregated.entrySet()) {
-            String pid = entry.getKey();
+            String key = entry.getKey();
+            String pid = key.split("\\|")[0];
             double dispensada = entry.getValue()[0];
             double averiadaPrevia = entry.getValue()[1];
             double disponible = dispensada - averiadaPrevia;
             if (disponible > 0) {
                 result.add(new ItemDispensadoAveriaDTO(
-                        pid, nombres.get(pid), unidades.get(pid),
+                        pid, nombres.get(key), unidades.get(key),
+                        loteIds.get(key), batchNumbers.get(key),
                         dispensada, averiadaPrevia, disponible));
             }
         }
@@ -167,12 +207,20 @@ public class AveriasService {
 
         List<Movimiento> movimientos = new ArrayList<>();
         for (ReporteAveriaItemDTO item : dto.getItems()) {
+            if (item.getLoteId() == null) {
+                throw new RuntimeException("loteId es obligatorio para cada item del reporte de avería (productoId: " + item.getProductoId() + ")");
+            }
+
             Producto producto = productoRepo.findByProductoId(item.getProductoId())
                     .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
+
+            Lote lote = loteRepo.findById(item.getLoteId())
+                    .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
 
             Movimiento movimiento = new Movimiento();
             movimiento.setCantidad(item.getCantidadAveria());
             movimiento.setProducto(producto);
+            movimiento.setLote(lote);
             movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.AVERIA);
             movimiento.setAlmacen(Movimiento.Almacen.AVERIAS);
             movimiento.setAreaProduccion(area);
@@ -182,5 +230,25 @@ public class AveriasService {
 
         transaccion.setMovimientosTransaccion(movimientos);
         return transaccionAlmacenHeaderRepo.save(transaccion);
+    }
+
+    /**
+     * El lote de origen (proveedor) se guarda explícitamente en Movimiento.lote porque NO es inferible
+     * cuando hay múltiples lotes dispensados del mismo material. El lote de la OP SÍ es inferible
+     * vía RA → idEntidadCausante → OrdenProduccion.loteAsignado. Método no usado aún; creado para uso futuro.
+     */
+    public String getLoteOrdenProduccionByMovimientoId(int movimientoId) {
+        Movimiento mov = transaccionAlmacenRepo.findById(movimientoId)
+                .orElseThrow(() -> new RuntimeException("Movimiento no encontrado con ID: " + movimientoId));
+
+        TransaccionAlmacen tx = mov.getTransaccionAlmacen();
+        if (tx == null || tx.getTipoEntidadCausante() != TransaccionAlmacen.TipoEntidadCausante.RA) {
+            throw new RuntimeException("El movimiento " + movimientoId + " no pertenece a un Reporte de Avería (RA)");
+        }
+
+        OrdenProduccion op = ordenProduccionRepo.findById(tx.getIdEntidadCausante())
+                .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + tx.getIdEntidadCausante()));
+
+        return op.getLoteAsignado();
     }
 }

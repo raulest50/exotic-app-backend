@@ -68,3 +68,13 @@ replay_pid15740.log
 
 
 /logs
+
+
+deployment_production_log.txt
+
+### Flyway Local Fix Scripts ###
+# Scripts ad-hoc para reparar checksums en desarrollo local
+# NO deben commitearse porque son específicos de cada ambiente
+fix-flyway-local.sql
+fix-*.sql
+*-local-fix.sql
