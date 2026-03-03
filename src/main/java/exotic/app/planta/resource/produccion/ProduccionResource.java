@@ -139,6 +139,20 @@ public class ProduccionResource {
     }
 
     /**
+     * Busca órdenes de producción abiertas/en progreso por número de lote asignado (búsqueda parcial).
+     */
+    @GetMapping("/dispensacion_odp_busqueda_lote")
+    public ResponseEntity<Page<OrdenProduccionDTO>> buscarOrdenesProduccionPorLote(
+            @RequestParam String loteAsignado,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("fechaCreacion").descending());
+        Page<OrdenProduccionDTO> resultados = produccionService.getOrdenesProduccionByLoteAsignadoForDispensacion(loteAsignado, pageable);
+        return ResponseEntity.ok(resultados);
+    }
+
+    /**
      * Obtiene todas las órdenes de producción que no estén terminadas (2) ni canceladas (-1)
      * utilizando paginación. Si se proporciona ordenId, busca solo esa orden.
      *

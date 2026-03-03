@@ -215,6 +215,11 @@ public class ProduccionService {
         return convertToDto(orden);
     }
 
+    public Page<OrdenProduccionDTO> getOrdenesProduccionByLoteAsignadoForDispensacion(String loteAsignado, Pageable pageable) {
+        Page<OrdenProduccion> ordenesPage = ordenProduccionRepo.findByLoteAsignadoContainingAndOpenOrInProgress(loteAsignado, pageable);
+        return ordenesPage.map(this::convertToDto);
+    }
+
     // Helper method to map OrdenProduccion to OrdenProduccionDTO
     private OrdenProduccionDTO convertToDto(OrdenProduccion orden) {
         OrdenProduccionDTO dto = new OrdenProduccionDTO();

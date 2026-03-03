@@ -82,4 +82,11 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
             @Param("loteAsignado") String loteAsignado,
             Pageable pageable
     );
+
+    @EntityGraph(attributePaths = {"producto"})
+    @Query("SELECT o FROM OrdenProduccion o WHERE o.loteAsignado LIKE CONCAT('%', :loteAsignado, '%') AND o.estadoOrden <> 2 AND o.estadoOrden <> -1 ORDER BY o.fechaCreacion DESC")
+    Page<OrdenProduccion> findByLoteAsignadoContainingAndOpenOrInProgress(
+            @Param("loteAsignado") String loteAsignado,
+            Pageable pageable
+    );
 }
