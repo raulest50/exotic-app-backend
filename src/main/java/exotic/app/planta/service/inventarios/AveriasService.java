@@ -7,6 +7,8 @@ import exotic.app.planta.model.inventarios.dto.HistorialAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.HistorialAveriaItemDTO;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.MaterialByLoteDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteAveriaAlmacenDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteAveriaAlmacenItemDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaItemDTO;
 import exotic.app.planta.model.produccion.OrdenProduccion;
@@ -245,6 +247,55 @@ public class AveriasService {
                 (String) row[4],
                 ((Number) row[5]).doubleValue()
         )).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public TransaccionAlmacen crearReporteAveriaAlmacen(ReporteAveriaAlmacenDTO dto) {
+        TransaccionAlmacen transaccion = new TransaccionAlmacen();
+        transaccion.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.RAA);
+        transaccion.setIdEntidadCausante(0);
+        transaccion.setObservaciones(dto.getObservaciones());
+
+        if (dto.getUsername() != null && !dto.getUsername().isEmpty()) {
+            Optional<User> userOpt = userRepository.findByUsername(dto.getUsername());
+            userOpt.ifPresent(transaccion::setUsuarioAprobador);
+        }
+
+        List<Movimiento> movimientos = new ArrayList<>();
+        for (ReporteAveriaAlmacenItemDTO item : dto.getItems()) {
+            if (item.getLoteId() == null) {
+                throw new RuntimeException("loteId es obligatorio para cada item del reporte de avería de almacén (productoId: " + item.getProductoId() + ")");
+            }
+
+            Producto producto = productoRepo.findByProductoId(item.getProductoId())
+                    .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
+
+            Lote lote = loteRepo.findById(item.getLoteId())
+                    .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
+
+            // Salida de almacén GENERAL (cantidad negativa)
+            Movimiento salidaGeneral = new Movimiento();
+            salidaGeneral.setCantidad(-item.getCantidadAveria());
+            salidaGeneral.setProducto(producto);
+            salidaGeneral.setLote(lote);
+            salidaGeneral.setTipoMovimiento(Movimiento.TipoMovimiento.AVERIA);
+            salidaGeneral.setAlmacen(Movimiento.Almacen.GENERAL);
+            salidaGeneral.setTransaccionAlmacen(transaccion);
+            movimientos.add(salidaGeneral);
+
+            // Entrada a almacén AVERIAS (cantidad positiva)
+            Movimiento entradaAverias = new Movimiento();
+            entradaAverias.setCantidad(item.getCantidadAveria());
+            entradaAverias.setProducto(producto);
+            entradaAverias.setLote(lote);
+            entradaAverias.setTipoMovimiento(Movimiento.TipoMovimiento.AVERIA);
+            entradaAverias.setAlmacen(Movimiento.Almacen.AVERIAS);
+            entradaAverias.setTransaccionAlmacen(transaccion);
+            movimientos.add(entradaAverias);
+        }
+
+        transaccion.setMovimientosTransaccion(movimientos);
+        return transaccionAlmacenHeaderRepo.save(transaccion);
     }
 
     /**

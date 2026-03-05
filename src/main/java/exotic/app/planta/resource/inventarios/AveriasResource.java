@@ -4,6 +4,7 @@ import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.HistorialAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.MaterialByLoteDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteAveriaAlmacenDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.service.inventarios.AveriasService;
@@ -58,6 +59,14 @@ public class AveriasResource {
     ) {
         List<MaterialByLoteDTO> resultados = averiasService.searchMaterialesByLote(batchNumber);
         return ResponseEntity.ok(resultados);
+    }
+
+    @PostMapping("/almacen/registrar")
+    public ResponseEntity<TransaccionAlmacen> registrarAveriaAlmacen(@RequestBody ReporteAveriaAlmacenDTO dto) {
+        TransaccionAlmacen transaccion = averiasService.crearReporteAveriaAlmacen(dto);
+        return ResponseEntity
+                .created(URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
+                .body(transaccion);
     }
 
     @PostMapping("/registrar")

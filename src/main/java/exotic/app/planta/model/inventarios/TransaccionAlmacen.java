@@ -208,7 +208,8 @@
             OAA, // Orden de Ajuste de Almacén - puede reclasificar productos entre almacenes */
             OD, // Orden de Dispensación - siempre dispensa desde almacén GENERAL
             CM, // Carga Masiva de inventario - típicamente a GENERAL (carga inicial del sistema)
-            RA  // Reporte de Avería - para material ya dispensado que se reporta como averiado
+            RA,  // Reporte de Avería (producción) - material ya dispensado que se reporta como averiado
+            RAA  // Reporte de Avería de Almacén - material aún en almacén general, no asociado a OP
         }
 
         /**
