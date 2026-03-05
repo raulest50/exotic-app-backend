@@ -176,6 +176,99 @@ public class SalidaAlmacenService {
 
 
     /**
+     * Crea una dispensación de reposición justificada por averías reportadas.
+     * Valida que la cantidad a dispensar por producto no exceda la cantidad pendiente de reposición.
+     */
+    @Transactional
+    public TransaccionAlmacen createDispensacionReposicionAveria(DispensacionDTO dispensacionDTO) {
+        OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(dispensacionDTO.getOrdenProduccionId())
+                .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + dispensacionDTO.getOrdenProduccionId()));
+
+        if (ordenProduccion.getEstadoOrden() == 2 || ordenProduccion.getEstadoOrden() == -1) {
+            throw new IllegalStateException("No se puede realizar reposición para una orden " +
+                    (ordenProduccion.getEstadoOrden() == 2 ? "TERMINADA" : "CANCELADA"));
+        }
+
+        // Calcular límites de reposición pendiente por producto
+        List<ItemPendienteReposicionDTO> pendientes = calcularItemsPendientesReposicion(dispensacionDTO.getOrdenProduccionId());
+        Map<String, Double> limitePorProducto = new HashMap<>();
+        for (ItemPendienteReposicionDTO p : pendientes) {
+            limitePorProducto.put(p.getProductoId(), p.getCantidadPendiente());
+        }
+
+        // Acumular cantidades solicitadas por producto para validación
+        Map<String, Double> solicitadoPorProducto = new HashMap<>();
+        for (DispensacionItemDTO item : dispensacionDTO.getItems()) {
+            solicitadoPorProducto.merge(item.getProductoId(), item.getCantidad(), Double::sum);
+        }
+
+        // Validar que ningún producto exceda su límite de reposición
+        for (Map.Entry<String, Double> entry : solicitadoPorProducto.entrySet()) {
+            double limite = limitePorProducto.getOrDefault(entry.getKey(), 0.0);
+            if (entry.getValue() - limite > 0.01) {
+                throw new IllegalStateException(
+                        "La cantidad solicitada para el producto " + entry.getKey() +
+                        " (" + entry.getValue() + ") excede la cantidad pendiente de reposición por avería (" + limite + ")");
+            }
+        }
+
+        TransaccionAlmacen transaccion = new TransaccionAlmacen();
+        transaccion.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.OD_RA);
+        transaccion.setIdEntidadCausante(ordenProduccion.getOrdenId());
+        transaccion.setObservaciones(dispensacionDTO.getObservaciones());
+
+        if (dispensacionDTO.getUsuarioRealizadorIds() != null && !dispensacionDTO.getUsuarioRealizadorIds().isEmpty()) {
+            List<Long> usuarioIds = dispensacionDTO.getUsuarioRealizadorIds().stream()
+                    .map(Integer::longValue)
+                    .collect(Collectors.toList());
+            List<User> usuariosRealizadores = userRepository.findAllById(usuarioIds);
+            transaccion.setUsuariosResponsables(usuariosRealizadores);
+            if (!usuariosRealizadores.isEmpty()) {
+                transaccion.setUsuarioAprobador(usuariosRealizadores.get(0));
+            }
+        } else {
+            User user = userRepository.findById(Long.valueOf(dispensacionDTO.getUsuarioId()))
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + dispensacionDTO.getUsuarioId()));
+            transaccion.setUsuarioAprobador(user);
+        }
+
+        if (dispensacionDTO.getUsuarioAprobadorId() != null) {
+            User usuarioAprobador = userRepository.findById(Long.valueOf(dispensacionDTO.getUsuarioAprobadorId()))
+                    .orElseThrow(() -> new RuntimeException("Usuario aprobador no encontrado con ID: " + dispensacionDTO.getUsuarioAprobadorId()));
+            transaccion.setUsuarioAprobador(usuarioAprobador);
+        }
+
+        List<Movimiento> movimientos = new ArrayList<>();
+        for (DispensacionItemDTO item : dispensacionDTO.getItems()) {
+            Producto producto = productoRepo.findById(item.getProductoId())
+                    .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
+
+            Movimiento movimiento = new Movimiento();
+            movimiento.setCantidad(-item.getCantidad());
+            movimiento.setProducto(producto);
+            movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
+            movimiento.setAlmacen(Movimiento.Almacen.GENERAL);
+            movimiento.setTransaccionAlmacen(transaccion);
+
+            if (item.getLoteId() != null) {
+                Lote lote = loteRepo.findById(Long.valueOf(item.getLoteId()))
+                        .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
+                movimiento.setLote(lote);
+            }
+
+            movimientos.add(movimiento);
+        }
+
+        transaccion.setMovimientosTransaccion(movimientos);
+        TransaccionAlmacen transaccionGuardada = transaccionAlmacenHeaderRepo.save(transaccion);
+
+        log.info("Dispensación de reposición por avería creada para orden {} con {} items",
+                ordenProduccion.getOrdenId(), movimientos.size());
+
+        return transaccionGuardada;
+    }
+
+    /**
      * Recomienda lotes para dispensación de un producto específico.
      * Utiliza la lógica de selección de lotes por fecha de vencimiento (FEFO).
      *
@@ -650,12 +743,73 @@ public class SalidaAlmacenService {
                 .map(this::convertirATransaccionAlmacenDetalleDTO)
                 .collect(Collectors.toList());
 
+        List<ItemPendienteReposicionDTO> itemsPendientes = calcularItemsPendientesReposicion(ordenProduccionId);
+
         DispensacionResumenDTO response = new DispensacionResumenDTO();
         response.setInsumosReceta(insumosReceta);
         response.setInsumosEmpaque(insumosEmpaque);
         response.setCasePack(casePack);
         response.setHistorialDispensaciones(historial);
+        response.setItemsPendientesReposicion(itemsPendientes);
         return response;
+    }
+
+    /**
+     * Calcula los items de material pendientes de reposición por avería para una orden de producción.
+     * Compara el total averiado (transacciones RA) contra el total ya repuesto (transacciones OD_RA).
+     */
+    private List<ItemPendienteReposicionDTO> calcularItemsPendientesReposicion(int ordenProduccionId) {
+        // Acumular cantidades averiadas por productoId (transacciones RA)
+        List<TransaccionAlmacen> reportesAveria = transaccionAlmacenHeaderRepo
+                .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
+                        TransaccionAlmacen.TipoEntidadCausante.RA, ordenProduccionId);
+
+        Map<String, double[]> porProducto = new HashMap<>(); // [0]=averiada, [1]=repuesta
+        Map<String, String> nombres = new HashMap<>();
+        Map<String, String> unidades = new HashMap<>();
+
+        for (TransaccionAlmacen tx : reportesAveria) {
+            if (tx.getMovimientosTransaccion() == null) continue;
+            for (Movimiento mov : tx.getMovimientosTransaccion()) {
+                if (mov.getProducto() == null) continue;
+                String pid = mov.getProducto().getProductoId();
+                porProducto.computeIfAbsent(pid, k -> new double[2]);
+                porProducto.get(pid)[0] += Math.abs(mov.getCantidad());
+                nombres.putIfAbsent(pid, mov.getProducto().getNombre());
+                unidades.putIfAbsent(pid, mov.getProducto().getTipoUnidades());
+            }
+        }
+
+        // Acumular cantidades ya repuestas por productoId (transacciones OD_RA)
+        List<TransaccionAlmacen> reposiciones = transaccionAlmacenHeaderRepo
+                .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
+                        TransaccionAlmacen.TipoEntidadCausante.OD_RA, ordenProduccionId);
+
+        for (TransaccionAlmacen tx : reposiciones) {
+            if (tx.getMovimientosTransaccion() == null) continue;
+            for (Movimiento mov : tx.getMovimientosTransaccion()) {
+                if (mov.getProducto() == null) continue;
+                String pid = mov.getProducto().getProductoId();
+                porProducto.computeIfAbsent(pid, k -> new double[2]);
+                porProducto.get(pid)[1] += Math.abs(mov.getCantidad());
+            }
+        }
+
+        List<ItemPendienteReposicionDTO> resultado = new ArrayList<>();
+        for (Map.Entry<String, double[]> entry : porProducto.entrySet()) {
+            double averiada = entry.getValue()[0];
+            double repuesta = entry.getValue()[1];
+            double pendiente = averiada - repuesta;
+            if (pendiente > 0.001) {
+                resultado.add(new ItemPendienteReposicionDTO(
+                        entry.getKey(),
+                        nombres.getOrDefault(entry.getKey(), ""),
+                        unidades.getOrDefault(entry.getKey(), "KG"),
+                        averiada, repuesta, pendiente
+                ));
+            }
+        }
+        return resultado;
     }
 
     /**

@@ -18,5 +18,6 @@ public class DispensacionResumenDTO {
     private List<InsumoDesglosadoDTO> insumosEmpaque = new ArrayList<>();
     private CasePackResponseDTO casePack;
     private List<TransaccionAlmacenDetalleDTO> historialDispensaciones = new ArrayList<>();
+    private List<ItemPendienteReposicionDTO> itemsPendientesReposicion = new ArrayList<>();
 }
 

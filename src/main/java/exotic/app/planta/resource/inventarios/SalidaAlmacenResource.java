@@ -108,6 +108,17 @@ public class SalidaAlmacenResource {
     }
 
     /**
+     * Crea una dispensación de reposición justificada por averías reportadas en una orden de producción.
+     * Valida que las cantidades no excedan lo pendiente de reposición por avería.
+     */
+    @PostMapping("/dispensacion-reposicion-averia")
+    public ResponseEntity<?> createDispensacionReposicionAveria(@RequestBody DispensacionDTO dispensacionDTO) {
+        TransaccionAlmacen transaccion = salidaAlmacenService.createDispensacionReposicionAveria(dispensacionDTO);
+        return ResponseEntity.created(java.net.URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
+                .body(transaccion);
+    }
+
+    /**
      * Endpoint para crear una dispensación no planificada (sin orden de producción).
      * Verifica la directiva "Permitir Consumo No Planificado" antes de permitir la operación.
      */

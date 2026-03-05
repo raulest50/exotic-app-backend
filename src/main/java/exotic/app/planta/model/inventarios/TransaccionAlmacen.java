@@ -209,7 +209,8 @@
             OD, // Orden de Dispensación - siempre dispensa desde almacén GENERAL
             CM, // Carga Masiva de inventario - típicamente a GENERAL (carga inicial del sistema)
             RA,  // Reporte de Avería (producción) - material ya dispensado que se reporta como averiado
-            RAA  // Reporte de Avería de Almacén - material aún en almacén general, no asociado a OP
+            RAA,  // Reporte de Avería de Almacén - material aún en almacén general, no asociado a OP
+            OD_RA // Dispensación de Reposición por Avería - material que repone lo dañado en producción
         }
 
         /**
