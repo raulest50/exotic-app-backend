@@ -590,6 +590,10 @@ public class MovimientosService {
                 resultado = buscarTransaccionesSoloFecha(filtro, TransaccionAlmacen.TipoEntidadCausante.CM);
                 break;
 
+            case "RA":
+                resultado = buscarTransaccionesSoloFecha(filtro, TransaccionAlmacen.TipoEntidadCausante.RA);
+                break;
+
             default:
                 throw new IllegalArgumentException("Tipo de entidad causante no válido: " + filtro.getTipoEntidadCausante());
         }
