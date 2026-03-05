@@ -6,6 +6,7 @@ import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.HistorialAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.HistorialAveriaItemDTO;
 import exotic.app.planta.model.inventarios.dto.ItemDispensadoAveriaDTO;
+import exotic.app.planta.model.inventarios.dto.MaterialByLoteDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteAveriaItemDTO;
 import exotic.app.planta.model.produccion.OrdenProduccion;
@@ -230,6 +231,20 @@ public class AveriasService {
 
         transaccion.setMovimientosTransaccion(movimientos);
         return transaccionAlmacenHeaderRepo.save(transaccion);
+    }
+
+    public List<MaterialByLoteDTO> searchMaterialesByLote(String batchNumber) {
+        List<Object[]> rows = transaccionAlmacenRepo
+                .findMaterialesWithStockByBatchNumberAndAlmacen(batchNumber, Movimiento.Almacen.GENERAL);
+
+        return rows.stream().map(row -> new MaterialByLoteDTO(
+                (String) row[0],
+                (String) row[1],
+                (String) row[2],
+                (Long) row[3],
+                (String) row[4],
+                ((Number) row[5]).doubleValue()
+        )).collect(Collectors.toList());
     }
 
     /**

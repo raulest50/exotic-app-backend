@@ -139,4 +139,19 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     List<Object[]> findLotesWithStockByProductoIdNative(@Param("productoId") String productoId);
 
     boolean existsByProducto_ProductoId(String productoId);
+
+    @Query("SELECT m.producto.productoId, m.producto.nombre, m.producto.tipoUnidades, " +
+           "m.lote.id, m.lote.batchNumber, SUM(m.cantidad) " +
+           "FROM Movimiento m " +
+           "WHERE TYPE(m.producto) = Material " +
+           "AND m.lote IS NOT NULL " +
+           "AND m.almacen = :almacen " +
+           "AND LOWER(m.lote.batchNumber) LIKE LOWER(CONCAT('%', :batchNumber, '%')) " +
+           "GROUP BY m.producto.productoId, m.producto.nombre, m.producto.tipoUnidades, " +
+           "m.lote.id, m.lote.batchNumber " +
+           "HAVING SUM(m.cantidad) > 0 " +
+           "ORDER BY m.lote.batchNumber ASC")
+    List<Object[]> findMaterialesWithStockByBatchNumberAndAlmacen(
+            @Param("batchNumber") String batchNumber,
+            @Param("almacen") Movimiento.Almacen almacen);
 }
