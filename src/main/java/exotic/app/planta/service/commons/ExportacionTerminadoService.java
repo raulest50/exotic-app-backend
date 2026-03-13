@@ -1,7 +1,11 @@
 package exotic.app.planta.service.commons;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import exotic.app.planta.model.commons.dto.exportacion.ExportacionTerminadosConInsumosDTO;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import lombok.RequiredArgsConstructor;
@@ -11,9 +15,11 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -27,6 +33,7 @@ public class ExportacionTerminadoService {
 
     private final TerminadoRepo terminadoRepo;
     private final CategoriaRepo categoriaRepo;
+    private final ObjectMapper objectMapper;
 
     private static final String[] SIN_INSUMOS_HEADERS = {
             "producto_id", "nombre", "observaciones", "costo", "iva_percentual", "tipo_unidades",
@@ -48,6 +55,24 @@ public class ExportacionTerminadoService {
         } catch (IOException e) {
             log.error("Error generating exportacion terminados Excel", e);
             throw new RuntimeException("Error generating exportacion terminados Excel", e);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportarTerminadosJsonConInsumos() {
+        List<Terminado> terminados = terminadoRepo.findAllByOrderByProductoIdAsc();
+
+        ExportacionTerminadosConInsumosDTO exportacion = new ExportacionTerminadosConInsumosDTO(
+                1,
+                LocalDateTime.now(),
+                terminados.stream().map(this::mapTerminado).toList()
+        );
+
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(exportacion);
+        } catch (IOException e) {
+            log.error("Error generating exportacion terminados JSON con insumos", e);
+            throw new RuntimeException("Error generating exportacion terminados JSON con insumos", e);
         }
     }
 
@@ -132,5 +157,57 @@ public class ExportacionTerminadoService {
         for (int i = 0; i < SIN_INSUMOS_HEADERS.length; i++) {
             datosSheet.autoSizeColumn(i);
         }
+    }
+
+    private ExportacionTerminadosConInsumosDTO.TerminadoExportDTO mapTerminado(Terminado terminado) {
+        return new ExportacionTerminadosConInsumosDTO.TerminadoExportDTO(
+                terminado.getProductoId(),
+                terminado.getNombre(),
+                terminado.getObservaciones(),
+                terminado.getCosto(),
+                terminado.getIvaPercentual(),
+                terminado.getTipoUnidades(),
+                terminado.getCantidadUnidad(),
+                terminado.getStockMinimo(),
+                terminado.isInventareable(),
+                terminado.getStatus(),
+                mapCategoria(terminado.getCategoria()),
+                terminado.getFotoUrl(),
+                terminado.getPrefijoLote(),
+                terminado.getInsumos() == null
+                        ? List.of()
+                        : terminado.getInsumos().stream().map(this::mapInsumo).toList()
+        );
+    }
+
+    private ExportacionTerminadosConInsumosDTO.CategoriaResumenDTO mapCategoria(Categoria categoria) {
+        if (categoria == null) {
+            return null;
+        }
+
+        return new ExportacionTerminadosConInsumosDTO.CategoriaResumenDTO(
+                categoria.getCategoriaId(),
+                categoria.getCategoriaNombre()
+        );
+    }
+
+    private ExportacionTerminadosConInsumosDTO.InsumoExportDTO mapInsumo(Insumo insumo) {
+        return new ExportacionTerminadosConInsumosDTO.InsumoExportDTO(
+                insumo.getInsumoId(),
+                insumo.getCantidadRequerida(),
+                mapProducto(insumo.getProducto())
+        );
+    }
+
+    private ExportacionTerminadosConInsumosDTO.ProductoResumenDTO mapProducto(Producto producto) {
+        if (producto == null) {
+            return null;
+        }
+
+        return new ExportacionTerminadosConInsumosDTO.ProductoResumenDTO(
+                producto.getProductoId(),
+                producto.getNombre(),
+                producto.getTipo_producto()
+        );
     }
 }

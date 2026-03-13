@@ -35,4 +35,13 @@ public class ExportacionDatosResource {
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(excel);
     }
+
+    @GetMapping("/terminados/json-con-insumos")
+    public ResponseEntity<byte[]> exportarTerminadosJsonConInsumos() {
+        byte[] json = exportacionTerminadoService.exportarTerminadosJsonConInsumos();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"exportacion_terminados_con_insumos.json\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(json);
+    }
 }
