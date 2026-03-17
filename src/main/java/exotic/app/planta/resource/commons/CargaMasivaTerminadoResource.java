@@ -66,4 +66,28 @@ public class CargaMasivaTerminadoResource {
         }
         return ResponseEntity.ok(result);
     }
+
+    @PostMapping(value = "/validar-json-con-insumos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ValidationResultDTO> validarJsonConInsumos(@RequestParam("file") MultipartFile file) {
+        log.debug("validarJsonConInsumos: request received, file name={}",
+                file != null ? file.getOriginalFilename() : null);
+        ValidationResultDTO result = cargaMasivaTerminadoService.validateJsonConInsumos(file);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping(value = "/ejecutar-json-con-insumos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ValidationResultDTO> ejecutarJsonConInsumos(@RequestParam("file") MultipartFile file) {
+        log.debug("[CargaMasivaTerminados] ejecutarJsonConInsumos: archivo={}, size={} bytes, isEmpty={}",
+                file != null ? file.getOriginalFilename() : null,
+                file != null ? file.getSize() : 0,
+                file != null ? file.isEmpty() : true);
+        ValidationResultDTO result = cargaMasivaTerminadoService.processBulkInsertJsonConInsumos(file);
+        log.debug("[CargaMasivaTerminados] ejecutarJsonConInsumos: resultado valid={}, rowCount={}, errorsCount={}",
+                result.isValid(), result.getRowCount(),
+                result.getErrors() != null ? result.getErrors().size() : 0);
+        if (!result.isValid() && result.getErrors() != null && !result.getErrors().isEmpty()) {
+            return ResponseEntity.badRequest().body(result);
+        }
+        return ResponseEntity.ok(result);
+    }
 }

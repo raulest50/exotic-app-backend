@@ -5,9 +5,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
+
 public interface ItemOrdenVentaRepo extends JpaRepository<ItemOrdenVenta, Integer> {
 
     @Modifying
     @Query("UPDATE ItemOrdenVenta i SET i.producto = null WHERE i.producto IS NOT NULL")
     int clearProductoReferences();
+
+    List<ItemOrdenVenta> findByProducto_ProductoId(String productoId);
+
+    long countByOrdenVenta_OrdenVentaId(int ordenVentaId);
 }

@@ -13,6 +13,8 @@ import java.time.LocalDateTime;
 @Repository
 public interface IncorporacionActivoHeaderRepo extends JpaRepository<IncorporacionActivoHeader, Long> {
 
+    boolean existsByAsientoContable_Id(Long asientoId);
+
     /**
      * Cuenta las incorporaciones de activos con un estado contable específico.
      * 

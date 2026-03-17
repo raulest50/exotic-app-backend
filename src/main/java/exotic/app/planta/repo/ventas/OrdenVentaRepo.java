@@ -16,4 +16,6 @@ public interface OrdenVentaRepo extends JpaRepository<OrdenVenta, Integer> {
             @Param("estado") String estado,
             Pageable pageable
     );
+
+    boolean existsByOrdenVentaId(int ordenVentaId);
 }

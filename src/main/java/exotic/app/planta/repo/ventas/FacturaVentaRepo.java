@@ -16,4 +16,6 @@ public interface FacturaVentaRepo extends JpaRepository<FacturaVenta, Integer> {
             @Param("estadoPago") String estadoPago,
             Pageable pageable
     );
+
+    boolean existsByOrdenVenta_OrdenVentaId(int ordenVentaId);
 }

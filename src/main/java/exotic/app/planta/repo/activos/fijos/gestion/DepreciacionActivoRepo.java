@@ -15,6 +15,8 @@ import java.util.List;
  */
 @Repository
 public interface DepreciacionActivoRepo extends JpaRepository<DepreciacionActivo, Long> {
+
+    boolean existsByAsientoContable_Id(Long asientoId);
     
     /**
      * Encuentra todas las depreciaciones para un activo específico.

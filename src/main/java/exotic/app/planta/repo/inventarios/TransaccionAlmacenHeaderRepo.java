@@ -53,6 +53,8 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         int idEntidadCausante
     );
 
+    boolean existsByAsientoContable_Id(Long asientoId);
+
     /**
      * Busca una transacción por ID cargando sus movimientos con fetch join.
      * Incluye las relaciones de producto y lote para evitar N+1 queries.
@@ -84,6 +86,28 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
     List<TransaccionAlmacen> findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
         @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
         @Param("idEntidadCausante") int idEntidadCausante
+    );
+
+    @Query("SELECT DISTINCT t FROM TransaccionAlmacen t " +
+           "LEFT JOIN FETCH t.asientoContable a " +
+           "LEFT JOIN FETCH t.movimientosTransaccion m " +
+           "LEFT JOIN FETCH m.producto p " +
+           "LEFT JOIN FETCH m.lote l " +
+           "WHERE t.tipoEntidadCausante IN :tiposEntidadCausante " +
+           "AND t.idEntidadCausante = :idEntidadCausante")
+    List<TransaccionAlmacen> findByTipoEntidadCausanteInAndIdEntidadCausanteWithMovimientos(
+        @Param("tiposEntidadCausante") List<TransaccionAlmacen.TipoEntidadCausante> tiposEntidadCausante,
+        @Param("idEntidadCausante") int idEntidadCausante
+    );
+
+    @Query("SELECT DISTINCT t FROM TransaccionAlmacen t " +
+           "LEFT JOIN FETCH t.asientoContable a " +
+           "LEFT JOIN FETCH t.movimientosTransaccion m " +
+           "LEFT JOIN FETCH m.producto p " +
+           "LEFT JOIN FETCH m.lote l " +
+           "WHERE p.productoId = :productoId")
+    List<TransaccionAlmacen> findDistinctByProductoIdWithMovimientos(
+        @Param("productoId") String productoId
     );
 
     /**

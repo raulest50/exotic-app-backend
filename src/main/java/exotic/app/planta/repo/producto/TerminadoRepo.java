@@ -5,6 +5,9 @@ import exotic.app.planta.model.producto.Terminado;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,5 +25,12 @@ public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpec
     List<Terminado> findByInsumos_Producto(Producto producto);
 
     Optional<Terminado> findByPrefijoLote(String prefijoLote);
+
+    @Query("SELECT t.productoId FROM Terminado t ORDER BY t.productoId ASC")
+    List<String> findAllProductoIdsOrderByProductoIdAsc();
+
+    @Modifying
+    @Query("UPDATE Terminado t SET t.procesoProduccionCompleto = null WHERE t.productoId = :productoId")
+    void clearProcesoProduccionCompletoByProductoId(@Param("productoId") String productoId);
 
 }

@@ -1,7 +1,9 @@
 package exotic.app.planta.resource.commons;
 
+import exotic.app.planta.model.commons.dto.eliminaciones.EliminacionTerminadosBatchResultDTO;
 import exotic.app.planta.model.commons.dto.eliminaciones.EstudiarEliminacionOCMResponseDTO;
 import exotic.app.planta.model.commons.dto.eliminaciones.EstudiarEliminacionOPResponseDTO;
+import exotic.app.planta.service.commons.DangerousOperationGuard;
 import exotic.app.planta.service.commons.EliminacionesForzadasService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class EliminacionesForzadasResource {
 
     private final EliminacionesForzadasService eliminacionesForzadasService;
+    private final DangerousOperationGuard dangerousOperationGuard;
 
     /**
      * Estudia qué registros bloquean la eliminación forzada de una Orden de Compra de Materiales (OCM)
@@ -84,6 +87,24 @@ public class EliminacionesForzadasResource {
             log.warn("Eliminación OP rechazada: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(java.util.Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/terminados")
+    public ResponseEntity<EliminacionTerminadosBatchResultDTO> ejecutarPurgaTotalTerminados() {
+        try {
+            dangerousOperationGuard.assertNotProduction("La purga total de terminados");
+            EliminacionTerminadosBatchResultDTO result = eliminacionesForzadasService.ejecutarEliminacionTodosLosTerminados();
+            return ResponseEntity.ok(result);
+        } catch (IllegalStateException e) {
+            log.warn("Purga total de terminados bloqueada: {}", e.getMessage());
+
+            EliminacionTerminadosBatchResultDTO blockedResult = new EliminacionTerminadosBatchResultDTO();
+            blockedResult.setPermitted(false);
+            blockedResult.setExecuted(false);
+            blockedResult.setMessage(e.getMessage());
+
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(blockedResult);
         }
     }
 }

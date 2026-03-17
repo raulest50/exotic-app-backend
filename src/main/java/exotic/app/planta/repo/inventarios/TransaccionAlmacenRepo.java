@@ -140,6 +140,8 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
 
     boolean existsByProducto_ProductoId(String productoId);
 
+    long countByLote_Id(Long loteId);
+
     @Query("SELECT m.producto.productoId, m.producto.nombre, m.producto.tipoUnidades, " +
            "m.lote.id, m.lote.batchNumber, SUM(m.cantidad) " +
            "FROM Movimiento m " +

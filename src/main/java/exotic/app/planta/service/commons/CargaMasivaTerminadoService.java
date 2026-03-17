@@ -1,9 +1,13 @@
 package exotic.app.planta.service.commons;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.commons.dto.ErrorRecord;
 import exotic.app.planta.model.commons.dto.ValidationResultDTO;
+import exotic.app.planta.model.commons.dto.exportacion.ExportacionTerminadosConInsumosDTO;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
@@ -38,6 +42,7 @@ public class CargaMasivaTerminadoService {
     private final ProductoRepo productoRepo;
     private final TerminadoRepo terminadoRepo;
     private final CategoriaRepo categoriaRepo;
+    private final ObjectMapper objectMapper;
 
     private static final String[] SIN_INSUMOS_HEADERS = {
             "producto_id", "nombre", "observaciones", "costo", "iva_percentual", "tipo_unidades",
@@ -273,6 +278,117 @@ public class CargaMasivaTerminadoService {
         }
     }
 
+    public ValidationResultDTO validateJsonConInsumos(MultipartFile file) {
+        List<ErrorRecord> errors = new ArrayList<>();
+        ExportacionTerminadosConInsumosDTO payload = parseJsonConInsumos(file, errors);
+        if (!errors.isEmpty() || payload == null) {
+            return new ValidationResultDTO(false, errors, 0);
+        }
+
+        List<ExportacionTerminadosConInsumosDTO.TerminadoExportDTO> terminados = payload.terminados();
+        if (terminados == null || terminados.isEmpty()) {
+            errors.add(new ErrorRecord(0, "", "El archivo JSON no contiene terminados"));
+            return new ValidationResultDTO(false, errors, 0);
+        }
+
+        Set<String> seenProductoIds = new HashSet<>();
+        Set<String> seenPrefijos = new HashSet<>();
+
+        for (int index = 0; index < terminados.size(); index++) {
+            ExportacionTerminadosConInsumosDTO.TerminadoExportDTO terminado = terminados.get(index);
+            int rowNumber = index + 1;
+            String productoId = safeTrim(terminado.productoId());
+
+            if (productoId == null || productoId.isEmpty()) {
+                errors.add(new ErrorRecord(rowNumber, "", "productoId es obligatorio", "productoId"));
+                continue;
+            }
+
+            if (!seenProductoIds.add(productoId)) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "productoId duplicado dentro del archivo", "productoId"));
+            }
+
+            if (productoRepo.findByProductoId(productoId).isPresent()) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "productoId ya existe en la base de datos", "productoId"));
+            }
+
+            if (safeTrim(terminado.nombre()) == null || safeTrim(terminado.nombre()).isEmpty()) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "nombre es obligatorio", "nombre"));
+            }
+            if (terminado.costo() < 0) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "costo debe ser >= 0", "costo"));
+            }
+            if (terminado.ivaPercentual() != 0 && terminado.ivaPercentual() != 5 && terminado.ivaPercentual() != 19) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "ivaPercentual debe ser 0, 5 o 19", "ivaPercentual"));
+            }
+            if (!isTipoUnidadesValido(terminado.tipoUnidades())) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "tipoUnidades debe ser L, KG o U", "tipoUnidades"));
+            }
+            if (terminado.cantidadUnidad() < 0) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "cantidadUnidad debe ser >= 0", "cantidadUnidad"));
+            }
+            if (terminado.stockMinimo() < 0) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "stockMinimo debe ser >= 0", "stockMinimo"));
+            }
+            if (terminado.status() != 0 && terminado.status() != 1) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "status debe ser 0 (activo) o 1 (obsoleto)", "status"));
+            }
+
+            Integer categoriaId = extractCategoriaId(terminado.categoria());
+            if (categoriaId != null && !categoriaRepo.existsById(categoriaId)) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "categoria.categoriaId no existe en la base de datos", "categoria.categoriaId"));
+            }
+
+            String prefijoLote = safeTrim(terminado.prefijoLote());
+            if (prefijoLote != null && !prefijoLote.isEmpty()) {
+                if (!seenPrefijos.add(prefijoLote)) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "prefijoLote duplicado dentro del archivo", "prefijoLote"));
+                }
+                Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(prefijoLote);
+                if (existing.isPresent() && !existing.get().getProductoId().equals(productoId)) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "prefijoLote ya existe en la base de datos", "prefijoLote"));
+                }
+            }
+
+            if (terminado.insumos() == null) {
+                errors.add(new ErrorRecord(rowNumber, productoId, "insumos no puede ser null", "insumos"));
+                continue;
+            }
+
+            Set<String> seenInsumoProductoIds = new HashSet<>();
+            for (ExportacionTerminadosConInsumosDTO.InsumoExportDTO insumo : terminado.insumos()) {
+                if (insumo.cantidadRequerida() <= 0) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "cantidadRequerida debe ser > 0", "insumos.cantidadRequerida"));
+                }
+
+                if (insumo.producto() == null) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "Cada insumo debe incluir un producto", "insumos.producto"));
+                    continue;
+                }
+
+                String insumoProductoId = safeTrim(insumo.producto().productoId());
+                if (insumoProductoId == null || insumoProductoId.isEmpty()) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "producto.productoId es obligatorio en cada insumo", "insumos.producto.productoId"));
+                    continue;
+                }
+
+                if (productoId.equals(insumoProductoId)) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "Un terminado no puede referenciarse a sí mismo como insumo", "insumos.producto.productoId"));
+                }
+
+                if (!seenInsumoProductoIds.add(insumoProductoId)) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "Hay insumos duplicados para el mismo producto dentro del terminado", "insumos.producto.productoId"));
+                }
+
+                if (productoRepo.findByProductoId(insumoProductoId).isEmpty()) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "El producto del insumo no existe en la base de datos", "insumos.producto.productoId"));
+                }
+            }
+        }
+
+        return new ValidationResultDTO(errors.isEmpty(), errors, terminados.size());
+    }
+
     @Transactional
     public ValidationResultDTO processBulkInsertSinInsumos(MultipartFile file) {
         ValidationResultDTO validation = validateExcelSinInsumos(file);
@@ -342,6 +458,110 @@ public class CargaMasivaTerminadoService {
             errors.add(new ErrorRecord(0, "", "Error leyendo archivo: " + e.getMessage()));
             return new ValidationResultDTO(false, errors, successCount);
         }
+    }
+
+    @Transactional
+    public ValidationResultDTO processBulkInsertJsonConInsumos(MultipartFile file) {
+        ValidationResultDTO validation = validateJsonConInsumos(file);
+        if (!validation.isValid()) {
+            return validation;
+        }
+
+        List<ErrorRecord> errors = new ArrayList<>();
+        int successCount = 0;
+        ExportacionTerminadosConInsumosDTO payload = parseJsonConInsumos(file, errors);
+        if (!errors.isEmpty() || payload == null) {
+            return new ValidationResultDTO(false, errors, successCount);
+        }
+
+        for (int index = 0; index < payload.terminados().size(); index++) {
+            ExportacionTerminadosConInsumosDTO.TerminadoExportDTO dto = payload.terminados().get(index);
+            int rowNumber = index + 1;
+            String productoId = safeTrim(dto.productoId());
+
+            try {
+                Terminado terminado = new Terminado();
+                terminado.setProductoId(productoId);
+                terminado.setNombre(safeTrim(dto.nombre()) != null ? safeTrim(dto.nombre()) : "");
+                terminado.setObservaciones(dto.observaciones());
+                terminado.setCosto(dto.costo());
+                terminado.setIvaPercentual(dto.ivaPercentual());
+                terminado.setTipoUnidades(normalizeTipoUnidades(dto.tipoUnidades()));
+                terminado.setCantidadUnidad(dto.cantidadUnidad());
+                terminado.setStockMinimo(dto.stockMinimo());
+                terminado.setInventareable(dto.inventareable());
+                terminado.setStatus(dto.status());
+                terminado.setFotoUrl(dto.fotoUrl());
+                terminado.setPrefijoLote(normalizeNullable(dto.prefijoLote()));
+                terminado.setProcesoProduccionCompleto(null);
+                terminado.setCasePack(null);
+
+                Integer categoriaId = extractCategoriaId(dto.categoria());
+                if (categoriaId != null) {
+                    categoriaRepo.findById(categoriaId).ifPresent(terminado::setCategoria);
+                }
+
+                List<Insumo> insumos = new ArrayList<>();
+                for (ExportacionTerminadosConInsumosDTO.InsumoExportDTO insumoDto : dto.insumos()) {
+                    Producto producto = productoRepo.findByProductoId(insumoDto.producto().productoId())
+                            .orElseThrow(() -> new IllegalStateException("Producto de insumo no encontrado: " + insumoDto.producto().productoId()));
+
+                    Insumo insumo = new Insumo();
+                    insumo.setProducto(producto);
+                    insumo.setCantidadRequerida(insumoDto.cantidadRequerida());
+                    insumos.add(insumo);
+                }
+
+                terminado.setInsumos(insumos);
+                terminadoRepo.save(terminado);
+                successCount++;
+            } catch (Exception e) {
+                log.warn("[CargaMasivaTerminados] processBulkInsertJsonConInsumos: fila {} productoId={} ERROR: {}", rowNumber, productoId, e.getMessage());
+                errors.add(new ErrorRecord(rowNumber, productoId, e.getMessage()));
+            }
+        }
+
+        return new ValidationResultDTO(errors.isEmpty(), errors, successCount);
+    }
+
+    private ExportacionTerminadosConInsumosDTO parseJsonConInsumos(MultipartFile file, List<ErrorRecord> errors) {
+        if (file == null || file.isEmpty()) {
+            errors.add(new ErrorRecord(0, "", "No se recibió archivo JSON"));
+            return null;
+        }
+
+        try {
+            return objectMapper.readValue(file.getInputStream(), ExportacionTerminadosConInsumosDTO.class);
+        } catch (IOException e) {
+            log.error("Error leyendo JSON de carga masiva terminados con insumos", e);
+            errors.add(new ErrorRecord(0, "", "Error leyendo archivo JSON: " + e.getMessage()));
+            return null;
+        }
+    }
+
+    private boolean isTipoUnidadesValido(String tipoUnidades) {
+        if (tipoUnidades == null) {
+            return false;
+        }
+        String tu = tipoUnidades.trim().toUpperCase();
+        return tu.equals("L") || tu.equals("KG") || tu.equals("U");
+    }
+
+    private String normalizeTipoUnidades(String tipoUnidades) {
+        return safeTrim(tipoUnidades) != null ? safeTrim(tipoUnidades).toUpperCase() : "U";
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private String normalizeNullable(String value) {
+        String trimmed = safeTrim(value);
+        return (trimmed == null || trimmed.isEmpty()) ? null : trimmed;
+    }
+
+    private Integer extractCategoriaId(ExportacionTerminadosConInsumosDTO.CategoriaResumenDTO categoria) {
+        return categoria != null ? categoria.categoriaId() : null;
     }
 
     private String getCellValueAsString(Row row, int cellIndex) {
