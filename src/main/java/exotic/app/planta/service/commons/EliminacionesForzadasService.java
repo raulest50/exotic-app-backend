@@ -411,14 +411,7 @@ public class EliminacionesForzadasService {
     }
 
     private void deleteAssociatedProcess(String productoId) {
-        terminadoRepo.clearProcesoProduccionCompletoByProductoId(productoId);
-        entityManager.flush();
-
         List<ProcesoProduccionCompleto> procesos = procesoProduccionCompletoRepo.findByProducto_ProductoIdWithNodes(productoId);
-        if (procesos.isEmpty()) {
-            entityManager.clear();
-            return;
-        }
 
         List<Long> nodeIds = procesos.stream()
                 .flatMap(proceso -> safeList(proceso.getProcesosProduccion()).stream())
@@ -432,7 +425,15 @@ public class EliminacionesForzadasService {
             entityManager.flush();
         }
 
-        procesoProduccionCompletoRepo.deleteAll(procesos);
+        terminadoRepo.clearProcesoProduccionCompletoByProductoId(productoId);
+        entityManager.flush();
+
+        if (!procesos.isEmpty()) {
+            procesoProduccionCompletoRepo.deleteAll(procesos);
+            entityManager.flush();
+        }
+
+        procesoProduccionCompletoRepo.clearProductoByProductoId(productoId);
         entityManager.flush();
         entityManager.clear();
     }

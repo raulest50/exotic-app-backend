@@ -17,6 +17,7 @@ import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProdu
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
+import exotic.app.planta.model.produccion.dto.OrdenProduccionBatchDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
 import exotic.app.planta.repo.inventarios.LoteRepo;
@@ -106,6 +107,62 @@ public class ProduccionService {
         }
 
         return savedOrden;
+    }
+
+    /**
+     * Crea múltiples órdenes de producción en una única transacción, una por cada número de
+     * lote recibido. Si cualquier lote ya existe, toda la operación hace rollback.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public List<OrdenProduccion> saveMultipleOrdenesProduccion(OrdenProduccionBatchDTO dto) {
+        Producto producto = productoRepo.findById(dto.getProductoId())
+            .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + dto.getProductoId()));
+
+        Long vendedorResponsableId = dto.getVendedorResponsableId();
+        if (vendedorResponsableId == null) {
+            throw new IllegalArgumentException("El ID del responsable es obligatorio para registrar la orden de producción.");
+        }
+
+        Vendedor vendedorResponsable = vendedorRepository.findById(vendedorResponsableId)
+            .orElseThrow(() -> new IllegalArgumentException("Responsable no encontrado con ID: " + vendedorResponsableId));
+
+        List<String> loteBatchNumbers = dto.getLoteBatchNumbers();
+        if (loteBatchNumbers == null || loteBatchNumbers.isEmpty()) {
+            throw new IllegalArgumentException("Se requiere al menos un número de lote para crear múltiples órdenes.");
+        }
+
+        List<OrdenProduccion> savedOrdenes = new ArrayList<>();
+        for (String loteBatchNumber : loteBatchNumbers) {
+            OrdenProduccion ordenProduccion = new OrdenProduccion(
+                producto, dto.getObservaciones(), dto.getCantidadProducir());
+            ordenProduccion.setFechaLanzamiento(dto.getFechaLanzamiento());
+            ordenProduccion.setFechaFinalPlanificada(dto.getFechaFinalPlanificada());
+            ordenProduccion.setNumeroPedidoComercial(dto.getNumeroPedidoComercial());
+            ordenProduccion.setAreaOperativa(dto.getAreaOperativa());
+            ordenProduccion.setDepartamentoOperativo(dto.getDepartamentoOperativo());
+            ordenProduccion.setVendedorResponsable(vendedorResponsable);
+
+            OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
+
+            if (loteBatchNumber != null && !loteBatchNumber.isBlank()) {
+                Lote loteExistente = loteRepo.findByBatchNumber(loteBatchNumber);
+                if (loteExistente != null) {
+                    throw new IllegalArgumentException(
+                        "El número de lote '" + loteBatchNumber + "' ya está asignado a otra orden de producción"
+                    );
+                }
+                Lote lote = new Lote();
+                lote.setBatchNumber(loteBatchNumber);
+                lote.setOrdenProduccion(savedOrden);
+                loteRepo.save(lote);
+                savedOrden.setLoteAsignado(lote.getBatchNumber());
+                ordenProduccionRepo.save(savedOrden);
+            }
+
+            savedOrdenes.add(savedOrden);
+        }
+
+        return savedOrdenes;
     }
 
     /**

@@ -3,6 +3,7 @@ package exotic.app.planta.resource.produccion;
 
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
+import exotic.app.planta.model.produccion.dto.OrdenProduccionBatchDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
 import exotic.app.planta.service.produccion.ProduccionService;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -34,6 +36,18 @@ public class ProduccionResource {
     @PostMapping("/save")
     public ResponseEntity<OrdenProduccion> saveOrdenProduccion(@RequestBody OrdenProduccionDTO_save ordenProduccionDTO){
         return ResponseEntity.created(URI.create("/ordenes/ordenID")).body(produccionService.saveOrdenProduccion(ordenProduccionDTO));
+    }
+
+    /**
+     * Crea múltiples órdenes de producción en una única transacción, una por cada número de
+     * lote incluido en el DTO. Si cualquier lote ya existe, toda la operación hace rollback.
+     */
+    @PostMapping("/save-multiple")
+    public ResponseEntity<List<OrdenProduccion>> saveMultipleOrdenesProduccion(
+            @RequestBody OrdenProduccionBatchDTO dto) {
+        return ResponseEntity
+            .created(URI.create("/produccion/save-multiple"))
+            .body(produccionService.saveMultipleOrdenesProduccion(dto));
     }
 
     /**

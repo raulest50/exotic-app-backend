@@ -3,6 +3,7 @@ package exotic.app.planta.repo.producto.procesos;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionCompleto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -19,4 +20,8 @@ public interface ProcesoProduccionCompletoRepo extends JpaRepository<ProcesoProd
             WHERE ppc.producto.productoId = :productoId
             """)
     List<ProcesoProduccionCompleto> findByProducto_ProductoIdWithNodes(@Param("productoId") String productoId);
+
+    @Modifying
+    @Query("UPDATE ProcesoProduccionCompleto ppc SET ppc.producto = null WHERE ppc.producto.productoId = :productoId")
+    void clearProductoByProductoId(@Param("productoId") String productoId);
 }
