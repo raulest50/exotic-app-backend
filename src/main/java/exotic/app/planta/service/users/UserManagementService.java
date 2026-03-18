@@ -6,6 +6,7 @@ import exotic.app.planta.config.PasswordConfig;
 import exotic.app.planta.model.users.Acceso;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
+import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.usuarios.AccesoRepository;
 import exotic.app.planta.repo.usuarios.PasswordResetTokenRepository;
@@ -173,6 +174,19 @@ public class UserManagementService {
         // Añadir el acceso al usuario
         user.getAccesos().add(acceso);
         return userRepository.save(user);
+    }
+
+    public User patchUserInfo(Long userId, UpdateUserInfoDTO dto) {
+        User existing = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        existing.setCedula(dto.getCedula());
+        existing.setUsername(dto.getUsername());
+        existing.setNombreCompleto(dto.getNombreCompleto());
+        existing.setEmail(dto.getEmail());
+        existing.setCel(dto.getCel());
+        existing.setDireccion(dto.getDireccion());
+        existing.setFechaNacimiento(dto.getFechaNacimiento());
+        return userRepository.save(existing);
     }
 
     public List<User> searchUser_by_DTO(SearchUserDTO searchUserDTO, int page, int size) {

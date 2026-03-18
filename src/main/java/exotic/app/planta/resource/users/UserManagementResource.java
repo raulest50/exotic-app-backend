@@ -4,6 +4,7 @@ package exotic.app.planta.resource.users;
 import exotic.app.planta.model.users.Acceso;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
+import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
 import exotic.app.planta.service.users.UserManagementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,15 @@ public class UserManagementResource {
     @PutMapping("/{userId}")
     public ResponseEntity<User> updateUser(@PathVariable Long userId, @RequestBody User user) {
         User updated = userManagementService.updateUser(userId, user);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/{userId}/info")
+    public ResponseEntity<User> patchUserInfo(
+            @PathVariable Long userId,
+            @RequestBody UpdateUserInfoDTO dto) {
+        User updated = userManagementService.patchUserInfo(userId, dto);
+        updated.setPassword("");
         return ResponseEntity.ok(updated);
     }
 
