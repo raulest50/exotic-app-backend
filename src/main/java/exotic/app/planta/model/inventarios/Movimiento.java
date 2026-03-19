@@ -122,7 +122,13 @@ public class Movimiento {
         AVERIA,
 
         /** Movimiento entre almacenes (OTA) */
-        TRANSFERENCIA
+        TRANSFERENCIA,
+
+        /** Devolución de producto terminado por cliente hacia DEVOLUCIONES */
+        DEVOLUCION_CLIENTE,
+
+        /** Salida de Material a proveedor (aun falta determinar si desde almacen averias o almacen devoluciones) */
+        DEVOLUCION_A_PROVEEDOR
     }
 
 
