@@ -19,7 +19,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/ingresos_almacen")
 @RequiredArgsConstructor
-public class IngresoAlmacenResource {
+public class IngresoMaterialesAlmacenResource {
 
     private final IngresoAlmacenService ingresoAlmacenService;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;

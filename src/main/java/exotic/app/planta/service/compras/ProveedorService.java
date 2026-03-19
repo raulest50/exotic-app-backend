@@ -2,6 +2,7 @@ package exotic.app.planta.service.compras;
 
 
 import org.springframework.transaction.annotation.Transactional;
+import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.compras.dto.search.DTO_SearchProveedor;
 import exotic.app.planta.repo.compras.ProveedorRepo;
@@ -67,6 +68,11 @@ public class ProveedorService {
             String camaraPath = fileStorageService.storeFileProveedor(proveedor.getId(), camaraFile, "camara.pdf");
             proveedor.setCamaraUrl(camaraPath);
         }
+        // Set bidirectional back-reference on each contact before persisting.
+        if (proveedor.getContactos() != null) {
+            proveedor.getContactos().forEach(c -> c.setProveedor(proveedor));
+        }
+
         // Save the proveedor entity; if any exception occurs (including in file saving),
         // the whole transaction will roll back.
         return proveedorRepo.save(proveedor);
@@ -199,7 +205,17 @@ public class ProveedorService {
         // Actualizar solo los campos editables
         proveedorOriginal.setRegimenTributario(proveedor.getRegimenTributario());
         proveedorOriginal.setCondicionPago(proveedor.getCondicionPago());
-        proveedorOriginal.setContactos(proveedor.getContactos());
+
+        // Reemplazar contactos: clear dispara orphanRemoval, luego se añaden los nuevos
+        // con el back-reference correctamente establecido.
+        proveedorOriginal.getContactos().clear();
+        if (proveedor.getContactos() != null) {
+            for (ContactoProveedor contacto : proveedor.getContactos()) {
+                contacto.setContactoId(0);
+                contacto.setProveedor(proveedorOriginal);
+                proveedorOriginal.getContactos().add(contacto);
+            }
+        }
 
         // Registrar en log los cambios realizados
         log.info("Actualizando proveedor {}: regimenTributario={}, condicionPago={}", 

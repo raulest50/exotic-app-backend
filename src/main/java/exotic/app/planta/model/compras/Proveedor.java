@@ -1,5 +1,6 @@
 package exotic.app.planta.model.compras;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -10,8 +11,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 
 /**
@@ -74,13 +75,9 @@ public class Proveedor {
     private String ciudad;
     private String departamento;
 
-    /**
-     * Instead of a single contacto, we store a list of JSON objects.
-     * Each object can represent a contact with its own attributes.
-     */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private List<Map<String, Object>> contactos;
+    @OneToMany(mappedBy = "proveedor", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private List<ContactoProveedor> contactos = new ArrayList<>();
 
     private String url;
     private String observacion;

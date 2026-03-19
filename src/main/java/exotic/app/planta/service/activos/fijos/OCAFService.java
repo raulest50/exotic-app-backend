@@ -5,6 +5,7 @@ import jakarta.transaction.Transactional;
 import exotic.app.planta.model.activos.fijos.compras.ItemOrdenCompraActivo;
 import exotic.app.planta.model.activos.fijos.compras.OrdenCompraActivo;
 import exotic.app.planta.model.activos.fijos.dto.UpdateEstadoOrdenCompraAFRequest;
+import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.users.Acceso;
 import exotic.app.planta.model.users.User;
@@ -27,7 +28,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -366,9 +366,9 @@ public class OCAFService {
 
         // Buscar el email del proveedor en la lista de contactos
         String emailProveedor = null;
-        for (Map<String, Object> contacto : proveedor.getContactos()) {
-            if (contacto.containsKey("email")) {
-                emailProveedor = (String) contacto.get("email");
+        for (ContactoProveedor contacto : proveedor.getContactos()) {
+            if (contacto.getEmail() != null && !contacto.getEmail().isBlank()) {
+                emailProveedor = contacto.getEmail();
                 break;
             }
         }
@@ -423,9 +423,9 @@ public class OCAFService {
 
         // Buscar el email del proveedor en la lista de contactos
         String emailProveedor = null;
-        for (Map<String, Object> contacto : proveedor.getContactos()) {
-            if (contacto.containsKey("email")) {
-                emailProveedor = (String) contacto.get("email");
+        for (ContactoProveedor contacto : proveedor.getContactos()) {
+            if (contacto.getEmail() != null && !contacto.getEmail().isBlank()) {
+                emailProveedor = contacto.getEmail();
                 break;
             }
         }

@@ -1,5 +1,6 @@
 package exotic.app.planta.config;
 
+import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.compras.ProveedorRepo;
@@ -11,9 +12,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Component
 public class CargaMasiva {
@@ -179,33 +178,24 @@ public class CargaMasiva {
                     proveedor.setDepartamento("");
                 }
 
-                // Set contactos as a List of Map<String, Object>
-                List<Map<String, Object>> contactos = new ArrayList<>();
+                // Consolidar phone y email en un único ContactoProveedor
+                List<ContactoProveedor> contactos = new ArrayList<>();
 
-                if (!phone.isEmpty()) {
-                    Map<String, Object> contactoTelefono = new HashMap<>();
-                    contactoTelefono.put("tipo", "telefono");
-                    contactoTelefono.put("valor", phone);
+                if (!phone.isEmpty() || !email.isEmpty()) {
+                    ContactoProveedor contacto = new ContactoProveedor();
 
-                    // Add persona de contacto if available
+                    String nombreContacto = "";
                     if (personaContactoCell != null && personaContactoCell.getCellType() != CellType.BLANK) {
-                        contactoTelefono.put("nombre", personaContactoCell.getStringCellValue().trim());
+                        nombreContacto = personaContactoCell.getStringCellValue().trim();
                     }
 
-                    contactos.add(contactoTelefono);
-                }
+                    contacto.setFullName(nombreContacto);
+                    contacto.setCargo("");
+                    contacto.setCel(phone);
+                    contacto.setEmail(email);
+                    contacto.setProveedor(proveedor);
 
-                if (!email.isEmpty()) {
-                    Map<String, Object> contactoEmail = new HashMap<>();
-                    contactoEmail.put("tipo", "email");
-                    contactoEmail.put("valor", email);
-
-                    // Add persona de contacto if available and not already added
-                    if (personaContactoCell != null && personaContactoCell.getCellType() != CellType.BLANK && phone.isEmpty()) {
-                        contactoEmail.put("nombre", personaContactoCell.getStringCellValue().trim());
-                    }
-
-                    contactos.add(contactoEmail);
+                    contactos.add(contacto);
                 }
 
                 proveedor.setContactos(contactos);

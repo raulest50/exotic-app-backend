@@ -184,16 +184,16 @@ public class DocumentPdfService {
         }
         
         // Supplier contact phone
-        if (!orden.getProveedor().getContactos().isEmpty() && orden.getProveedor().getContactos().get(0).containsKey("cel")) {
-            table.addCell(createValueCell(orden.getProveedor().getContactos().get(0).get("cel").toString(), normalFont));
+        if (!orden.getProveedor().getContactos().isEmpty() && orden.getProveedor().getContactos().get(0).getCel() != null) {
+            table.addCell(createValueCell(orden.getProveedor().getContactos().get(0).getCel(), normalFont));
         }
         
         // Supplier tax regime
         table.addCell(createValueCell(getRegimenTributarioText(orden.getProveedor().getRegimenTributario()), normalFont));
         
         // Supplier contact email
-        if (!orden.getProveedor().getContactos().isEmpty() && orden.getProveedor().getContactos().get(0).containsKey("email")) {
-            table.addCell(createValueCell(orden.getProveedor().getContactos().get(0).get("email").toString(), normalFont));
+        if (!orden.getProveedor().getContactos().isEmpty() && orden.getProveedor().getContactos().get(0).getEmail() != null) {
+            table.addCell(createValueCell(orden.getProveedor().getContactos().get(0).getEmail(), normalFont));
         }
         
         document.add(table);

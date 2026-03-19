@@ -12,10 +12,21 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Integer> {
 
     List<OrdenProduccion> findByEstadoOrden(int estadoOrden);
+
+    /**
+     * Busca una OrdenProduccion por su loteAsignado (match exacto).
+     * El campo es unique, por lo que retorna a lo sumo un resultado.
+     *
+     * @param loteAsignado Número de lote exacto a buscar
+     * @return Optional con la orden encontrada
+     */
+    @EntityGraph(attributePaths = {"producto"})
+    Optional<OrdenProduccion> findByLoteAsignado(String loteAsignado);
 
     /**
      * Counts the number of production orders for a specific product with a specific status

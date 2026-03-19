@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.commons;
 
 import exotic.app.planta.service.commons.ExportacionMaterialService;
+import exotic.app.planta.service.commons.ExportacionProveedorService;
 import exotic.app.planta.service.commons.ExportacionTerminadoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -17,6 +18,7 @@ public class ExportacionDatosResource {
 
     private final ExportacionMaterialService exportacionMaterialService;
     private final ExportacionTerminadoService exportacionTerminadoService;
+    private final ExportacionProveedorService exportacionProveedorService;
 
     @GetMapping("/materiales/excel")
     public ResponseEntity<byte[]> exportarMaterialesExcel() {
@@ -41,6 +43,15 @@ public class ExportacionDatosResource {
         byte[] json = exportacionTerminadoService.exportarTerminadosJsonConInsumos();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"exportacion_terminados_con_insumos.json\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(json);
+    }
+
+    @GetMapping("/proveedores/json-con-contactos")
+    public ResponseEntity<byte[]> exportarProveedoresJsonConContactos() {
+        byte[] json = exportacionProveedorService.exportarProveedoresJsonConContactos();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"exportacion_proveedores.json\"")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(json);
     }

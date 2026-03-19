@@ -180,10 +180,10 @@ public class ComprasService {
 
         // Buscar el email del proveedor en la lista de contactos
         String emailProveedor = null;
-        for (Map<String, Object> contacto : proveedor.getContactos()) {
+        for (ContactoProveedor contacto : proveedor.getContactos()) {
             log.info("Revisando contacto: {}", contacto);
-            if (contacto.containsKey("email")) {
-                emailProveedor = (String) contacto.get("email");
+            if (contacto.getEmail() != null && !contacto.getEmail().isBlank()) {
+                emailProveedor = contacto.getEmail();
                 log.info("Email encontrado para el proveedor: {}", emailProveedor);
                 break;
             }
@@ -249,10 +249,10 @@ public class ComprasService {
 
         // Buscar el email del proveedor en la lista de contactos
         String emailProveedor = null;
-        for (Map<String, Object> contacto : proveedor.getContactos()) {
+        for (ContactoProveedor contacto : proveedor.getContactos()) {
             log.info("Revisando contacto: {}", contacto);
-            if (contacto.containsKey("email")) {
-                emailProveedor = (String) contacto.get("email");
+            if (contacto.getEmail() != null && !contacto.getEmail().isBlank()) {
+                emailProveedor = contacto.getEmail();
                 log.info("Email encontrado para el proveedor: {}", emailProveedor);
                 break;
             }
@@ -404,9 +404,9 @@ public class ComprasService {
 
         // Buscar el email del proveedor en la lista de contactos
         String emailProveedor = null;
-        for (Map<String, Object> contacto : proveedor.getContactos()) {
-            if (contacto.containsKey("email")) {
-                emailProveedor = (String) contacto.get("email");
+        for (ContactoProveedor contacto : proveedor.getContactos()) {
+            if (contacto.getEmail() != null && !contacto.getEmail().isBlank()) {
+                emailProveedor = contacto.getEmail();
                 log.info("Email encontrado para el proveedor: {}", emailProveedor);
                 break;
             }
@@ -460,9 +460,9 @@ public class ComprasService {
 
         // Buscar el email del proveedor en la lista de contactos
         String emailProveedor = null;
-        for (Map<String, Object> contacto : proveedor.getContactos()) {
-            if (contacto.containsKey("email")) {
-                emailProveedor = (String) contacto.get("email");
+        for (ContactoProveedor contacto : proveedor.getContactos()) {
+            if (contacto.getEmail() != null && !contacto.getEmail().isBlank()) {
+                emailProveedor = contacto.getEmail();
                 log.info("Email encontrado para el proveedor: {}", emailProveedor);
                 break;
             }
