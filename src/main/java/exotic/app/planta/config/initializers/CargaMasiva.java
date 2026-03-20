@@ -1,4 +1,4 @@
-package exotic.app.planta.config;
+package exotic.app.planta.config.initializers;
 
 import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
@@ -289,14 +289,11 @@ public class CargaMasiva {
                 material.setTipoUnidades(convertUnidad(unidad));
                 material.setTipoMaterial(tipoMaterial);
                 material.setIvaPercentual(0.0);
-                // fichaTecnicaUrl remains null
-                // fechaCreacion is handled automatically by @CreationTimestamp
 
                 materialRepo.save(material);
                 rowCount++;
             }
         } catch (Exception e) {
-            // Ideally use a logger instead of printing to stderr
             System.err.println("Error reading file " + filePath + ": " + e.getMessage());
             e.printStackTrace();
         }
@@ -305,7 +302,6 @@ public class CargaMasiva {
     /**
      * Converts the unit of measure string to the corresponding string for tipoUnidades.
      * Supported units: "KG", "L", "U", "G".
-     * For example: "KG" -> "KG", "UND" -> "U", "L" -> "L", "G" -> "G".
      */
     private String convertUnidad(String unidad) {
         if (unidad.equalsIgnoreCase("KG")) {

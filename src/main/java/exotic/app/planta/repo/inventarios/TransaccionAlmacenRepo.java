@@ -1,6 +1,7 @@
 package exotic.app.planta.repo.inventarios;
 
 import exotic.app.planta.model.inventarios.Movimiento;
+import exotic.app.planta.model.producto.Material;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +15,17 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
 
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId")
     Double findTotalCantidadByProductoId(@Param("productoId") String productoId);
+
+    /**
+     * Todos los materiales con stock agregado (suma de movimientos). Una fila por material.
+     */
+    @Query("""
+            SELECT m, COALESCE(SUM(mov.cantidad), 0.0)
+            FROM Material m
+            LEFT JOIN Movimiento mov ON mov.producto = m
+            GROUP BY m
+            """)
+    List<Object[]> findAllMaterialsWithStock();
 
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId AND m.fechaMovimiento < :fecha")
     Double findTotalCantidadByProductoIdAndFechaMovimientoBefore(@Param("productoId") String productoId, @Param("fecha") LocalDateTime fecha);

@@ -1,5 +1,6 @@
-package exotic.app.planta.config;
+package exotic.app.planta.config.initializers;
 
+import exotic.app.planta.config.PasswordConfig;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.RequiredArgsConstructor;

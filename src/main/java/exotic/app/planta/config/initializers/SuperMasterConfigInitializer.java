@@ -1,4 +1,4 @@
-package exotic.app.planta.config;
+package exotic.app.planta.config.initializers;
 
 import exotic.app.planta.model.master.configs.SuperMasterConfig;
 import exotic.app.planta.repo.master.configs.SuperMasterConfigRepo;

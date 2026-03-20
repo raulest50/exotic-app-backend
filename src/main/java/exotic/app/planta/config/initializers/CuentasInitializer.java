@@ -1,4 +1,4 @@
-package exotic.app.planta.config;
+package exotic.app.planta.config.initializers;
 
 import exotic.app.planta.model.contabilidad.CuentaContable;
 import exotic.app.planta.model.contabilidad.CuentaContable.SaldoNormal;

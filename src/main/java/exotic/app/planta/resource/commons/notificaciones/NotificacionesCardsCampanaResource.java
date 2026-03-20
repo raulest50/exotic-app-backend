@@ -11,7 +11,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/notificaciones")
 @RequiredArgsConstructor
-public class NotificacionesModulosResource {
+public class NotificacionesCardsCampanaResource {
 
     private final NotificacionesModulosService notificacionesModulosService;
 

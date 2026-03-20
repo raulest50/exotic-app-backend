@@ -1,4 +1,4 @@
-package exotic.app.planta.config;
+package exotic.app.planta.config.initializers;
 
 import org.springframework.stereotype.Component;
 
