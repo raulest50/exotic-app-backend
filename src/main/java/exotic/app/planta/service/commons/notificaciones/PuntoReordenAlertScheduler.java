@@ -38,6 +38,7 @@ public class PuntoReordenAlertScheduler {
 
     @Scheduled(cron = "0 0 7 * * MON-FRI", zone = "America/Bogota")
     @Scheduled(cron = "0 30 12 * * MON-FRI", zone = "America/Bogota")
+    @Scheduled(cron = "0 0 16 * * MON-FRI", zone = "America/Bogota")
     @Transactional(readOnly = true)
     public void checkPuntosDeReorden() {
         MaestraNotificacion notificacion = maestraNotificacionRepo.findByIdWithUsersGroup(NOTIFICACION_ID).orElse(null);
