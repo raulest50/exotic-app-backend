@@ -113,7 +113,7 @@ public class OrdenProduccion {
     private String departamentoOperativo;
 
     @ManyToOne
-    @JoinColumn(name = "responsable_id")
+    @JoinColumn(name = "responsable_id", nullable = true)
     private Vendedor vendedorResponsable;
 
 

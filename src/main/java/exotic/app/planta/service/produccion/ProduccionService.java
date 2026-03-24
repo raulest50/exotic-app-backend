@@ -71,12 +71,11 @@ public class ProduccionService {
             .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
 
         Long vendedorResponsableId = ordenProduccionDTO.getVendedorResponsableId();
-        if (vendedorResponsableId == null) {
-            throw new IllegalArgumentException("El ID del responsable es obligatorio para registrar la orden de producción.");
+        Vendedor vendedorResponsable = null;
+        if (vendedorResponsableId != null) {
+            vendedorResponsable = vendedorRepository.findById(vendedorResponsableId)
+                .orElseThrow(() -> new IllegalArgumentException("Responsable no encontrado con ID: " + vendedorResponsableId));
         }
-
-        Vendedor vendedorResponsable = vendedorRepository.findById(vendedorResponsableId)
-            .orElseThrow(() -> new IllegalArgumentException("Responsable no encontrado con ID: " + vendedorResponsableId));
 
         OrdenProduccion ordenProduccion = new OrdenProduccion(producto, ordenProduccionDTO.getObservaciones(), ordenProduccionDTO.getCantidadProducir());
         ordenProduccion.setFechaLanzamiento(ordenProduccionDTO.getFechaLanzamiento());
@@ -119,12 +118,11 @@ public class ProduccionService {
             .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + dto.getProductoId()));
 
         Long vendedorResponsableId = dto.getVendedorResponsableId();
-        if (vendedorResponsableId == null) {
-            throw new IllegalArgumentException("El ID del responsable es obligatorio para registrar la orden de producción.");
+        Vendedor vendedorResponsable = null;
+        if (vendedorResponsableId != null) {
+            vendedorResponsable = vendedorRepository.findById(vendedorResponsableId)
+                .orElseThrow(() -> new IllegalArgumentException("Responsable no encontrado con ID: " + vendedorResponsableId));
         }
-
-        Vendedor vendedorResponsable = vendedorRepository.findById(vendedorResponsableId)
-            .orElseThrow(() -> new IllegalArgumentException("Responsable no encontrado con ID: " + vendedorResponsableId));
 
         List<String> loteBatchNumbers = dto.getLoteBatchNumbers();
         if (loteBatchNumbers == null || loteBatchNumbers.isEmpty()) {

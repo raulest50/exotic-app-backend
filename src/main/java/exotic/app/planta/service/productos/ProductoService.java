@@ -14,6 +14,7 @@ import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.service.commons.FileStorageService;
+import exotic.app.planta.service.commons.notificaciones.PuntoReordenEvaluacionService;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -90,6 +91,7 @@ public class ProductoService {
             throw new IllegalArgumentException("El codigo: " + material.getProductoId() +
                     " ya esta asignado a otro Material");
         }
+        validatePuntoReorden(material.getPuntoReorden());
         try {
             // Solo guardar la ficha técnica si se proporciona un archivo
             if (file != null && !file.isEmpty()) {
@@ -515,8 +517,11 @@ public class ProductoService {
             // Solo actualizamos tipoMaterial si el producto enviado también es Material
             if (producto instanceof Material) {
                 Material materialNuevo = (Material) producto;
+                validatePuntoReorden(materialNuevo.getPuntoReorden());
                 materialOriginal.setTipoMaterial(materialNuevo.getTipoMaterial());
-                log.info("Actualizando tipo de material: {}", materialNuevo.getTipoMaterial());
+                materialOriginal.setPuntoReorden(materialNuevo.getPuntoReorden());
+                log.info("Actualizando tipo de material: {}, puntoReorden: {}",
+                        materialNuevo.getTipoMaterial(), materialNuevo.getPuntoReorden());
             } else {
                 log.warn("El frontend envió un tipo de producto incorrecto. Se mantiene el tipo original: Material");
             }
@@ -570,7 +575,18 @@ public class ProductoService {
         materialRepo.deleteById(productoId);
     }
 
-
-
+    /**
+     * -1: no participar en alertas de punto de reorden ({@link PuntoReordenEvaluacionService#PUNTO_REORDEN_IGNORAR}).
+     * &gt;= 0: umbral válido (0 = sin umbral definido en evaluación).
+     */
+    private static void validatePuntoReorden(double pr) {
+        if (Double.isNaN(pr) || Double.isInfinite(pr)) {
+            throw new IllegalArgumentException("puntoReorden debe ser un número finito");
+        }
+        if (pr != PuntoReordenEvaluacionService.PUNTO_REORDEN_IGNORAR && pr < 0) {
+            throw new IllegalArgumentException(
+                    "puntoReorden debe ser -1 (ignorar alertas) o mayor o igual a 0");
+        }
+    }
 
 }

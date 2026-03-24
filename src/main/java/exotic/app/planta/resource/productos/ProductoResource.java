@@ -306,6 +306,7 @@ public class ProductoResource {
     /**
      * Endpoint para actualizar un producto existente.
      * Permite modificar campos como nombre, tipo de material (para productos tipo Material),
+     * punto de reorden ({@code puntoReorden}: -1 ignora alertas, 0 sin umbral definido, &gt; 0 umbral),
      * cantidad por unidad, porcentaje de IVA y observaciones.
      * 
      * @param productoId ID del producto a actualizar
