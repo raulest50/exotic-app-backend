@@ -24,9 +24,9 @@ public class NotificacionesModulosService {
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
 
     /**
-     * Verifica las notificaciones para todos los módulos a los que tiene acceso un usuario
+     * Verifica las notificaciones para todos los m?dulos a los que tiene acceso un usuario
      * @param username Nombre de usuario para el que se verifican las notificaciones
-     * @return Lista de objetos con información de notificaciones por módulo
+     * @return Lista de objetos con informaci?n de notificaciones por m?dulo
      */
     public List<ModuleNotificationDTA> checkAllNotifications4User(String username) {
         List<ModuleNotificationDTA> notifications = new ArrayList<>();
@@ -41,7 +41,7 @@ public class NotificacionesModulosService {
             for (Acceso acceso : user.getAccesos()) {
                 Modulo modulo = acceso.getModuloAcceso();
 
-                // Llamar al método correspondiente según el módulo
+                // Llamar al m?todo correspondiente seg?n el m?dulo
                 ModuleNotificationDTA notification = null;
 
                 switch (modulo) {
@@ -118,9 +118,9 @@ public class NotificacionesModulosService {
 
 
     /**
-     * Verifica si hay notificaciones para el módulo USUARIOS
+     * Verifica si hay notificaciones para el m?dulo USUARIOS
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesUsuarios(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -131,9 +131,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo PRODUCTOS
+     * Verifica si hay notificaciones para el m?dulo PRODUCTOS
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesProductos(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -144,9 +144,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo PRODUCCION
+     * Verifica si hay notificaciones para el m?dulo PRODUCCION
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesProduccion(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -157,9 +157,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo STOCK
+     * Verifica si hay notificaciones para el m?dulo STOCK
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesStock(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -170,9 +170,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo PROVEEDORES
+     * Verifica si hay notificaciones para el m?dulo PROVEEDORES
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesProveedores(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -183,25 +183,25 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo COMPRAS
+     * Verifica si hay notificaciones para el m?dulo COMPRAS
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesCompras(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
         notification.setModulo(Modulo.COMPRAS);
 
-        // Verificamos si hay órdenes de compra con estado 0 (pendiente liberación)
-        boolean existsOrdenPendienteLiberar = ordenCompraRepo.existsByEstado(0);
+        long countLiberar = ordenCompraRepo.countByEstado(0);
+        long countEnviar = ordenCompraRepo.countByEstado(1);
+        notification.setOrdenesPendientesLiberar(countLiberar);
+        notification.setOrdenesPendientesEnviar(countEnviar);
 
-        // Verificamos si hay órdenes de compra con estado 1 (pendiente envío)
-        boolean existsOrdenPendienteEnviar = ordenCompraRepo.existsByEstado(1);
+        boolean existsOrdenPendienteLiberar = countLiberar > 0;
+        boolean existsOrdenPendienteEnviar = countEnviar > 0;
 
-        // Si hay órdenes pendientes por liberar o por enviar
         if (existsOrdenPendienteLiberar || existsOrdenPendienteEnviar) {
             notification.setRequireAtention(true);
 
-            // Personalizamos el mensaje según el caso
             if (existsOrdenPendienteLiberar && existsOrdenPendienteEnviar) {
                 notification.setMessage("Hay órdenes de compra pendientes por liberar y por enviar al proveedor");
             } else if (existsOrdenPendienteLiberar) {
@@ -210,7 +210,6 @@ public class NotificacionesModulosService {
                 notification.setMessage("Hay órdenes de compra pendientes por enviar al proveedor");
             }
         } else {
-            // No hay órdenes pendientes
             notification.setRequireAtention(false);
             notification.setMessage("");
         }
@@ -219,9 +218,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo SEGUIMIENTO_PRODUCCION
+     * Verifica si hay notificaciones para el m?dulo SEGUIMIENTO_PRODUCCION
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesSeguimientoProduccion(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -232,9 +231,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo CLIENTES
+     * Verifica si hay notificaciones para el m?dulo CLIENTES
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesClientes(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -245,9 +244,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo VENTAS
+     * Verifica si hay notificaciones para el m?dulo VENTAS
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesVentas(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -258,9 +257,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo TRANSACCIONES_ALMACEN
+     * Verifica si hay notificaciones para el m?dulo TRANSACCIONES_ALMACEN
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesTransaccionesAlmacen(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -271,9 +270,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo ACTIVOS
+     * Verifica si hay notificaciones para el m?dulo ACTIVOS
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesActivos(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -284,9 +283,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo CONTABILIDAD
+     * Verifica si hay notificaciones para el m?dulo CONTABILIDAD
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesContabilidad(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -297,9 +296,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo PERSONAL_PLANTA
+     * Verifica si hay notificaciones para el m?dulo PERSONAL_PLANTA
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesPersonalPlanta(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -310,9 +309,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo BINTELLIGENCE
+     * Verifica si hay notificaciones para el m?dulo BINTELLIGENCE
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesBIntelligence(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -323,9 +322,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo CARGA_MASIVA
+     * Verifica si hay notificaciones para el m?dulo CARGA_MASIVA
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesCargaMasiva(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -336,9 +335,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo ADMINISTRACION_ALERTAS
+     * Verifica si hay notificaciones para el m?dulo ADMINISTRACION_ALERTAS
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesAdministracionAlertas(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -349,9 +348,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo MASTER_DIRECTIVES
+     * Verifica si hay notificaciones para el m?dulo MASTER_DIRECTIVES
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesMasterDirectives(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -362,9 +361,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo CRONOGRAMA
+     * Verifica si hay notificaciones para el m?dulo CRONOGRAMA
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesCronograma(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -375,9 +374,9 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo ORGANIGRAMA
+     * Verifica si hay notificaciones para el m?dulo ORGANIGRAMA
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesOrganigrama(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
@@ -388,16 +387,16 @@ public class NotificacionesModulosService {
     }
 
     /**
-     * Verifica si hay notificaciones para el módulo PAGOS_PROVEEDORES
+     * Verifica si hay notificaciones para el m?dulo PAGOS_PROVEEDORES
      * @param user Usuario para el que se verifican las notificaciones
-     * @return Objeto con información de notificación
+     * @return Objeto con informaci?n de notificaci?n
      */
     public ModuleNotificationDTA checkNotificacionesPagosProveedores(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
         notification.setModulo(Modulo.PAGOS_PROVEEDORES);
 
-        // Verificar si hay transacciones de almacén pendientes por asentar contablemente
-        // causadas por órdenes de compra de materiales
+        // Verificar si hay transacciones de almac?n pendientes por asentar contablemente
+        // causadas por ?rdenes de compra de materiales
         long countPendientes = transaccionAlmacenHeaderRepo.countByEstadoContableAndTipoEntidadCausante(
             TransaccionAlmacen.EstadoContable.PENDIENTE,
             TransaccionAlmacen.TipoEntidadCausante.OCM
@@ -405,7 +404,7 @@ public class NotificacionesModulosService {
 
         if (countPendientes > 0) {
             notification.setRequireAtention(true);
-            notification.setMessage("Hay " + countPendientes + " transacciones de almacén pendientes por asentar contablemente");
+            notification.setMessage("Hay " + countPendientes + " transacciones de almac?n pendientes por asentar contablemente");
         } else {
             notification.setRequireAtention(false);
             notification.setMessage("");

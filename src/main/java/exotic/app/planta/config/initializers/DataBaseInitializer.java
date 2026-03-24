@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Configuration;
 public class DataBaseInitializer {
 
     private final UsersInitializer usersInitializer;
-    private final CargaMasiva cargaMasiva;
     private final CuentasInitializer cuentasInitializer;
     private final MasterDirectiveInitializer masterDirectiveInitializer;
     private final SuperMasterConfigInitializer superMasterConfigInitializer;

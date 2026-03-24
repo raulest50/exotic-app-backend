@@ -64,6 +64,8 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
      */
     boolean existsByEstado(int estado);
 
+    long countByEstado(int estado);
+
     /**
      * Calcula el porcentaje de materiales recibidos para múltiples órdenes de compra en batch.
      * 
