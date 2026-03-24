@@ -20,4 +20,7 @@ public class ModuleNotificationDTA {
     /** Cantidad de órdenes de compra en estado pendiente envío al proveedor (solo módulo COMPRAS). */
     private Long ordenesPendientesEnviar;
 
+    /** Cantidad de materiales en o bajo punto de reorden (solo módulo STOCK). */
+    private Long materialesEnPuntoReorden;
+
 }

@@ -22,6 +22,7 @@ public class NotificacionesModulosService {
     private final OrdenCompraRepo ordenCompraRepo;
     private final UserRepository userRepository;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
+    private final PuntoReordenEvaluacionService puntoReordenEvaluacionService;
 
     /**
      * Verifica las notificaciones para todos los m?dulos a los que tiene acceso un usuario
@@ -164,8 +165,20 @@ public class NotificacionesModulosService {
     public ModuleNotificationDTA checkNotificacionesStock(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
         notification.setModulo(Modulo.STOCK);
-        notification.setRequireAtention(false);
-        notification.setMessage("");
+
+        long count = puntoReordenEvaluacionService.evaluar().enReorden().size();
+        notification.setMaterialesEnPuntoReorden(count);
+
+        if (count > 0) {
+            notification.setRequireAtention(true);
+            notification.setMessage(count == 1
+                    ? "Hay 1 material en o bajo punto de reorden"
+                    : "Hay " + count + " materiales en o bajo punto de reorden");
+        } else {
+            notification.setRequireAtention(false);
+            notification.setMessage("");
+        }
+
         return notification;
     }
 
@@ -203,11 +216,11 @@ public class NotificacionesModulosService {
             notification.setRequireAtention(true);
 
             if (existsOrdenPendienteLiberar && existsOrdenPendienteEnviar) {
-                notification.setMessage("Hay órdenes de compra pendientes por liberar y por enviar al proveedor");
+                notification.setMessage("Hay ?rdenes de compra pendientes por liberar y por enviar al proveedor");
             } else if (existsOrdenPendienteLiberar) {
-                notification.setMessage("Hay órdenes de compra pendientes por liberar");
+                notification.setMessage("Hay ?rdenes de compra pendientes por liberar");
             } else {
-                notification.setMessage("Hay órdenes de compra pendientes por enviar al proveedor");
+                notification.setMessage("Hay ?rdenes de compra pendientes por enviar al proveedor");
             }
         } else {
             notification.setRequireAtention(false);

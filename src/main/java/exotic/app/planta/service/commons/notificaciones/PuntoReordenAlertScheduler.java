@@ -1,9 +1,10 @@
 package exotic.app.planta.service.commons.notificaciones;
 
+import exotic.app.planta.model.commons.notificaciones.MaterialStockRow;
+import exotic.app.planta.model.commons.notificaciones.PuntoReordenEvaluacionResult;
 import exotic.app.planta.model.notificaciones.MaestraNotificacion;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.users.User;
-import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.notificaciones.MaestraNotificacionRepo;
 import exotic.app.planta.service.commons.EmailService;
 import jakarta.mail.MessagingException;
@@ -15,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,10 +29,9 @@ import java.util.Objects;
 public class PuntoReordenAlertScheduler {
 
     private static final int NOTIFICACION_ID = 1;
-    private static final double PUNTO_REORDEN_IGNORAR = -1.0;
     private static final ZoneId BOGOTA = ZoneId.of("America/Bogota");
 
-    private final TransaccionAlmacenRepo transaccionAlmacenRepo;
+    private final PuntoReordenEvaluacionService puntoReordenEvaluacionService;
     private final MaestraNotificacionRepo maestraNotificacionRepo;
     private final EmailService emailService;
 
@@ -56,23 +55,9 @@ public class PuntoReordenAlertScheduler {
             return;
         }
 
-        List<MaterialStockRow> rows = mapMaterialsWithStock(transaccionAlmacenRepo.findAllMaterialsWithStock());
-        List<MaterialStockRow> enReorden = new ArrayList<>();
-        List<MaterialStockRow> sinPunto = new ArrayList<>();
-
-        for (MaterialStockRow row : rows) {
-            double pr = row.material().getPuntoReorden();
-            if (pr == PUNTO_REORDEN_IGNORAR) {
-                continue;
-            }
-            if (pr == 0.0) {
-                sinPunto.add(row);
-                continue;
-            }
-            if (pr > 0 && row.stock() <= pr) {
-                enReorden.add(row);
-            }
-        }
+        PuntoReordenEvaluacionResult eval = puntoReordenEvaluacionService.evaluar();
+        List<MaterialStockRow> enReorden = eval.enReorden();
+        List<MaterialStockRow> sinPunto = eval.sinPunto();
 
         if (enReorden.isEmpty()) {
             log.info("PuntoReordenAlert: no hay materiales en o bajo punto de reorden; no se envía correo.");
@@ -94,16 +79,6 @@ public class PuntoReordenAlertScheduler {
                 destinatarios.size(), enReorden.size());
     }
 
-    private static List<MaterialStockRow> mapMaterialsWithStock(List<Object[]> raw) {
-        List<MaterialStockRow> out = new ArrayList<>(raw.size());
-        for (Object[] row : raw) {
-            Material m = (Material) row[0];
-            double stock = row[1] instanceof Number n ? n.doubleValue() : 0.0;
-            out.add(new MaterialStockRow(m, stock));
-        }
-        return out;
-    }
-
     private static String buildHtmlBody(List<MaterialStockRow> enReorden, List<MaterialStockRow> sinPunto) {
         StringBuilder sb = new StringBuilder(2048);
         sb.append("<html><body>");
@@ -116,7 +91,7 @@ public class PuntoReordenAlertScheduler {
             String unidad = m.getTipoUnidades() != null ? m.getTipoUnidades() : "";
             sb.append("<tr><td>").append(escapeHtml(m.getProductoId())).append("</td><td>")
                     .append(escapeHtml(m.getNombre())).append("</td><td>")
-                    .append(escapeHtml(tipoMaterialLabel(m.getTipoMaterial()))).append("</td><td>")
+                    .append(escapeHtml(PuntoReordenEvaluacionService.tipoMaterialLabel(m.getTipoMaterial()))).append("</td><td>")
                     .append(formatQty(r.stock())).append(" ").append(escapeHtml(unidad)).append("</td><td>")
                     .append(formatQty(m.getPuntoReorden())).append(" ").append(escapeHtml(unidad))
                     .append("</td></tr>");
@@ -138,14 +113,6 @@ public class PuntoReordenAlertScheduler {
         return sb.toString();
     }
 
-    private static String tipoMaterialLabel(int tipoMaterial) {
-        return switch (tipoMaterial) {
-            case 1 -> "Materia prima";
-            case 2 -> "Material de empaque";
-            default -> "Otro";
-        };
-    }
-
     private static String formatQty(double v) {
         if (Double.isNaN(v) || Double.isInfinite(v)) {
             return "0";
@@ -165,6 +132,4 @@ public class PuntoReordenAlertScheduler {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;");
     }
-
-    private record MaterialStockRow(Material material, double stock) {}
 }
