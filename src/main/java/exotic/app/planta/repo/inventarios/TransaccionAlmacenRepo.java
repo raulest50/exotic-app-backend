@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Integer> {
@@ -168,4 +169,25 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     List<Object[]> findMaterialesWithStockByBatchNumberAndAlmacen(
             @Param("batchNumber") String batchNumber,
             @Param("almacen") Movimiento.Almacen almacen);
+
+    /**
+     * Movimientos de ingreso de {@link Material} en un rango de fechas (típicamente un día).
+     * Incluye COMPRA, AJUSTE_POSITIVO y la pierna positiva de TRANSFERENCIA ({@code cantidad > 0}).
+     */
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE TYPE(m.producto) = Material
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND m.cantidad > 0
+              AND m.tipoMovimiento IN :tiposEntrada
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findIngresosMaterialPorDia(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tiposEntrada") Collection<Movimiento.TipoMovimiento> tiposEntrada);
 }
