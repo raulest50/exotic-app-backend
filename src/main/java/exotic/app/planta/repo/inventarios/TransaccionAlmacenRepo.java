@@ -2,6 +2,7 @@ package exotic.app.planta.repo.inventarios;
 
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.Material;
+import exotic.app.planta.model.producto.Terminado;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -190,4 +191,45 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             @Param("tiposEntrada") Collection<Movimiento.TipoMovimiento> tiposEntrada);
+
+    /**
+     * Dispensaciones de {@link Material} en un rango (típicamente un día): salidas con cantidad negativa.
+     */
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE TYPE(m.producto) = Material
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoDispensacion
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findDispensacionesMaterialPorDia(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoDispensacion") Movimiento.TipoMovimiento tipoDispensacion);
+
+    /**
+     * Ingresos de {@link Terminado} por backflush en un rango (típicamente un día).
+     * Ampliación futura posible: AJUSTE_POSITIVO / TRANSFERENCIA positiva sobre Terminado.
+     */
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE TYPE(m.producto) = Terminado
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND m.cantidad > 0
+              AND m.tipoMovimiento = :tipoBackflush
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findIngresosTerminadoPorDia(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoBackflush") Movimiento.TipoMovimiento tipoBackflush);
 }

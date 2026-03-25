@@ -37,4 +37,28 @@ public class InformesDiariosResource {
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(excel);
     }
+
+    @GetMapping("/almacen/dispensacion-materiales/excel")
+    public ResponseEntity<byte[]> exportarDispensacionMaterialesExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        byte[] excel = informesDiariosService.exportarDispensacionMaterialesExcel(fecha);
+        String filename = "informe_dispensacion_materiales_" + fecha + ".xlsx";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
+
+    @GetMapping("/almacen/ingreso-terminados/excel")
+    public ResponseEntity<byte[]> exportarIngresoTerminadosExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(fecha);
+        String filename = "informe_ingreso_terminados_" + fecha + ".xlsx";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
 }

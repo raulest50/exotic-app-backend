@@ -30,7 +30,8 @@ public class InformesDiariosService {
             Movimiento.TipoMovimiento.TRANSFERENCIA
     );
 
-    private static final String[] HEADERS_INGRESO_MATERIALES = {
+    /** Columnas comunes para informes de movimientos de almacén (materiales o terminados). */
+    private static final String[] HEADERS_MOVIMIENTO_ALMACEN = {
             "Fecha movimiento",
             "ID producto",
             "Nombre",
@@ -57,70 +58,98 @@ public class InformesDiariosService {
     public byte[] exportarIngresoMaterialesExcel(LocalDate fecha) {
         LocalDateTime start = fecha.atStartOfDay();
         LocalDateTime end = fecha.atTime(LocalTime.MAX);
-
         List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosMaterialPorDia(
                 start, end, TIPOS_INGRESO_MATERIAL);
+        return generarExcelMovimientosAlmacen(movimientos, "Ingreso materiales", "ingreso materiales");
+    }
 
+    /**
+     * Excel con dispensaciones de materiales (OD / OD_RA) en el día indicado.
+     */
+    public byte[] exportarDispensacionMaterialesExcel(LocalDate fecha) {
+        LocalDateTime start = fecha.atStartOfDay();
+        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        List<Movimiento> movimientos = transaccionAlmacenRepo.findDispensacionesMaterialPorDia(
+                start, end, Movimiento.TipoMovimiento.DISPENSACION);
+        return generarExcelMovimientosAlmacen(movimientos, "Dispensación materiales", "dispensación materiales");
+    }
+
+    /**
+     * Excel con ingresos de producto terminado (BACKFLUSH, típicamente cierre de OP) en el día indicado.
+     */
+    public byte[] exportarIngresoTerminadosExcel(LocalDate fecha) {
+        LocalDateTime start = fecha.atStartOfDay();
+        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
+                start, end, Movimiento.TipoMovimiento.BACKFLUSH);
+        return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado");
+    }
+
+    private byte[] generarExcelMovimientosAlmacen(
+            List<Movimiento> movimientos, String nombreHoja, String contextoLog) {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("Ingreso materiales");
+            Sheet sheet = workbook.createSheet(nombreHoja);
             Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < HEADERS_INGRESO_MATERIALES.length; i++) {
-                headerRow.createCell(i).setCellValue(HEADERS_INGRESO_MATERIALES[i]);
+            for (int i = 0; i < HEADERS_MOVIMIENTO_ALMACEN.length; i++) {
+                headerRow.createCell(i).setCellValue(HEADERS_MOVIMIENTO_ALMACEN[i]);
             }
 
             int rowIdx = 1;
             for (Movimiento mov : movimientos) {
-                Row row = sheet.createRow(rowIdx++);
-                int c = 0;
-                row.createCell(c++).setCellValue(
-                        mov.getFechaMovimiento() != null ? mov.getFechaMovimiento().toString() : "");
-                row.createCell(c++).setCellValue(
-                        mov.getProducto() != null && mov.getProducto().getProductoId() != null
-                                ? mov.getProducto().getProductoId() : "");
-                row.createCell(c++).setCellValue(
-                        mov.getProducto() != null && mov.getProducto().getNombre() != null
-                                ? mov.getProducto().getNombre() : "");
-                row.createCell(c++).setCellValue(mov.getCantidad());
-                row.createCell(c++).setCellValue(
-                        mov.getProducto() != null && mov.getProducto().getTipoUnidades() != null
-                                ? mov.getProducto().getTipoUnidades() : "");
-                row.createCell(c++).setCellValue(
-                        mov.getTipoMovimiento() != null ? mov.getTipoMovimiento().name() : "");
-                row.createCell(c++).setCellValue(
-                        mov.getAlmacen() != null ? mov.getAlmacen().name() : "");
-
-                TransaccionAlmacen tx = mov.getTransaccionAlmacen();
-                if (tx != null) {
-                    row.createCell(c++).setCellValue(tx.getTransaccionId());
-                    row.createCell(c++).setCellValue(
-                            tx.getTipoEntidadCausante() != null ? tx.getTipoEntidadCausante().name() : "");
-                    row.createCell(c++).setCellValue(tx.getIdEntidadCausante());
-                    row.createCell(c++).setCellValue(
-                            tx.getObservaciones() != null ? tx.getObservaciones() : "");
-                } else {
-                    row.createCell(c++).setCellValue("");
-                    row.createCell(c++).setCellValue("");
-                    row.createCell(c++).setCellValue("");
-                    row.createCell(c++).setCellValue("");
-                }
-
-                if (mov.getLote() != null && mov.getLote().getBatchNumber() != null) {
-                    row.createCell(c).setCellValue(mov.getLote().getBatchNumber());
-                } else {
-                    row.createCell(c).setCellValue("");
-                }
+                escribirFilaMovimiento(mov, sheet.createRow(rowIdx++));
             }
 
-            for (int i = 0; i < HEADERS_INGRESO_MATERIALES.length; i++) {
+            for (int i = 0; i < HEADERS_MOVIMIENTO_ALMACEN.length; i++) {
                 sheet.autoSizeColumn(i);
             }
 
             workbook.write(out);
             return out.toByteArray();
         } catch (IOException e) {
-            log.error("Error generando Excel ingreso materiales", e);
-            throw new RuntimeException("Error generando Excel ingreso materiales", e);
+            log.error("Error generando Excel {}", contextoLog, e);
+            throw new RuntimeException("Error generando Excel " + contextoLog, e);
+        }
+    }
+
+    private static void escribirFilaMovimiento(Movimiento mov, Row row) {
+        int c = 0;
+        row.createCell(c++).setCellValue(
+                mov.getFechaMovimiento() != null ? mov.getFechaMovimiento().toString() : "");
+        row.createCell(c++).setCellValue(
+                mov.getProducto() != null && mov.getProducto().getProductoId() != null
+                        ? mov.getProducto().getProductoId() : "");
+        row.createCell(c++).setCellValue(
+                mov.getProducto() != null && mov.getProducto().getNombre() != null
+                        ? mov.getProducto().getNombre() : "");
+        row.createCell(c++).setCellValue(mov.getCantidad());
+        row.createCell(c++).setCellValue(
+                mov.getProducto() != null && mov.getProducto().getTipoUnidades() != null
+                        ? mov.getProducto().getTipoUnidades() : "");
+        row.createCell(c++).setCellValue(
+                mov.getTipoMovimiento() != null ? mov.getTipoMovimiento().name() : "");
+        row.createCell(c++).setCellValue(
+                mov.getAlmacen() != null ? mov.getAlmacen().name() : "");
+
+        TransaccionAlmacen tx = mov.getTransaccionAlmacen();
+        if (tx != null) {
+            row.createCell(c++).setCellValue(tx.getTransaccionId());
+            row.createCell(c++).setCellValue(
+                    tx.getTipoEntidadCausante() != null ? tx.getTipoEntidadCausante().name() : "");
+            row.createCell(c++).setCellValue(tx.getIdEntidadCausante());
+            row.createCell(c++).setCellValue(
+                    tx.getObservaciones() != null ? tx.getObservaciones() : "");
+        } else {
+            row.createCell(c++).setCellValue("");
+            row.createCell(c++).setCellValue("");
+            row.createCell(c++).setCellValue("");
+            row.createCell(c++).setCellValue("");
+        }
+
+        if (mov.getLote() != null && mov.getLote().getBatchNumber() != null) {
+            row.createCell(c).setCellValue(mov.getLote().getBatchNumber());
+        } else {
+            row.createCell(c).setCellValue("");
         }
     }
 }
