@@ -1,8 +1,8 @@
 package exotic.app.planta.service.rehumanos;
 
 import org.springframework.transaction.annotation.Transactional;
-import exotic.app.planta.model.personal.DocTranDePersonal;
-import exotic.app.planta.model.personal.IntegrantePersonal;
+import exotic.app.planta.model.organizacion.personal.DocTranDePersonal;
+import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import exotic.app.planta.repo.personal.IntegrantePersonalRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

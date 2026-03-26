@@ -2,7 +2,7 @@ package exotic.app.planta.model.inventarios;
 
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
@@ -81,8 +81,8 @@ public class Movimiento {
      * se reporta la averia.
      */
     @ManyToOne
-    @JoinColumn(name = "area_produccion_id")
-    private AreaProduccion areaProduccion;
+    @JoinColumn(name = "area_operativa_id")
+    private AreaOperativa areaOperativa;
 
     @CreationTimestamp
     private LocalDateTime fechaMovimiento;

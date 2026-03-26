@@ -7,7 +7,7 @@ import exotic.app.planta.model.activos.fijos.compras.ItemOrdenCompraActivo;
 import exotic.app.planta.model.activos.fijos.compras.OrdenCompraActivo;
 import exotic.app.planta.model.activos.fijos.gestion.IncorporacionActivoHeader;
 import exotic.app.planta.model.activos.fijos.gestion.IncorporacionActivoLine;
-import exotic.app.planta.model.personal.IntegrantePersonal;
+import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import exotic.app.planta.repo.activos.fijos.ActivoFijoRepo;
 import exotic.app.planta.repo.activos.fijos.compras.FacturaCompraActivoRepo;
 import exotic.app.planta.repo.activos.fijos.gestion.IncorporacionActivoHeaderRepo;

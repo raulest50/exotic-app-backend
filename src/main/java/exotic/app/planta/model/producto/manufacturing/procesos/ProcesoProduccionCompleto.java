@@ -2,6 +2,7 @@ package exotic.app.planta.model.producto.manufacturing.procesos;
 
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import jakarta.persistence.*;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
@@ -35,8 +36,8 @@ public class ProcesoProduccionCompleto {
     private double rendimientoTeorico;
 
     @ManyToOne
-    @JoinColumn(name = "area_produccion_id")
-    private AreaProduccion areaProduccion;
+    @JoinColumn(name = "area_operativa_id")
+    private AreaOperativa areaOperativa;
 
     @Lob
     private String diagramaJson;

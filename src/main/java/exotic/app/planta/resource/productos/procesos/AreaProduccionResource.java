@@ -5,7 +5,7 @@ import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.ErrorResponse;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
-import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.service.productos.procesos.AreaProduccionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,7 @@ public class AreaProduccionResource {
         log.info("REST request para crear una nueva área de producción: {}", areaProduccionDTO.getNombre());
 
         try {
-            AreaProduccion result = areaProduccionService.createAreaProduccionFromDTO(areaProduccionDTO);
+            AreaOperativa result = areaProduccionService.createAreaProduccionFromDTO(areaProduccionDTO);
             return ResponseEntity
                     .created(URI.create("/api/areas-produccion/" + result.getAreaId()))
                     .body(result);
@@ -61,7 +61,7 @@ public class AreaProduccionResource {
         log.info("REST request para actualizar área de producción con ID: {}", areaId);
 
         try {
-            AreaProduccion result = areaProduccionService.updateAreaProduccion(areaId, dto);
+            AreaOperativa result = areaProduccionService.updateAreaProduccion(areaId, dto);
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             log.error("Error al actualizar área de producción: {}", e.getMessage());
@@ -77,7 +77,7 @@ public class AreaProduccionResource {
     }
 
     @PostMapping("/search")
-    public ResponseEntity<Page<AreaProduccion>> searchAreas(
+    public ResponseEntity<Page<AreaOperativa>> searchAreas(
             @RequestBody SearchAreaOperativaDTO searchDTO,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -86,7 +86,7 @@ public class AreaProduccionResource {
 
         try {
             PageRequest pageable = PageRequest.of(page, size);
-            Page<AreaProduccion> result = areaProduccionService.searchAreas(searchDTO, pageable);
+            Page<AreaOperativa> result = areaProduccionService.searchAreas(searchDTO, pageable);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error al buscar áreas operativas", e);
@@ -103,7 +103,7 @@ public class AreaProduccionResource {
      * @return ResponseEntity con la lista de áreas que coinciden con el criterio
      */
     @PostMapping("/search_by_name")
-    public ResponseEntity<List<AreaProduccion>> searchAreasByName(
+    public ResponseEntity<List<AreaOperativa>> searchAreasByName(
             @RequestBody SearchAreaProduccionDTO searchDTO,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -115,7 +115,7 @@ public class AreaProduccionResource {
             PageRequest pageable = PageRequest.of(page, size);
 
             // Realizar la búsqueda
-            List<AreaProduccion> areas = areaProduccionService.searchAreasByName(searchDTO, pageable);
+            List<AreaOperativa> areas = areaProduccionService.searchAreasByName(searchDTO, pageable);
 
             return ResponseEntity.ok(areas);
         } catch (Exception e) {

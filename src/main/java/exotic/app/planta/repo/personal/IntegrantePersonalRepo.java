@@ -1,6 +1,6 @@
 package exotic.app.planta.repo.personal;
 
-import exotic.app.planta.model.personal.IntegrantePersonal;
+import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

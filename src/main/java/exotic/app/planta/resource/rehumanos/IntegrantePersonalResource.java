@@ -1,6 +1,6 @@
 package exotic.app.planta.resource.rehumanos;
 
-import exotic.app.planta.model.personal.IntegrantePersonal;
+import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import exotic.app.planta.service.rehumanos.IntegrantePersonalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

@@ -3,7 +3,7 @@ package exotic.app.planta.service.productos.procesos;
 import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
-import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
@@ -33,7 +33,7 @@ public class AreaProduccionService {
      * @return El área de producción guardada
      */
     @Transactional
-    public AreaProduccion saveAreaProduccion(AreaProduccion areaProduccion) {
+    public AreaOperativa saveAreaProduccion(AreaOperativa areaProduccion) {
         log.info("Guardando área de producción: {}", areaProduccion.getNombre());
         return areaProduccionRepo.save(areaProduccion);
     }
@@ -45,7 +45,7 @@ public class AreaProduccionService {
      * @return Página de áreas de producción
      */
     @Transactional(readOnly = true)
-    public Page<AreaProduccion> getAreasProduccionPaginadas(Pageable pageable) {
+    public Page<AreaOperativa> getAreasProduccionPaginadas(Pageable pageable) {
         log.info("Obteniendo áreas de producción paginadas");
         return areaProduccionRepo.findAll(pageable);
     }
@@ -57,7 +57,7 @@ public class AreaProduccionService {
      * @return Optional con el área de producción si existe
      */
     @Transactional(readOnly = true)
-    public Optional<AreaProduccion> getAreaProduccionById(Integer id) {
+    public Optional<AreaOperativa> getAreaProduccionById(Integer id) {
         log.info("Buscando área de producción con ID: {}", id);
         return areaProduccionRepo.findById(id);
     }
@@ -70,7 +70,7 @@ public class AreaProduccionService {
      * @throws IllegalArgumentException si no se encuentra el usuario responsable o si ya existe un área con el mismo nombre
      */
     @Transactional
-    public AreaProduccion createAreaProduccionFromDTO(AreaProduccionDTO dto) {
+    public AreaOperativa createAreaProduccionFromDTO(AreaProduccionDTO dto) {
         log.info("Creando área de producción desde DTO: {}", dto.getNombre());
 
         // Verificar si ya existe un área con el mismo nombre
@@ -83,7 +83,7 @@ public class AreaProduccionService {
             .orElseThrow(() -> new IllegalArgumentException("Usuario responsable no encontrado con ID: " + dto.getResponsableId()));
 
         // Crear y guardar el área
-        AreaProduccion area = new AreaProduccion();
+        AreaOperativa area = new AreaOperativa();
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
         area.setResponsableArea(responsable);
@@ -99,7 +99,7 @@ public class AreaProduccionService {
      * @return Lista de áreas de producción que coinciden con el criterio
      */
     @Transactional(readOnly = true)
-    public List<AreaProduccion> searchAreasByName(SearchAreaProduccionDTO searchDTO, Pageable pageable) {
+    public List<AreaOperativa> searchAreasByName(SearchAreaProduccionDTO searchDTO, Pageable pageable) {
         log.info("Buscando áreas de producción por nombre: {}", searchDTO.getNombre());
 
         // Si el nombre está vacío, devolver todas las áreas paginadas
@@ -108,7 +108,7 @@ public class AreaProduccionService {
         }
 
         // Crear especificación para buscar por coincidencia parcial del nombre
-        Specification<AreaProduccion> spec = (root, query, cb) -> 
+        Specification<AreaOperativa> spec = (root, query, cb) ->
             cb.like(cb.lower(root.get("nombre")), "%" + searchDTO.getNombre().toLowerCase() + "%");
 
         // Ejecutar la búsqueda con la especificación y paginación
@@ -116,10 +116,10 @@ public class AreaProduccionService {
     }
 
     @Transactional
-    public AreaProduccion updateAreaProduccion(Integer areaId, AreaProduccionDTO dto) {
+    public AreaOperativa updateAreaProduccion(Integer areaId, AreaProduccionDTO dto) {
         log.info("Actualizando área de producción con ID: {}", areaId);
 
-        AreaProduccion area = areaProduccionRepo.findById(areaId)
+        AreaOperativa area = areaProduccionRepo.findById(areaId)
             .orElseThrow(() -> new IllegalArgumentException("Área no encontrada con ID: " + areaId));
 
         if (!area.getNombre().equals(dto.getNombre())) {
@@ -143,7 +143,7 @@ public class AreaProduccionService {
      * Retorna Page para conservar metadata de paginación.
      */
     @Transactional(readOnly = true)
-    public Page<AreaProduccion> searchAreas(SearchAreaOperativaDTO searchDTO, Pageable pageable) {
+    public Page<AreaOperativa> searchAreas(SearchAreaOperativaDTO searchDTO, Pageable pageable) {
         log.info("Buscando áreas operativas - tipo: {}", searchDTO.getSearchType());
 
         String searchType = searchDTO.getSearchType();
@@ -156,7 +156,7 @@ public class AreaProduccionService {
                 if (searchDTO.getNombre() == null || searchDTO.getNombre().trim().isEmpty()) {
                     return areaProduccionRepo.findAll(pageable);
                 }
-                Specification<AreaProduccion> spec = (root, query, cb) ->
+                Specification<AreaOperativa> spec = (root, query, cb) ->
                         cb.like(cb.lower(root.get("nombre")),
                                 "%" + searchDTO.getNombre().toLowerCase() + "%");
                 return areaProduccionRepo.findAll(spec, pageable);
@@ -165,7 +165,7 @@ public class AreaProduccionService {
                 if (searchDTO.getResponsableId() == null) {
                     return areaProduccionRepo.findAll(pageable);
                 }
-                Specification<AreaProduccion> spec = (root, query, cb) ->
+                Specification<AreaOperativa> spec = (root, query, cb) ->
                         cb.equal(root.get("responsableArea").get("id"), searchDTO.getResponsableId());
                 return areaProduccionRepo.findAll(spec, pageable);
             }
@@ -173,7 +173,7 @@ public class AreaProduccionService {
                 if (searchDTO.getAreaId() == null) {
                     return areaProduccionRepo.findAll(pageable);
                 }
-                Specification<AreaProduccion> spec = (root, query, cb) ->
+                Specification<AreaOperativa> spec = (root, query, cb) ->
                         cb.equal(root.get("areaId"), searchDTO.getAreaId());
                 return areaProduccionRepo.findAll(spec, pageable);
             }

@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import exotic.app.planta.model.personal.IntegrantePersonal;
+import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import exotic.app.planta.model.contabilidad.AsientoContable;
 import org.hibernate.annotations.CreationTimestamp;
 

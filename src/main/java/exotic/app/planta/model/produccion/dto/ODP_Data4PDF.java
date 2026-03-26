@@ -3,7 +3,7 @@ package exotic.app.planta.model.produccion.dto;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
-import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -20,5 +20,5 @@ public class ODP_Data4PDF {
     private List<Material> materials;
     private List<SemiTerminado> semiterminados;
 
-    private List<AreaProduccion> areasProduccion;
+    private List<AreaOperativa> areasProduccion;
 }

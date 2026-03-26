@@ -46,6 +46,7 @@ public class OrdenProduccion {
      * 12: SEGUNDA_DISPENSACION - Se realizó la segunda dispensación de materiales
      * 13: TERCERA_DISPENSACION - Se realizó la tercera dispensación de materiales
      * ... (continuar según necesidad: 14, 15, etc.)
+     * 3: FABRICACION_COMPLETADA - Producto fabricado, pendiente de ingreso a almacén
      * 2: TERMINADA - Orden finalizada exitosamente (se devolvió mercancía a almacén)
      * -1: CANCELADA - Orden cancelada
      */

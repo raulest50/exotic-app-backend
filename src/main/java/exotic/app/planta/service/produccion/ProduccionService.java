@@ -12,7 +12,7 @@ import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
-import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.produccion.OrdenProduccion;
@@ -40,7 +40,6 @@ import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.*;
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -439,14 +438,14 @@ public class ProduccionService {
      * @param terminado El producto terminado
      * @return Lista ordenada de áreas de producción
      */
-    private List<AreaProduccion> getAreasProduccionOrdenadas(Terminado terminado) {
-        List<AreaProduccion> areasProduccion = new ArrayList<>();
-        AreaProduccion areaTerminado = null;
+    private List<AreaOperativa> getAreasProduccionOrdenadas(Terminado terminado) {
+        List<AreaOperativa> areasProduccion = new ArrayList<>();
+        AreaOperativa areaTerminado = null;
 
         // Obtener el área de producción del terminado
-        if (terminado.getProcesoProduccionCompleto() != null && 
-            terminado.getProcesoProduccionCompleto().getAreaProduccion() != null) {
-            areaTerminado = terminado.getProcesoProduccionCompleto().getAreaProduccion();
+        if (terminado.getProcesoProduccionCompleto() != null &&
+            terminado.getProcesoProduccionCompleto().getAreaOperativa() != null) {
+            areaTerminado = terminado.getProcesoProduccionCompleto().getAreaOperativa();
         }
 
         // Recolectar áreas de producción de los semiterminados
@@ -455,10 +454,10 @@ public class ProduccionService {
             if (producto instanceof SemiTerminado) {
                 SemiTerminado semiterminado = (SemiTerminado) producto;
 
-                if (semiterminado.getProcesoProduccionCompleto() != null && 
-                    semiterminado.getProcesoProduccionCompleto().getAreaProduccion() != null) {
+                if (semiterminado.getProcesoProduccionCompleto() != null &&
+                    semiterminado.getProcesoProduccionCompleto().getAreaOperativa() != null) {
 
-                    AreaProduccion areaSemiterminado = semiterminado.getProcesoProduccionCompleto().getAreaProduccion();
+                    AreaOperativa areaSemiterminado = semiterminado.getProcesoProduccionCompleto().getAreaOperativa();
 
                     // Evitar duplicados
                     if (!areasProduccion.contains(areaSemiterminado) && 

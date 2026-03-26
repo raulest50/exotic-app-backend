@@ -1,6 +1,6 @@
 package exotic.app.planta.repo.personal;
 
-import exotic.app.planta.model.personal.DocTranDePersonal;
+import exotic.app.planta.model.organizacion.personal.DocTranDePersonal;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**

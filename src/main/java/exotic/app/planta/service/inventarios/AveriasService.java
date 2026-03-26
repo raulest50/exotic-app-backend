@@ -14,7 +14,7 @@ import exotic.app.planta.model.inventarios.dto.ReporteAveriaItemDTO;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.producto.Producto;
-import exotic.app.planta.model.producto.manufacturing.procesos.AreaProduccion;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
@@ -195,7 +195,7 @@ public class AveriasService {
 
     @Transactional
     public TransaccionAlmacen crearReporteAveria(ReporteAveriaDTO dto) {
-        AreaProduccion area = areaProduccionRepo.findById(dto.getAreaProduccionId())
+        AreaOperativa area = areaProduccionRepo.findById(dto.getAreaProduccionId())
                 .orElseThrow(() -> new RuntimeException("Área de producción no encontrada con ID: " + dto.getAreaProduccionId()));
 
         TransaccionAlmacen transaccion = new TransaccionAlmacen();
@@ -226,7 +226,7 @@ public class AveriasService {
             movimiento.setLote(lote);
             movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.AVERIA);
             movimiento.setAlmacen(Movimiento.Almacen.AVERIAS);
-            movimiento.setAreaProduccion(area);
+            movimiento.setAreaOperativa(area);
             movimiento.setTransaccionAlmacen(transaccion);
             movimientos.add(movimiento);
         }

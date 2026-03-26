@@ -1,4 +1,4 @@
-package exotic.app.planta.model.personal;
+package exotic.app.planta.model.organizacion.personal;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
