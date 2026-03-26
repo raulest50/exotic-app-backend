@@ -19,6 +19,10 @@ public class RutaProcesoNode {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne
+    @JoinColumn(name = "ruta_proceso_cat_id")
+    private RutaProcesoCat rutaProcesoCat;
+
     @Column(name = "frontend_id")
     private String frontendId;
 
@@ -33,4 +37,10 @@ public class RutaProcesoNode {
     private AreaOperativa areaOperativa;
 
     private String label;
+
+    @Column(name = "has_left_handle")
+    private boolean hasLeftHandle = true;
+
+    @Column(name = "has_right_handle")
+    private boolean hasRightHandle = true;
 }

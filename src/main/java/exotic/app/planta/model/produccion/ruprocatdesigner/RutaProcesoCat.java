@@ -27,12 +27,10 @@ public class RutaProcesoCat {
     @JoinColumn(name = "categoria_id", unique = true)
     private Categoria categoria;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "ruta_proceso_cat_id")
+    @OneToMany(mappedBy = "rutaProcesoCat", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RutaProcesoNode> nodes = new ArrayList<>();
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "ruta_proceso_cat_id")
+    @OneToMany(mappedBy = "rutaProcesoCat", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RutaProcesoEdge> edges = new ArrayList<>();
 
     private LocalDateTime fechaCreacion;

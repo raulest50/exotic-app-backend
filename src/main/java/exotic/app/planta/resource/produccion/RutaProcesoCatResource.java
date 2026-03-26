@@ -26,12 +26,10 @@ public class RutaProcesoCatResource {
         return ResponseEntity.ok(ruta);
     }
 
-    @PostMapping("/{categoriaId}")
-    public ResponseEntity<RutaProcesoCatDTO> saveRuta(
-            @PathVariable int categoriaId,
-            @RequestBody RutaProcesoCatDTO dto) {
-        RutaProcesoCatDTO saved = rutaProcesoCatService.saveRuta(categoriaId, dto);
-        return ResponseEntity.created(URI.create("/api/ruta-proceso-cat/" + categoriaId)).body(saved);
+    @PostMapping("/save_ruprocat")
+    public ResponseEntity<RutaProcesoCatDTO> saveRuta(@RequestBody RutaProcesoCatDTO dto) {
+        RutaProcesoCatDTO saved = rutaProcesoCatService.saveRuta(dto.getCategoriaId(), dto);
+        return ResponseEntity.created(URI.create("/api/ruta-proceso-cat/" + dto.getCategoriaId())).body(saved);
     }
 
     @DeleteMapping("/{categoriaId}")

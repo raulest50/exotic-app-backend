@@ -53,10 +53,13 @@ public class RutaProcesoCatService {
         // Create nodes
         for (RutaProcesoNodeDTO nodeDto : dto.getNodes()) {
             RutaProcesoNode node = new RutaProcesoNode();
+            node.setRutaProcesoCat(ruta);  // Set parent reference
             node.setFrontendId(nodeDto.getId());
             node.setPosicionX(nodeDto.getPosicionX());
             node.setPosicionY(nodeDto.getPosicionY());
             node.setLabel(nodeDto.getLabel());
+            node.setHasLeftHandle(nodeDto.isHasLeftHandle());
+            node.setHasRightHandle(nodeDto.isHasRightHandle());
 
             if (nodeDto.getAreaOperativaId() != null) {
                 AreaOperativa area = areaProduccionRepo.findById(nodeDto.getAreaOperativaId())
@@ -90,6 +93,7 @@ public class RutaProcesoCatService {
             }
 
             RutaProcesoEdge edge = new RutaProcesoEdge();
+            edge.setRutaProcesoCat(ruta);  // Set parent reference
             edge.setFrontendId(edgeDto.getId());
             edge.setSourceNode(sourceNode);
             edge.setTargetNode(targetNode);
@@ -137,6 +141,8 @@ public class RutaProcesoCatService {
         dto.setPosicionX(node.getPosicionX());
         dto.setPosicionY(node.getPosicionY());
         dto.setLabel(node.getLabel());
+        dto.setHasLeftHandle(node.isHasLeftHandle());
+        dto.setHasRightHandle(node.isHasRightHandle());
 
         if (node.getAreaOperativa() != null) {
             dto.setAreaOperativaId(node.getAreaOperativa().getAreaId());
@@ -171,6 +177,8 @@ public class RutaProcesoCatService {
         private Integer areaOperativaId;
         private String areaOperativaNombre;
         private String label;
+        private boolean hasLeftHandle = true;
+        private boolean hasRightHandle = true;
     }
 
     @lombok.Data
