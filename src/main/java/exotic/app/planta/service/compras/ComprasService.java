@@ -15,7 +15,8 @@ import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.service.commons.EmailService;
-import exotic.app.planta.model.users.Acceso;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.UserPermissionQueries;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -294,8 +295,7 @@ public class ComprasService {
     public List<String> getEmailsUsuariosProduccionNivel2() {
         return userRepository.findAll().stream()
                 .filter(u -> u.getEmail() != null && !u.getEmail().isEmpty())
-                .filter(u -> u.getAccesos().stream()
-                        .anyMatch(a -> a.getModuloAcceso() == Acceso.Modulo.PRODUCCION && a.getNivel() == 2))
+                .filter(u -> UserPermissionQueries.hasModuloWithTabNivel(u, ModuloSistema.PRODUCCION, 2))
                 .map(User::getEmail)
                 .collect(Collectors.toList());
     }

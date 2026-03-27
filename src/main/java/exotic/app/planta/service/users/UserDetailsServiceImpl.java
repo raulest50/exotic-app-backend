@@ -14,27 +14,20 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Implementation of Spring Security's UserDetailsService
- * Separated from AuthService to avoid circular dependencies
- */
 @Service
 @RequiredArgsConstructor
 public class UserDetailsServiceImpl implements UserDetailsService {
 
     private final UserRepository userRepository;
 
-    /**
-     * Given a username, find the user in the DB, map accesos to GrantedAuthorities
-     */
     @Override
     @Transactional
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User appUser = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        Set<GrantedAuthority> authorities = appUser.getAccesos().stream()
-                .map(acceso -> "ACCESO_" + acceso.getModuloAcceso().name()) // e.g. "ACCESO_USUARIOS"
+        Set<GrantedAuthority> authorities = appUser.getModuloAccesos().stream()
+                .map(ma -> "ACCESO_" + ma.getModulo().name())
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toSet());
 

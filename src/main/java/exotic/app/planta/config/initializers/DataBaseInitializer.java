@@ -1,6 +1,6 @@
 package exotic.app.planta.config.initializers;
 
-import exotic.app.planta.repo.usuarios.AccesoRepository;
+import exotic.app.planta.repo.usuarios.ModuloAccesoRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +17,7 @@ public class DataBaseInitializer {
     private final MasterDirectiveInitializer masterDirectiveInitializer;
     private final SuperMasterConfigInitializer superMasterConfigInitializer;
     private final MaestraNotificacionInitializer maestraNotificacionInitializer;
-    private final AccesoRepository accesoRepository;
+    private final ModuloAccesoRepository moduloAccesoRepository;
 
     private static final Logger log = LoggerFactory.getLogger(DataBaseInitializer.class);
 
@@ -26,7 +26,7 @@ public class DataBaseInitializer {
         return args -> {
             superMasterConfigInitializer.initializeSuperMasterConfig();
             maestraNotificacionInitializer.initializeMaestraNotificaciones();
-            if (accesoRepository.count() == 0) {
+            if (moduloAccesoRepository.count() == 0) {
                 log.info("Database is empty. Performing initial data setup...");
                 usersInitializer.initializeUsers();
                 //cargaMasiva.executeCargaMasiva();

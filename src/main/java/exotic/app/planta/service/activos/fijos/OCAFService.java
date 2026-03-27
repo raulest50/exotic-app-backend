@@ -7,7 +7,8 @@ import exotic.app.planta.model.activos.fijos.compras.OrdenCompraActivo;
 import exotic.app.planta.model.activos.fijos.dto.UpdateEstadoOrdenCompraAFRequest;
 import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
-import exotic.app.planta.model.users.Acceso;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.UserPermissionQueries;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.activos.fijos.ItemOrdenCompraActivoRepo;
 import exotic.app.planta.repo.activos.fijos.OrdenCompraActivoRepo;
@@ -464,8 +465,7 @@ public class OCAFService {
     public List<String> getEmailsUsuariosProduccionNivel2() {
         return userRepository.findAll().stream()
                 .filter(u -> u.getEmail() != null && !u.getEmail().isEmpty())
-                .filter(u -> u.getAccesos().stream()
-                        .anyMatch(a -> a.getModuloAcceso() == Acceso.Modulo.PRODUCCION && a.getNivel() == 2))
+                .filter(u -> UserPermissionQueries.hasModuloWithTabNivel(u, ModuloSistema.PRODUCCION, 2))
                 .map(User::getEmail)
                 .collect(Collectors.toList());
     }

@@ -1,5 +1,6 @@
 package exotic.app.planta.model.users;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -49,6 +50,7 @@ public class User {
 
     @OneToMany(mappedBy = "user", fetch = FetchType.EAGER, cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private Set<Acceso> accesos = new HashSet<>();
+    @JsonManagedReference("userModuloAccesos")
+    private Set<ModuloAcceso> moduloAccesos = new HashSet<>();
 
 }

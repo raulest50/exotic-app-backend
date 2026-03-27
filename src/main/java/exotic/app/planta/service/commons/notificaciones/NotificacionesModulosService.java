@@ -2,8 +2,8 @@ package exotic.app.planta.service.commons.notificaciones;
 
 import exotic.app.planta.model.commons.notificaciones.ModuleNotificationDTA;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
-import exotic.app.planta.model.users.Acceso;
-import exotic.app.planta.model.users.Acceso.Modulo;
+import exotic.app.planta.model.users.ModuloAcceso;
+import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
@@ -38,11 +38,9 @@ public class NotificacionesModulosService {
         if (userOpt.isPresent()) {
             User user = userOpt.get();
 
-            // Recorrer todos los accesos del usuario
-            for (Acceso acceso : user.getAccesos()) {
-                Modulo modulo = acceso.getModuloAcceso();
+            for (ModuloAcceso moduloAcceso : user.getModuloAccesos()) {
+                ModuloSistema modulo = moduloAcceso.getModulo();
 
-                // Llamar al m?todo correspondiente seg?n el m?dulo
                 ModuleNotificationDTA notification = null;
 
                 switch (modulo) {
@@ -106,6 +104,9 @@ public class NotificacionesModulosService {
                     case PAGOS_PROVEEDORES:
                         notification = checkNotificacionesPagosProveedores(user);
                         break;
+                    case VENDEDORES:
+                    default:
+                        break;
                 }
 
                 if (notification != null) {
@@ -125,7 +126,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesUsuarios(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.USUARIOS);
+        notification.setModulo(ModuloSistema.USUARIOS);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -138,7 +139,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesProductos(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.PRODUCTOS);
+        notification.setModulo(ModuloSistema.PRODUCTOS);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -151,7 +152,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesProduccion(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.PRODUCCION);
+        notification.setModulo(ModuloSistema.PRODUCCION);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -164,7 +165,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesStock(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.STOCK);
+        notification.setModulo(ModuloSistema.STOCK);
 
         long count = puntoReordenEvaluacionService.evaluar().enReorden().size();
         notification.setMaterialesEnPuntoReorden(count);
@@ -189,7 +190,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesProveedores(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.PROVEEDORES);
+        notification.setModulo(ModuloSistema.PROVEEDORES);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -202,7 +203,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesCompras(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.COMPRAS);
+        notification.setModulo(ModuloSistema.COMPRAS);
 
         long countLiberar = ordenCompraRepo.countByEstado(0);
         long countEnviar = ordenCompraRepo.countByEstado(1);
@@ -237,7 +238,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesSeguimientoProduccion(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.SEGUIMIENTO_PRODUCCION);
+        notification.setModulo(ModuloSistema.SEGUIMIENTO_PRODUCCION);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -250,7 +251,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesClientes(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.CLIENTES);
+        notification.setModulo(ModuloSistema.CLIENTES);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -263,7 +264,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesVentas(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.VENTAS);
+        notification.setModulo(ModuloSistema.VENTAS);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -276,7 +277,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesTransaccionesAlmacen(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.TRANSACCIONES_ALMACEN);
+        notification.setModulo(ModuloSistema.TRANSACCIONES_ALMACEN);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -289,7 +290,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesActivos(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.ACTIVOS);
+        notification.setModulo(ModuloSistema.ACTIVOS);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -302,7 +303,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesContabilidad(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.CONTABILIDAD);
+        notification.setModulo(ModuloSistema.CONTABILIDAD);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -315,7 +316,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesPersonalPlanta(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.PERSONAL_PLANTA);
+        notification.setModulo(ModuloSistema.PERSONAL_PLANTA);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -328,7 +329,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesBIntelligence(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.BINTELLIGENCE);
+        notification.setModulo(ModuloSistema.BINTELLIGENCE);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -341,7 +342,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesCargaMasiva(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.CARGA_MASIVA);
+        notification.setModulo(ModuloSistema.CARGA_MASIVA);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -354,7 +355,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesAdministracionAlertas(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.ADMINISTRACION_ALERTAS);
+        notification.setModulo(ModuloSistema.ADMINISTRACION_ALERTAS);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -367,7 +368,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesMasterDirectives(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.MASTER_DIRECTIVES);
+        notification.setModulo(ModuloSistema.MASTER_DIRECTIVES);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -380,7 +381,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesCronograma(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.CRONOGRAMA);
+        notification.setModulo(ModuloSistema.CRONOGRAMA);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -393,7 +394,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesOrganigrama(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.ORGANIGRAMA);
+        notification.setModulo(ModuloSistema.ORGANIGRAMA);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;
@@ -406,7 +407,7 @@ public class NotificacionesModulosService {
      */
     public ModuleNotificationDTA checkNotificacionesPagosProveedores(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
-        notification.setModulo(Modulo.PAGOS_PROVEEDORES);
+        notification.setModulo(ModuloSistema.PAGOS_PROVEEDORES);
 
         // Verificar si hay transacciones de almac?n pendientes por asentar contablemente
         // causadas por ?rdenes de compra de materiales

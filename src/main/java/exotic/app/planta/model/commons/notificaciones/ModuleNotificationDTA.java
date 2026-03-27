@@ -1,6 +1,6 @@
 package exotic.app.planta.model.commons.notificaciones;
 
-import exotic.app.planta.model.users.Acceso.Modulo;
+import exotic.app.planta.model.users.ModuloSistema;
 import lombok.Data;
 
 /**
@@ -11,7 +11,7 @@ import lombok.Data;
 @Data
 public class ModuleNotificationDTA {
 
-    private Modulo modulo;
+    private ModuloSistema modulo;
     private boolean requireAtention;
     private String message;
 

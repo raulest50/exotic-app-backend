@@ -3,22 +3,27 @@ package exotic.app.planta.service.users;
 
 import jakarta.transaction.Transactional;
 import exotic.app.planta.config.PasswordConfig;
-import exotic.app.planta.model.users.Acceso;
+import exotic.app.planta.model.users.ModuloAcceso;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.ModuloTabCatalog;
+import exotic.app.planta.model.users.TabAcceso;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
+import exotic.app.planta.model.users.dto.TabAccesoAssignmentDTO;
 import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
-import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
-import exotic.app.planta.repo.usuarios.AccesoRepository;
 import exotic.app.planta.repo.usuarios.PasswordResetTokenRepository;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
 
@@ -28,26 +33,17 @@ import org.springframework.data.domain.PageRequest;
 public class UserManagementService {
 
     private final UserRepository userRepository;
-    private final AccesoRepository accesoRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
-    /**
-     * Gets all users with a specific estado
-     * @param estado the estado to filter by (1 = active, 2 = inactive)
-     * @return list of users with the specified estado
-     */
     public List<User> getUsersByEstado(int estado) {
         return userRepository.findByEstado(estado);
     }
 
     public User createUser(User user) {
-        // Encrypt the password before saving using Argon2 with username as salt
         user.setPassword(PasswordConfig.encodePassword(user.getPassword(), user.getUsername()));
         return userRepository.save(user);
     }
@@ -57,20 +53,14 @@ public class UserManagementService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         existing.setUsername(updatedUser.getUsername());
 
-        // Only encrypt the password if it has been changed
         if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
             existing.setPassword(PasswordConfig.encodePassword(updatedUser.getPassword(), existing.getUsername()));
         }
 
-        existing.setAccesos(updatedUser.getAccesos());
+        // moduloAccesos se gestiona solo vía assignModuloAcceso / removeModuloAccesoFromUser
         return userRepository.save(existing);
     }
 
-    /**
-     * Deactivates a user by setting their estado to 2 (inactive)
-     * @param userId the ID of the user to deactivate
-     * @return the updated user
-     */
     public User deactivateUser(Long userId) {
         User existing = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -79,38 +69,26 @@ public class UserManagementService {
             throw new RuntimeException("Cannot deactivate master or super_master user");
         }
 
-        // Only deactivate if the user is active (estado = 1)
         if (existing.getEstado() == 1) {
-            existing.setEstado(2); // Set to inactive
+            existing.setEstado(2);
             return userRepository.save(existing);
         } else {
             throw new RuntimeException("User is already inactive");
         }
     }
 
-    /**
-     * Activates a user by setting their estado to 1 (active)
-     * @param userId the ID of the user to activate
-     * @return the updated user
-     */
     public User activateUser(Long userId) {
         User existing = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Only activate if the user is inactive (estado = 2)
         if (existing.getEstado() == 2) {
-            existing.setEstado(1); // Set to active
+            existing.setEstado(1);
             return userRepository.save(existing);
         } else {
             throw new RuntimeException("User is already active");
         }
     }
 
-    /**
-     * Deletes a user if there are no referential integrity issues
-     * @param userId the ID of the user to delete
-     * @throws DataIntegrityViolationException if there are referential integrity issues
-     */
     public void deleteUser(Long userId) {
         User existing = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -120,59 +98,91 @@ public class UserManagementService {
         }
 
         try {
-            // Delete any password reset tokens associated with the user
             passwordResetTokenRepository.deleteByUser(existing);
-
-            // Try to delete the user - this will fail with a DataIntegrityViolationException
-            // if there are any referential integrity issues
             userRepository.delete(existing);
         } catch (DataIntegrityViolationException e) {
-            // If deletion fails due to referential integrity, throw a more user-friendly exception
             throw new RuntimeException("Cannot delete user because it is referenced by other entities. Consider deactivating the user instead.", e);
         }
     }
 
-    /*public User addAccesoToUser(Long userId, String moduloName) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        try {
-            // Convertir el nombre del módulo a enum
-            Acceso.Modulo modulo = Acceso.Modulo.valueOf(moduloName);
-
-            // Crear un nuevo acceso directamente
-            return addAccesoToUserByModulo(userId, modulo, 1);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Módulo no válido: " + moduloName);
-        }
-    }*/
-
-    public User removeAccesoFromUser(Long userId, Long accesoId) {
+    public User removeModuloAccesoFromUser(Long userId, Long moduloAccesoId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) {
             throw new RuntimeException("Cannot remove accesos from master or super_master user");
         }
-        user.getAccesos().removeIf(acceso -> acceso.getId().equals(accesoId));
+        boolean removed = user.getModuloAccesos().removeIf(ma -> ma.getId() != null && ma.getId().equals(moduloAccesoId));
+        if (!removed) {
+            throw new RuntimeException("ModuloAcceso not found for user");
+        }
         return userRepository.save(user);
     }
 
-    public User addAccesoToUserByModulo(Long userId, Acceso.Modulo modulo, int nivel) {
+    public User assignModuloAcceso(Long userId, AssignModuloAccesoRequest request) {
+        if (request.getModulo() == null) {
+            throw new RuntimeException("Módulo requerido");
+        }
+        boolean replace = Boolean.TRUE.equals(request.getReplaceTabs());
+        List<TabAccesoAssignmentDTO> tabsList = request.getTabs();
+
+        if (!replace && (tabsList == null || tabsList.isEmpty())) {
+            throw new RuntimeException("Debe indicar al menos un tab con nivel");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Siempre crear un nuevo acceso directamente
-        Acceso acceso = Acceso.builder()
-                .user(user)
-                .moduloAcceso(modulo)
-                .nivel(nivel)
-                .build();
+        if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) {
+            throw new RuntimeException("Cannot assign accesos to master or super_master user");
+        }
 
-        // Guardar el nuevo acceso
-        acceso = accesoRepository.save(acceso);
+        if (replace && (tabsList == null || tabsList.isEmpty())) {
+            user.getModuloAccesos().removeIf(ma -> ma.getModulo() == request.getModulo());
+            return userRepository.save(user);
+        }
 
-        // Añadir el acceso al usuario
-        user.getAccesos().add(acceso);
+        Set<String> tabIds = tabsList.stream()
+                .map(TabAccesoAssignmentDTO::getTabId)
+                .collect(Collectors.toSet());
+        try {
+            ModuloTabCatalog.validateAssignments(request.getModulo(), tabIds);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException(e.getMessage());
+        }
+
+        ModuloAcceso moduloAcceso = user.getModuloAccesos().stream()
+                .filter(ma -> ma.getModulo() == request.getModulo())
+                .findFirst()
+                .orElseGet(() -> {
+                    ModuloAcceso created = ModuloAcceso.builder()
+                            .user(user)
+                            .modulo(request.getModulo())
+                            .tabs(new HashSet<>())
+                            .build();
+                    user.getModuloAccesos().add(created);
+                    return created;
+                });
+
+        if (replace) {
+            moduloAcceso.getTabs().removeIf(t -> !tabIds.contains(t.getTabId()));
+        }
+
+        for (TabAccesoAssignmentDTO t : tabsList) {
+            TabAcceso existingTab = moduloAcceso.getTabs().stream()
+                    .filter(x -> x.getTabId().equals(t.getTabId()))
+                    .findFirst()
+                    .orElse(null);
+            if (existingTab != null) {
+                existingTab.setNivel(t.getNivel());
+            } else {
+                moduloAcceso.getTabs().add(TabAcceso.builder()
+                        .moduloAcceso(moduloAcceso)
+                        .tabId(t.getTabId())
+                        .nivel(t.getNivel())
+                        .build());
+            }
+        }
+
         return userRepository.save(user);
     }
 
@@ -190,56 +200,47 @@ public class UserManagementService {
     }
 
     public List<User> searchUser_by_DTO(SearchUserDTO searchUserDTO, int page, int size) {
-        // Validar parámetros de paginación
         if (page < 0) page = 0;
         if (size <= 0) size = 10;
 
-        // Crear objeto Pageable para paginación
         Pageable pageable = PageRequest.of(page, size);
 
-        // Realizar búsqueda según el tipo
         if (searchUserDTO.getSearchType() == null || searchUserDTO.getSearch() == null || searchUserDTO.getSearch().trim().isEmpty()) {
-            // Si no hay criterios de búsqueda, devolver todos los usuarios paginados
             return userRepository.findAll(pageable).getContent();
         }
 
         switch (searchUserDTO.getSearchType()) {
             case ID:
                 try {
-                    // Buscar por cédula (convertir a long)
                     long cedula = Long.parseLong(searchUserDTO.getSearch());
                     return userRepository.findAll(
-                        (root, query, cb) -> cb.equal(root.get("cedula"), cedula),
-                        pageable
+                            (root, query, cb) -> cb.equal(root.get("cedula"), cedula),
+                            pageable
                     ).getContent();
                 } catch (NumberFormatException e) {
-                    // Si no es un número válido, devolver lista vacía
                     return new ArrayList<>();
                 }
 
             case NAME:
-                // Buscar por coincidencia parcial del nombre
                 return userRepository.findAll(
-                    (root, query, cb) -> cb.like(
-                        cb.lower(root.get("nombreCompleto")), 
-                        "%" + searchUserDTO.getSearch().toLowerCase() + "%"
-                    ),
-                    pageable
+                        (root, query, cb) -> cb.like(
+                                cb.lower(root.get("nombreCompleto")),
+                                "%" + searchUserDTO.getSearch().toLowerCase() + "%"
+                        ),
+                        pageable
                 ).getContent();
 
             case EMAIL:
-                // Buscar por email
                 return userRepository.findAll(
-                    (root, query, cb) -> cb.like(
-                        cb.lower(root.get("email")), 
-                        "%" + searchUserDTO.getSearch().toLowerCase() + "%"
-                    ),
-                    pageable
+                        (root, query, cb) -> cb.like(
+                                cb.lower(root.get("email")),
+                                "%" + searchUserDTO.getSearch().toLowerCase() + "%"
+                        ),
+                        pageable
                 ).getContent();
 
             default:
                 return new ArrayList<>();
         }
     }
-
 }
