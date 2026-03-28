@@ -5,7 +5,7 @@ import jakarta.transaction.Transactional;
 import exotic.app.planta.config.PasswordConfig;
 import exotic.app.planta.model.users.ModuloAcceso;
 import exotic.app.planta.model.users.ModuloSistema;
-import exotic.app.planta.model.users.ModuloTabCatalog;
+import exotic.app.planta.model.users.MapaAccesos;
 import exotic.app.planta.model.users.TabAcceso;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
@@ -145,7 +145,7 @@ public class UserManagementService {
                 .map(TabAccesoAssignmentDTO::getTabId)
                 .collect(Collectors.toSet());
         try {
-            ModuloTabCatalog.validateAssignments(request.getModulo(), tabIds);
+            MapaAccesos.validateAssignments(request.getModulo(), tabIds);
         } catch (IllegalArgumentException e) {
             throw new RuntimeException(e.getMessage());
         }

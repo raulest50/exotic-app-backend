@@ -4,7 +4,7 @@
 
 ### Login para obtener token JWT
 # Este endpoint permite autenticarse y obtener un token JWT
-# El token se guardará automáticamente en la variable global auth_token
+# El token se guardara automaticamente en la variable global auth_token
 POST {{host}}/api/auth/login
 Content-Type: {{contentType}}
 
@@ -14,29 +14,27 @@ Content-Type: {{contentType}}
 }
 
 > {%
-    // Extraer el token de la respuesta
     var token = response.body.token;
 
-    // Guardar el token en la variable de entorno global
     if (token) {
         client.global.set("auth_token", token);
-        client.log("Token JWT guardado con éxito: " + token.substring(0, 15) + "...");
+        client.log("Token JWT guardado con exito: " + token.substring(0, 15) + "...");
     }
 %}
 
-### Verificar usuario autenticado
-# Este endpoint devuelve información sobre el usuario autenticado actualmente
-# IMPORTANTE: Primero debes ejecutar el login para obtener el token automáticamente
-GET {{host}}/api/auth/whoami
+### Obtener snapshot de accesos
+# Este endpoint devuelve la informacion canonica del usuario autenticado y sus accesos
+# IMPORTANTE: Primero debes ejecutar el login para obtener el token automaticamente
+GET {{host}}/api/auth/me
 Content-Type: {{contentType}}
 Authorization: Bearer {{auth_token}}
 
 ### INSTRUCCIONES PARA USAR EL TOKEN EN OTROS ARCHIVOS
-# El token JWT ahora se guarda automáticamente en la variable global auth_token
+# El token JWT ahora se guarda automaticamente en la variable global auth_token
 # Para usar el token en otros archivos:
-# 1. Ejecuta la petición de login arriba con credenciales válidas
-# 2. El token se guardará automáticamente y estará disponible en todos los archivos HTTP
-# 3. Usa {{auth_token}} en tus peticiones que requieran autenticación
+# 1. Ejecuta la peticion de login arriba con credenciales validas
+# 2. El token se guardara automaticamente y estara disponible en todos los archivos HTTP
+# 3. Usa {{auth_token}} en tus peticiones que requieran autenticacion
 #
 # Ejemplo de uso en otros archivos:
 # Authorization: Bearer {{auth_token}}

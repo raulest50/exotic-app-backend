@@ -7,11 +7,12 @@ import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.users.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,49 +50,9 @@ public class AuthResource {
         }
     }
 
-    @GetMapping("/whoami")
-    public ResponseEntity<?> whoAmI(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        String username = authentication.getName();
-
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("name", username);
-        response.put("authenticated", authentication.isAuthenticated());
-        response.put("credentials", authentication.getCredentials());
-        response.put("details", authentication.getDetails());
-
-        List<Map<String, Object>> authoritiesWithLevel = buildAuthoritiesWithMaxNivel(user);
-        response.put("authorities", authoritiesWithLevel);
-        response.put("accesos", buildModuloAccesosPayload(user));
-
-        Map<String, Object> principalInfo = new HashMap<>();
-        principalInfo.put("username", username);
-        principalInfo.put("password", "");
-        principalInfo.put("authorities", authoritiesWithLevel);
-        principalInfo.put("accountNonExpired", true);
-        principalInfo.put("accountNonLocked", true);
-        principalInfo.put("credentialsNonExpired", true);
-        principalInfo.put("enabled", true);
-
-        response.put("principal", principalInfo);
-
-        return ResponseEntity.ok(response);
-    }
-
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        String username = authentication.getName();
-
+        String username = requireAuthenticatedUsername(authentication);
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
@@ -106,30 +67,12 @@ public class AuthResource {
         userData.put("fechaNacimiento", user.getFechaNacimiento());
         userData.put("estado", user.getEstado());
 
-        List<Map<String, Object>> accesosList = buildModuloAccesosPayload(user);
-        List<Map<String, Object>> authoritiesWithLevel = buildAuthoritiesWithMaxNivel(user);
-
         Map<String, Object> response = new HashMap<>();
         response.put("user", userData);
-        response.put("accesos", accesosList);
-        response.put("authorities", authoritiesWithLevel);
+        response.put("isMasterLike", isMasterLike(user.getUsername()));
+        response.put("accesos", buildModuloAccesosPayload(user));
 
         return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Una entrada por módulo; nivel = máximo entre tabs (compatibilidad con clientes que leen un solo nivel).
-     */
-    private static List<Map<String, Object>> buildAuthoritiesWithMaxNivel(User user) {
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (ModuloAcceso ma : user.getModuloAccesos()) {
-            int maxNivel = ma.getTabs().stream().mapToInt(TabAcceso::getNivel).max().orElse(1);
-            Map<String, Object> row = new HashMap<>();
-            row.put("authority", "ACCESO_" + ma.getModulo().name());
-            row.put("nivel", String.valueOf(maxNivel));
-            out.add(row);
-        }
-        return out;
     }
 
     private static List<Map<String, Object>> buildModuloAccesosPayload(User user) {
@@ -150,6 +93,19 @@ public class AuthResource {
             list.add(mo);
         }
         return list;
+    }
+
+    private static String requireAuthenticatedUsername(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+        return authentication.getName();
+    }
+
+    private static boolean isMasterLike(String username) {
+        if (username == null) return false;
+        String normalized = username.toLowerCase();
+        return "master".equals(normalized) || "super_master".equals(normalized);
     }
 
     @PostMapping("/request_reset_passw")
