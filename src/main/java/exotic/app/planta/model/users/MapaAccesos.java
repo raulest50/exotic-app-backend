@@ -1,80 +1,55 @@
 package exotic.app.planta.model.users;
 
-import java.util.Collections;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Fuente de verdad backend para módulos y tabs válidos.
+ * Catalogo estatico de tabs validos por modulo.
  */
 public final class MapaAccesos {
 
-    public record TabDef(String tabId) {
-    }
-
-    public record ModuloDef(ModuloSistema modulo, List<TabDef> tabs, boolean especial) {
-    }
-
-    private static final Map<ModuloSistema, ModuloDef> DEFINITIONS = new EnumMap<>(ModuloSistema.class);
+    private static final Map<ModuloSistema, Set<String>> TABS_POR_MODULO = new EnumMap<>(ModuloSistema.class);
 
     static {
         for (ModuloSistema modulo : ModuloSistema.values()) {
-            DEFINITIONS.put(modulo, modulo(modulo, false, "MAIN"));
+            TABS_POR_MODULO.put(modulo, Set.of("MAIN"));
         }
 
-        DEFINITIONS.put(ModuloSistema.USUARIOS, modulo(ModuloSistema.USUARIOS, false, "GESTION_USUARIOS", "INFO_NIVELES", "NOTIFICACIONES"));
-        DEFINITIONS.put(ModuloSistema.ACTIVOS, modulo(ModuloSistema.ACTIVOS, false, "INCORPORACION", "CREAR_OC_AF", "REPORTES_OC_AF", "REPORTES_ACTIVOS_FIJOS"));
-        DEFINITIONS.put(ModuloSistema.BINTELLIGENCE, modulo(ModuloSistema.BINTELLIGENCE, false, "INFORMES_DIARIOS", "SERIES_TIEMPO_PROYECCIONES"));
-        DEFINITIONS.put(ModuloSistema.CLIENTES, modulo(ModuloSistema.CLIENTES, false, "REGISTRAR_CLIENTE", "CONSULTAR_CLIENTES"));
-        DEFINITIONS.put(ModuloSistema.COMPRAS, modulo(ModuloSistema.COMPRAS, false, "CREAR_OCM", "REPORTES_ORDENES_COMPRA"));
-        DEFINITIONS.put(ModuloSistema.SEGUIMIENTO_PRODUCCION, modulo(ModuloSistema.SEGUIMIENTO_PRODUCCION, false, "CREAR_AREA_PRODUCCION", "CONSULTA_AREAS_OPERATIVAS"));
-        DEFINITIONS.put(ModuloSistema.MASTER_DIRECTIVES, modulo(ModuloSistema.MASTER_DIRECTIVES, true, "MAIN"));
-        DEFINITIONS.put(ModuloSistema.OPERACIONES_CRITICAS_BD, modulo(ModuloSistema.OPERACIONES_CRITICAS_BD, true, "CARGA_MASIVA_ALMACEN", "CARGA_MASIVA_MATERIALES", "CARGA_MASIVA_TERMINADOS", "ELIMINACIONES_FORZADAS", "EXPORTACION_DATOS"));
-        DEFINITIONS.put(ModuloSistema.ORGANIGRAMA, modulo(ModuloSistema.ORGANIGRAMA, false, "ORGANIGRAMA", "MISION_VISION"));
-        DEFINITIONS.put(ModuloSistema.PAGOS_PROVEEDORES, modulo(ModuloSistema.PAGOS_PROVEEDORES, false, "ASENTAR_TRANSACCIONES_ALMACEN", "FACTURAS_VENCIDAS"));
-        DEFINITIONS.put(ModuloSistema.PERSONAL_PLANTA, modulo(ModuloSistema.PERSONAL_PLANTA, false, "INCORPORACION", "CONSULTA"));
-        DEFINITIONS.put(ModuloSistema.PRODUCCION, modulo(ModuloSistema.PRODUCCION, false, "CREAR_ODP_MANUALMENTE", "HISTORIAL", "PARAMETROS_POR_CATEGORIA", "PLANEACION_PRODUCCION"));
-        DEFINITIONS.put(ModuloSistema.PROVEEDORES, modulo(ModuloSistema.PROVEEDORES, false, "CODIFICAR_PROVEEDOR", "CONSULTAR_PROVEEDORES"));
-        DEFINITIONS.put(ModuloSistema.STOCK, modulo(ModuloSistema.STOCK, false, "CONSOLIDADO", "KARDEX", "HISTORIAL_TRANSACCIONES_ALMACEN"));
-        DEFINITIONS.put(ModuloSistema.TRANSACCIONES_ALMACEN, modulo(ModuloSistema.TRANSACCIONES_ALMACEN, false, "INGRESO_OCM", "HACER_DISPENSACION", "HISTORIAL_DISPENSACIONES", "INGRESO_PRODUCTO_TERMINADO", "GESTION_AVERIAS", "AJUSTES_INVENTARIO"));
-        DEFINITIONS.put(ModuloSistema.VENTAS, modulo(ModuloSistema.VENTAS, false, "CREAR_VENTA", "HISTORIAL_VENTAS", "REPORTES", "CREAR_VENDEDOR_NUEVO"));
+        TABS_POR_MODULO.put(ModuloSistema.USUARIOS, Set.of("GESTION_USUARIOS", "INFO_NIVELES", "NOTIFICACIONES"));
+        TABS_POR_MODULO.put(ModuloSistema.ACTIVOS, Set.of("INCORPORACION", "CREAR_OC_AF", "REPORTES_OC_AF", "REPORTES_ACTIVOS_FIJOS"));
+        TABS_POR_MODULO.put(ModuloSistema.BINTELLIGENCE, Set.of("INFORMES_DIARIOS", "SERIES_TIEMPO_PROYECCIONES"));
+        TABS_POR_MODULO.put(ModuloSistema.CLIENTES, Set.of("REGISTRAR_CLIENTE", "CONSULTAR_CLIENTES"));
+        TABS_POR_MODULO.put(ModuloSistema.COMPRAS, Set.of("CREAR_OCM", "REPORTES_ORDENES_COMPRA"));
+        TABS_POR_MODULO.put(ModuloSistema.SEGUIMIENTO_PRODUCCION, Set.of("CREAR_AREA_PRODUCCION", "CONSULTA_AREAS_OPERATIVAS"));
+        TABS_POR_MODULO.put(ModuloSistema.MASTER_DIRECTIVES, Set.of("MAIN"));
+        TABS_POR_MODULO.put(ModuloSistema.OPERACIONES_CRITICAS_BD, Set.of("CARGA_MASIVA_ALMACEN", "CARGA_MASIVA_MATERIALES", "CARGA_MASIVA_TERMINADOS", "ELIMINACIONES_FORZADAS", "EXPORTACION_DATOS"));
+        TABS_POR_MODULO.put(ModuloSistema.ORGANIGRAMA, Set.of("ORGANIGRAMA", "MISION_VISION"));
+        TABS_POR_MODULO.put(ModuloSistema.PAGOS_PROVEEDORES, Set.of("ASENTAR_TRANSACCIONES_ALMACEN", "FACTURAS_VENCIDAS"));
+        TABS_POR_MODULO.put(ModuloSistema.PERSONAL_PLANTA, Set.of("INCORPORACION", "CONSULTA"));
+        TABS_POR_MODULO.put(ModuloSistema.PRODUCCION, Set.of("CREAR_ODP_MANUALMENTE", "HISTORIAL", "PARAMETROS_POR_CATEGORIA", "PLANEACION_PRODUCCION"));
+        TABS_POR_MODULO.put(ModuloSistema.PROVEEDORES, Set.of("CODIFICAR_PROVEEDOR", "CONSULTAR_PROVEEDORES"));
+        TABS_POR_MODULO.put(ModuloSistema.STOCK, Set.of("CONSOLIDADO", "KARDEX", "HISTORIAL_TRANSACCIONES_ALMACEN"));
+        TABS_POR_MODULO.put(ModuloSistema.TRANSACCIONES_ALMACEN, Set.of("INGRESO_OCM", "HACER_DISPENSACION", "HISTORIAL_DISPENSACIONES", "INGRESO_PRODUCTO_TERMINADO", "GESTION_AVERIAS", "AJUSTES_INVENTARIO"));
+        TABS_POR_MODULO.put(ModuloSistema.VENTAS, Set.of("CREAR_VENTA", "HISTORIAL_VENTAS", "REPORTES", "CREAR_VENDEDOR_NUEVO"));
     }
 
     private MapaAccesos() {
     }
 
-    private static ModuloDef modulo(ModuloSistema modulo, boolean especial, String... tabIds) {
-        return new ModuloDef(
-                modulo,
-                List.of(tabIds).stream().map(TabDef::new).toList(),
-                especial
-        );
+    public static Set<String> allowedTabIds(ModuloSistema modulo) {
+        return TABS_POR_MODULO.getOrDefault(modulo, Set.of());
     }
 
-    public static ModuloDef modulo(ModuloSistema modulo) {
-        return DEFINITIONS.getOrDefault(modulo, new ModuloDef(modulo, List.of(), false));
-    }
-
-    public static List<String> allowedTabIds(ModuloSistema modulo) {
-        return modulo(modulo).tabs().stream().map(TabDef::tabId).toList();
-    }
-
-    public static boolean isEspecial(ModuloSistema modulo) {
-        return modulo(modulo).especial();
+    public static boolean containsTab(ModuloSistema modulo, String tabId) {
+        return allowedTabIds(modulo).contains(tabId);
     }
 
     public static void validateAssignments(ModuloSistema modulo, Set<String> tabIds) {
-        List<String> allowed = allowedTabIds(modulo);
         for (String tabId : tabIds) {
-            if (!allowed.contains(tabId)) {
-                throw new IllegalArgumentException("Tab no permitido para el módulo " + modulo + ": " + tabId);
+            if (!containsTab(modulo, tabId)) {
+                throw new IllegalArgumentException("Tab no permitido para el modulo " + modulo + ": " + tabId);
             }
         }
-    }
-
-    public static Map<ModuloSistema, ModuloDef> all() {
-        return Collections.unmodifiableMap(DEFINITIONS);
     }
 }

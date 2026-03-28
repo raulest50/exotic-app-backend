@@ -5,7 +5,9 @@ import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.TabAcceso;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
+import exotic.app.planta.model.users.dto.ModuloAccesoAssignmentDTO;
 import exotic.app.planta.model.users.dto.TabAccesoAssignmentDTO;
+import exotic.app.planta.model.users.dto.UpdateUserAccesosRequest;
 import exotic.app.planta.repo.usuarios.PasswordResetTokenRepository;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,6 +116,72 @@ class UserManagementServiceTest {
 
         assertTrue(user.getModuloAccesos().isEmpty());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void replaceUserAccesos_updatesExistingModuloInPlace() {
+        ModuloAcceso stock = ModuloAcceso.builder()
+                .id(20L)
+                .user(user)
+                .modulo(ModuloSistema.STOCK)
+                .tabs(new HashSet<>(Set.of(
+                        TabAcceso.builder().id(1L).moduloAcceso(null).tabId("CONSOLIDADO").nivel(1).build(),
+                        TabAcceso.builder().id(2L).moduloAcceso(null).tabId("KARDEX").nivel(1).build()
+                )))
+                .build();
+        fixTabBackRefs(stock);
+        user.getModuloAccesos().add(stock);
+
+        User updated = service.replaceUserAccesos(1L, UpdateUserAccesosRequest.builder()
+                .accesos(List.of(
+                        ModuloAccesoAssignmentDTO.builder()
+                                .modulo(ModuloSistema.STOCK)
+                                .tabs(List.of(
+                                        TabAccesoAssignmentDTO.builder().tabId("CONSOLIDADO").nivel(3).build(),
+                                        TabAccesoAssignmentDTO.builder().tabId("HISTORIAL_TRANSACCIONES_ALMACEN").nivel(2).build()
+                                ))
+                                .build()
+                ))
+                .build());
+
+        assertEquals(1, updated.getModuloAccesos().size());
+        ModuloAcceso only = updated.getModuloAccesos().iterator().next();
+        assertSame(stock, only);
+        assertEquals(2, only.getTabs().size());
+        assertTrue(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("CONSOLIDADO") && t.getNivel() == 3));
+        assertTrue(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("HISTORIAL_TRANSACCIONES_ALMACEN") && t.getNivel() == 2));
+        assertFalse(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("KARDEX")));
+    }
+
+    @Test
+    void replaceUserAccesos_removesMissingModuloAndCreatesNewOne() {
+        ModuloAcceso stock = ModuloAcceso.builder()
+                .id(20L)
+                .user(user)
+                .modulo(ModuloSistema.STOCK)
+                .tabs(new HashSet<>(Set.of(
+                        TabAcceso.builder().id(1L).moduloAcceso(null).tabId("CONSOLIDADO").nivel(1).build()
+                )))
+                .build();
+        fixTabBackRefs(stock);
+        user.getModuloAccesos().add(stock);
+
+        User updated = service.replaceUserAccesos(1L, UpdateUserAccesosRequest.builder()
+                .accesos(List.of(
+                        ModuloAccesoAssignmentDTO.builder()
+                                .modulo(ModuloSistema.USUARIOS)
+                                .tabs(List.of(
+                                        TabAccesoAssignmentDTO.builder().tabId("GESTION_USUARIOS").nivel(2).build()
+                                ))
+                                .build()
+                ))
+                .build());
+
+        assertEquals(1, updated.getModuloAccesos().size());
+        ModuloAcceso only = updated.getModuloAccesos().iterator().next();
+        assertEquals(ModuloSistema.USUARIOS, only.getModulo());
+        assertNotSame(stock, only);
+        assertTrue(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("GESTION_USUARIOS") && t.getNivel() == 2));
     }
 
     private static void fixTabBackRefs(ModuloAcceso ma) {

@@ -1,31 +1,35 @@
 // src/main/java/lacosmetics/planta/lacmanufacture/service/UserManagementService.java
 package exotic.app.planta.service.users;
 
-import jakarta.transaction.Transactional;
 import exotic.app.planta.config.PasswordConfig;
+import exotic.app.planta.model.users.MapaAccesos;
 import exotic.app.planta.model.users.ModuloAcceso;
 import exotic.app.planta.model.users.ModuloSistema;
-import exotic.app.planta.model.users.MapaAccesos;
 import exotic.app.planta.model.users.TabAcceso;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
+import exotic.app.planta.model.users.dto.ModuloAccesoAssignmentDTO;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
 import exotic.app.planta.model.users.dto.TabAccesoAssignmentDTO;
+import exotic.app.planta.model.users.dto.UpdateUserAccesosRequest;
 import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
 import exotic.app.planta.repo.usuarios.PasswordResetTokenRepository;
 import exotic.app.planta.repo.usuarios.UserRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.PageRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -57,7 +61,7 @@ public class UserManagementService {
             existing.setPassword(PasswordConfig.encodePassword(updatedUser.getPassword(), existing.getUsername()));
         }
 
-        // moduloAccesos se gestiona solo vía assignModuloAcceso / removeModuloAccesoFromUser
+        // moduloAccesos se gestiona solo via assignModuloAcceso / removeModuloAccesoFromUser
         return userRepository.save(existing);
     }
 
@@ -120,7 +124,7 @@ public class UserManagementService {
 
     public User assignModuloAcceso(Long userId, AssignModuloAccesoRequest request) {
         if (request.getModulo() == null) {
-            throw new RuntimeException("Módulo requerido");
+            throw new RuntimeException("Modulo requerido");
         }
         boolean replace = Boolean.TRUE.equals(request.getReplaceTabs());
         List<TabAccesoAssignmentDTO> tabsList = request.getTabs();
@@ -180,6 +184,98 @@ public class UserManagementService {
                         .tabId(t.getTabId())
                         .nivel(t.getNivel())
                         .build());
+            }
+        }
+
+        return userRepository.save(user);
+    }
+
+    public User replaceUserAccesos(Long userId, UpdateUserAccesosRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) {
+            throw new RuntimeException("Cannot assign accesos to master or super_master user");
+        }
+
+        List<ModuloAccesoAssignmentDTO> accesos = request != null && request.getAccesos() != null
+                ? request.getAccesos()
+                : List.of();
+
+        Set<ModuloSistema> seenModulos = new HashSet<>();
+        for (ModuloAccesoAssignmentDTO acceso : accesos) {
+            if (acceso.getModulo() == null) {
+                throw new RuntimeException("Modulo requerido");
+            }
+            if (!seenModulos.add(acceso.getModulo())) {
+                throw new RuntimeException("Modulo duplicado en el payload: " + acceso.getModulo());
+            }
+
+            List<TabAccesoAssignmentDTO> tabs = acceso.getTabs() != null ? acceso.getTabs() : List.of();
+            Set<String> tabIds = new LinkedHashSet<>();
+            for (TabAccesoAssignmentDTO tab : tabs) {
+                if (tab == null || tab.getTabId() == null || tab.getTabId().isBlank()) {
+                    throw new RuntimeException("Cada tab debe tener tabId");
+                }
+                if (!tabIds.add(tab.getTabId())) {
+                    throw new RuntimeException("Tab duplicado en el modulo " + acceso.getModulo() + ": " + tab.getTabId());
+                }
+                if (tab.getNivel() < 1 || tab.getNivel() > 4) {
+                    throw new RuntimeException("Nivel invalido para " + tab.getTabId() + ": " + tab.getNivel());
+                }
+            }
+
+            try {
+                MapaAccesos.validateAssignments(acceso.getModulo(), tabIds);
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException(e.getMessage());
+            }
+        }
+
+        Map<ModuloSistema, ModuloAcceso> existentesPorModulo = new EnumMap<>(ModuloSistema.class);
+        for (ModuloAcceso existente : user.getModuloAccesos()) {
+            existentesPorModulo.put(existente.getModulo(), existente);
+        }
+
+        user.getModuloAccesos().removeIf(existente -> !seenModulos.contains(existente.getModulo()));
+
+        for (ModuloAccesoAssignmentDTO acceso : accesos) {
+            List<TabAccesoAssignmentDTO> tabs = acceso.getTabs() != null ? acceso.getTabs() : List.of();
+            if (tabs.isEmpty()) {
+                continue;
+            }
+
+            ModuloAcceso moduloAcceso = existentesPorModulo.get(acceso.getModulo());
+            if (moduloAcceso == null) {
+                moduloAcceso = ModuloAcceso.builder()
+                        .user(user)
+                        .modulo(acceso.getModulo())
+                        .tabs(new HashSet<>())
+                        .build();
+                user.getModuloAccesos().add(moduloAcceso);
+                existentesPorModulo.put(acceso.getModulo(), moduloAcceso);
+            }
+
+            Set<String> requestedTabIds = tabs.stream()
+                    .map(TabAccesoAssignmentDTO::getTabId)
+                    .collect(Collectors.toSet());
+
+            moduloAcceso.getTabs().removeIf(existingTab -> !requestedTabIds.contains(existingTab.getTabId()));
+
+            Map<String, TabAcceso> existingTabs = moduloAcceso.getTabs().stream()
+                    .collect(Collectors.toMap(TabAcceso::getTabId, tab -> tab));
+
+            for (TabAccesoAssignmentDTO tab : tabs) {
+                TabAcceso existingTab = existingTabs.get(tab.getTabId());
+                if (existingTab != null) {
+                    existingTab.setNivel(tab.getNivel());
+                } else {
+                    moduloAcceso.getTabs().add(TabAcceso.builder()
+                            .moduloAcceso(moduloAcceso)
+                            .tabId(tab.getTabId())
+                            .nivel(tab.getNivel())
+                            .build());
+                }
             }
         }
 

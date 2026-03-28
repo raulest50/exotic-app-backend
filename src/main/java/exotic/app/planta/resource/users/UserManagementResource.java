@@ -4,6 +4,7 @@ package exotic.app.planta.resource.users;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
+import exotic.app.planta.model.users.dto.UpdateUserAccesosRequest;
 import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
 import exotic.app.planta.service.users.UserManagementService;
 import lombok.RequiredArgsConstructor;
@@ -100,6 +101,15 @@ public class UserManagementResource {
             @PathVariable Long userId,
             @RequestBody AssignModuloAccesoRequest request) {
         User updated = userManagementService.assignModuloAcceso(userId, request);
+        updated.setPassword("");
+        return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/{userId}/accesos")
+    public ResponseEntity<User> replaceUserAccesos(
+            @PathVariable Long userId,
+            @RequestBody UpdateUserAccesosRequest request) {
+        User updated = userManagementService.replaceUserAccesos(userId, request);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
     }
