@@ -38,6 +38,7 @@ public class UserManagementService {
 
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final UserOperationalCompatibilityService userOperationalCompatibilityService;
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
@@ -139,6 +140,7 @@ public class UserManagementService {
         if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) {
             throw new RuntimeException("Cannot assign accesos to master or super_master user");
         }
+        userOperationalCompatibilityService.assertCanReceiveModuloAccesos(userId);
 
         if (replace && (tabsList == null || tabsList.isEmpty())) {
             user.getModuloAccesos().removeIf(ma -> ma.getModulo() == request.getModulo());
@@ -197,6 +199,7 @@ public class UserManagementService {
         if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) {
             throw new RuntimeException("Cannot assign accesos to master or super_master user");
         }
+        userOperationalCompatibilityService.assertCanReceiveModuloAccesos(userId);
 
         List<ModuloAccesoAssignmentDTO> accesos = request != null && request.getAccesos() != null
                 ? request.getAccesos()

@@ -6,7 +6,9 @@ import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
 import exotic.app.planta.model.users.dto.UpdateUserAccesosRequest;
 import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
+import exotic.app.planta.model.users.dto.UserAssignmentStatusDTO;
 import exotic.app.planta.service.users.UserManagementService;
+import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,7 @@ import java.util.List;
 public class UserManagementResource {
 
     private final UserManagementService userManagementService;
+    private final UserOperationalCompatibilityService userOperationalCompatibilityService;
 
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
@@ -112,6 +115,13 @@ public class UserManagementResource {
         User updated = userManagementService.replaceUserAccesos(userId, request);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/{userId}/assignment-status")
+    public ResponseEntity<UserAssignmentStatusDTO> getUserAssignmentStatus(
+            @PathVariable Long userId,
+            @RequestParam(required = false) Integer excludeAreaId) {
+        return ResponseEntity.ok(userOperationalCompatibilityService.buildAssignmentStatus(userId, excludeAreaId));
     }
 
     @GetMapping("/filter")

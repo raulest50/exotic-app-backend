@@ -3,8 +3,10 @@ package exotic.app.planta.resource.users;
 import exotic.app.planta.model.users.ModuloAcceso;
 import exotic.app.planta.model.users.TabAcceso;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.dto.UserAssignmentStatusDTO;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.users.AuthService;
+import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +36,7 @@ public class AuthResource {
 
     private final AuthService authService;
     private final UserRepository userRepository;
+    private final UserOperationalCompatibilityService userOperationalCompatibilityService;
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
@@ -55,6 +58,7 @@ public class AuthResource {
         String username = requireAuthenticatedUsername(authentication);
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        UserAssignmentStatusDTO assignmentStatus = userOperationalCompatibilityService.buildAssignmentStatus(user.getId(), null);
 
         Map<String, Object> userData = new HashMap<>();
         userData.put("id", user.getId());
@@ -70,9 +74,22 @@ public class AuthResource {
         Map<String, Object> response = new HashMap<>();
         response.put("user", userData);
         response.put("isMasterLike", isMasterLike(user.getUsername()));
+        // El frontend necesita este snapshot para bifurcar la ruta raiz entre Home y el panel de area operativa.
+        response.put("isAreaResponsable", assignmentStatus.isAreaResponsable());
+        response.put("areaResponsable", buildAreaResponsablePayload(assignmentStatus));
         response.put("accesos", buildModuloAccesosPayload(user));
 
         return ResponseEntity.ok(response);
+    }
+
+    private static Map<String, Object> buildAreaResponsablePayload(UserAssignmentStatusDTO assignmentStatus) {
+        if (!assignmentStatus.isAreaResponsable()) {
+            return null;
+        }
+        Map<String, Object> areaResponsable = new HashMap<>();
+        areaResponsable.put("areaId", assignmentStatus.getAreaResponsableId());
+        areaResponsable.put("nombre", assignmentStatus.getAreaResponsableNombre());
+        return areaResponsable;
     }
 
     private static List<Map<String, Object>> buildModuloAccesosPayload(User user) {

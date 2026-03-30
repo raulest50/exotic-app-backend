@@ -29,13 +29,15 @@ class UserManagementServiceTest {
 
     private UserRepository userRepository;
     private UserManagementService service;
+    private UserOperationalCompatibilityService compatibilityService;
     private User user;
 
     @BeforeEach
     void setUp() {
         userRepository = Mockito.mock(UserRepository.class);
         PasswordResetTokenRepository tokenRepo = Mockito.mock(PasswordResetTokenRepository.class);
-        service = new UserManagementService(userRepository, tokenRepo);
+        compatibilityService = Mockito.mock(UserOperationalCompatibilityService.class);
+        service = new UserManagementService(userRepository, tokenRepo, compatibilityService);
 
         user = new User();
         user.setId(1L);
@@ -67,6 +69,7 @@ class UserManagementServiceTest {
         Set<String> ids = ma.getTabs().stream().map(TabAcceso::getTabId).collect(Collectors.toSet());
         assertTrue(ids.contains("GESTION_USUARIOS"));
         assertTrue(ids.contains("INFO_NIVELES"));
+        verify(compatibilityService).assertCanReceiveModuloAccesos(1L);
     }
 
     @Test
@@ -93,6 +96,7 @@ class UserManagementServiceTest {
         TabAcceso only = ma.getTabs().iterator().next();
         assertEquals("GESTION_USUARIOS", only.getTabId());
         assertEquals(3, only.getNivel());
+        verify(compatibilityService).assertCanReceiveModuloAccesos(1L);
     }
 
     @Test
@@ -116,6 +120,7 @@ class UserManagementServiceTest {
 
         assertTrue(user.getModuloAccesos().isEmpty());
         verify(userRepository).save(user);
+        verify(compatibilityService).assertCanReceiveModuloAccesos(1L);
     }
 
     @Test
@@ -151,6 +156,7 @@ class UserManagementServiceTest {
         assertTrue(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("CONSOLIDADO") && t.getNivel() == 3));
         assertTrue(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("HISTORIAL_TRANSACCIONES_ALMACEN") && t.getNivel() == 2));
         assertFalse(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("KARDEX")));
+        verify(compatibilityService).assertCanReceiveModuloAccesos(1L);
     }
 
     @Test
@@ -182,6 +188,48 @@ class UserManagementServiceTest {
         assertEquals(ModuloSistema.USUARIOS, only.getModulo());
         assertNotSame(stock, only);
         assertTrue(only.getTabs().stream().anyMatch(t -> t.getTabId().equals("GESTION_USUARIOS") && t.getNivel() == 2));
+        verify(compatibilityService).assertCanReceiveModuloAccesos(1L);
+    }
+
+    @Test
+    void replaceUserAccesos_rejectsWhenUserIsAreaResponsable() {
+        Mockito.doThrow(new RuntimeException("bloqueado"))
+                .when(compatibilityService)
+                .assertCanReceiveModuloAccesos(1L);
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.replaceUserAccesos(
+                1L,
+                UpdateUserAccesosRequest.builder()
+                        .accesos(List.of(
+                                ModuloAccesoAssignmentDTO.builder()
+                                        .modulo(ModuloSistema.USUARIOS)
+                                        .tabs(List.of(
+                                                TabAccesoAssignmentDTO.builder().tabId("GESTION_USUARIOS").nivel(1).build()
+                                        ))
+                                        .build()
+                        ))
+                        .build()
+        ));
+
+        assertEquals("bloqueado", error.getMessage());
+    }
+
+    @Test
+    void assignModuloAcceso_rejectsWhenUserIsAreaResponsable() {
+        Mockito.doThrow(new RuntimeException("bloqueado"))
+                .when(compatibilityService)
+                .assertCanReceiveModuloAccesos(1L);
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.assignModuloAcceso(
+                1L,
+                AssignModuloAccesoRequest.builder()
+                        .modulo(ModuloSistema.USUARIOS)
+                        .replaceTabs(false)
+                        .tabs(List.of(TabAccesoAssignmentDTO.builder().tabId("GESTION_USUARIOS").nivel(1).build()))
+                        .build()
+        ));
+
+        assertEquals("bloqueado", error.getMessage());
     }
 
     private static void fixTabBackRefs(ModuloAcceso ma) {
