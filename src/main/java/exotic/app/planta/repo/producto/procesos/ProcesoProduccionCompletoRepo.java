@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ProcesoProduccionCompletoRepo extends JpaRepository<ProcesoProduccionCompleto, Integer>, JpaSpecificationExecutor<ProcesoProduccionCompleto> {
@@ -16,10 +17,13 @@ public interface ProcesoProduccionCompletoRepo extends JpaRepository<ProcesoProd
     @Query("""
             SELECT DISTINCT ppc
             FROM ProcesoProduccionCompleto ppc
-            LEFT JOIN FETCH ppc.procesosProduccion ppn
+            LEFT JOIN FETCH ppc.nodes n
+            LEFT JOIN FETCH ppc.edges e
             WHERE ppc.producto.productoId = :productoId
             """)
     List<ProcesoProduccionCompleto> findByProducto_ProductoIdWithNodes(@Param("productoId") String productoId);
+
+    Optional<ProcesoProduccionCompleto> findByProducto_ProductoId(String productoId);
 
     @Modifying
     @Query("UPDATE ProcesoProduccionCompleto ppc SET ppc.producto = null WHERE ppc.producto.productoId = :productoId")

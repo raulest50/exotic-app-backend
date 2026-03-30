@@ -13,7 +13,7 @@ import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.organizacion.AreaOperativa;
-import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
+import exotic.app.planta.model.producto.manufacturing.procesos.nodo.NodoProceso;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
@@ -63,6 +63,7 @@ public class ProduccionService {
     private final LoteRepo loteRepo;
     //private final UserRepository userRepository;
     private final VendedorRepository vendedorRepository;
+    private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
 
     @Transactional(rollbackFor = Exception.class)
     public OrdenProduccion saveOrdenProduccion(OrdenProduccionDTO_save ordenProduccionDTO) {
@@ -103,6 +104,9 @@ public class ProduccionService {
             savedOrden.setLoteAsignado(lote.getBatchNumber());
             ordenProduccionRepo.save(savedOrden);
         }
+
+        // Inicializar seguimiento por áreas operativas
+        seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
 
         return savedOrden;
     }
@@ -155,6 +159,9 @@ public class ProduccionService {
                 savedOrden.setLoteAsignado(lote.getBatchNumber());
                 ordenProduccionRepo.save(savedOrden);
             }
+
+            // Inicializar seguimiento por áreas operativas
+            seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
 
             savedOrdenes.add(savedOrden);
         }
@@ -443,9 +450,8 @@ public class ProduccionService {
         AreaOperativa areaTerminado = null;
 
         // Obtener el área de producción del terminado
-        if (terminado.getProcesoProduccionCompleto() != null &&
-            terminado.getProcesoProduccionCompleto().getAreaOperativa() != null) {
-            areaTerminado = terminado.getProcesoProduccionCompleto().getAreaOperativa();
+        if (getLastAreaOperativa(terminado) != null) {
+            areaTerminado = getLastAreaOperativa(terminado);
         }
 
         // Recolectar áreas de producción de los semiterminados
@@ -454,10 +460,9 @@ public class ProduccionService {
             if (producto instanceof SemiTerminado) {
                 SemiTerminado semiterminado = (SemiTerminado) producto;
 
-                if (semiterminado.getProcesoProduccionCompleto() != null &&
-                    semiterminado.getProcesoProduccionCompleto().getAreaOperativa() != null) {
+                if (getLastAreaOperativa(semiterminado) != null) {
 
-                    AreaOperativa areaSemiterminado = semiterminado.getProcesoProduccionCompleto().getAreaOperativa();
+                    AreaOperativa areaSemiterminado = getLastAreaOperativa(semiterminado);
 
                     // Evitar duplicados
                     if (!areasProduccion.contains(areaSemiterminado) && 
@@ -479,7 +484,7 @@ public class ProduccionService {
     /**
      * Obtiene la lista de nombres de procesos asociados a un producto terminado
      * y todos sus semiterminados, extrayendo los nombres específicamente de cada 
-     * nodo en la lista ProcesoProduccionNode.
+     * nodo de tipo proceso en el metodo de fabricacion relacional.
      * 
      * @param terminadoId ID del producto terminado
      * @return Lista de nombres de procesos
@@ -492,10 +497,9 @@ public class ProduccionService {
             .orElseThrow(() -> new RuntimeException("Producto terminado no encontrado con ID: " + terminadoId));
 
         // Añadir procesos del producto terminado
-        if (terminado.getProcesoProduccionCompleto() != null && 
-            terminado.getProcesoProduccionCompleto().getProcesosProduccion() != null) {
+        if (!getNodoProcesos(terminado).isEmpty()) {
 
-            for (ProcesoProduccionNode nodo : terminado.getProcesoProduccionCompleto().getProcesosProduccion()) {
+            for (NodoProceso nodo : getNodoProcesos(terminado)) {
                 if (nodo.getProcesoProduccion() != null) {
                     // Extraer el nombre del proceso específicamente del nodo
                     nombresProcesos.add(nodo.getProcesoProduccion().getNombre());
@@ -509,10 +513,9 @@ public class ProduccionService {
             if (producto instanceof SemiTerminado) {
                 SemiTerminado semiterminado = (SemiTerminado) producto;
 
-                if (semiterminado.getProcesoProduccionCompleto() != null && 
-                    semiterminado.getProcesoProduccionCompleto().getProcesosProduccion() != null) {
+                if (!getNodoProcesos(semiterminado).isEmpty()) {
 
-                    for (ProcesoProduccionNode nodo : semiterminado.getProcesoProduccionCompleto().getProcesosProduccion()) {
+                    for (NodoProceso nodo : getNodoProcesos(semiterminado)) {
                         if (nodo.getProcesoProduccion() != null) {
                             // Extraer el nombre del proceso específicamente del nodo
                             nombresProcesos.add(nodo.getProcesoProduccion().getNombre());
@@ -523,5 +526,35 @@ public class ProduccionService {
         }
 
         return new ArrayList<>(nombresProcesos);
+    }
+
+    private AreaOperativa getLastAreaOperativa(Producto producto) {
+        List<NodoProceso> nodoProcesos = getNodoProcesos(producto);
+        if (nodoProcesos.isEmpty()) {
+            return null;
+        }
+        return nodoProcesos.get(nodoProcesos.size() - 1).getAreaOperativa();
+    }
+
+    private List<NodoProceso> getNodoProcesos(Producto producto) {
+        if (producto instanceof Terminado terminado) {
+            if (terminado.getProcesoProduccionCompleto() == null || terminado.getProcesoProduccionCompleto().getNodes() == null) {
+                return List.of();
+            }
+            return terminado.getProcesoProduccionCompleto().getNodes().stream()
+                    .filter(NodoProceso.class::isInstance)
+                    .map(NodoProceso.class::cast)
+                    .collect(Collectors.toList());
+        }
+        if (producto instanceof SemiTerminado semiTerminado) {
+            if (semiTerminado.getProcesoProduccionCompleto() == null || semiTerminado.getProcesoProduccionCompleto().getNodes() == null) {
+                return List.of();
+            }
+            return semiTerminado.getProcesoProduccionCompleto().getNodes().stream()
+                    .filter(NodoProceso.class::isInstance)
+                    .map(NodoProceso.class::cast)
+                    .collect(Collectors.toList());
+        }
+        return List.of();
     }
 }

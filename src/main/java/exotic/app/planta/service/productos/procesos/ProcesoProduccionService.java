@@ -6,7 +6,8 @@ import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoRecurso;
 import exotic.app.planta.model.producto.manufacturing.procesos.RecursoProduccion;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionCompleto;
-import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
+import exotic.app.planta.model.producto.manufacturing.procesos.nodo.NodoProceso;
+import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoFabricacionNodo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionCompletoRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.RecursoProduccionRepo;
@@ -65,8 +66,9 @@ public class ProcesoProduccionService {
 
         Specification<ProcesoProduccionCompleto> referencedInProcesoCompleto = (root, query, cb) -> {
             query.distinct(true);
-            Join<ProcesoProduccionCompleto, ProcesoProduccionNode> nodeJoin = root.join("procesosProduccion");
-            return cb.equal(nodeJoin.get("procesoProduccion").get("procesoId"), id);
+            Join<ProcesoProduccionCompleto, ProcesoFabricacionNodo> nodeJoin = root.join("nodes");
+            Join<ProcesoProduccionCompleto, NodoProceso> procesoNodeJoin = cb.treat(nodeJoin, NodoProceso.class);
+            return cb.equal(procesoNodeJoin.get("procesoProduccion").get("procesoId"), id);
         };
 
         long references = procesoProduccionCompletoRepo.count(referencedInProcesoCompleto);
@@ -99,8 +101,9 @@ public class ProcesoProduccionService {
         // Verificar si está referenciado en algún proceso completo
         Specification<ProcesoProduccionCompleto> referencedInProcesoCompleto = (root, query, cb) -> {
             query.distinct(true);
-            Join<ProcesoProduccionCompleto, ProcesoProduccionNode> nodeJoin = root.join("procesosProduccion");
-            return cb.equal(nodeJoin.get("procesoProduccion").get("procesoId"), id);
+            Join<ProcesoProduccionCompleto, ProcesoFabricacionNodo> nodeJoin = root.join("nodes");
+            Join<ProcesoProduccionCompleto, NodoProceso> procesoNodeJoin = cb.treat(nodeJoin, NodoProceso.class);
+            return cb.equal(procesoNodeJoin.get("procesoProduccion").get("procesoId"), id);
         };
 
         long references = procesoProduccionCompletoRepo.count(referencedInProcesoCompleto);

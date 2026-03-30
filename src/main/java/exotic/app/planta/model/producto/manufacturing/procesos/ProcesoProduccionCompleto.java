@@ -1,11 +1,11 @@
 package exotic.app.planta.model.producto.manufacturing.procesos;
 
-
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import exotic.app.planta.model.organizacion.AreaOperativa;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import exotic.app.planta.model.producto.Producto;
-import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
+import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoFabricacionEdge;
+import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoFabricacionNodo;
 import lombok.*;
 
 import java.util.List;
@@ -23,22 +23,21 @@ public class ProcesoProduccionCompleto {
     @Column(name = "proceso_completo_id", unique = true, updatable = true, nullable = false)
     private int procesoCompletoId;
 
-    @ManyToOne
-    @JoinColumn(name = "producto_id")
+    @OneToOne
+    @JoinColumn(name = "producto_id", unique = true)
     @JsonBackReference("producto-proceso")
     private Producto producto;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "proceso_completo_id")
-    private List<ProcesoProduccionNode> procesosProduccion;
+    @OneToMany(mappedBy = "procesoProduccionCompleto", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
+    @JsonManagedReference("proceso-completo-nodes")
+    private List<ProcesoFabricacionNodo> nodes;
+
+    @OneToMany(mappedBy = "procesoProduccionCompleto", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
+    @JsonManagedReference("proceso-completo-edges")
+    private List<ProcesoFabricacionEdge> edges;
 
     @Column(name = "rendimiento_teorico")
     private double rendimientoTeorico;
-
-    @ManyToOne
-    @JoinColumn(name = "area_operativa_id")
-    private AreaOperativa areaOperativa;
-
-    @Lob
-    private String diagramaJson;
 }

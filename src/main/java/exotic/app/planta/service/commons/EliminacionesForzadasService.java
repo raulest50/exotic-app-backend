@@ -9,7 +9,6 @@ import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionCompleto;
-import exotic.app.planta.model.producto.manufacturing.procesos.nodo.ProcesoProduccionNode;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
 import exotic.app.planta.model.produccion.OrdenProduccion;
@@ -29,7 +28,6 @@ import exotic.app.planta.repo.producto.InsumoRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
-import exotic.app.planta.repo.producto.procesos.NodeConnectionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionCompletoRepo;
 import exotic.app.planta.repo.ventas.FacturaVentaRepo;
 import exotic.app.planta.repo.ventas.ItemFacturaVentaRepo;
@@ -79,7 +77,6 @@ public class EliminacionesForzadasService {
     private final OrdenVentaRepo ordenVentaRepo;
     private final FacturaVentaRepo facturaVentaRepo;
     private final ProcesoProduccionCompletoRepo procesoProduccionCompletoRepo;
-    private final NodeConnectionRepo nodeConnectionRepo;
     private final AsientoContableRepo asientoContableRepo;
     private final IncorporacionActivoHeaderRepo incorporacionActivoHeaderRepo;
     private final DepreciacionActivoRepo depreciacionActivoRepo;
@@ -412,18 +409,6 @@ public class EliminacionesForzadasService {
 
     private void deleteAssociatedProcess(String productoId) {
         List<ProcesoProduccionCompleto> procesos = procesoProduccionCompletoRepo.findByProducto_ProductoIdWithNodes(productoId);
-
-        List<Long> nodeIds = procesos.stream()
-                .flatMap(proceso -> safeList(proceso.getProcesosProduccion()).stream())
-                .map(ProcesoProduccionNode::getPNodeId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-
-        if (!nodeIds.isEmpty()) {
-            nodeConnectionRepo.deleteByNodeIds(nodeIds);
-            entityManager.flush();
-        }
 
         terminadoRepo.clearProcesoProduccionCompletoByProductoId(productoId);
         entityManager.flush();

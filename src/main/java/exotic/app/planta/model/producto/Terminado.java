@@ -27,8 +27,7 @@ public class Terminado extends Producto{
     @JoinColumn(name = "output_producto_id")
     private List<Insumo> insumos;
 
-    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "proceso_prod_id")
+    @OneToOne(mappedBy = "producto", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference("producto-proceso")
     private ProcesoProduccionCompleto procesoProduccionCompleto;
 

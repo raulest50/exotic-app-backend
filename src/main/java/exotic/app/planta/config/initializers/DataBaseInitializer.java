@@ -17,6 +17,7 @@ public class DataBaseInitializer {
     private final MasterDirectiveInitializer masterDirectiveInitializer;
     private final SuperMasterConfigInitializer superMasterConfigInitializer;
     private final MaestraNotificacionInitializer maestraNotificacionInitializer;
+    private final AreaOperativaInitializer areaOperativaInitializer;
     private final ModuloAccesoRepository moduloAccesoRepository;
 
     private static final Logger log = LoggerFactory.getLogger(DataBaseInitializer.class);
@@ -26,6 +27,7 @@ public class DataBaseInitializer {
         return args -> {
             superMasterConfigInitializer.initializeSuperMasterConfig();
             maestraNotificacionInitializer.initializeMaestraNotificaciones();
+            areaOperativaInitializer.verifyAlmacenGeneral();
             if (moduloAccesoRepository.count() == 0) {
                 log.info("Database is empty. Performing initial data setup...");
                 usersInitializer.initializeUsers();
