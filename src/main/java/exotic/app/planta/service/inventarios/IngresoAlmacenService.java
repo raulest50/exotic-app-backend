@@ -167,28 +167,33 @@ public class IngresoAlmacenService {
                 .map(movimiento -> {
                     MovimientoDetalleDTO dto = new MovimientoDetalleDTO();
                     dto.setMovimientoId(movimiento.getMovimientoId());
-                    
+
                     if (movimiento.getProducto() != null) {
                         dto.setProductoId(movimiento.getProducto().getProductoId());
                         dto.setProductoNombre(movimiento.getProducto().getNombre());
                         dto.setTipoUnidades(movimiento.getProducto().getTipoUnidades());
                     }
-                    
+
+                    if (movimiento.getAreaOperativa() != null) {
+                        dto.setAreaOperativaId(movimiento.getAreaOperativa().getAreaId());
+                        dto.setAreaOperativaNombre(movimiento.getAreaOperativa().getNombre());
+                    }
+
                     dto.setCantidad(movimiento.getCantidad());
-                    dto.setTipoMovimiento(movimiento.getTipoMovimiento() != null 
-                            ? movimiento.getTipoMovimiento().name() 
+                    dto.setTipoMovimiento(movimiento.getTipoMovimiento() != null
+                            ? movimiento.getTipoMovimiento().name()
                             : null);
-                    dto.setAlmacen(movimiento.getAlmacen() != null 
-                            ? movimiento.getAlmacen().name() 
+                    dto.setAlmacen(movimiento.getAlmacen() != null
+                            ? movimiento.getAlmacen().name()
                             : null);
                     dto.setFechaMovimiento(movimiento.getFechaMovimiento());
-                    
+
                     if (movimiento.getLote() != null) {
                         dto.setBatchNumber(movimiento.getLote().getBatchNumber());
                         dto.setProductionDate(movimiento.getLote().getProductionDate());
                         dto.setExpirationDate(movimiento.getLote().getExpirationDate());
                     }
-                    
+
                     return dto;
                 })
                 .collect(Collectors.toList());

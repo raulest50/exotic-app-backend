@@ -23,6 +23,12 @@ public class DispensacionDTO {
     private int ordenProduccionId;
 
     /**
+     * ID del área operativa destino a la que se entrega la dispensación.
+     * Se usa para registrar trazabilidad cuando los materiales salen de Almacén General.
+     */
+    private Integer areaOperativaDestinoId;
+
+    /**
      * Notas adicionales sobre esta dispensación.
      */
     private String observaciones;

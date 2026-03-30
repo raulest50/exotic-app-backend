@@ -3,13 +3,17 @@ package exotic.app.planta.resource.inventarios;
 
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.*;
-
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.inventarios.SalidaAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/salidas_almacen")
@@ -18,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class SalidaAlmacenResource {
 
     private final SalidaAlmacenService salidaAlmacenService;
+    private final UserRepository userRepository;
 
     /**
      * Endpoint para obtener recomendaciones de lotes para dispensación.
@@ -101,8 +106,11 @@ public class SalidaAlmacenResource {
      * @return La transacción de almacén creada
      */
     @PostMapping("/dispensacion")
-    public ResponseEntity<?> createDispensacion(@RequestBody DispensacionDTO dispensacionDTO) {
-        TransaccionAlmacen transaccion = salidaAlmacenService.createDispensacion(dispensacionDTO);
+    public ResponseEntity<?> createDispensacion(
+            Authentication authentication,
+            @RequestBody DispensacionDTO dispensacionDTO) {
+        User currentUser = getCurrentUser(authentication);
+        TransaccionAlmacen transaccion = salidaAlmacenService.createDispensacion(dispensacionDTO, currentUser.getId());
         return ResponseEntity.created(java.net.URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
                 .body(transaccion);
     }
@@ -155,6 +163,15 @@ public class SalidaAlmacenResource {
             @RequestBody FiltroHistDispensacionDTO filtro) {
         Page<TransaccionAlmacenResponseDTO> resultados = salidaAlmacenService.buscarDispensacionesFiltradasDTO(filtro);
         return ResponseEntity.ok(resultados);
+    }
+
+    private User getCurrentUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
     }
 
 

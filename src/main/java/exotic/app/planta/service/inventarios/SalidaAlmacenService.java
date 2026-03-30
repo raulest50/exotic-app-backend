@@ -6,6 +6,7 @@ import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.*;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.manufacturing.packaging.dto.CasePackResponseDTO;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
@@ -19,10 +20,12 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
+import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
 import exotic.app.planta.service.produccion.ProduccionService;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +59,8 @@ public class SalidaAlmacenService {
     private final ProduccionService produccionService;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final ProductoService productoService;
+    private final AreaProduccionRepo areaProduccionRepo;
+    private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
 
     /**
      * Creates a dispensation transaction for a production order.
@@ -65,7 +70,7 @@ public class SalidaAlmacenService {
      * @return The created transaction
      */
     @Transactional
-    public TransaccionAlmacen createDispensacion(DispensacionDTO dispensacionDTO) {
+    public TransaccionAlmacen createDispensacion(DispensacionDTO dispensacionDTO, Long userIdReportaSeguimiento) {
         // Obtain the production order
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(dispensacionDTO.getOrdenProduccionId())
                 .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + dispensacionDTO.getOrdenProduccionId()));
@@ -76,6 +81,11 @@ public class SalidaAlmacenService {
                 (ordenProduccion.getEstadoOrden() == 2 ? "TERMINADA" : "CANCELADA") + 
                 ". Estado actual: " + ordenProduccion.getEstadoOrden());
         }
+
+        AreaOperativa areaDestino = resolveAreaOperativaDestino(
+                ordenProduccion,
+                dispensacionDTO.getAreaOperativaDestinoId()
+        );
 
         // Create the warehouse transaction
         TransaccionAlmacen transaccion = new TransaccionAlmacen();
@@ -131,6 +141,7 @@ public class SalidaAlmacenService {
             movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
             movimiento.setAlmacen(Movimiento.Almacen.GENERAL);
             movimiento.setTransaccionAlmacen(transaccion);
+            movimiento.setAreaOperativa(areaDestino);
 
             if (item.getLoteId() != null) {
                 Lote lote = loteRepo.findById(Long.valueOf(item.getLoteId()))
@@ -171,9 +182,55 @@ public class SalidaAlmacenService {
         // Logica contable dispensacion
         // Pendiente implementación de lógica contable para dispensaciones
 
+        seguimientoOrdenAreaService.autoCompletarAlmacenGeneralPorDispensacion(
+                ordenProduccion.getOrdenId(),
+                userIdReportaSeguimiento,
+                buildObservacionAutoCompletar(dispensacionDTO, areaDestino)
+        );
+
         return transaccionGuardada;
     }
 
+    private AreaOperativa resolveAreaOperativaDestino(OrdenProduccion ordenProduccion, Integer areaOperativaDestinoId) {
+        if (areaOperativaDestinoId == null) {
+            return null;
+        }
+
+        if (areaOperativaDestinoId == SeguimientoOrdenAreaService.ALMACEN_GENERAL_AREA_ID) {
+            throw new IllegalArgumentException("El área operativa destino de una dispensación no puede ser Almacen General.");
+        }
+
+        AreaOperativa areaDestino = areaProduccionRepo.findById(areaOperativaDestinoId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No se encontró el área operativa destino con ID: " + areaOperativaDestinoId));
+
+        boolean areaPerteneceAlSeguimiento = seguimientoOrdenAreaService.tieneAreaOperativaEnSeguimiento(
+                ordenProduccion.getOrdenId(),
+                areaOperativaDestinoId
+        );
+
+        if (!areaPerteneceAlSeguimiento) {
+            throw new IllegalArgumentException(
+                    "El área operativa destino no pertenece a la ruta o seguimiento de la orden " + ordenProduccion.getOrdenId());
+        }
+
+        return areaDestino;
+    }
+
+    private String buildObservacionAutoCompletar(DispensacionDTO dispensacionDTO, AreaOperativa areaDestino) {
+        StringBuilder observacion = new StringBuilder("Auto-completado por dispensación de materiales");
+
+        if (areaDestino != null) {
+            observacion.append(" hacia ").append(areaDestino.getNombre())
+                    .append(" (ID ").append(areaDestino.getAreaId()).append(")");
+        }
+
+        if (dispensacionDTO.getObservaciones() != null && !dispensacionDTO.getObservaciones().isBlank()) {
+            observacion.append(". Observaciones: ").append(dispensacionDTO.getObservaciones().trim());
+        }
+
+        return observacion.toString();
+    }
 
     /**
      * Crea una dispensación de reposición justificada por averías reportadas.
@@ -938,6 +995,10 @@ public class SalidaAlmacenService {
                             dto.setProductoId(movimiento.getProducto().getProductoId());
                             dto.setProductoNombre(movimiento.getProducto().getNombre());
                             dto.setTipoUnidades(movimiento.getProducto().getTipoUnidades());
+                        }
+                        if (movimiento.getAreaOperativa() != null) {
+                            dto.setAreaOperativaId(movimiento.getAreaOperativa().getAreaId());
+                            dto.setAreaOperativaNombre(movimiento.getAreaOperativa().getNombre());
                         }
                         dto.setCantidad(movimiento.getCantidad());
                         dto.setTipoMovimiento(movimiento.getTipoMovimiento() != null

@@ -21,6 +21,8 @@ public class MovimientoDetalleDTO {
     private String productoId;
     private String productoNombre;
     private String tipoUnidades;
+    private Integer areaOperativaId;
+    private String areaOperativaNombre;
     private double cantidad;
     private String batchNumber; // del lote
     private LocalDate productionDate; // del lote

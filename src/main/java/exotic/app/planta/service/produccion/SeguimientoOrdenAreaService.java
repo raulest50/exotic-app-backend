@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SeguimientoOrdenAreaService {
 
+    public static final int ALMACEN_GENERAL_AREA_ID = -1;
+
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final UserRepository userRepository;
@@ -117,7 +119,42 @@ public class SeguimientoOrdenAreaService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No se encontró seguimiento visible para orden " + ordenId + " y área " + areaId));
 
-        // Marcar como completado
+        completarSeguimiento(seguimiento, userId, observaciones);
+
+        return toDTO(seguimiento);
+    }
+
+    /**
+     * Marca automÃ¡ticamente como completado el nodo visible de Almacen General cuando
+     * una dispensaciÃ³n normal de materiales se registra exitosamente.
+     */
+    public SeguimientoOrdenAreaDTO autoCompletarAlmacenGeneralPorDispensacion(int ordenId, Long userId, String observaciones) {
+        Optional<SeguimientoOrdenArea> seguimientoOpt = seguimientoRepo
+                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
+                        ordenId,
+                        ALMACEN_GENERAL_AREA_ID,
+                        SeguimientoOrdenArea.ESTADO_VISIBLE
+                );
+
+        if (seguimientoOpt.isEmpty()) {
+            log.info("No hay seguimiento visible de Almacen General para orden {}. Se omite auto-completado.", ordenId);
+            return null;
+        }
+
+        SeguimientoOrdenArea seguimiento = seguimientoOpt.get();
+        completarSeguimiento(seguimiento, userId, observaciones);
+        return toDTO(seguimiento);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean tieneAreaOperativaEnSeguimiento(int ordenId, int areaId) {
+        return seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
+                .stream()
+                .anyMatch(seguimiento -> seguimiento.getAreaOperativa() != null
+                        && seguimiento.getAreaOperativa().getAreaId() == areaId);
+    }
+
+    private void completarSeguimiento(SeguimientoOrdenArea seguimiento, Long userId, String observaciones) {
         seguimiento.setEstado(SeguimientoOrdenArea.ESTADO_COMPLETADO);
         seguimiento.setFechaCompletado(LocalDateTime.now());
         seguimiento.setObservaciones(observaciones);
@@ -128,11 +165,7 @@ public class SeguimientoOrdenAreaService {
         }
 
         seguimientoRepo.save(seguimiento);
-
-        // Propagar visibilidad a sucesores
-        propagarVisibilidad(ordenId, seguimiento.getRutaProcesoNode().getId());
-
-        return toDTO(seguimiento);
+        propagarVisibilidad(seguimiento.getOrdenProduccion().getOrdenId(), seguimiento.getRutaProcesoNode().getId());
     }
 
     /**

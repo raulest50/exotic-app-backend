@@ -100,4 +100,18 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
             @Param("loteAsignado") String loteAsignado,
             Pageable pageable
     );
+
+    /**
+     * Busca órdenes de producción pendientes (estado = 0) cuyo producto sea de tipo Terminado.
+     * Incluye fetch de producto y categoría para generar la plantilla de ingreso masivo.
+     *
+     * @return Lista de OPs pendientes con productos terminados, ordenadas por fecha de creación DESC
+     */
+    @Query("SELECT op FROM OrdenProduccion op " +
+           "JOIN FETCH op.producto p " +
+           "LEFT JOIN FETCH p.categoria c " +
+           "WHERE op.estadoOrden = 0 " +
+           "AND TYPE(p) = exotic.app.planta.model.producto.Terminado " +
+           "ORDER BY op.fechaCreacion DESC")
+    List<OrdenProduccion> findOrdenesPendientesConTerminado();
 }
