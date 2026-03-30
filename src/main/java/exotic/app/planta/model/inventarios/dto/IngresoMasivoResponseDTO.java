@@ -54,6 +54,6 @@ public class IngresoMasivoResponseDTO {
         private String mensaje;
 
         /** ID de la transacción creada; null si falló. */
-        private Long transaccionId;
+        private Integer transaccionId;
     }
 }

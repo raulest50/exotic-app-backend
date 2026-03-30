@@ -389,7 +389,7 @@ public class IngresoTerminadosAlmacenService {
                         loteAsignado,
                         true,
                         null,
-                        tx.getTransaccionId()
+                        (Integer) tx.getTransaccionId()
                 ));
                 exitosos++;
 
