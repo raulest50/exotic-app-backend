@@ -1,6 +1,7 @@
 package exotic.app.planta.service.commons.notificaciones;
 
 import exotic.app.planta.model.commons.notificaciones.ModuleNotificationDTA;
+import exotic.app.planta.model.commons.notificaciones.PuntoReordenEvaluacionResult;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.users.ModuloAcceso;
 import exotic.app.planta.model.users.ModuloSistema;
@@ -167,14 +168,15 @@ public class NotificacionesModulosService {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
         notification.setModulo(ModuloSistema.STOCK);
 
-        long count = puntoReordenEvaluacionService.evaluar().enReorden().size();
+        PuntoReordenEvaluacionResult result = puntoReordenEvaluacionService.evaluar();
+        long count = result.totalEnAlerta();
         notification.setMaterialesEnPuntoReorden(count);
 
         if (count > 0) {
             notification.setRequireAtention(true);
             notification.setMessage(count == 1
-                    ? "Hay 1 material en o bajo punto de reorden"
-                    : "Hay " + count + " materiales en o bajo punto de reorden");
+                    ? "Hay 1 material en punto de reorden pendiente de pedir o ingresar"
+                    : "Hay " + count + " materiales en punto de reorden pendientes de pedir o ingresar");
         } else {
             notification.setRequireAtention(false);
             notification.setMessage("");
