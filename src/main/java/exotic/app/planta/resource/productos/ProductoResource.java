@@ -2,6 +2,8 @@ package exotic.app.planta.resource.productos;
 
 
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
+import exotic.app.planta.model.producto.dto.ProductoBasicUpdateDTO;
+import exotic.app.planta.model.producto.dto.ProductoCategoriaEditabilityDTO;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
 import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminado;
@@ -170,6 +172,17 @@ public class ProductoResource {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/{productoId}/categoria-editability")
+    public ResponseEntity<?> getCategoriaEditability(@PathVariable String productoId) {
+        try {
+            ProductoCategoriaEditabilityDTO response = productoService.getCategoriaEditability(productoId);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/terminado/{productoId}/case-pack")
     public ResponseEntity<CasePackResponseDTO> getCasePackByTerminadoId(@PathVariable String productoId) {
         Optional<Terminado> terminadoOpt = productoService.findTerminadoByProductoId(productoId);
@@ -321,12 +334,44 @@ public class ProductoResource {
             // Delegar toda la lógica al método del servicio
             Producto updatedProducto = productoService.updateProducto(productoId, producto);
             return ResponseEntity.ok(updatedProducto);
+        } catch (IllegalStateException e) {
+            log.error("Conflicto al actualizar el producto: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                            "error", e.getMessage(),
+                            "reason", e.getMessage()
+                    ));
         } catch (IllegalArgumentException e) {
             log.error("Error de validación al actualizar el producto: {}", e.getMessage());
             return ResponseEntity.badRequest()
                     .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("Error al actualizar el producto: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al actualizar el producto: " + e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{productoId}/basic")
+    public ResponseEntity<Object> updateProductoBasic(
+            @PathVariable String productoId,
+            @RequestBody ProductoBasicUpdateDTO dto) {
+        try {
+            Producto updatedProducto = productoService.updateProductoBasic(productoId, dto);
+            return ResponseEntity.ok(updatedProducto);
+        } catch (IllegalStateException e) {
+            log.error("Conflicto al actualizar el producto (edicion basica): {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                            "error", e.getMessage(),
+                            "reason", e.getMessage()
+                    ));
+        } catch (IllegalArgumentException e) {
+            log.error("Error de validacion al actualizar el producto (edicion basica): {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error al actualizar el producto (edicion basica): {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Error al actualizar el producto: " + e.getMessage()));
         }

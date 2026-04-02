@@ -5,6 +5,8 @@ import exotic.app.planta.repo.producto.*;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.transaction.annotation.Transactional;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
+import exotic.app.planta.model.producto.dto.ProductoBasicUpdateDTO;
+import exotic.app.planta.model.producto.dto.ProductoCategoriaEditabilityDTO;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
@@ -12,7 +14,9 @@ import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
+import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.service.commons.FileStorageService;
 import exotic.app.planta.service.commons.notificaciones.PuntoReordenEvaluacionService;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
@@ -39,14 +43,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProductoService {
 
+    private static final List<Integer> TERMINAL_ORDER_STATES = List.of(2, -1);
+
     private final ProductoRepo productoRepo;
     private final MaterialRepo materialRepo;
     private final SemiTerminadoRepo semiTerminadoRepo;
     private final TerminadoRepo terminadoRepo;
+    private final CategoriaRepo categoriaRepo;
 
     private final InsumoRepo insumoRepository;
 
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
+    private final OrdenProduccionRepo ordenProduccionRepo;
 
     private final ItemOrdenCompraRepo itemOrdenCompraRepo;
 
@@ -208,6 +216,31 @@ public class ProductoService {
 
     public Optional<Terminado> findTerminadoByProductoId(String productoId) {
         return terminadoRepo.findById(productoId);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductoCategoriaEditabilityDTO getCategoriaEditability(String productoId) {
+        Producto producto = productoRepo.findById(productoId)
+                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + productoId));
+
+        if (!(producto instanceof Terminado)) {
+            return new ProductoCategoriaEditabilityDTO(
+                    false,
+                    0,
+                    "Solo los productos terminados pueden cambiar categoria."
+            );
+        }
+
+        long blockingOrdersCount = countBlockingOrdenesProduccion(productoId);
+        if (blockingOrdersCount > 0) {
+            return new ProductoCategoriaEditabilityDTO(
+                    false,
+                    blockingOrdersCount,
+                    "No se puede cambiar la categoria mientras existan ordenes de produccion no terminadas o no canceladas asociadas a este terminado."
+            );
+        }
+
+        return new ProductoCategoriaEditabilityDTO(true, 0, null);
     }
 
     /**
@@ -464,6 +497,70 @@ public class ProductoService {
         return productoRepo.findAll(spec, pageable);
     }
 
+    @Transactional
+    public Producto updateProductoBasic(String productoId, ProductoBasicUpdateDTO dto) {
+        validateBasicUpdateRequest(productoId, dto);
+
+        Producto productoOriginal = productoRepo.findById(productoId)
+                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + productoId));
+
+        productoOriginal.setNombre(dto.getNombre());
+        productoOriginal.setCantidadUnidad(dto.getCantidadUnidad());
+        productoOriginal.setObservaciones(dto.getObservaciones());
+        productoOriginal.setIvaPercentual(dto.getIvaPercentual());
+
+        log.info("Actualizando producto (edicion basica) {}: nombre={}, cantidadUnidad={}, iva={}%",
+                productoId, dto.getNombre(), dto.getCantidadUnidad(), dto.getIvaPercentual());
+
+        if (productoOriginal instanceof Material materialOriginal) {
+            if (dto.getTipoMaterial() != null) {
+                materialOriginal.setTipoMaterial(dto.getTipoMaterial());
+            }
+            if (dto.getPuntoReorden() != null) {
+                validatePuntoReorden(dto.getPuntoReorden());
+                materialOriginal.setPuntoReorden(dto.getPuntoReorden());
+            }
+            return materialRepo.save(materialOriginal);
+        }
+
+        if (productoOriginal instanceof SemiTerminado semiTerminadoOriginal) {
+            return semiTerminadoRepo.save(semiTerminadoOriginal);
+        }
+
+        if (productoOriginal instanceof Terminado terminadoOriginal) {
+            if (dto.getPrefijoLote() != null) {
+                if (dto.getPrefijoLote().trim().isEmpty()) {
+                    throw new IllegalArgumentException("El prefijo de lote es requerido para productos terminados.");
+                }
+                terminadoOriginal.setPrefijoLote(dto.getPrefijoLote());
+            }
+
+            Integer categoriaActualId = Optional.ofNullable(terminadoOriginal.getCategoria())
+                    .map(Categoria::getCategoriaId)
+                    .orElse(null);
+            Integer categoriaSolicitadaId = dto.getCategoriaId();
+
+            if (categoriaSolicitadaId != null && !Objects.equals(categoriaActualId, categoriaSolicitadaId)) {
+                long blockingOrdersCount = countBlockingOrdenesProduccion(productoId);
+                if (blockingOrdersCount > 0) {
+                    throw new IllegalStateException(
+                            "No se puede cambiar la categoria mientras existan ordenes de produccion no terminadas o no canceladas asociadas a este terminado."
+                    );
+                }
+
+                terminadoOriginal.setCategoria(categoriaRepo.findById(categoriaSolicitadaId)
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Categoria no encontrada: " + categoriaSolicitadaId
+                        )));
+                log.info("Actualizando categoria de terminado {} a {}", productoId, categoriaSolicitadaId);
+            }
+
+            return terminadoRepo.save(terminadoOriginal);
+        }
+
+        return productoRepo.save(productoOriginal);
+    }
+
     /**
      * Actualiza un producto existente en la base de datos.
      * Maneja diferentes tipos de productos (Material, SemiTerminado, Terminado) de forma adecuada.
@@ -536,6 +633,28 @@ public class ProductoService {
                 Terminado terminadoRequest = (Terminado) producto;
                 terminadoOriginal.setPrefijoLote(terminadoRequest.getPrefijoLote());
                 log.info("Actualizando prefijo de lote: {}", terminadoRequest.getPrefijoLote());
+
+                Integer categoriaActualId = Optional.ofNullable(terminadoOriginal.getCategoria())
+                        .map(categoria -> categoria.getCategoriaId())
+                        .orElse(null);
+                Integer categoriaSolicitadaId = Optional.ofNullable(terminadoRequest.getCategoria())
+                        .map(categoria -> categoria.getCategoriaId())
+                        .orElse(null);
+
+                if (categoriaSolicitadaId != null && !Objects.equals(categoriaActualId, categoriaSolicitadaId)) {
+                    long blockingOrdersCount = countBlockingOrdenesProduccion(productoId);
+                    if (blockingOrdersCount > 0) {
+                        throw new IllegalStateException(
+                                "No se puede cambiar la categoria mientras existan ordenes de produccion no terminadas o no canceladas asociadas a este terminado."
+                        );
+                    }
+
+                    terminadoOriginal.setCategoria(categoriaRepo.findById(categoriaSolicitadaId)
+                            .orElseThrow(() -> new IllegalArgumentException(
+                                    "Categoria no encontrada: " + categoriaSolicitadaId
+                            )));
+                    log.info("Actualizando categoria de terminado {} a {}", productoId, categoriaSolicitadaId);
+                }
             }
             log.info("Actualizando producto tipo Terminado");
             return terminadoRepo.save(terminadoOriginal);
@@ -575,6 +694,33 @@ public class ProductoService {
         materialRepo.deleteById(productoId);
     }
 
+    private void validateBasicUpdateRequest(String productoId, ProductoBasicUpdateDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("El cuerpo de la solicitud es requerido");
+        }
+        if (!productoId.equals(dto.getProductoId())) {
+            throw new IllegalArgumentException("El ID en la URL no coincide con el ID en el cuerpo de la solicitud");
+        }
+        if (dto.getNombre() == null || dto.getNombre().trim().isEmpty()) {
+            throw new IllegalArgumentException("El nombre del producto es requerido.");
+        }
+        if (dto.getCantidadUnidad() == null || dto.getCantidadUnidad() <= 0) {
+            throw new IllegalArgumentException("La cantidad por unidad es requerida.");
+        }
+        if (dto.getIvaPercentual() == null) {
+            throw new IllegalArgumentException("Valor de IVA no válido. Valores permitidos: 0%, 5%, 19%");
+        }
+
+        double iva = dto.getIvaPercentual();
+        if (iva != 0.0 && iva != 5.0 && iva != 19.0) {
+            throw new IllegalArgumentException("Valor de IVA no válido. Valores permitidos: 0%, 5%, 19%");
+        }
+
+        if (!productoRepo.existsById(productoId)) {
+            throw new IllegalArgumentException("Producto no encontrado: " + productoId);
+        }
+    }
+
     /**
      * -1: no participar en alertas de punto de reorden ({@link PuntoReordenEvaluacionService#PUNTO_REORDEN_IGNORAR}).
      * &gt;= 0: umbral válido (0 = sin umbral definido en evaluación).
@@ -589,4 +735,7 @@ public class ProductoService {
         }
     }
 
+    private long countBlockingOrdenesProduccion(String productoId) {
+        return ordenProduccionRepo.countByProducto_ProductoIdAndEstadoOrdenNotIn(productoId, TERMINAL_ORDER_STATES);
+    }
 }

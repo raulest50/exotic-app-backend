@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +37,8 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
      * @return Count of orders
      */
     long countByProducto_ProductoIdAndEstadoOrden(String productoId, int estadoOrden);
+
+    long countByProducto_ProductoIdAndEstadoOrdenNotIn(String productoId, Collection<Integer> estadosOrden);
 
     /**
      * Finds all production orders related to a specific product

@@ -219,11 +219,11 @@ public class NotificacionesModulosService {
             notification.setRequireAtention(true);
 
             if (existsOrdenPendienteLiberar && existsOrdenPendienteEnviar) {
-                notification.setMessage("Hay ?rdenes de compra pendientes por liberar y por enviar al proveedor");
+                notification.setMessage("Hay Ordenes de compra pendientes por liberar y por enviar al proveedor");
             } else if (existsOrdenPendienteLiberar) {
-                notification.setMessage("Hay ?rdenes de compra pendientes por liberar");
+                notification.setMessage("Hay Ordenes de compra pendientes por liberar");
             } else {
-                notification.setMessage("Hay ?rdenes de compra pendientes por enviar al proveedor");
+                notification.setMessage("Hay Ordenes de compra pendientes por enviar al proveedor");
             }
         } else {
             notification.setRequireAtention(false);
