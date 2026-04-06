@@ -187,8 +187,12 @@ public class MovimientosService {
                 if (isCargaMasiva) {
                     log.debug("[CARGA_MASIVA-Movimientos] Procesando item: productoId={}, cantidad={}", item.getProductoId(), item.getCantidad());
                 }
-                Producto producto = productoRepo.findByProductoId(item.getProductoId())
-                        .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + item.getProductoId()));
+                Optional<Producto> productoOpt = productoRepo.findByProductoId(item.getProductoId());
+                if (productoOpt.isEmpty()) {
+                    log.error("[CARGA_MASIVA-Movimientos] Producto no encontrado: {}. Abortando transacción.", item.getProductoId());
+                    throw new RuntimeException("Producto no encontrado: " + item.getProductoId());
+                }
+                Producto producto = productoOpt.get();
 
                 Movimiento movimiento = new Movimiento();
                 movimiento.setCantidad(item.getCantidad());
@@ -206,8 +210,10 @@ public class MovimientosService {
                     nuevoLote.setProductionDate(LocalDate.now());
                     nuevoLote.setExpirationDate(LocalDate.now().plusMonths(6));
 
-                    nuevoLote = loteRepo.save(nuevoLote);
-                    movimiento.setLote(nuevoLote);
+                    Lote savedLote = loteRepo.save(nuevoLote);
+                    log.debug("[CARGA_MASIVA-Movimientos] Lote creado: id={}, batchNumber={}",
+                            savedLote.getId(), savedLote.getBatchNumber());
+                    movimiento.setLote(savedLote);
                 }
 
                 movimiento.setTransaccionAlmacen(transaccion);
@@ -411,6 +417,9 @@ public class MovimientosService {
         }
         updatedProductIds.add(producto.getProductoId());
 
+        log.info("[CARGA_MASIVA-Cascada] Iniciando para producto={}", producto.getProductoId());
+        int semiCount = 0, termiCount = 0;
+
         // Recalculate cost of the product if it's a SemiTerminado or Terminado
         if (producto instanceof SemiTerminado) {
             SemiTerminado semiTerminado = (SemiTerminado) producto;
@@ -427,6 +436,7 @@ public class MovimientosService {
 
             // Save updated SemiTerminado
             semiTerminadoRepo.save(semiTerminado);
+            log.debug("[CARGA_MASIVA-Cascada] SemiTerminado actualizado: {}", semiTerminado.getProductoId());
 
         } else if (producto instanceof Terminado) {
             Terminado terminado = (Terminado) producto;
@@ -443,19 +453,25 @@ public class MovimientosService {
 
             // Save updated Terminado
             terminadoRepo.save(terminado);
+            log.debug("[CARGA_MASIVA-Cascada] Terminado actualizado: {}", terminado.getProductoId());
         }
 
         // Now find any SemiTerminados that use this product as an Insumo
         List<SemiTerminado> semiTerminados = semiTerminadoRepo.findByInsumos_Producto(producto);
         for (SemiTerminado st : semiTerminados) {
             updateCostoCascade(st, updatedProductIds);
+            semiCount++;
         }
 
         // And find any Terminados that use this product as an Insumo
         List<Terminado> terminados = terminadoRepo.findByInsumos_Producto(producto);
         for (Terminado t : terminados) {
             updateCostoCascade(t, updatedProductIds);
+            termiCount++;
         }
+
+        log.info("[CARGA_MASIVA-Cascada] Completado para producto={}. SemiTerminados={}, Terminados={}",
+                producto.getProductoId(), semiCount, termiCount);
     }
 
 

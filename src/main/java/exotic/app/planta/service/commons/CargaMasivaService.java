@@ -84,12 +84,11 @@ public class CargaMasivaService {
 
     @Transactional
     public BulkUpdateResponseDTO processBulkUpdate(MultipartFile file, String username) {
+        long startTime = System.currentTimeMillis();
         List<ErrorRecord> errors = new ArrayList<>();
         int successCount = 0;
         List<AjusteItemDTO> ajusteItems = new ArrayList<>();
         Set<String> updatedProductIds = new HashSet<>();
-
-        log.info("[CARGA_MASIVA] Inicio procesamiento. Archivo={}, usuario={}", file.getOriginalFilename(), username);
 
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheet("Carga masiva");
@@ -101,9 +100,9 @@ public class CargaMasivaService {
                 throw new RuntimeException("El archivo Excel no contiene datos válidos");
             }
 
-            int totalRows = sheet.getLastRowNum() - 1 + 1;
-            log.info("[CARGA_MASIVA] Hoja '{}', filas de datos: {} (índices 1 a {})",
-                    sheet.getSheetName(), totalRows, sheet.getLastRowNum());
+            int totalRows = sheet.getLastRowNum();
+            log.info("[CARGA_MASIVA] Inicio. archivo={}, tamaño={}KB, usuario={}, hoja='{}', filas={}",
+                    file.getOriginalFilename(), file.getSize() / 1024, username, sheet.getSheetName(), totalRows);
 
             for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
                 Row row = sheet.getRow(rowNum);
@@ -155,8 +154,8 @@ public class CargaMasivaService {
                     double actual = actualConsolidado != null ? actualConsolidado : 0.0;
                     double delta = nuevoValorAbsoluto - actual;
 
-                    log.info("[CARGA_MASIVA] Fila {}: productoid={}, nuevoValorAbsoluto={}, actualConsolidado={}, delta={}, nuevoCosto={}, costoActual={}",
-                            rowNum + 1, productoid, nuevoValorAbsoluto, actual, delta, nuevoCosto, costoActual);
+                    log.debug("[CARGA_MASIVA] Fila {}: productoid={}, delta={}, nuevoCosto={}",
+                            rowNum + 1, productoid, delta, nuevoCosto);
 
                     boolean hasChanges = false;
 
@@ -184,17 +183,26 @@ public class CargaMasivaService {
                     }
                 } catch (Exception e) {
                     String productoid = getCellValueAsString(row, 0);
-                    log.error("[CARGA_MASIVA] Error procesando fila {} (productoid={}): {}", rowNum + 1, productoid, e.getMessage(), e);
-                    errors.add(new ErrorRecord(rowNum + 1, productoid != null ? productoid : "N/A", 
-                        "Error procesando fila: " + e.getMessage()));
+                    Throwable rootCause = getRootCause(e);
+                    log.error("[CARGA_MASIVA] Error fila {} (productoid={}): {} | Causa raíz: {}",
+                            rowNum + 1, productoid, e.getMessage(),
+                            rootCause != null ? rootCause.getMessage() : "N/A", e);
+                    errors.add(new ErrorRecord(rowNum + 1, productoid != null ? productoid : "N/A",
+                            "Error: " + e.getMessage()));
                 }
             }
 
             log.info("[CARGA_MASIVA] Resumen iteración: successCount={}, ajusteItems.size()={}, errors.size()={}", successCount, ajusteItems.size(), errors.size());
 
             if (!ajusteItems.isEmpty()) {
-                log.info("[CARGA_MASIVA] Creando ajuste de inventario con {} items: {}", ajusteItems.size(),
-                        ajusteItems.stream().map(i -> i.getProductoId() + "=" + i.getCantidad()).collect(Collectors.joining(", ")));
+                String itemsPreview = ajusteItems.stream()
+                        .limit(10)
+                        .map(i -> i.getProductoId() + "=" + i.getCantidad())
+                        .collect(Collectors.joining(", "));
+                if (ajusteItems.size() > 10) {
+                    itemsPreview += " ... y " + (ajusteItems.size() - 10) + " más";
+                }
+                log.info("[CARGA_MASIVA] Creando ajuste con {} items: {}", ajusteItems.size(), itemsPreview);
                 AjusteInventarioDTO ajusteDTO = new AjusteInventarioDTO();
                 ajusteDTO.setUsername(username);
                 ajusteDTO.setObservaciones("Carga masiva de inventario");
@@ -212,7 +220,9 @@ public class CargaMasivaService {
             response.setErrors(errors);
             response.setReportFile(reportFile);
             response.setReportFileName("reporte_carga_masiva.xlsx");
-            log.info("[CARGA_MASIVA] Finalizado. successCount={}, failureCount={}", successCount, errors.size());
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("[CARGA_MASIVA] Finalizado en {}ms. successCount={}, failureCount={}, ajustesCreados={}",
+                    duration, successCount, errors.size(), ajusteItems.size());
             return response;
 
         } catch (IOException e) {
@@ -254,6 +264,15 @@ public class CargaMasivaService {
         movimientosService.updateCostoCascade(material, updatedProductIds);
     }
 
+    private Throwable getRootCause(Throwable t) {
+        Throwable cause = t.getCause();
+        if (cause == null) return t;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
     private byte[] generateReportExcel(Sheet originalSheet, List<ErrorRecord> errors, int successCount) {
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet reportSheet = workbook.createSheet("Reporte");
@@ -292,8 +311,9 @@ public class CargaMasivaService {
                 return out.toByteArray();
             }
         } catch (IOException e) {
-            log.error("Error generando reporte Excel: {}", e.getMessage(), e);
-            return new byte[0];
+            log.error("[CARGA_MASIVA] Error generando reporte Excel. successCount={}, errorsCount={}: {}",
+                    successCount, errors.size(), e.getMessage(), e);
+            throw new RuntimeException("Error generando reporte Excel", e);
         }
     }
 }
