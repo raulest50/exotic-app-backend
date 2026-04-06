@@ -3,6 +3,7 @@ package exotic.app.planta.resource.commons;
 import exotic.app.planta.model.commons.dto.BulkUpdateResponseDTO;
 import exotic.app.planta.service.commons.CargaMasivaService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/carga-masiva")
 @RequiredArgsConstructor
+@Slf4j
 public class CargaMasivaResource {
 
     private final CargaMasivaService cargaMasivaService;
@@ -36,18 +38,44 @@ public class CargaMasivaResource {
             Authentication authentication
     ) {
         String username = authentication != null ? authentication.getName() : "system";
-        BulkUpdateResponseDTO response = cargaMasivaService.processBulkUpdate(file, username);
-        
-        if (response.getReportFile() != null && response.getReportFile().length > 0) {
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, 
-                            "attachment; filename=\"" + response.getReportFileName() + "\"")
-                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                    .body(response.getReportFile());
-        } else {
+        String filename = file != null ? file.getOriginalFilename() : "null";
+        String contentType = file != null ? file.getContentType() : "null";
+        long sizeBytes = file != null ? file.getSize() : -1L;
+
+        log.info("[CARGA_MASIVA][RESOURCE] Inicio request ejecutar. usuario={}, archivo={}, sizeBytes={}, contentType={}",
+                username, filename, sizeBytes, contentType);
+
+        try {
+            if (file == null || file.isEmpty()) {
+                log.error("[CARGA_MASIVA][RESOURCE] Archivo invalido o vacio. usuario={}, archivo={}, sizeBytes={}, contentType={}",
+                        username, filename, sizeBytes, contentType);
+                throw new IllegalArgumentException("El archivo de carga masiva esta vacio o no fue enviado");
+            }
+
+            BulkUpdateResponseDTO response = cargaMasivaService.processBulkUpdate(file, username);
+            byte[] reportFile = response.getReportFile();
+            String reportFileName = response.getReportFileName();
+            int reportSizeBytes = reportFile != null ? reportFile.length : 0;
+
+            if (reportFile != null && reportFile.length > 0) {
+                log.info("[CARGA_MASIVA][RESOURCE] Request exitoso. usuario={}, archivo={}, reporte={}, reportSizeBytes={}",
+                        username, filename, reportFileName, reportSizeBytes);
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION,
+                                "attachment; filename=\"" + reportFileName + "\"")
+                        .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                        .body(reportFile);
+            }
+
+            log.warn("[CARGA_MASIVA][RESOURCE] Request completado sin reporte adjunto. usuario={}, archivo={}, reportSizeBytes={}",
+                    username, filename, reportSizeBytes);
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new byte[0]);
+        } catch (Exception e) {
+            log.error("[CARGA_MASIVA][RESOURCE] Error ejecutando carga masiva. usuario={}, archivo={}, sizeBytes={}, contentType={}, exceptionType={}, message={}",
+                    username, filename, sizeBytes, contentType, e.getClass().getName(), e.getMessage(), e);
+            throw e;
         }
     }
 }
