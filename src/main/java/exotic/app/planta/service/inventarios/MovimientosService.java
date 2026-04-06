@@ -37,6 +37,7 @@ import exotic.app.planta.service.contabilidad.ContabilidadService;
 import exotic.app.planta.service.produccion.ProduccionService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -71,6 +72,8 @@ import exotic.app.planta.model.inventarios.dto.MovimientoExcelRequestDTO;
 @Transactional(rollbackFor = Exception.class)
 @RequiredArgsConstructor
 public class MovimientosService {
+
+    private static final int MAX_CARGA_MASIVA_BATCH_SUFFIX_ATTEMPTS = 1000;
 
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final ProductoRepo productoRepo;
@@ -205,12 +208,9 @@ public class MovimientosService {
                             .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
                     movimiento.setLote(lote);
                 } else {
-                    Lote nuevoLote = new Lote();
-                    nuevoLote.setBatchNumber(generateBatchNumber(producto));
-                    nuevoLote.setProductionDate(LocalDate.now());
-                    nuevoLote.setExpirationDate(LocalDate.now().plusMonths(6));
-
-                    Lote savedLote = loteRepo.save(nuevoLote);
+                    Lote savedLote = isCargaMasiva
+                            ? crearLoteCargaMasivaConBatchUnico(producto)
+                            : crearLoteAutomatico(producto);
                     log.debug("[CARGA_MASIVA-Movimientos] Lote creado: id={}, batchNumber={}",
                             savedLote.getId(), savedLote.getBatchNumber());
                     movimiento.setLote(savedLote);
@@ -407,6 +407,97 @@ public class MovimientosService {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String random = String.format("%04d", new Random().nextInt(10000));
         return prefix + "-" + date + "-" + random;
+    }
+
+    private Lote crearLoteAutomatico(Producto producto) {
+        Lote nuevoLote = new Lote();
+        nuevoLote.setBatchNumber(generateBatchNumber(producto));
+        nuevoLote.setProductionDate(LocalDate.now());
+        nuevoLote.setExpirationDate(LocalDate.now().plusMonths(6));
+        return loteRepo.save(nuevoLote);
+    }
+
+    private Lote crearLoteCargaMasivaConBatchUnico(Producto producto) {
+        String baseBatchNumber = generateBatchNumber(producto);
+
+        for (int attempt = 0; attempt <= MAX_CARGA_MASIVA_BATCH_SUFFIX_ATTEMPTS; attempt++) {
+            String candidateBatchNumber = buildCargaMasivaBatchCandidate(baseBatchNumber, attempt);
+
+            if (loteRepo.findByBatchNumber(candidateBatchNumber) != null) {
+                log.warn("[CARGA_MASIVA-Movimientos] Batch ocupado antes de guardar. baseBatchNumber={}, candidateBatchNumber={}, attempt={}",
+                        baseBatchNumber, candidateBatchNumber, attempt);
+                continue;
+            }
+
+            Lote nuevoLote = new Lote();
+            nuevoLote.setBatchNumber(candidateBatchNumber);
+            nuevoLote.setProductionDate(LocalDate.now());
+            nuevoLote.setExpirationDate(LocalDate.now().plusMonths(6));
+
+            try {
+                Lote savedLote = loteRepo.save(nuevoLote);
+                if (attempt > 0) {
+                    log.info("[CARGA_MASIVA-Movimientos] Colisión de batch resuelta con sufijo. baseBatchNumber={}, finalBatchNumber={}, attempt={}",
+                            baseBatchNumber, candidateBatchNumber, attempt);
+                }
+                return savedLote;
+            } catch (DataIntegrityViolationException e) {
+                if (isBatchNumberUniqueCollision(e)) {
+                    log.warn("[CARGA_MASIVA-Movimientos] Colisión detectada al guardar lote. baseBatchNumber={}, candidateBatchNumber={}, attempt={}",
+                            baseBatchNumber, candidateBatchNumber, attempt);
+                    continue;
+                }
+
+                log.error("[CARGA_MASIVA-Movimientos] Error no recuperable creando lote para carga masiva. baseBatchNumber={}, candidateBatchNumber={}",
+                        baseBatchNumber, candidateBatchNumber, e);
+                throw e;
+            }
+        }
+
+        String message = "No fue posible asignar un batchNumber único para carga masiva. baseBatchNumber="
+                + baseBatchNumber + ", maxIntentos=" + MAX_CARGA_MASIVA_BATCH_SUFFIX_ATTEMPTS;
+        log.error("[CARGA_MASIVA-Movimientos] {}", message);
+        throw new IllegalStateException(message);
+    }
+
+    private String buildCargaMasivaBatchCandidate(String baseBatchNumber, int attempt) {
+        if (attempt == 0) {
+            return baseBatchNumber;
+        }
+
+        return baseBatchNumber + toAlphabeticSuffix(attempt);
+    }
+
+    private String toAlphabeticSuffix(int value) {
+        StringBuilder suffix = new StringBuilder();
+        int current = value;
+
+        while (current > 0) {
+            current--;
+            suffix.insert(0, (char) ('a' + (current % 26)));
+            current /= 26;
+        }
+
+        return suffix.toString();
+    }
+
+    private boolean isBatchNumberUniqueCollision(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null) {
+                String normalizedMessage = message.toLowerCase(Locale.ROOT);
+                boolean mentionsUniqueViolation = normalizedMessage.contains("duplicate key")
+                        || normalizedMessage.contains("unique constraint")
+                        || normalizedMessage.contains("constraint");
+                boolean mentionsBatchNumber = normalizedMessage.contains("batch_number");
+                if (mentionsUniqueViolation && mentionsBatchNumber) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
 

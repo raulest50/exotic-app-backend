@@ -78,3 +78,4 @@ deployment_production_log.txt
 fix-flyway-local.sql
 fix-*.sql
 *-local-fix.sql
+/id_rsa.ppk
