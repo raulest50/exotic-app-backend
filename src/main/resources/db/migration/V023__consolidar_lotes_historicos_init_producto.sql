@@ -18,16 +18,19 @@
 --
 -- Post-migración opcional:
 --   Elimina filas de lote que ya no están referenciadas por movimientos.
+--
+-- Lotes INIT: expiration_date = 2027-01-01 (FEFO); FKs OCM/OP en NULL con
+-- cast explícito para evitar error de tipos en PostgreSQL (date vs text).
 -- =====================================================================
 
 -- 1) Crear lotes INIT (idempotente: no inserta si el batch_number ya existe)
 INSERT INTO lote (batch_number, production_date, expiration_date, orden_compra_id, orden_produccion_id)
 SELECT DISTINCT
     ('INIT-' || m.producto_id) AS batch_number,
-    CURRENT_DATE              AS production_date,
-    NULL                      AS expiration_date,
-    NULL                      AS orden_compra_id,
-    NULL                      AS orden_produccion_id
+    CURRENT_DATE::date          AS production_date,
+    DATE '2027-01-01'          AS expiration_date,
+    NULL::integer               AS orden_compra_id,
+    NULL::integer               AS orden_produccion_id
 FROM movimientos m
 WHERE NOT EXISTS (
     SELECT 1
