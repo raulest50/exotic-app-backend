@@ -113,7 +113,7 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
     @Query("SELECT op FROM OrdenProduccion op " +
            "JOIN FETCH op.producto p " +
            "LEFT JOIN FETCH p.categoria c " +
-           "WHERE op.estadoOrden = 0 " +
+           "WHERE op.estadoOrden <> 2 AND op.estadoOrden <> -1 " +
            "AND TYPE(p) = exotic.app.planta.model.producto.Terminado " +
            "ORDER BY op.fechaCreacion DESC")
     List<OrdenProduccion> findOrdenesPendientesConTerminado();

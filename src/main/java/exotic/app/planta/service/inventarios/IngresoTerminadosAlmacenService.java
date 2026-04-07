@@ -221,7 +221,8 @@ public class IngresoTerminadosAlmacenService {
     }
 
     /**
-     * Genera una plantilla Excel con las OPs pendientes (estado = 0) de productos terminados.
+     * Genera una plantilla Excel con las OPs abiertas de productos terminados.
+     * Se consideran abiertas las ordenes no TERMINADAS (2) ni CANCELADAS (-1).
      * Las columnas de datos de la OP están pre-llenadas y las columnas editables
      * (cantidad_ingresada, fecha_vencimiento) se resaltan con fondo verde claro.
      *
