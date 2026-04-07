@@ -232,4 +232,65 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             @Param("tipoBackflush") Movimiento.TipoMovimiento tipoBackflush);
+
+    /**
+     * Ajustes de almacén (entradas): {@link Movimiento.TipoMovimiento#AJUSTE_POSITIVO} con cantidad &gt; 0.
+     * Sin filtrar por tipo de producto (materiales y terminados).
+     */
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND m.cantidad > 0
+              AND m.tipoMovimiento = :tipoAjustePositivo
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findAjustesAlmacenEntradasPorRango(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoAjustePositivo") Movimiento.TipoMovimiento tipoAjustePositivo);
+
+    /**
+     * Ajustes de almacén (salidas): {@link Movimiento.TipoMovimiento#AJUSTE_NEGATIVO} con cantidad &lt; 0.
+     */
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoAjusteNegativo
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findAjustesAlmacenSalidasPorRango(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoAjusteNegativo") Movimiento.TipoMovimiento tipoAjusteNegativo);
+
+    /**
+     * Ajustes de almacén (mixto): entradas y salidas según tipo y signo de cantidad.
+     */
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND (
+                (m.cantidad > 0 AND m.tipoMovimiento = :tipoAjustePositivo)
+                OR (m.cantidad < 0 AND m.tipoMovimiento = :tipoAjusteNegativo)
+              )
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findAjustesAlmacenMixtaPorRango(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoAjustePositivo") Movimiento.TipoMovimiento tipoAjustePositivo,
+            @Param("tipoAjusteNegativo") Movimiento.TipoMovimiento tipoAjusteNegativo);
 }

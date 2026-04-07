@@ -1,7 +1,5 @@
 package exotic.app.planta.model.inventarios.dto;
 
-import java.util.List;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,6 +8,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class InventarioExcelRequestDTO {
-    private List<String> categories;
     private String searchTerm;
+    private String tipoBusqueda;
 }

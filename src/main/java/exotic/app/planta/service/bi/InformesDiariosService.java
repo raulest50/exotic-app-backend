@@ -85,6 +85,47 @@ public class InformesDiariosService {
         return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado");
     }
 
+    /**
+     * Excel con movimientos de ajuste de almacén ({@link Movimiento.TipoMovimiento#AJUSTE_POSITIVO} /
+     * {@link Movimiento.TipoMovimiento#AJUSTE_NEGATIVO}) en el rango de fechas inclusive.
+     */
+    public byte[] exportarAjustesAlmacenExcel(
+            LocalDate fechaDesde, LocalDate fechaHasta, SentidoAjusteInforme sentido) {
+        if (fechaDesde == null || fechaHasta == null) {
+            throw new IllegalArgumentException("fechaDesde y fechaHasta son obligatorias");
+        }
+        if (fechaDesde.isAfter(fechaHasta)) {
+            throw new IllegalArgumentException("fechaDesde no puede ser posterior a fechaHasta");
+        }
+        if (sentido == null) {
+            throw new IllegalArgumentException("sentido es obligatorio");
+        }
+
+        LocalDateTime start = fechaDesde.atStartOfDay();
+        LocalDateTime end = fechaHasta.atTime(LocalTime.MAX);
+
+        return switch (sentido) {
+            case ENTRADAS -> generarExcelMovimientosAlmacen(
+                    transaccionAlmacenRepo.findAjustesAlmacenEntradasPorRango(
+                            start, end, Movimiento.TipoMovimiento.AJUSTE_POSITIVO),
+                    "Ajustes almacén entradas",
+                    "ajustes almacén entradas");
+            case SALIDAS -> generarExcelMovimientosAlmacen(
+                    transaccionAlmacenRepo.findAjustesAlmacenSalidasPorRango(
+                            start, end, Movimiento.TipoMovimiento.AJUSTE_NEGATIVO),
+                    "Ajustes almacén salidas",
+                    "ajustes almacén salidas");
+            case MIXTA -> generarExcelMovimientosAlmacen(
+                    transaccionAlmacenRepo.findAjustesAlmacenMixtaPorRango(
+                            start,
+                            end,
+                            Movimiento.TipoMovimiento.AJUSTE_POSITIVO,
+                            Movimiento.TipoMovimiento.AJUSTE_NEGATIVO),
+                    "Ajustes almacén mixto",
+                    "ajustes almacén mixto");
+        };
+    }
+
     private byte[] generarExcelMovimientosAlmacen(
             List<Movimiento> movimientos, String nombreHoja, String contextoLog) {
         try (XSSFWorkbook workbook = new XSSFWorkbook();

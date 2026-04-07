@@ -1,19 +1,18 @@
 package exotic.app.planta.service.inventarios;
 
+import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.dto.InventarioExcelRequestDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientoRowDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientosPageDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientosRequestDTO;
-import exotic.app.planta.model.inventarios.Movimiento;
-import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
-import exotic.app.planta.model.producto.SemiTerminado;
-import exotic.app.planta.model.producto.Terminado;
-import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
+import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -34,13 +33,12 @@ public class InventarioService {
 
     private final ProductoService productoService;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
+    private final MovimientosService movimientosService;
 
     public byte[] generateInventoryExcel(InventarioExcelRequestDTO dto) {
-        Page<Producto> productos = productoService.consultaProductos(
+        List<ProductoStockDTO> productos = movimientosService.findProductsWithStockForExport(
                 dto.getSearchTerm(),
-                dto.getCategories(),
-                0,
-                Integer.MAX_VALUE
+                dto.getTipoBusqueda()
         );
 
         try (Workbook workbook = new XSSFWorkbook()) {
@@ -49,17 +47,17 @@ public class InventarioService {
             Row headerRow = sheet.createRow(0);
             headerRow.createCell(0).setCellValue("ID");
             headerRow.createCell(1).setCellValue("Nombre");
-            headerRow.createCell(2).setCellValue("Categoría");
-            headerRow.createCell(3).setCellValue("Stock");
+            headerRow.createCell(2).setCellValue("Stock");
+            headerRow.createCell(3).setCellValue("Unidades");
 
             int rowIdx = 1;
-            for (Producto producto : productos.getContent()) {
+            for (ProductoStockDTO productoStock : productos) {
+                Producto producto = productoStock.getProducto();
                 Row row = sheet.createRow(rowIdx++);
                 row.createCell(0).setCellValue(producto.getProductoId());
                 row.createCell(1).setCellValue(producto.getNombre());
-                row.createCell(2).setCellValue(getCategoria(producto));
-                Double stock = transaccionAlmacenRepo.findTotalCantidadByProductoId(producto.getProductoId());
-                row.createCell(3).setCellValue(stock != null ? stock : 0);
+                row.createCell(2).setCellValue(productoStock.getStock());
+                row.createCell(3).setCellValue(producto.getTipoUnidades() != null ? producto.getTipoUnidades() : "");
             }
 
             for (int i = 0; i < 4; i++) {
@@ -75,21 +73,6 @@ public class InventarioService {
         }
     }
 
-    private String getCategoria(Producto producto) {
-        if (producto instanceof Material material) {
-            if (material.getTipoMaterial() == 1) {
-                return ProductoSearchCriteria.CATEGORIA_MATERIA_PRIMA;
-            } else if (material.getTipoMaterial() == 2) {
-                return ProductoSearchCriteria.CATEGORIA_MATERIAL_EMPAQUE;
-            }
-        } else if (producto instanceof SemiTerminado) {
-            return ProductoSearchCriteria.CATEGORIA_SEMITERMINADO;
-        } else if (producto instanceof Terminado) {
-            return ProductoSearchCriteria.CATEGORIA_TERMINADO;
-        }
-        return "";
-    }
-
     public KardexMovimientosPageDTO getKardexMovimientosPage(KardexMovimientosRequestDTO dto) {
         if (dto == null) throw new IllegalArgumentException("DTO requerido");
         if (dto.getProductoId() == null || dto.getProductoId().trim().isEmpty()) {
@@ -103,7 +86,7 @@ public class InventarioService {
         try {
             almacen = Movimiento.Almacen.valueOf(dto.getAlmacen().trim().toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Almacén no válido: " + dto.getAlmacen());
+            throw new IllegalArgumentException("Almacen no valido: " + dto.getAlmacen());
         }
 
         LocalDate startDate = dto.getStartDate();
@@ -207,7 +190,7 @@ public class InventarioService {
         try {
             almacen = Movimiento.Almacen.valueOf(dto.getAlmacen().trim().toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Almacén no válido: " + dto.getAlmacen());
+            throw new IllegalArgumentException("Almacen no valido: " + dto.getAlmacen());
         }
 
         LocalDate startDate = dto.getStartDate();
@@ -251,7 +234,7 @@ public class InventarioService {
             meta3.createCell(0).setCellValue("Saldo inicial");
             meta3.createCell(1).setCellValue(saldoInicial);
 
-            rowIdx++; // blank
+            rowIdx++;
 
             Row headerRow = sheet.createRow(rowIdx++);
             headerRow.createCell(0).setCellValue("Fecha");

@@ -236,6 +236,8 @@ public class SeguimientoOrdenAreaService {
         dto.setProductoNombre(entity.getOrdenProduccion().getProducto().getNombre());
         dto.setCantidadProducir(entity.getOrdenProduccion().getCantidadProducir());
         dto.setEstadoOrden(entity.getOrdenProduccion().getEstadoOrden());
+        dto.setOrdenObservaciones(entity.getOrdenProduccion().getObservaciones());
+        dto.setFechaFinalPlanificada(entity.getOrdenProduccion().getFechaFinalPlanificada());
 
         dto.setNodeId(entity.getRutaProcesoNode().getId());
         dto.setNodeLabel(entity.getRutaProcesoNode().getLabel());
@@ -280,6 +282,8 @@ public class SeguimientoOrdenAreaService {
         private String productoNombre;
         private double cantidadProducir;
         private int estadoOrden;
+        private String ordenObservaciones;
+        private LocalDateTime fechaFinalPlanificada;
 
         private Long nodeId;
         private String nodeLabel;

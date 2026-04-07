@@ -123,7 +123,7 @@ public class MovimientosService {
     }
 
 
-    // New method to search products and get stock
+    // Search products and compute stock for consolidated inventory views/exports
     public Page<ProductoStockDTO> searchProductsWithStock(String searchTerm, String tipoBusqueda, int page, int size){
         Pageable pageable = PageRequest.of(page, size);
 
@@ -147,6 +147,27 @@ public class MovimientosService {
         }).collect(Collectors.toList());
 
         return new PageImpl<>(productStockDTOList, pageable, productosPage.getTotalElements());
+    }
+
+    public List<ProductoStockDTO> findProductsWithStockForExport(String searchTerm, String tipoBusqueda) {
+        String normalizedSearchTerm = searchTerm != null ? searchTerm.trim() : "";
+        String normalizedTipoBusqueda = "ID".equalsIgnoreCase(tipoBusqueda) ? "ID" : "NOMBRE";
+
+        Specification<Producto> spec = (root, query, criteriaBuilder) -> {
+            if ("ID".equalsIgnoreCase(normalizedTipoBusqueda)) {
+                return criteriaBuilder.equal(root.get("productoId"), normalizedSearchTerm);
+            }
+            return criteriaBuilder.like(
+                    criteriaBuilder.lower(root.get("nombre")),
+                    "%" + normalizedSearchTerm.toLowerCase() + "%"
+            );
+        };
+
+        return productoRepo.findAll(spec).stream().map(producto -> {
+            Double stockQuantity = transaccionAlmacenRepo.findTotalCantidadByProductoId(producto.getProductoId());
+            stockQuantity = (stockQuantity != null) ? stockQuantity : 0.0;
+            return new ProductoStockDTO(producto, stockQuantity);
+        }).collect(Collectors.toList());
     }
 
 

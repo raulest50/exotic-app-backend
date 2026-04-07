@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.bi;
 
 import exotic.app.planta.service.bi.InformesDiariosService;
+import exotic.app.planta.service.bi.SentidoAjusteInforme;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
@@ -60,5 +61,24 @@ public class InformesDiariosResource {
                 .contentType(MediaType.parseMediaType(
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(excel);
+    }
+
+    @GetMapping("/almacen/ajustes/excel")
+    public ResponseEntity<byte[]> exportarAjustesAlmacenExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam SentidoAjusteInforme sentido) {
+        try {
+            byte[] excel = informesDiariosService.exportarAjustesAlmacenExcel(fechaDesde, fechaHasta, sentido);
+            String filename = String.format(
+                    "informe_ajustes_almacen_%s_%s_%s.xlsx", sentido.name(), fechaDesde, fechaHasta);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(excel);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 }
