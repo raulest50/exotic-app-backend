@@ -1,6 +1,7 @@
 package exotic.app.planta.service.commons.notificaciones;
 
 import exotic.app.planta.model.commons.notificaciones.ModuleNotificationDTA;
+import exotic.app.planta.model.commons.notificaciones.OrdenCompraAlertaCampanaDTO;
 import exotic.app.planta.model.commons.notificaciones.PuntoReordenEvaluacionResult;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.users.ModuloAcceso;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -211,6 +213,24 @@ public class NotificacionesModulosService {
         long countEnviar = ordenCompraRepo.countByEstado(1);
         notification.setOrdenesPendientesLiberar(countLiberar);
         notification.setOrdenesPendientesEnviar(countEnviar);
+
+        if (countLiberar > 0) {
+            notification.setDetalleOrdenesPendientesLiberar(
+                    ordenCompraRepo.findByEstadoOrderByFechaEmisionDesc(0).stream()
+                            .map(o -> new OrdenCompraAlertaCampanaDTO(o.getOrdenCompraId(), o.getFechaEmision()))
+                            .toList());
+        } else {
+            notification.setDetalleOrdenesPendientesLiberar(Collections.emptyList());
+        }
+
+        if (countEnviar > 0) {
+            notification.setDetalleOrdenesPendientesEnviar(
+                    ordenCompraRepo.findByEstadoOrderByFechaEmisionDesc(1).stream()
+                            .map(o -> new OrdenCompraAlertaCampanaDTO(o.getOrdenCompraId(), o.getFechaEmision()))
+                            .toList());
+        } else {
+            notification.setDetalleOrdenesPendientesEnviar(Collections.emptyList());
+        }
 
         boolean existsOrdenPendienteLiberar = countLiberar > 0;
         boolean existsOrdenPendienteEnviar = countEnviar > 0;

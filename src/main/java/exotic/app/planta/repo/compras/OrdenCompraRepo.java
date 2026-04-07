@@ -67,6 +67,11 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
     long countByEstado(int estado);
 
     /**
+     * Listado liviano para notificaciones COMPRAS (campana); ordenado por fecha de emisión descendente.
+     */
+    List<OrdenCompraMateriales> findByEstadoOrderByFechaEmisionDesc(int estado);
+
+    /**
      * Calcula el porcentaje de materiales recibidos para múltiples órdenes de compra en batch.
      * 
      * Esta query SQL nativa optimiza el cálculo de porcentajes recibidos haciendo una sola
