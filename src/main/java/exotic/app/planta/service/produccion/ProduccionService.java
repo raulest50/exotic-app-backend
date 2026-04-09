@@ -245,8 +245,11 @@ public class ProduccionService {
      */
     public Page<OrdenProduccionDTO> getOrdenesProduccionOpenOrInProgress(Pageable pageable) {
         Page<OrdenProduccion> ordenesPage = ordenProduccionRepo.findByEstadoOrdenOpenOrInProgress(pageable);
-        // No need to initialize associations as EntityGraph is used in the repository method
-        return ordenesPage.map(this::convertToDto);
+        List<OrdenProduccionDTO> dtoList = ordenesPage.getContent().stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        enriquecerUltimaAreaDispensada(dtoList);
+        return new PageImpl<>(dtoList, pageable, ordenesPage.getTotalElements());
     }
 
     /**
@@ -273,12 +276,18 @@ public class ProduccionService {
             return null;
         }
 
-        return convertToDto(orden);
+        OrdenProduccionDTO dto = convertToDto(orden);
+        enriquecerUltimaAreaDispensada(List.of(dto));
+        return dto;
     }
 
     public Page<OrdenProduccionDTO> getOrdenesProduccionByLoteAsignadoForDispensacion(String loteAsignado, Pageable pageable) {
         Page<OrdenProduccion> ordenesPage = ordenProduccionRepo.findByLoteAsignadoContainingAndOpenOrInProgress(loteAsignado, pageable);
-        return ordenesPage.map(this::convertToDto);
+        List<OrdenProduccionDTO> dtoList = ordenesPage.getContent().stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        enriquecerUltimaAreaDispensada(dtoList);
+        return new PageImpl<>(dtoList, pageable, ordenesPage.getTotalElements());
     }
 
     // Helper method to map OrdenProduccion to OrdenProduccionDTO
@@ -303,6 +312,29 @@ public class ProduccionService {
         }
 
         return dto;
+    }
+
+    private void enriquecerUltimaAreaDispensada(List<OrdenProduccionDTO> ordenes) {
+        if (ordenes == null || ordenes.isEmpty()) {
+            return;
+        }
+
+        Map<Integer, String> ultimaAreaPorOrdenId = transaccionAlmacenHeaderRepo
+                .findUltimaAreaDispensadaByOrdenIds(
+                        TransaccionAlmacen.TipoEntidadCausante.OD,
+                        ordenes.stream().map(OrdenProduccionDTO::getOrdenId).toList()
+                )
+                .stream()
+                .collect(Collectors.toMap(
+                        TransaccionAlmacenHeaderRepo.UltimaAreaDispensadaProjection::getOrdenProduccionId,
+                        projection -> projection.getAreaOperativaNombre() != null
+                                ? projection.getAreaOperativaNombre()
+                                : "Sin dispensacion"
+                ));
+
+        ordenes.forEach(orden -> orden.setUltimaAreaDispensada(
+                ultimaAreaPorOrdenId.getOrDefault(orden.getOrdenId(), "Sin dispensacion")
+        ));
     }
 
     /**

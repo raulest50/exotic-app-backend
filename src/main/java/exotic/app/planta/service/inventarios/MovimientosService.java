@@ -222,7 +222,7 @@ public class MovimientosService {
                 movimiento.setCantidad(item.getCantidad());
                 movimiento.setProducto(producto);
                 movimiento.setAlmacen(Optional.ofNullable(item.getAlmacen()).orElse(Movimiento.Almacen.GENERAL));
-                movimiento.setTipoMovimiento(resolveTipoMovimiento(item));
+                movimiento.setTipoMovimiento(resolveTipoMovimiento(item, tipoEntidadCausante));
 
                 if (item.getLoteId() != null) {
                     Lote lote = loteRepo.findById(item.getLoteId().longValue())
@@ -636,7 +636,15 @@ public class MovimientosService {
     }
 
 
-    private Movimiento.TipoMovimiento resolveTipoMovimiento(AjusteItemDTO item) {
+    private Movimiento.TipoMovimiento resolveTipoMovimiento(
+            AjusteItemDTO item,
+            TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante) {
+        if (tipoEntidadCausante == TransaccionAlmacen.TipoEntidadCausante.OAA) {
+            return item.getCantidad() >= 0
+                    ? Movimiento.TipoMovimiento.AJUSTE_POSITIVO
+                    : Movimiento.TipoMovimiento.AJUSTE_NEGATIVO;
+        }
+
         if (item.getMotivo() != null) {
             try {
                 return Movimiento.TipoMovimiento.valueOf(item.getMotivo().toUpperCase());

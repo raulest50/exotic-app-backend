@@ -78,28 +78,28 @@ Ejemplo de carga útil:
 
 ```json
 {
-  "usuarioId": 12,
+  "username": "jdoe",
   "observaciones": "Ajuste mensual de stock",
   "urlDocSoporte": "https://example.com/ajuste-septiembre.pdf",
   "items": [
     {
       "productoId": "MP001",
       "cantidad": 15.5,
-      "almacen": "GENERAL",
-      "motivo": "COMPRA"
+      "almacen": "GENERAL"
     },
     {
       "productoId": "PT-123",
       "cantidad": -3,
-      "almacen": "PERDIDAS",
-      "loteId": 45,
-      "motivo": "PERDIDA"
+      "almacen": "GENERAL",
+      "loteId": 45
     }
   ]
 }
 ```
 
-- Las cantidades positivas incrementan el inventario y se clasifican como `COMPRA` por defecto.
+- Para este endpoint (`OAA`), las cantidades positivas se registran como `AJUSTE_POSITIVO`.
 - Las cantidades negativas disminuyen el inventario y se clasifican como `BAJA` si no se envía otro motivo válido.
-- El campo `motivo` acepta valores de `Movimiento.TipoMovimiento` para forzar el tipo de movimiento.
+- Nota: la clasificación como `BAJA` ya no aplica a ajustes `OAA`.
+- Para este endpoint (`OAA`), las cantidades negativas se registran como `AJUSTE_NEGATIVO`.
+- En `POST /movimientos/ajustes`, el tipo del movimiento se deriva del signo de `cantidad`; no se usa `motivo` para reclasificarlo como compra o baja.
 - `loteId` es opcional y permite asociar el ajuste a un lote específico.

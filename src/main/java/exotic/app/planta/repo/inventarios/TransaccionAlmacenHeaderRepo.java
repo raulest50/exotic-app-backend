@@ -88,6 +88,37 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         @Param("idEntidadCausante") int idEntidadCausante
     );
 
+    @Query("SELECT t.idEntidadCausante as ordenProduccionId, " +
+           "MAX(a.nombre) as areaOperativaNombre " +
+           "FROM TransaccionAlmacen t " +
+           "JOIN t.movimientosTransaccion m " +
+           "LEFT JOIN m.areaOperativa a " +
+           "WHERE t.tipoEntidadCausante = :tipoEntidadCausante " +
+           "AND t.idEntidadCausante IN :ordenIds " +
+           "AND t.fechaTransaccion = (" +
+           "    SELECT MAX(t2.fechaTransaccion) " +
+           "    FROM TransaccionAlmacen t2 " +
+           "    WHERE t2.tipoEntidadCausante = :tipoEntidadCausante " +
+           "    AND t2.idEntidadCausante = t.idEntidadCausante" +
+           ") " +
+           "AND t.transaccionId = (" +
+           "    SELECT MAX(t3.transaccionId) " +
+           "    FROM TransaccionAlmacen t3 " +
+           "    WHERE t3.tipoEntidadCausante = :tipoEntidadCausante " +
+           "    AND t3.idEntidadCausante = t.idEntidadCausante " +
+           "    AND t3.fechaTransaccion = t.fechaTransaccion" +
+           ") " +
+           "GROUP BY t.idEntidadCausante")
+    List<UltimaAreaDispensadaProjection> findUltimaAreaDispensadaByOrdenIds(
+        @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+        @Param("ordenIds") List<Integer> ordenIds
+    );
+
+    interface UltimaAreaDispensadaProjection {
+        Integer getOrdenProduccionId();
+        String getAreaOperativaNombre();
+    }
+
     @Query("SELECT DISTINCT t FROM TransaccionAlmacen t " +
            "LEFT JOIN FETCH t.asientoContable a " +
            "LEFT JOIN FETCH t.movimientosTransaccion m " +

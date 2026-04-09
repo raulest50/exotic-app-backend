@@ -24,6 +24,7 @@ public class OrdenProduccionDTO {
     private double cantidadProducir = 1.0; // Cantidad planificada a producir (mínimo 1.0)
     private String numeroPedidoComercial; // pedido comercial origen
     private String areaOperativa; // área operativa que ejecuta
+    private String ultimaAreaDispensada;
     private String departamentoOperativo; // departamento responsable de coordinar
     private String loteAsignado; // número de lote asignado a la orden
     private Long responsableId;
