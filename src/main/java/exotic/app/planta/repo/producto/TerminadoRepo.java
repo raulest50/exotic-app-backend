@@ -22,7 +22,10 @@ public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpec
     @EntityGraph(attributePaths = {"categoria", "insumos", "insumos.producto"})
     List<Terminado> findAllByOrderByProductoIdAsc();
 
+    @EntityGraph(attributePaths = {"insumos", "insumos.producto"})
     List<Terminado> findByInsumos_Producto(Producto producto);
+
+    List<Terminado> findDistinctByCasePack_InsumosEmpaque_Material_ProductoId(String productoId);
 
     Optional<Terminado> findByPrefijoLote(String prefijoLote);
 

@@ -14,9 +14,10 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.producto.InsumoRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
+import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.producto.manufacturing.InsumoEmpaqueRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
-import exotic.app.planta.repo.producto.procesos.NodeConnectionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionCompletoRepo;
 import exotic.app.planta.repo.ventas.FacturaVentaRepo;
 import exotic.app.planta.repo.ventas.ItemFacturaVentaRepo;
@@ -98,7 +99,9 @@ class EliminacionesForzadasServiceTest {
     private final OrdenProduccionRepo ordenProduccionRepo = mock(OrdenProduccionRepo.class);
     private final ProductoRepo productoRepo = mock(ProductoRepo.class);
     private final TerminadoRepo terminadoRepo = mock(TerminadoRepo.class);
+    private final SemiTerminadoRepo semiTerminadoRepo = mock(SemiTerminadoRepo.class);
     private final InsumoRepo insumoRepo = mock(InsumoRepo.class);
+    private final InsumoEmpaqueRepo insumoEmpaqueRepo = mock(InsumoEmpaqueRepo.class);
     private final TransaccionAlmacenRepo transaccionAlmacenRepo = mock(TransaccionAlmacenRepo.class);
     private final ManufacturingVersionRepo manufacturingVersionRepo = mock(ManufacturingVersionRepo.class);
     private final ItemOrdenVentaRepo itemOrdenVentaRepo = mock(ItemOrdenVentaRepo.class);
@@ -106,7 +109,6 @@ class EliminacionesForzadasServiceTest {
     private final OrdenVentaRepo ordenVentaRepo = mock(OrdenVentaRepo.class);
     private final FacturaVentaRepo facturaVentaRepo = mock(FacturaVentaRepo.class);
     private final ProcesoProduccionCompletoRepo procesoProduccionCompletoRepo = mock(ProcesoProduccionCompletoRepo.class);
-    private final NodeConnectionRepo nodeConnectionRepo = mock(NodeConnectionRepo.class);
     private final AsientoContableRepo asientoContableRepo = mock(AsientoContableRepo.class);
     private final IncorporacionActivoHeaderRepo incorporacionActivoHeaderRepo = mock(IncorporacionActivoHeaderRepo.class);
     private final DepreciacionActivoRepo depreciacionActivoRepo = mock(DepreciacionActivoRepo.class);
@@ -140,7 +142,9 @@ class EliminacionesForzadasServiceTest {
                 ordenProduccionRepo,
                 productoRepo,
                 terminadoRepo,
+                semiTerminadoRepo,
                 insumoRepo,
+                insumoEmpaqueRepo,
                 transaccionAlmacenRepo,
                 manufacturingVersionRepo,
                 itemOrdenVentaRepo,
@@ -148,7 +152,6 @@ class EliminacionesForzadasServiceTest {
                 ordenVentaRepo,
                 facturaVentaRepo,
                 procesoProduccionCompletoRepo,
-                nodeConnectionRepo,
                 asientoContableRepo,
                 incorporacionActivoHeaderRepo,
                 depreciacionActivoRepo,

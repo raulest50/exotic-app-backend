@@ -62,6 +62,18 @@
         </encoder>
     </appender>
 
+    <appender name="ELIMINACION_FORZADA_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/eliminaciones_forzadas.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/eliminaciones_forzadas.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{60} - %msg%n%ex</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- Logger especifico para carga masiva -->
     <logger name="exotic.app.planta.resource.commons.CargaMasivaResource" level="DEBUG" additivity="true">
         <appender-ref ref="CARGA_MASIVA_FILE"/>
@@ -77,5 +89,18 @@
     </logger>
     <logger name="exotic.app.planta.resource.commons.CargaMasivaTerminadoResource" level="DEBUG" additivity="true">
         <appender-ref ref="CARGA_MASIVA_FILE"/>
+    </logger>
+
+    <logger name="exotic.app.planta.resource.commons.EliminacionesForzadasResource" level="DEBUG" additivity="true">
+        <appender-ref ref="ELIMINACION_FORZADA_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.commons.EliminacionesForzadasService" level="DEBUG" additivity="true">
+        <appender-ref ref="ELIMINACION_FORZADA_FILE"/>
+    </logger>
+    <logger name="org.hibernate.engine.jdbc.spi.SqlExceptionHelper" level="WARN" additivity="true">
+        <appender-ref ref="ELIMINACION_FORZADA_FILE"/>
+    </logger>
+    <logger name="org.springframework.dao" level="ERROR" additivity="true">
+        <appender-ref ref="ELIMINACION_FORZADA_FILE"/>
     </logger>
 </configuration>

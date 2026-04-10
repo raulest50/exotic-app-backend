@@ -25,6 +25,15 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante
     );
 
+    @Query("SELECT DISTINCT t.transaccionId FROM TransaccionAlmacen t " +
+           "JOIN t.movimientosTransaccion m " +
+           "JOIN m.producto p " +
+           "WHERE p.productoId = :productoId " +
+           "ORDER BY t.transaccionId ASC")
+    List<Integer> findDistinctIdsByProductoId(
+        @Param("productoId") String productoId
+    );
+
     /**
      * Consulta dinámica para filtrar transacciones de almacén por estado contable, tipo de entidad causante y rango de fechas.
      * 

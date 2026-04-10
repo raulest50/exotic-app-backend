@@ -6,8 +6,11 @@ import exotic.app.planta.model.compras.ItemOrdenCompra;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
+import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionCompleto;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
@@ -26,7 +29,9 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.producto.InsumoRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
+import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.producto.manufacturing.InsumoEmpaqueRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionCompletoRepo;
 import exotic.app.planta.repo.ventas.FacturaVentaRepo;
@@ -34,11 +39,13 @@ import exotic.app.planta.repo.ventas.ItemFacturaVentaRepo;
 import exotic.app.planta.repo.ventas.ItemOrdenVentaRepo;
 import exotic.app.planta.repo.ventas.OrdenVentaRepo;
 import jakarta.persistence.EntityManager;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import java.util.Optional;
+
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -48,7 +55,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class EliminacionesForzadasService {
 
@@ -69,7 +75,9 @@ public class EliminacionesForzadasService {
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final ProductoRepo productoRepo;
     private final TerminadoRepo terminadoRepo;
+    private final SemiTerminadoRepo semiTerminadoRepo;
     private final InsumoRepo insumoRepo;
+    private final InsumoEmpaqueRepo insumoEmpaqueRepo;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final ItemOrdenVentaRepo itemOrdenVentaRepo;
@@ -84,6 +92,59 @@ public class EliminacionesForzadasService {
     private final DangerousOperationGuard dangerousOperationGuard;
     private final TransactionTemplate transactionTemplate;
     private final EntityManager entityManager;
+
+    @Autowired
+    public EliminacionesForzadasService(
+            OrdenCompraRepo ordenCompraRepo,
+            ItemOrdenCompraRepo itemOrdenCompraRepo,
+            LoteRepo loteRepo,
+            TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo,
+            OrdenProduccionRepo ordenProduccionRepo,
+            ProductoRepo productoRepo,
+            TerminadoRepo terminadoRepo,
+            SemiTerminadoRepo semiTerminadoRepo,
+            InsumoRepo insumoRepo,
+            InsumoEmpaqueRepo insumoEmpaqueRepo,
+            TransaccionAlmacenRepo transaccionAlmacenRepo,
+            ManufacturingVersionRepo manufacturingVersionRepo,
+            ItemOrdenVentaRepo itemOrdenVentaRepo,
+            ItemFacturaVentaRepo itemFacturaVentaRepo,
+            OrdenVentaRepo ordenVentaRepo,
+            FacturaVentaRepo facturaVentaRepo,
+            ProcesoProduccionCompletoRepo procesoProduccionCompletoRepo,
+            AsientoContableRepo asientoContableRepo,
+            IncorporacionActivoHeaderRepo incorporacionActivoHeaderRepo,
+            DepreciacionActivoRepo depreciacionActivoRepo,
+            DocumentoBajaActivoRepo documentoBajaActivoRepo,
+            DangerousOperationGuard dangerousOperationGuard,
+            TransactionTemplate transactionTemplate,
+            EntityManager entityManager
+    ) {
+        this.ordenCompraRepo = ordenCompraRepo;
+        this.itemOrdenCompraRepo = itemOrdenCompraRepo;
+        this.loteRepo = loteRepo;
+        this.transaccionAlmacenHeaderRepo = transaccionAlmacenHeaderRepo;
+        this.ordenProduccionRepo = ordenProduccionRepo;
+        this.productoRepo = productoRepo;
+        this.terminadoRepo = terminadoRepo;
+        this.semiTerminadoRepo = semiTerminadoRepo;
+        this.insumoRepo = insumoRepo;
+        this.insumoEmpaqueRepo = insumoEmpaqueRepo;
+        this.transaccionAlmacenRepo = transaccionAlmacenRepo;
+        this.manufacturingVersionRepo = manufacturingVersionRepo;
+        this.itemOrdenVentaRepo = itemOrdenVentaRepo;
+        this.itemFacturaVentaRepo = itemFacturaVentaRepo;
+        this.ordenVentaRepo = ordenVentaRepo;
+        this.facturaVentaRepo = facturaVentaRepo;
+        this.procesoProduccionCompletoRepo = procesoProduccionCompletoRepo;
+        this.asientoContableRepo = asientoContableRepo;
+        this.incorporacionActivoHeaderRepo = incorporacionActivoHeaderRepo;
+        this.depreciacionActivoRepo = depreciacionActivoRepo;
+        this.documentoBajaActivoRepo = documentoBajaActivoRepo;
+        this.dangerousOperationGuard = dangerousOperationGuard;
+        this.transactionTemplate = transactionTemplate;
+        this.entityManager = entityManager;
+    }
 
     @Transactional(readOnly = true)
     public EstudiarEliminacionOCMResponseDTO estudiarEliminacionOrdenCompra(int ordenCompraId) {
@@ -195,6 +256,82 @@ public class EliminacionesForzadasService {
         return response;
     }
 
+    @Transactional(readOnly = true)
+    public EstudiarEliminacionMaterialResponseDTO estudiarEliminacionMaterial(String productoId) {
+        Material material = requireMaterial(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][ESTUDIO] Inicio estudio. productoId={}, materialNombre={}, tipoMaterial={}, unidad={}",
+                productoId, material.getNombre(), material.getTipoMaterial(), material.getTipoUnidades());
+
+        List<ItemOrdenCompraMaterialResumenDTO> itemsOrdenCompra = itemOrdenCompraRepo
+                .findByMaterial_ProductoId(productoId)
+                .stream()
+                .map(this::toItemOrdenCompraMaterialResumen)
+                .toList();
+        List<SemiTerminado> semiTerminadosReceta = listSemiTerminadosQueReferencianMaterial(material);
+        List<Terminado> terminadosReceta = listTerminadosQueReferencianMaterial(material);
+        List<InsumoRecetaResumenDTO> insumosReceta = buildInsumosRecetaResumen(material, semiTerminadosReceta, terminadosReceta);
+        List<InsumoEmpaqueResumenDTO> insumosEmpaque = buildInsumosEmpaqueResumen(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][ESTUDIO] Padres receta con material. productoId={}, semiTerminadoIds={}, terminadoIds={}, totalSemi={}, totalTerminado={}",
+                productoId,
+                semiTerminadosReceta.stream().map(SemiTerminado::getProductoId).collect(Collectors.joining(",")),
+                terminadosReceta.stream().map(Terminado::getProductoId).collect(Collectors.joining(",")),
+                semiTerminadosReceta.size(),
+                terminadosReceta.size());
+        List<TransaccionAlmacen> transacciones = loadMaterialTransactionsWithAllMovimientos(productoId);
+
+        log.info("[ELIM_FORZADA][MATERIAL][ESTUDIO] Transacciones impactadas. productoId={}, totalTransacciones={}, transaccionIds={}",
+                productoId, transacciones.size(), transaccionIds(transacciones));
+
+        List<TransaccionAlmacenResumenDTO> transaccionesDto = new ArrayList<>();
+        Set<AsientoContableResumenDTO> asientosSet = new LinkedHashSet<>();
+        Set<LoteResumenDTO> lotesSet = new LinkedHashSet<>();
+        for (TransaccionAlmacen transaccion : transacciones) {
+            List<Movimiento> movimientosTransaccion = safeList(transaccion.getMovimientosTransaccion());
+            long movimientosMaterial = movimientosTransaccion.stream()
+                    .filter(movimiento -> productoId.equals(getProductoId(movimiento)))
+                    .count();
+            log.debug("[ELIM_FORZADA][MATERIAL][TRANSACCION] Estudio transaccion. productoId={}, transaccionId={}, tipoEntidadCausante={}, idEntidadCausante={}, estadoContable={}, asientoId={}, totalMovimientos={}, movimientosMaterial={}, movimientoIds={}, detalleMovimientos={}",
+                    productoId,
+                    transaccion.getTransaccionId(),
+                    transaccion.getTipoEntidadCausante(),
+                    transaccion.getIdEntidadCausante(),
+                    transaccion.getEstadoContable(),
+                    getAsientoId(transaccion),
+                    movimientosTransaccion.size(),
+                    movimientosMaterial,
+                    movimientoIds(movimientosTransaccion),
+                    movementDiagnostics(movimientosTransaccion));
+            transaccionesDto.add(toTransaccionResumen(transaccion));
+            if (transaccion.getAsientoContable() != null) {
+                asientosSet.add(toAsientoResumen(transaccion.getAsientoContable()));
+            }
+            for (Movimiento movimiento : movimientosTransaccion) {
+                if (productoId.equals(getProductoId(movimiento)) && movimiento.getLote() != null) {
+                    lotesSet.add(toLoteResumen(movimiento.getLote()));
+                }
+            }
+        }
+
+        EstudiarEliminacionMaterialResponseDTO response = new EstudiarEliminacionMaterialResponseDTO();
+        response.setMaterial(toMaterialResumen(material));
+        response.setEliminable(true);
+        response.setItemsOrdenCompra(itemsOrdenCompra);
+        response.setLotes(new ArrayList<>(lotesSet));
+        response.setTransaccionesAlmacen(transaccionesDto);
+        response.setAsientosContables(new ArrayList<>(asientosSet));
+        response.setInsumosReceta(insumosReceta);
+        response.setInsumosEmpaque(insumosEmpaque);
+        log.info("[ELIM_FORZADA][MATERIAL][ESTUDIO] Resumen dependencias. productoId={}, itemsOCM={}, transacciones={}, asientos={}, lotes={}, insumosReceta={}, insumosEmpaque={}",
+                productoId,
+                itemsOrdenCompra.size(),
+                transacciones.size(),
+                asientosSet.size(),
+                lotesSet.size(),
+                insumosReceta.size(),
+                insumosEmpaque.size());
+        return response;
+    }
+
     @Transactional
     public void ejecutarEliminacionOrdenProduccion(int ordenProduccionId) {
         if (!ordenProduccionRepo.existsById(ordenProduccionId)) {
@@ -218,6 +355,59 @@ public class EliminacionesForzadasService {
 
         ordenProduccionRepo.deleteById(ordenProduccionId);
         log.info("Eliminación forzada ejecutada para OP id: {}", ordenProduccionId);
+    }
+
+    @Transactional
+    public void ejecutarEliminacionMaterial(String productoId) {
+        Material material = requireMaterial(productoId);
+        List<Integer> transaccionIdsDetectados = transaccionAlmacenHeaderRepo.findDistinctIdsByProductoId(productoId);
+        List<ItemOrdenCompraMaterialResumenDTO> itemsOrdenCompra = itemOrdenCompraRepo.findByMaterial_ProductoId(productoId).stream()
+                .map(this::toItemOrdenCompraMaterialResumen)
+                .toList();
+        List<SemiTerminado> semiTerminadosReceta = listSemiTerminadosQueReferencianMaterial(material);
+        List<Terminado> terminadosReceta = listTerminadosQueReferencianMaterial(material);
+        List<InsumoRecetaResumenDTO> insumosReceta = buildInsumosRecetaResumen(material, semiTerminadosReceta, terminadosReceta);
+        List<InsumoEmpaqueResumenDTO> insumosEmpaque = buildInsumosEmpaqueResumen(productoId);
+
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Inicio ejecucion. productoId={}, materialNombre={}, tipoMaterial={}, unidad={}, itemsOCM={}, transacciones={}, transaccionIds={}, insumosReceta={}, insumosEmpaque={}, semiTerminadoIdsReceta={}, terminadoIdsReceta={}",
+                productoId,
+                material.getNombre(),
+                material.getTipoMaterial(),
+                material.getTipoUnidades(),
+                itemsOrdenCompra.size(),
+                transaccionIdsDetectados.size(),
+                integerIds(transaccionIdsDetectados),
+                insumosReceta.size(),
+                insumosEmpaque.size(),
+                semiTerminadosReceta.stream().map(SemiTerminado::getProductoId).collect(Collectors.joining(",")),
+                terminadosReceta.stream().map(Terminado::getProductoId).collect(Collectors.joining(",")));
+
+        Set<Long> candidateStandaloneLoteIds = new LinkedHashSet<>();
+
+        removeInsumosReferencingProductFromLoadedRecipeParents(productoId, semiTerminadosReceta, terminadosReceta);
+        entityManager.flush();
+        deleteRecipeConsumers(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION][RECETA_CORRELACION] Lineas insumo en estudio previo (insumosReceta)={}. Comparar con cantidadEncontrada del ultimo log [ELIM_FORZADA][RECETA][INSUMO]; discrepancia puede indicar desajuste columna/JPQL o filas huérfanas en BD. productoId={}",
+                insumosReceta.size(), productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Etapa receta completada. productoId={}", productoId);
+        deletePackagingConsumers(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Etapa empaque completada. productoId={}", productoId);
+        processOrdenCompraItemsForMaterial(productoId, candidateStandaloneLoteIds);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Etapa OCM completada. productoId={}, lotesCandidatosAcumulados={}",
+                productoId, setIds(candidateStandaloneLoteIds));
+        processMaterialTransactions(productoId, candidateStandaloneLoteIds);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Etapa transacciones completada. productoId={}, lotesCandidatosAcumulados={}",
+                productoId, setIds(candidateStandaloneLoteIds));
+        cleanupTouchedStandaloneLotes(candidateStandaloneLoteIds);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Cleanup de lotes completado. productoId={}, lotesEvaluados={}",
+                productoId, setIds(candidateStandaloneLoteIds));
+
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Solicitando productoRepo.deleteById. Las restricciones FK contra productos se validan al flush/commit de esta transaccion. productoId={}", productoId);
+        productoRepo.deleteById(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] deleteById(producto) invocado sin excepcion local; borrado definitivo sujeto a commit. productoId={}, materialNombre={}",
+                productoId, material.getNombre());
+        log.info("[ELIM_FORZADA][MATERIAL][EJECUCION] Pipeline de eliminacion material en sesion JPA listo; commit de transaccion pendiente. productoId={}", productoId);
+        log.info("Eliminación forzada de Material id: {} — operaciones registradas en sesion; confirmar resultado en commit (sin error 23503 u otros).", productoId);
     }
 
     public EliminacionTerminadosBatchResultDTO ejecutarEliminacionTodosLosTerminados() {
@@ -284,9 +474,88 @@ public class EliminacionesForzadasService {
 
     private void deleteRecipeConsumers(String productoId) {
         List<Insumo> insumosConsumidores = insumoRepo.findByProducto_ProductoId(productoId);
+        String insumoIds = insumosConsumidores.stream()
+                .map(insumo -> String.valueOf(insumo.getInsumoId()))
+                .collect(Collectors.joining(","));
+        String inputProductoIdsEfectivos = insumosConsumidores.stream()
+                .map(insumo -> insumo.getProducto() != null ? insumo.getProducto().getProductoId() : "null")
+                .collect(Collectors.joining(","));
+        log.info("[ELIM_FORZADA][RECETA][INSUMO] Busqueda por findByProducto_ProductoId (insumo de entrada / producto asociado). productoId={}, cantidadEncontrada={}, insumoIds={}, inputProductoIdsEfectivos={}",
+                productoId, insumosConsumidores.size(), insumoIds, inputProductoIdsEfectivos);
         if (!insumosConsumidores.isEmpty()) {
             insumoRepo.deleteAll(insumosConsumidores);
+            insumoRepo.flush();
+            log.info("[ELIM_FORZADA][RECETA][INSUMO] deleteAll y flush ejecutados para {} entidades Insumo. productoId={}, insumoIds={}",
+                    insumosConsumidores.size(), productoId, insumoIds);
         }
+    }
+
+    /**
+     * Quita líneas de receta que referencian el producto como insumo de entrada desde las colecciones
+     * ya cargadas de padres (sesión JPA), guarda los cambios y permite que orphanRemoval persista el borrado de hijos
+     * antes de otras operaciones en la misma transacción.
+     */
+    private void removeInsumosReferencingProductFromLoadedRecipeParents(
+            String productoId,
+            List<SemiTerminado> semiTerminados,
+            List<Terminado> terminados
+    ) {
+        int semiTerminadosGuardados = 0;
+        int terminadosGuardados = 0;
+
+        for (SemiTerminado semi : semiTerminados) {
+            List<Insumo> insumos = semi.getInsumos();
+            if (insumos == null || insumos.isEmpty()) {
+                continue;
+            }
+            boolean changed = insumos.removeIf(insumo -> productoId.equals(
+                    insumo.getProducto() != null ? insumo.getProducto().getProductoId() : null));
+            if (changed) {
+                semiTerminadoRepo.save(semi);
+                semiTerminadosGuardados++;
+            }
+        }
+
+        for (Terminado terminado : terminados) {
+            List<Insumo> insumos = terminado.getInsumos();
+            if (insumos == null || insumos.isEmpty()) {
+                continue;
+            }
+            boolean changed = insumos.removeIf(insumo -> productoId.equals(
+                    insumo.getProducto() != null ? insumo.getProducto().getProductoId() : null));
+            if (changed) {
+                terminadoRepo.save(terminado);
+                terminadosGuardados++;
+            }
+        }
+
+        log.info("[ELIM_FORZADA][MATERIAL][RECETA_SYNC] Lineas de receta retiradas desde colecciones cargadas (orphanRemoval). productoId={}, semiTerminadosGuardados={}, terminadosGuardados={}",
+                productoId, semiTerminadosGuardados, terminadosGuardados);
+    }
+
+    private void deletePackagingConsumers(String productoId) {
+        List<Terminado> terminados = terminadoRepo
+                .findDistinctByCasePack_InsumosEmpaque_Material_ProductoId(productoId);
+        int conCasePackInsumos = 0;
+        int terminadosGuardadosPorQuitarEmpaque = 0;
+
+        for (Terminado terminado : terminados) {
+            if (terminado.getCasePack() == null || terminado.getCasePack().getInsumosEmpaque() == null) {
+                continue;
+            }
+
+            conCasePackInsumos++;
+            boolean changed = terminado.getCasePack().getInsumosEmpaque()
+                    .removeIf(insumoEmpaque -> productoId.equals(getMaterialId(insumoEmpaque)));
+
+            if (changed) {
+                terminadosGuardadosPorQuitarEmpaque++;
+                terminadoRepo.save(terminado);
+            }
+        }
+
+        log.info("[ELIM_FORZADA][EMPAQUE] productoId={}, terminadosEnConsulta={}, conCasePackEInsumosEmpaque={}, terminadosGuardadosTrasQuitarInsumoEmpaqueDelMaterial={}",
+                productoId, terminados.size(), conCasePackInsumos, terminadosGuardadosPorQuitarEmpaque);
     }
 
     private void deleteProductionHistory(String productoId) {
@@ -346,16 +615,283 @@ public class EliminacionesForzadasService {
         deleteOrphanStandaloneLotes(candidateStandaloneLoteIds);
     }
 
+    private void processOrdenCompraItemsForMaterial(String productoId, Set<Long> candidateStandaloneLoteIds) {
+        List<ItemOrdenCompra> items = itemOrdenCompraRepo.findByMaterial_ProductoId(productoId);
+        if (items.isEmpty()) {
+            log.debug("[ELIM_FORZADA][MATERIAL][OCM] No se encontraron items OCM para productoId={}", productoId);
+            return;
+        }
+
+        Set<Integer> ordenesAfectadas = items.stream()
+                .map(ItemOrdenCompra::getOrdenCompraMateriales)
+                .filter(Objects::nonNull)
+                .map(orden -> orden.getOrdenCompraId())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        log.info("[ELIM_FORZADA][MATERIAL][OCM] Procesando items OCM. productoId={}, totalItems={}, itemIds={}, ordenesAfectadas={}",
+                productoId,
+                items.size(),
+                items.stream().map(item -> String.valueOf(item.getItemOrdenId())).collect(Collectors.joining(",")),
+                setIds(new LinkedHashSet<>(ordenesAfectadas)));
+
+        itemOrdenCompraRepo.deleteAll(items);
+        itemOrdenCompraRepo.flush();
+        log.info("[ELIM_FORZADA][MATERIAL][OCM] Items OCM eliminados. productoId={}, totalItems={}", productoId, items.size());
+
+        for (Integer ordenCompraId : ordenesAfectadas) {
+            if (itemOrdenCompraRepo.countByOrdenCompraMateriales_OrdenCompraId(ordenCompraId) > 0) {
+                log.info("[ELIM_FORZADA][MATERIAL][OCM] Orden de compra conservada. productoId={}, ordenCompraId={}, motivo=TIENE_OTROS_ITEMS",
+                        productoId, ordenCompraId);
+                continue;
+            }
+
+            List<Lote> lotesDeOrden = loteRepo.findByOrdenCompraMateriales_OrdenCompraId(ordenCompraId);
+            for (Lote lote : lotesDeOrden) {
+                lote.setOrdenCompraMateriales(null);
+                loteRepo.save(lote);
+                if (lote.getId() != null) {
+                    candidateStandaloneLoteIds.add(lote.getId());
+                }
+            }
+
+            log.info("[ELIM_FORZADA][MATERIAL][OCM] Orden de compra eliminada. productoId={}, ordenCompraId={}, lotesTocados={}",
+                    productoId, ordenCompraId, lotesDeOrden.stream()
+                            .map(Lote::getId)
+                            .filter(Objects::nonNull)
+                            .map(String::valueOf)
+                            .collect(Collectors.joining(",")));
+            ordenCompraRepo.deleteById(ordenCompraId);
+        }
+    }
+
+    private void processMaterialTransactions(String productoId, Set<Long> candidateStandaloneLoteIds) {
+        List<TransaccionAlmacen> transacciones = loadMaterialTransactionsWithAllMovimientos(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Procesando transacciones. productoId={}, totalTransacciones={}, transaccionIds={}",
+                productoId, transacciones.size(), transaccionIds(transacciones));
+
+        for (TransaccionAlmacen transaccion : transacciones) {
+            List<Movimiento> movimientosTotales = safeList(transaccion.getMovimientosTransaccion());
+            List<Movimiento> movimientosObjetivo = movimientosTotales.stream()
+                    .filter(movimiento -> productoId.equals(getProductoId(movimiento)))
+                    .toList();
+
+            for (Movimiento movimiento : movimientosObjetivo) {
+                if (movimiento.getLote() != null && movimiento.getLote().getId() != null) {
+                    candidateStandaloneLoteIds.add(movimiento.getLote().getId());
+                }
+            }
+
+            if (movimientosObjetivo.isEmpty()) {
+                log.debug("[ELIM_FORZADA][MATERIAL][TRANSACCION] Transaccion ignorada al ejecutar. productoId={}, transaccionId={}, motivo=SIN_MOVIMIENTOS_DEL_MATERIAL",
+                        productoId, transaccion.getTransaccionId());
+                continue;
+            }
+
+            if (movimientosObjetivo.size() == movimientosTotales.size()) {
+                log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Decision tomada. productoId={}, transaccionId={}, decision=TRANSACCION_EXCLUSIVA_ELIMINAR_HEADER, totalMovimientos={}, movimientosMaterial={}, movimientoIdsMaterial={}, lotesCandidatos={}",
+                        productoId,
+                        transaccion.getTransaccionId(),
+                        movimientosTotales.size(),
+                        movimientosObjetivo.size(),
+                        movimientoIds(movimientosObjetivo),
+                        movimientoLoteIds(movimientosObjetivo));
+                deleteWholeMaterialTransaction(productoId, transaccion);
+                continue;
+            }
+
+            int beforeCount = movimientosTotales.size();
+            detachMovimientosFromTransaccion(transaccion, movimientosObjetivo);
+            transaccionAlmacenHeaderRepo.saveAndFlush(transaccion);
+            log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Decision tomada. productoId={}, transaccionId={}, decision=TRANSACCION_MIXTA_CONSERVAR_HEADER, estrategia=DESASOCIAR_MOVIMIENTOS_Y_APLICAR_ORPHAN_REMOVAL, totalMovimientosAntes={}, totalMovimientosDespues={}, movimientosMaterialRemovidos={}, movimientoIdsMaterial={}, lotesCandidatos={}",
+                    productoId,
+                    transaccion.getTransaccionId(),
+                    beforeCount,
+                    safeList(transaccion.getMovimientosTransaccion()).size(),
+                    movimientosObjetivo.size(),
+                    movimientoIds(movimientosObjetivo),
+                    movimientoLoteIds(movimientosObjetivo));
+        }
+    }
+
+    private List<TransaccionAlmacen> loadMaterialTransactionsWithAllMovimientos(String productoId) {
+        List<Integer> transaccionIds = transaccionAlmacenHeaderRepo.findDistinctIdsByProductoId(productoId);
+        log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] IDs detectados para recarga. productoId={}, transaccionIds={}",
+                productoId, integerIds(transaccionIds));
+
+        List<TransaccionAlmacen> transacciones = new ArrayList<>();
+        List<Integer> missingIds = new ArrayList<>();
+
+        for (Integer transaccionId : transaccionIds) {
+            var loaded = transaccionAlmacenHeaderRepo.findByIdWithMovimientos(transaccionId);
+            if (loaded.isPresent()) {
+                TransaccionAlmacen transaccion = loaded.get();
+                transacciones.add(transaccion);
+                log.debug("[ELIM_FORZADA][MATERIAL][TRANSACCION] Transaccion recargada completa. productoId={}, transaccionId={}, totalMovimientos={}, movimientoIds={}, detalleMovimientos={}",
+                        productoId,
+                        transaccion.getTransaccionId(),
+                        safeList(transaccion.getMovimientosTransaccion()).size(),
+                        movimientoIds(safeList(transaccion.getMovimientosTransaccion())),
+                        movementDiagnostics(safeList(transaccion.getMovimientosTransaccion())));
+            } else {
+                missingIds.add(transaccionId);
+            }
+        }
+
+        if (!missingIds.isEmpty()) {
+            log.warn("[ELIM_FORZADA][MATERIAL][TRANSACCION] Algunas transacciones no pudieron recargarse. productoId={}, transaccionIdsNoRecargadas={}",
+                    productoId, integerIds(missingIds));
+        }
+
+        log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Recarga completa finalizada. productoId={}, totalRecargadas={}, transaccionIdsRecargadas={}",
+                productoId, transacciones.size(), transaccionIds(transacciones));
+        return transacciones;
+    }
+
+    private void deleteWholeMaterialTransaction(String productoId, TransaccionAlmacen transaccion) {
+        AsientoContable asientoContable = transaccion.getAsientoContable();
+        List<Movimiento> movimientos = new ArrayList<>(safeList(transaccion.getMovimientosTransaccion()));
+        try {
+            log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Inicio borrado completo. productoId={}, transaccionId={}, asientoId={}, estrategia=ELIMINAR_AGREGADO_RAIZ_CON_CASCADE_REMOVE, totalMovimientos={}, movimientoIds={}, detalleMovimientos={}",
+                    productoId,
+                    transaccion.getTransaccionId(),
+                    asientoContable != null ? asientoContable.getId() : null,
+                    movimientos.size(),
+                    movimientoIds(movimientos),
+                    movementDiagnostics(movimientos));
+
+            if (asientoContable != null) {
+                transaccion.setAsientoContable(null);
+                transaccionAlmacenHeaderRepo.saveAndFlush(transaccion);
+                log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Asiento desacoplado. productoId={}, transaccionId={}, asientoId={}",
+                        productoId, transaccion.getTransaccionId(), asientoContable.getId());
+            }
+
+            transaccionAlmacenHeaderRepo.delete(transaccion);
+            transaccionAlmacenHeaderRepo.flush();
+            log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Header eliminado con cascade/orphanRemoval. productoId={}, transaccionId={}, totalMovimientosCascada={}, movimientoIdsCascada={}",
+                    productoId, transaccion.getTransaccionId(), movimientos.size(), movimientoIds(movimientos));
+
+            if (asientoContable != null) {
+                if (!isAsientoStillReferenced(asientoContable.getId())) {
+                    asientoContableRepo.deleteById(asientoContable.getId());
+                    log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Asiento eliminado. productoId={}, transaccionId={}, asientoId={}",
+                            productoId, transaccion.getTransaccionId(), asientoContable.getId());
+                } else {
+                    log.info("[ELIM_FORZADA][MATERIAL][TRANSACCION] Asiento conservado por referencias activas. productoId={}, transaccionId={}, asientoId={}",
+                            productoId, transaccion.getTransaccionId(), asientoContable.getId());
+                }
+            }
+        } catch (RuntimeException e) {
+            log.error("[ELIM_FORZADA][MATERIAL][TRANSACCION] Error en borrado completo. productoId={}, transaccionId={}, asientoId={}, totalMovimientos={}, movimientoIds={}, message={}",
+                    productoId,
+                    transaccion.getTransaccionId(),
+                    asientoContable != null ? asientoContable.getId() : null,
+                    movimientos.size(),
+                    movimientoIds(movimientos),
+                    e.getMessage(),
+                    e);
+            throw e;
+        }
+    }
+
+    private void detachMovimientosFromTransaccion(TransaccionAlmacen transaccion, List<Movimiento> movimientos) {
+        for (Movimiento movimiento : movimientos) {
+            detachMovimientoFromTransaccion(transaccion, movimiento);
+        }
+    }
+
+    private void detachMovimientoFromTransaccion(TransaccionAlmacen transaccion, Movimiento movimiento) {
+        List<Movimiento> movimientosTransaccion = transaccion.getMovimientosTransaccion();
+        if (movimientosTransaccion != null) {
+            movimientosTransaccion.remove(movimiento);
+        }
+        movimiento.setTransaccionAlmacen(null);
+    }
+
+    private void cleanupTouchedStandaloneLotes(Set<Long> loteIds) {
+        log.info("[ELIM_FORZADA][MATERIAL][LOTE] Iniciando cleanup de lotes tocados. loteIds={}", setIds(loteIds));
+        for (Long loteId : loteIds) {
+            loteRepo.findById(loteId).ifPresent(lote -> {
+                long transaccionesReferenciandoLote = transaccionAlmacenRepo.countByLote_Id(loteId);
+                if (transaccionesReferenciandoLote == 0 && lote.getOrdenCompraMateriales() != null) {
+                    lote.setOrdenCompraMateriales(null);
+                    loteRepo.save(lote);
+                    log.info("[ELIM_FORZADA][MATERIAL][LOTE] Lote desacoplado de OCM. loteId={}, batchNumber={}, motivo=SIN_MOVIMIENTOS_RESTANTES",
+                            loteId, lote.getBatchNumber());
+                } else {
+                    log.debug("[ELIM_FORZADA][MATERIAL][LOTE] Lote conservado en cleanup inicial. loteId={}, batchNumber={}, movimientosRestantes={}, tieneOCM={}, tieneOP={}",
+                            loteId,
+                            lote.getBatchNumber(),
+                            transaccionesReferenciandoLote,
+                            lote.getOrdenCompraMateriales() != null,
+                            lote.getOrdenProduccion() != null);
+                }
+            });
+        }
+
+        deleteOrphanStandaloneLotes(loteIds);
+    }
+
     private void deleteOrphanStandaloneLotes(Set<Long> loteIds) {
         for (Long loteId : loteIds) {
             loteRepo.findById(loteId).ifPresent(lote -> {
                 boolean noTieneRelacionesRaiz = lote.getOrdenCompraMateriales() == null && lote.getOrdenProduccion() == null;
                 boolean sinMovimientos = transaccionAlmacenRepo.countByLote_Id(loteId) == 0;
                 if (noTieneRelacionesRaiz && sinMovimientos) {
+                    log.info("[ELIM_FORZADA][MATERIAL][LOTE] Lote eliminado por quedar huerfano. loteId={}, batchNumber={}",
+                            loteId, lote.getBatchNumber());
                     loteRepo.delete(lote);
+                } else {
+                    log.debug("[ELIM_FORZADA][MATERIAL][LOTE] Lote conservado. loteId={}, batchNumber={}, noTieneRelacionesRaiz={}, sinMovimientos={}",
+                            loteId, lote.getBatchNumber(), noTieneRelacionesRaiz, sinMovimientos);
                 }
             });
         }
+    }
+
+    private Long getAsientoId(TransaccionAlmacen transaccion) {
+        return transaccion.getAsientoContable() != null ? transaccion.getAsientoContable().getId() : null;
+    }
+
+    private String transaccionIds(List<TransaccionAlmacen> transacciones) {
+        return transacciones.stream()
+                .map(transaccion -> String.valueOf(transaccion.getTransaccionId()))
+                .collect(Collectors.joining(","));
+    }
+
+    private String integerIds(List<Integer> ids) {
+        return ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
+    private String setIds(Set<?> ids) {
+        return ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
+    private String movimientoIds(List<Movimiento> movimientos) {
+        return movimientos.stream()
+                .map(movimiento -> String.valueOf(movimiento.getMovimientoId()))
+                .collect(Collectors.joining(","));
+    }
+
+    private String movimientoLoteIds(List<Movimiento> movimientos) {
+        return movimientos.stream()
+                .map(Movimiento::getLote)
+                .filter(Objects::nonNull)
+                .map(Lote::getId)
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+    }
+
+    private String movementDiagnostics(List<Movimiento> movimientos) {
+        return movimientos.stream()
+                .map(movimiento -> "movimientoId=" + movimiento.getMovimientoId()
+                        + ",productoId=" + getProductoId(movimiento)
+                        + ",cantidad=" + movimiento.getCantidad()
+                        + ",tipoMovimiento=" + movimiento.getTipoMovimiento()
+                        + ",almacen=" + movimiento.getAlmacen()
+                        + ",loteId=" + (movimiento.getLote() != null ? movimiento.getLote().getId() : null))
+                .collect(Collectors.joining(" | "));
     }
 
     private void deleteManufacturingVersions(String productoId) {
@@ -449,8 +985,125 @@ public class EliminacionesForzadasService {
         return movimiento.getProducto() != null ? movimiento.getProducto().getProductoId() : null;
     }
 
+    private String getMaterialId(InsumoEmpaque insumoEmpaque) {
+        return insumoEmpaque.getMaterial() != null ? insumoEmpaque.getMaterial().getProductoId() : null;
+    }
+
     private <T> List<T> safeList(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private Material requireMaterial(String productoId) {
+        Producto producto = productoRepo.findById(productoId)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontró el producto con ID: " + productoId));
+
+        if (!(producto instanceof Material material)) {
+            throw new IllegalStateException("El producto con ID " + productoId + " no es un Material.");
+        }
+
+        return material;
+    }
+
+    private MaterialEliminacionResumenDTO toMaterialResumen(Material material) {
+        return new MaterialEliminacionResumenDTO(
+                material.getProductoId(),
+                material.getNombre(),
+                material.getTipoMaterial(),
+                material.getTipoUnidades()
+        );
+    }
+
+    private ItemOrdenCompraMaterialResumenDTO toItemOrdenCompraMaterialResumen(ItemOrdenCompra item) {
+        return new ItemOrdenCompraMaterialResumenDTO(
+                item.getItemOrdenId(),
+                item.getOrdenCompraMateriales() != null ? item.getOrdenCompraMateriales().getOrdenCompraId() : 0,
+                item.getOrdenCompraMateriales() != null && item.getOrdenCompraMateriales().getProveedor() != null
+                        ? item.getOrdenCompraMateriales().getProveedor().getNombre()
+                        : null,
+                item.getOrdenCompraMateriales() != null ? item.getOrdenCompraMateriales().getEstado() : null,
+                item.getCantidad(),
+                item.getPrecioUnitario(),
+                item.getSubTotal()
+        );
+    }
+
+    /**
+     * Terminados cuya lista {@code insumos} referencia este material como producto de entrada.
+     */
+    private List<Terminado> listTerminadosQueReferencianMaterial(Material material) {
+        return terminadoRepo.findByInsumos_Producto(material);
+    }
+
+    /**
+     * SemiTerminados cuya lista {@code insumos} referencia este material como producto de entrada.
+     */
+    private List<SemiTerminado> listSemiTerminadosQueReferencianMaterial(Material material) {
+        return semiTerminadoRepo.findByInsumos_Producto(material);
+    }
+
+    private List<InsumoRecetaResumenDTO> buildInsumosRecetaResumen(
+            Material material,
+            List<SemiTerminado> semiTerminados,
+            List<Terminado> terminados
+    ) {
+        List<InsumoRecetaResumenDTO> result = new ArrayList<>();
+
+        for (SemiTerminado semiTerminado : semiTerminados) {
+            for (Insumo insumo : safeList(semiTerminado.getInsumos())) {
+                if (material.getProductoId().equals(insumo.getProducto() != null ? insumo.getProducto().getProductoId() : null)) {
+                    result.add(new InsumoRecetaResumenDTO(
+                            insumo.getInsumoId(),
+                            semiTerminado.getProductoId(),
+                            semiTerminado.getNombre(),
+                            semiTerminado.getTipo_producto(),
+                            insumo.getCantidadRequerida()
+                    ));
+                }
+            }
+        }
+
+        for (Terminado terminado : terminados) {
+            for (Insumo insumo : safeList(terminado.getInsumos())) {
+                if (material.getProductoId().equals(insumo.getProducto() != null ? insumo.getProducto().getProductoId() : null)) {
+                    result.add(new InsumoRecetaResumenDTO(
+                            insumo.getInsumoId(),
+                            terminado.getProductoId(),
+                            terminado.getNombre(),
+                            terminado.getTipo_producto(),
+                            insumo.getCantidadRequerida()
+                    ));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private List<InsumoEmpaqueResumenDTO> buildInsumosEmpaqueResumen(String productoId) {
+        List<InsumoEmpaqueResumenDTO> result = new ArrayList<>();
+
+        for (Terminado terminado : terminadoRepo.findDistinctByCasePack_InsumosEmpaque_Material_ProductoId(productoId)) {
+            if (terminado.getCasePack() == null) {
+                continue;
+            }
+
+            for (InsumoEmpaque insumoEmpaque : safeList(terminado.getCasePack().getInsumosEmpaque())) {
+                if (!productoId.equals(getMaterialId(insumoEmpaque))) {
+                    continue;
+                }
+
+                result.add(new InsumoEmpaqueResumenDTO(
+                        insumoEmpaque.getId(),
+                        terminado.getProductoId(),
+                        terminado.getNombre(),
+                        terminado.getCasePack().getUnitsPerCase(),
+                        insumoEmpaque.getCantidad(),
+                        insumoEmpaque.getUom()
+                ));
+            }
+        }
+
+        return result;
     }
 
     private ItemOrdenCompraResumenDTO toItemResumen(ItemOrdenCompra item) {

@@ -4,6 +4,7 @@ import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +16,7 @@ import java.util.List;
 @Repository
 public interface SemiTerminadoRepo extends JpaRepository<SemiTerminado, String>, JpaSpecificationExecutor<SemiTerminado> {
 
+    @EntityGraph(attributePaths = {"insumos", "insumos.producto"})
     List<SemiTerminado> findByInsumos_Producto(Producto producto);
 
     @Query(value = """

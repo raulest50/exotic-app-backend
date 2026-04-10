@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.commons;
 
 import exotic.app.planta.model.commons.dto.eliminaciones.EliminacionTerminadosBatchResultDTO;
+import exotic.app.planta.model.commons.dto.eliminaciones.EstudiarEliminacionMaterialResponseDTO;
 import exotic.app.planta.model.commons.dto.eliminaciones.EstudiarEliminacionOCMResponseDTO;
 import exotic.app.planta.model.commons.dto.eliminaciones.EstudiarEliminacionOPResponseDTO;
 import exotic.app.planta.service.commons.DangerousOperationGuard;
@@ -72,6 +73,29 @@ public class EliminacionesForzadasResource {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/estudiar/material/{productoId}")
+    public ResponseEntity<?> estudiarEliminacionMaterial(
+            @PathVariable String productoId
+    ) {
+        try {
+            log.info("[ELIM_FORZADA][MATERIAL][RESOURCE] Solicitud de estudio recibida. productoId={}", productoId);
+            EstudiarEliminacionMaterialResponseDTO result =
+                    eliminacionesForzadasService.estudiarEliminacionMaterial(productoId);
+            log.info("[ELIM_FORZADA][MATERIAL][RESOURCE] Estudio completado. productoId={}, transacciones={}, lotes={}, itemsOCM={}, insumosReceta={}, insumosEmpaque={}",
+                    productoId,
+                    result.getTransaccionesAlmacen() != null ? result.getTransaccionesAlmacen().size() : 0,
+                    result.getLotes() != null ? result.getLotes().size() : 0,
+                    result.getItemsOrdenCompra() != null ? result.getItemsOrdenCompra().size() : 0,
+                    result.getInsumosReceta() != null ? result.getInsumosReceta().size() : 0,
+                    result.getInsumosEmpaque() != null ? result.getInsumosEmpaque().size() : 0);
+            return ResponseEntity.ok(result);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            log.warn("[ELIM_FORZADA][MATERIAL][RESOURCE] Estudio rechazado. productoId={}, message={}", productoId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(java.util.Map.of("message", e.getMessage()));
+        }
+    }
+
     /**
      * Ejecuta la eliminación forzada de una Orden de Producción (solo si no tiene transacciones asociadas).
      *
@@ -85,6 +109,20 @@ public class EliminacionesForzadasResource {
             return ResponseEntity.noContent().build();
         } catch (IllegalStateException e) {
             log.warn("Eliminación OP rechazada: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(java.util.Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/material/{productoId}")
+    public ResponseEntity<?> ejecutarEliminacionMaterial(@PathVariable String productoId) {
+        try {
+            log.info("[ELIM_FORZADA][MATERIAL][RESOURCE] Solicitud de ejecucion recibida. productoId={}", productoId);
+            eliminacionesForzadasService.ejecutarEliminacionMaterial(productoId);
+            log.info("[ELIM_FORZADA][MATERIAL][RESOURCE] Ejecucion completada. productoId={}", productoId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            log.warn("[ELIM_FORZADA][MATERIAL][RESOURCE] Ejecucion rechazada. productoId={}, message={}", productoId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(java.util.Map.of("message", e.getMessage()));
         }
