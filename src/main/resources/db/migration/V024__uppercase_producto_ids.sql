@@ -30,7 +30,8 @@ SELECT merge_rule.old_id,
 FROM (
     VALUES
         ('10009.0', '10009'),
-        ('10013.0', '10013')
+        ('10013.0', '10013'),
+        ('403007.0', '403007')
 ) AS merge_rule(old_id, new_id)
 WHERE EXISTS (
     SELECT 1
