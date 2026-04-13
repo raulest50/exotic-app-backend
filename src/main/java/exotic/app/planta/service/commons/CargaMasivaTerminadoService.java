@@ -13,7 +13,10 @@ import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -27,33 +30,32 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
-/**
- * Servicio para carga masiva de Terminados.
- * Soporta plantilla placeholder (template) y flujo "sin insumos" (template-sin-insumos, validar, ejecutar).
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CargaMasivaTerminadoService {
+
+    private static final String[] SIN_INSUMOS_HEADERS = {
+            "producto_id", "nombre", "observaciones", "costo", "iva_percentual", "tipo_unidades",
+            "cantidad_unidad", "stock_minimo", "status", "categoria_id", "foto_url", "prefijo_lote"
+    };
+    private static final Pattern PRODUCTO_ID_ALPHANUMERIC_PATTERN = Pattern.compile("^[A-Za-z0-9]+$");
 
     private final ProductoRepo productoRepo;
     private final TerminadoRepo terminadoRepo;
     private final CategoriaRepo categoriaRepo;
     private final ObjectMapper objectMapper;
 
-    private static final String[] SIN_INSUMOS_HEADERS = {
-            "producto_id", "nombre", "observaciones", "costo", "iva_percentual", "tipo_unidades",
-            "cantidad_unidad", "stock_minimo", "status", "categoria_id", "foto_url", "prefijo_lote"
-    };
-
     public byte[] generateTemplateExcel() {
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Carga masiva terminados");
             Row row = sheet.createRow(0);
-            row.createCell(0).setCellValue("Próximamente");
+            row.createCell(0).setCellValue("Proximamente");
             sheet.autoSizeColumn(0);
             try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 workbook.write(out);
@@ -69,42 +71,42 @@ public class CargaMasivaTerminadoService {
         try (Workbook workbook = new XSSFWorkbook()) {
             List<Categoria> categorias = categoriaRepo.findAll();
             int primeraCategoriaId = categorias.isEmpty() ? 0 : categorias.get(0).getCategoriaId();
-
+            CellStyle textCellStyle = createTextCellStyle(workbook);
             Sheet valoresSheet = workbook.createSheet("Valores permitidos");
-
             Row headerValores = valoresSheet.createRow(0);
             headerValores.createCell(0).setCellValue("Columna");
             headerValores.createCell(1).setCellValue("Valores permitidos");
 
             int rowIdx = 1;
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("producto_id");
-            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto único, obligatorio");
+            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto unico, obligatorio, en mayusculas y sin espacios ni caracteres especiales");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("nombre");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto obligatorio");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("observaciones");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto opcional");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("costo");
-            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Número >= 0");
+            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Numero >= 0");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("iva_percentual");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("0, 5, 19");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("tipo_unidades");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("L, KG, U");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("cantidad_unidad");
-            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Número >= 0");
+            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Numero >= 0");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("stock_minimo");
-            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Número >= 0");
+            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Numero >= 0");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("status");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("0 (activo), 1 (obsoleto)");
             Row catRow = valoresSheet.createRow(rowIdx++);
             catRow.createCell(0).setCellValue("categoria_id");
             StringBuilder catValores = new StringBuilder();
             if (categorias.isEmpty()) {
-                catValores.append("Opcional (vacío o 0)");
+                catValores.append("Opcional (vacio o 0)");
             } else {
                 for (int i = 0; i < categorias.size(); i++) {
-                    if (i > 0) catValores.append("; ");
-                    catValores.append(categorias.get(i).getCategoriaId())
-                            .append(": ")
+                    if (i > 0) {
+                        catValores.append("; ");
+                    }
+                    catValores.append(categorias.get(i).getCategoriaId()).append(": ")
                             .append(categorias.get(i).getCategoriaNombre() != null ? categorias.get(i).getCategoriaNombre() : "");
                 }
             }
@@ -112,10 +114,9 @@ public class CargaMasivaTerminadoService {
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("foto_url");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto opcional");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("prefijo_lote");
-            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto único opcional");
+            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto unico opcional");
 
             rowIdx += 2;
-
             Row ejemplosHeader = valoresSheet.createRow(rowIdx++);
             for (int i = 0; i < SIN_INSUMOS_HEADERS.length; i++) {
                 ejemplosHeader.createCell(i).setCellValue(SIN_INSUMOS_HEADERS[i]);
@@ -125,30 +126,32 @@ public class CargaMasivaTerminadoService {
                     {"TER_EJ02", "Terminado ejemplo 2", "", 80, 5, "KG", 1, 0, 0, primeraCategoriaId > 0 ? primeraCategoriaId : "", "", ""},
                     {"TER_EJ03", "Terminado ejemplo 3 obsoleto", "", 50, 0, "L", 1, 0, 1, "", "", ""},
                     {"TER_EJ04", "Terminado con prefijo", "Observaciones ejemplo", 120, 19, "U", 1, 5, 0, "", "", "TRP"},
-                    {"TER_EJ05", "Terminado sin categoría", "", 200, 19, "KG", 1, 0, 0, "", "", ""},
+                    {"TER_EJ05", "Terminado sin categoria", "", 200, 19, "KG", 1, 0, 0, "", "", ""},
             };
             for (Object[] fila : ejemplos) {
                 Row r = valoresSheet.createRow(rowIdx++);
                 for (int c = 0; c < fila.length; c++) {
                     Object v = fila[c];
-                    if (v instanceof Number) {
-                        r.createCell(c).setCellValue(((Number) v).doubleValue());
+                    if (c == 0) {
+                        Cell cell = r.createCell(c);
+                        cell.setCellStyle(textCellStyle);
+                        cell.setCellValue(v != null ? v.toString() : "");
+                    } else if (v instanceof Number number) {
+                        r.createCell(c).setCellValue(number.doubleValue());
                     } else {
                         r.createCell(c).setCellValue(v != null ? v.toString() : "");
                     }
                 }
             }
-
             for (int i = 0; i < Math.max(2, SIN_INSUMOS_HEADERS.length); i++) {
                 valoresSheet.autoSizeColumn(i);
             }
 
             Sheet datosSheet = workbook.createSheet("Datos");
+            datosSheet.setDefaultColumnStyle(0, textCellStyle);
             Row headerRow = datosSheet.createRow(0);
             for (int i = 0; i < SIN_INSUMOS_HEADERS.length; i++) {
                 headerRow.createCell(i).setCellValue(SIN_INSUMOS_HEADERS[i]);
-            }
-            for (int i = 0; i < SIN_INSUMOS_HEADERS.length; i++) {
                 datosSheet.autoSizeColumn(i);
             }
 
@@ -178,6 +181,7 @@ public class CargaMasivaTerminadoService {
                 errors.add(new ErrorRecord(0, "", "El archivo no contiene la hoja 'Datos' o no tiene filas de datos"));
                 return new ValidationResultDTO(false, errors, 0);
             }
+
             Row headerRow = sheet.getRow(0);
             if (headerRow == null) {
                 errors.add(new ErrorRecord(1, "", "Fila de encabezados no encontrada"));
@@ -193,26 +197,32 @@ public class CargaMasivaTerminadoService {
             if (!errors.isEmpty()) {
                 return new ValidationResultDTO(false, errors, 0);
             }
+
             Set<String> seenProductoIds = new HashSet<>();
             Set<String> seenPrefijos = new HashSet<>();
             int lastRow = sheet.getLastRowNum();
-            log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: rangoBucle rowNum desde 1 hasta {} (lastRowNum={}), ¿bucleSeEjecutara?={}",
+            log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: rangoBucle rowNum desde 1 hasta {} (lastRowNum={}), se ejecuta={}",
                     lastRow, lastRow, 1 <= lastRow);
-            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
+            for (int rowNum = 1; rowNum <= lastRow; rowNum++) {
                 Row row = sheet.getRow(rowNum);
-                if (row == null) continue;
-                String productoId = getCellValueAsString(row, 0);
-                if (productoId == null || productoId.trim().isEmpty()) continue;
-                productoId = productoId.trim();
-                log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: procesando fila rowNum={} (Excel fila {}), productoId={}",
-                        rowNum, rowNum + 1, productoId);
-                rowCount++;
-
-                if (seenProductoIds.contains(productoId)) {
-                    errors.add(new ErrorRecord(rowNum + 1, productoId, "producto_id duplicado dentro del archivo", "producto_id"));
+                if (row == null || isRowEmpty(row, SIN_INSUMOS_HEADERS.length)) {
                     continue;
                 }
-                seenProductoIds.add(productoId);
+
+                ProductoIdReadResult productoIdResult = readProductoIdCell(row, 0, "producto_id");
+                String productoId = productoIdResult.value() != null ? productoIdResult.value() : "";
+                rowCount++;
+
+                if (productoIdResult.errorMessage() != null) {
+                    errors.add(new ErrorRecord(rowNum + 1, productoId, productoIdResult.errorMessage(), "producto_id"));
+                } else {
+                    if (!seenProductoIds.add(productoId)) {
+                        errors.add(new ErrorRecord(rowNum + 1, productoId, "producto_id duplicado dentro del archivo", "producto_id"));
+                    }
+                    if (productoRepo.findByProductoId(productoId).isPresent()) {
+                        errors.add(new ErrorRecord(rowNum + 1, productoId, "producto_id ya existe en la base de datos", "producto_id"));
+                    }
+                }
 
                 String nombre = getCellValueAsString(row, 1);
                 if (nombre == null || nombre.trim().isEmpty()) {
@@ -230,7 +240,7 @@ public class CargaMasivaTerminadoService {
                 if (tipoUnidades == null || tipoUnidades.trim().isEmpty()) {
                     errors.add(new ErrorRecord(rowNum + 1, productoId, "tipo_unidades es obligatorio", "tipo_unidades"));
                 } else {
-                    String tu = tipoUnidades.trim().toUpperCase();
+                    String tu = tipoUnidades.trim().toUpperCase(Locale.ROOT);
                     if (!tu.equals("L") && !tu.equals("KG") && !tu.equals("U")) {
                         errors.add(new ErrorRecord(rowNum + 1, productoId, "tipo_unidades debe ser L, KG o U", "tipo_unidades"));
                     }
@@ -238,6 +248,10 @@ public class CargaMasivaTerminadoService {
                 double cantidadUnidad = getCellValueAsDouble(row, 6);
                 if (cantidadUnidad < 0) {
                     errors.add(new ErrorRecord(rowNum + 1, productoId, "cantidad_unidad debe ser >= 0", "cantidad_unidad"));
+                }
+                double stockMinimo = getCellValueAsDouble(row, 7);
+                if (stockMinimo < 0) {
+                    errors.add(new ErrorRecord(rowNum + 1, productoId, "stock_minimo debe ser >= 0", "stock_minimo"));
                 }
                 double statusVal = getCellValueAsDouble(row, 8);
                 if (statusVal != 0 && statusVal != 1) {
@@ -252,24 +266,16 @@ public class CargaMasivaTerminadoService {
                 }
                 String prefijoLote = getCellValueAsString(row, 11);
                 if (prefijoLote != null && !prefijoLote.trim().isEmpty()) {
-                    prefijoLote = prefijoLote.trim();
-                    if (seenPrefijos.contains(prefijoLote)) {
+                    String prefijoNormalizado = prefijoLote.trim();
+                    if (!seenPrefijos.add(prefijoNormalizado)) {
                         errors.add(new ErrorRecord(rowNum + 1, productoId, "prefijo_lote duplicado dentro del archivo", "prefijo_lote"));
-                    } else {
-                        seenPrefijos.add(prefijoLote);
                     }
-                    Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(prefijoLote);
+                    Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(prefijoNormalizado);
                     if (existing.isPresent() && !existing.get().getProductoId().equals(productoId)) {
                         errors.add(new ErrorRecord(rowNum + 1, productoId, "prefijo_lote ya existe en la base de datos", "prefijo_lote"));
                     }
                 }
-
-                if (productoRepo.findByProductoId(productoId).isPresent()) {
-                    errors.add(new ErrorRecord(rowNum + 1, productoId, "producto_id ya existe en la base de datos", "producto_id"));
-                }
             }
-            log.debug("[CargaMasivaTerminados] validateExcelSinInsumos: fin validacion, rowCount={}, errorsCount={}",
-                    rowCount, errors.size());
             return new ValidationResultDTO(errors.isEmpty(), errors, rowCount);
         } catch (IOException e) {
             log.error("Error validando Excel de carga masiva terminados sin insumos", e);
@@ -284,6 +290,9 @@ public class CargaMasivaTerminadoService {
         if (!errors.isEmpty() || payload == null) {
             return new ValidationResultDTO(false, errors, 0);
         }
+        if (payload.schemaVersion() != 1) {
+            errors.add(new ErrorRecord(0, "", "schemaVersion debe ser 1", "schemaVersion"));
+        }
 
         List<ExportacionTerminadosConInsumosDTO.TerminadoExportDTO> terminados = payload.terminados();
         if (terminados == null || terminados.isEmpty()) {
@@ -293,110 +302,76 @@ public class CargaMasivaTerminadoService {
 
         Set<String> seenProductoIds = new HashSet<>();
         Set<String> seenPrefijos = new HashSet<>();
-
         for (int index = 0; index < terminados.size(); index++) {
             ExportacionTerminadosConInsumosDTO.TerminadoExportDTO terminado = terminados.get(index);
             int rowNumber = index + 1;
-            String productoId = safeTrim(terminado.productoId());
+            String productoId = terminado.productoId();
+            String productoIdError = validateProductoId(productoId, "productoId");
+            String productoIdForError = productoId != null ? productoId : "";
 
-            if (productoId == null || productoId.isEmpty()) {
-                errors.add(new ErrorRecord(rowNumber, "", "productoId es obligatorio", "productoId"));
-                continue;
-            }
-
-            if (!seenProductoIds.add(productoId)) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "productoId duplicado dentro del archivo", "productoId"));
-            }
-
-            if (productoRepo.findByProductoId(productoId).isPresent()) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "productoId ya existe en la base de datos", "productoId"));
+            if (productoIdError != null) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, productoIdError, "productoId"));
+            } else {
+                if (!seenProductoIds.add(productoId)) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "productoId duplicado dentro del archivo", "productoId"));
+                }
+                if (productoRepo.findByProductoId(productoId).isPresent()) {
+                    errors.add(new ErrorRecord(rowNumber, productoId, "productoId ya existe en la base de datos", "productoId"));
+                }
             }
 
             if (safeTrim(terminado.nombre()) == null || safeTrim(terminado.nombre()).isEmpty()) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "nombre es obligatorio", "nombre"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "nombre es obligatorio", "nombre"));
             }
             if (terminado.costo() < 0) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "costo debe ser >= 0", "costo"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "costo debe ser >= 0", "costo"));
             }
             if (terminado.ivaPercentual() != 0 && terminado.ivaPercentual() != 5 && terminado.ivaPercentual() != 19) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "ivaPercentual debe ser 0, 5 o 19", "ivaPercentual"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "ivaPercentual debe ser 0, 5 o 19", "ivaPercentual"));
             }
             if (!isTipoUnidadesValido(terminado.tipoUnidades())) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "tipoUnidades debe ser L, KG o U", "tipoUnidades"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "tipoUnidades debe ser L, KG o U", "tipoUnidades"));
             }
             if (terminado.cantidadUnidad() < 0) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "cantidadUnidad debe ser >= 0", "cantidadUnidad"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "cantidadUnidad debe ser >= 0", "cantidadUnidad"));
             }
             if (terminado.stockMinimo() < 0) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "stockMinimo debe ser >= 0", "stockMinimo"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "stockMinimo debe ser >= 0", "stockMinimo"));
             }
             if (terminado.status() != 0 && terminado.status() != 1) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "status debe ser 0 (activo) o 1 (obsoleto)", "status"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "status debe ser 0 (activo) o 1 (obsoleto)", "status"));
             }
-
             Integer categoriaId = extractCategoriaId(terminado.categoria());
             if (categoriaId != null && !categoriaRepo.existsById(categoriaId)) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "categoria.categoriaId no existe en la base de datos", "categoria.categoriaId"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "categoria.categoriaId no existe en la base de datos", "categoria.categoriaId"));
             }
-
             String prefijoLote = safeTrim(terminado.prefijoLote());
             if (prefijoLote != null && !prefijoLote.isEmpty()) {
                 if (!seenPrefijos.add(prefijoLote)) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "prefijoLote duplicado dentro del archivo", "prefijoLote"));
+                    errors.add(new ErrorRecord(rowNumber, productoIdForError, "prefijoLote duplicado dentro del archivo", "prefijoLote"));
                 }
                 Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(prefijoLote);
                 if (existing.isPresent() && !existing.get().getProductoId().equals(productoId)) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "prefijoLote ya existe en la base de datos", "prefijoLote"));
+                    errors.add(new ErrorRecord(rowNumber, productoIdForError, "prefijoLote ya existe en la base de datos", "prefijoLote"));
                 }
             }
 
             if (terminado.insumos() == null) {
-                errors.add(new ErrorRecord(rowNumber, productoId, "insumos no puede ser null", "insumos"));
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "insumos no puede ser null", "insumos"));
                 continue;
             }
-
-            Set<String> seenInsumoProductoIds = new HashSet<>();
-            for (ExportacionTerminadosConInsumosDTO.InsumoExportDTO insumo : terminado.insumos()) {
-                if (insumo.cantidadRequerida() <= 0) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "cantidadRequerida debe ser > 0", "insumos.cantidadRequerida"));
-                }
-
-                if (insumo.producto() == null) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "Cada insumo debe incluir un producto", "insumos.producto"));
-                    continue;
-                }
-
-                String insumoProductoId = safeTrim(insumo.producto().productoId());
-                if (insumoProductoId == null || insumoProductoId.isEmpty()) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "producto.productoId es obligatorio en cada insumo", "insumos.producto.productoId"));
-                    continue;
-                }
-
-                if (productoId.equals(insumoProductoId)) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "Un terminado no puede referenciarse a sí mismo como insumo", "insumos.producto.productoId"));
-                }
-
-                if (!seenInsumoProductoIds.add(insumoProductoId)) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "Hay insumos duplicados para el mismo producto dentro del terminado", "insumos.producto.productoId"));
-                }
-
-                if (productoRepo.findByProductoId(insumoProductoId).isEmpty()) {
-                    errors.add(new ErrorRecord(rowNumber, productoId, "El producto del insumo no existe en la base de datos", "insumos.producto.productoId"));
-                }
-            }
+            validateInsumos(errors, rowNumber, productoIdForError, productoId, productoIdError, terminado.insumos());
         }
-
         return new ValidationResultDTO(errors.isEmpty(), errors, terminados.size());
     }
 
     @Transactional
     public ValidationResultDTO processBulkInsertSinInsumos(MultipartFile file) {
         ValidationResultDTO validation = validateExcelSinInsumos(file);
-        log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: validacion previa valid={}, rowCount={}",
-                validation.isValid(), validation.getRowCount());
         if (!validation.isValid()) {
             return validation;
         }
+
         List<ErrorRecord> errors = new ArrayList<>();
         int successCount = 0;
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
@@ -404,22 +379,19 @@ public class CargaMasivaTerminadoService {
             if (sheet == null) {
                 sheet = workbook.getSheetAt(workbook.getNumberOfSheets() > 1 ? 1 : 0);
             }
-            int lastRow = sheet.getLastRowNum();
-            log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: hojaUsada={}, lastRowNum={}, rangoBucle rowNum 1..{}, ¿bucleSeEjecutara?={}",
-                    sheet.getSheetName(), lastRow, lastRow, 1 <= lastRow);
             for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
                 Row row = sheet.getRow(rowNum);
-                if (row == null) {
-                    log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} (rowNum={}) es null, saltando", rowNum + 1, rowNum);
+                if (row == null || isRowEmpty(row, SIN_INSUMOS_HEADERS.length)) {
                     continue;
                 }
-                String productoId = getCellValueAsString(row, 0);
-                if (productoId == null || productoId.trim().isEmpty()) {
-                    log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} (rowNum={}) producto_id vacio, saltando", rowNum + 1, rowNum);
+
+                ProductoIdReadResult productoIdResult = readProductoIdCell(row, 0, "producto_id");
+                String productoId = productoIdResult.value() != null ? productoIdResult.value() : "";
+                if (productoIdResult.errorMessage() != null) {
+                    errors.add(new ErrorRecord(rowNum + 1, productoId, productoIdResult.errorMessage(), "producto_id"));
                     continue;
                 }
-                productoId = productoId.trim();
-                log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: procesando fila {} (rowNum={}), productoId={}", rowNum + 1, rowNum, productoId);
+
                 try {
                     Terminado terminado = new Terminado();
                     terminado.setProductoId(productoId);
@@ -427,7 +399,7 @@ public class CargaMasivaTerminadoService {
                     terminado.setObservaciones(getCellValueAsString(row, 2));
                     terminado.setCosto(getCellValueAsDouble(row, 3));
                     terminado.setIvaPercentual(getCellValueAsDouble(row, 4));
-                    terminado.setTipoUnidades(getCellValueAsString(row, 5) != null ? getCellValueAsString(row, 5).trim().toUpperCase() : "U");
+                    terminado.setTipoUnidades(getCellValueAsString(row, 5) != null ? getCellValueAsString(row, 5).trim().toUpperCase(Locale.ROOT) : "U");
                     terminado.setCantidadUnidad(getCellValueAsDouble(row, 6));
                     terminado.setStockMinimo(getCellValueAsDouble(row, 7));
                     terminado.setStatus((int) getCellValueAsDouble(row, 8));
@@ -444,14 +416,10 @@ public class CargaMasivaTerminadoService {
                     terminado.setInventareable(true);
                     terminadoRepo.save(terminado);
                     successCount++;
-                    log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} productoId={} INSERTADO OK", rowNum + 1, productoId);
                 } catch (Exception e) {
-                    log.warn("[CargaMasivaTerminados] processBulkInsertSinInsumos: fila {} productoId={} ERROR: {}", rowNum + 1, productoId, e.getMessage());
                     errors.add(new ErrorRecord(rowNum + 1, productoId, e.getMessage()));
                 }
             }
-            log.debug("[CargaMasivaTerminados] processBulkInsertSinInsumos: fin, successCount={}, errorsCount={}",
-                    successCount, errors.size());
             return new ValidationResultDTO(errors.isEmpty(), errors, successCount);
         } catch (IOException e) {
             log.error("Error procesando Excel de carga masiva terminados sin insumos", e);
@@ -477,8 +445,7 @@ public class CargaMasivaTerminadoService {
         for (int index = 0; index < payload.terminados().size(); index++) {
             ExportacionTerminadosConInsumosDTO.TerminadoExportDTO dto = payload.terminados().get(index);
             int rowNumber = index + 1;
-            String productoId = safeTrim(dto.productoId());
-
+            String productoId = dto.productoId();
             try {
                 Terminado terminado = new Terminado();
                 terminado.setProductoId(productoId);
@@ -505,7 +472,6 @@ public class CargaMasivaTerminadoService {
                 for (ExportacionTerminadosConInsumosDTO.InsumoExportDTO insumoDto : dto.insumos()) {
                     Producto producto = productoRepo.findByProductoId(insumoDto.producto().productoId())
                             .orElseThrow(() -> new IllegalStateException("Producto de insumo no encontrado: " + insumoDto.producto().productoId()));
-
                     Insumo insumo = new Insumo();
                     insumo.setProducto(producto);
                     insumo.setCantidadRequerida(insumoDto.cantidadRequerida());
@@ -516,20 +482,53 @@ public class CargaMasivaTerminadoService {
                 terminadoRepo.save(terminado);
                 successCount++;
             } catch (Exception e) {
-                log.warn("[CargaMasivaTerminados] processBulkInsertJsonConInsumos: fila {} productoId={} ERROR: {}", rowNumber, productoId, e.getMessage());
                 errors.add(new ErrorRecord(rowNumber, productoId, e.getMessage()));
             }
         }
-
         return new ValidationResultDTO(errors.isEmpty(), errors, successCount);
+    }
+
+    private void validateInsumos(
+            List<ErrorRecord> errors,
+            int rowNumber,
+            String productoIdForError,
+            String productoId,
+            String productoIdError,
+            List<ExportacionTerminadosConInsumosDTO.InsumoExportDTO> insumos
+    ) {
+        Set<String> seenInsumoProductoIds = new HashSet<>();
+        for (ExportacionTerminadosConInsumosDTO.InsumoExportDTO insumo : insumos) {
+            if (insumo.cantidadRequerida() <= 0) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "cantidadRequerida debe ser > 0", "insumos.cantidadRequerida"));
+            }
+            if (insumo.producto() == null) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "Cada insumo debe incluir un producto", "insumos.producto"));
+                continue;
+            }
+
+            String insumoProductoId = insumo.producto().productoId();
+            String insumoProductoIdError = validateProductoId(insumoProductoId, "insumos.producto.productoId");
+            if (insumoProductoIdError != null) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, insumoProductoIdError, "insumos.producto.productoId"));
+                continue;
+            }
+            if (productoIdError == null && productoId.equals(insumoProductoId)) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "Un terminado no puede referenciarse a si mismo como insumo", "insumos.producto.productoId"));
+            }
+            if (!seenInsumoProductoIds.add(insumoProductoId)) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "Hay insumos duplicados para el mismo producto dentro del terminado", "insumos.producto.productoId"));
+            }
+            if (productoRepo.findByProductoId(insumoProductoId).isEmpty()) {
+                errors.add(new ErrorRecord(rowNumber, productoIdForError, "El producto del insumo no existe en la base de datos", "insumos.producto.productoId"));
+            }
+        }
     }
 
     private ExportacionTerminadosConInsumosDTO parseJsonConInsumos(MultipartFile file, List<ErrorRecord> errors) {
         if (file == null || file.isEmpty()) {
-            errors.add(new ErrorRecord(0, "", "No se recibió archivo JSON"));
+            errors.add(new ErrorRecord(0, "", "No se recibio archivo JSON"));
             return null;
         }
-
         try {
             return objectMapper.readValue(file.getInputStream(), ExportacionTerminadosConInsumosDTO.class);
         } catch (IOException e) {
@@ -543,12 +542,19 @@ public class CargaMasivaTerminadoService {
         if (tipoUnidades == null) {
             return false;
         }
-        String tu = tipoUnidades.trim().toUpperCase();
+        String tu = tipoUnidades.trim().toUpperCase(Locale.ROOT);
         return tu.equals("L") || tu.equals("KG") || tu.equals("U");
     }
 
     private String normalizeTipoUnidades(String tipoUnidades) {
-        return safeTrim(tipoUnidades) != null ? safeTrim(tipoUnidades).toUpperCase() : "U";
+        return safeTrim(tipoUnidades) != null ? safeTrim(tipoUnidades).toUpperCase(Locale.ROOT) : "U";
+    }
+
+    private CellStyle createTextCellStyle(Workbook workbook) {
+        CellStyle textCellStyle = workbook.createCellStyle();
+        DataFormat dataFormat = workbook.createDataFormat();
+        textCellStyle.setDataFormat(dataFormat.getFormat("@"));
+        return textCellStyle;
     }
 
     private String safeTrim(String value) {
@@ -564,39 +570,104 @@ public class CargaMasivaTerminadoService {
         return categoria != null ? categoria.categoriaId() : null;
     }
 
-    private String getCellValueAsString(Row row, int cellIndex) {
-        if (row == null) return null;
-        var cell = row.getCell(cellIndex);
-        if (cell == null) return null;
-        if (cell.getCellType() == CellType.STRING) {
-            String v = cell.getStringCellValue();
-            if (v == null) {
-                log.debug("[CargaMasivaTerminados] getCellValueAsString: row={}, cellIndex={}, getStringCellValue=null (usando vacio)",
-                        row.getRowNum(), cellIndex);
-                return "";
-            }
-            return v.trim();
+    private String validateProductoId(String value, String fieldName) {
+        if (value == null || value.isEmpty()) {
+            return fieldName + " es obligatorio";
         }
-        String v = cell.toString();
-        return (v == null) ? "" : v.trim();
+        if (!value.equals(value.trim())) {
+            return fieldName + " no puede tener espacios al inicio o al final";
+        }
+        if (!PRODUCTO_ID_ALPHANUMERIC_PATTERN.matcher(value).matches()) {
+            return fieldName + " solo puede contener letras y numeros, sin espacios ni caracteres especiales";
+        }
+        if (!value.equals(value.toUpperCase(Locale.ROOT))) {
+            return fieldName + " debe usar letras mayusculas";
+        }
+        return null;
+    }
+
+    private ProductoIdReadResult readProductoIdCell(Row row, int cellIndex, String fieldName) {
+        if (row == null) {
+            return new ProductoIdReadResult("", fieldName + " es obligatorio");
+        }
+        Cell cell = row.getCell(cellIndex);
+        if (cell == null || cell.getCellType() == CellType.BLANK) {
+            return new ProductoIdReadResult("", fieldName + " es obligatorio");
+        }
+        if (cell.getCellType() != CellType.STRING) {
+            String renderedValue = cell.toString();
+            return new ProductoIdReadResult(renderedValue != null ? renderedValue : "",
+                    fieldName + " debe escribirse como texto en Excel. No se aceptan celdas numericas ni formulas.");
+        }
+        String rawValue = cell.getStringCellValue();
+        String productoId = rawValue != null ? rawValue : "";
+        return new ProductoIdReadResult(productoId, validateProductoId(productoId, fieldName));
+    }
+
+    private boolean isRowEmpty(Row row, int columnCount) {
+        if (row == null) {
+            return true;
+        }
+        for (int i = 0; i < columnCount; i++) {
+            Cell cell = row.getCell(i);
+            if (cell == null || cell.getCellType() == CellType.BLANK) {
+                continue;
+            }
+            if (cell.getCellType() == CellType.STRING) {
+                String value = cell.getStringCellValue();
+                if (value != null && !value.trim().isEmpty()) {
+                    return false;
+                }
+                continue;
+            }
+            if (!cell.toString().trim().isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String getCellValueAsString(Row row, int cellIndex) {
+        if (row == null) {
+            return null;
+        }
+        Cell cell = row.getCell(cellIndex);
+        if (cell == null) {
+            return null;
+        }
+        if (cell.getCellType() == CellType.STRING) {
+            String value = cell.getStringCellValue();
+            return value == null ? "" : value.trim();
+        }
+        String value = cell.toString();
+        return value == null ? "" : value.trim();
     }
 
     private double getCellValueAsDouble(Row row, int cellIndex) {
-        if (row == null) return 0;
-        var cell = row.getCell(cellIndex);
-        if (cell == null) return 0;
+        if (row == null) {
+            return 0;
+        }
+        Cell cell = row.getCell(cellIndex);
+        if (cell == null) {
+            return 0;
+        }
         try {
             if (cell.getCellType() == CellType.NUMERIC) {
                 return cell.getNumericCellValue();
             }
             if (cell.getCellType() == CellType.STRING) {
                 String str = cell.getStringCellValue();
-                if (str == null || str.trim().isEmpty()) return 0;
+                if (str == null || str.trim().isEmpty()) {
+                    return 0;
+                }
                 return Double.parseDouble(str.trim());
             }
         } catch (Exception e) {
-            log.warn("Error parseando celda {} como número: {}", cellIndex, e.getMessage());
+            log.warn("Error parseando celda {} como numero: {}", cellIndex, e.getMessage());
         }
         return 0;
+    }
+
+    private record ProductoIdReadResult(String value, String errorMessage) {
     }
 }
