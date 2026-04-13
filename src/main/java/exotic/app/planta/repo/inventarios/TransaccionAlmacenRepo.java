@@ -1,5 +1,6 @@
 package exotic.app.planta.repo.inventarios;
 
+import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Terminado;
@@ -35,10 +36,25 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId AND m.almacen = :almacen AND m.fechaMovimiento < :fecha")
     Double findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(@Param("productoId") String productoId, @Param("almacen") Movimiento.Almacen almacen, @Param("fecha") LocalDateTime fecha);
 
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.lote.id = :loteId
+              AND m.almacen = :almacen
+            """)
+    Double findTotalCantidadByProductoIdAndLoteIdAndAlmacen(
+            @Param("productoId") String productoId,
+            @Param("loteId") Long loteId,
+            @Param("almacen") Movimiento.Almacen almacen
+    );
+
     List<Movimiento> findMovimientosByCantidad(Double cantidad);
 
     // Get movimientos filtered by product ID
     List<Movimiento> findByProducto_ProductoId(String productoId);
+
+    boolean existsByProducto_ProductoIdAndLote_Id(String productoId, Long loteId);
 
     // New method
     Page<Movimiento> findByProducto_ProductoIdOrderByFechaMovimientoDesc(String productoId, Pageable pageable);
@@ -151,6 +167,32 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
                    "ORDER BY l.expiration_date ASC NULLS LAST", 
            nativeQuery = true)
     List<Object[]> findLotesWithStockByProductoIdNative(@Param("productoId") String productoId);
+
+    @Query("""
+            SELECT l, SUM(m.cantidad) as stockDisponible
+            FROM Movimiento m
+            JOIN m.lote l
+            WHERE m.producto.productoId = :productoId
+              AND m.lote IS NOT NULL
+              AND m.almacen = :almacen
+            GROUP BY l
+            HAVING SUM(m.cantidad) > 0
+            ORDER BY l.expirationDate ASC NULLS LAST, l.id ASC
+            """)
+    List<Object[]> findLotesWithStockByProductoIdAndAlmacenOrderByExpirationDate(
+            @Param("productoId") String productoId,
+            @Param("almacen") Movimiento.Almacen almacen
+    );
+
+    @Query("""
+            SELECT DISTINCT l
+            FROM Movimiento m
+            JOIN m.lote l
+            WHERE m.producto.productoId = :productoId
+              AND m.lote IS NOT NULL
+            ORDER BY l.expirationDate ASC NULLS LAST, l.id ASC
+            """)
+    List<Lote> findDistinctLotesByProductoIdOrderByExpirationDate(@Param("productoId") String productoId);
 
     boolean existsByProducto_ProductoId(String productoId);
 

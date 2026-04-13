@@ -430,14 +430,23 @@ public class ProductoService {
 
 
     public Page<Producto> consultaProductos(String search,
+                                            String searchType,
                                             List<String> categories,
                                             int page,
                                             int size) {
 
         Pageable pageable = PageRequest.of(page, size);
+        String resolvedSearchType = searchType == null || searchType.isBlank()
+                ? "NOMBRE"
+                : searchType.trim().toUpperCase(Locale.ROOT);
+        String trimmedSearch = search == null ? "" : search.trim();
 
         // 1) Sin categorías → vacío
         if (categories == null || categories.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        if ("ID".equals(resolvedSearchType) && trimmedSearch.isEmpty()) {
             return Page.empty(pageable);
         }
 
@@ -477,8 +486,16 @@ public class ProductoService {
             Predicate categoryPredicate = cb.or(preds.toArray(new Predicate[0]));
 
             // Si hay término de búsqueda, combinamos con AND
-            if (search != null && !search.trim().isEmpty()) {
-                String[] terms = search.trim().toLowerCase().split("\\s+");
+            if ("ID".equals(resolvedSearchType)) {
+                Predicate idPredicate = cb.equal(
+                        root.get("productoId"),
+                        trimmedSearch.toUpperCase(Locale.ROOT)
+                );
+                return cb.and(categoryPredicate, idPredicate);
+            }
+
+            if (!trimmedSearch.isEmpty()) {
+                String[] terms = trimmedSearch.toLowerCase(Locale.ROOT).split("\\s+");
                 List<Predicate> searchPreds = new ArrayList<>();
                 for (String term : terms) {
                     searchPreds.add(cb.like(

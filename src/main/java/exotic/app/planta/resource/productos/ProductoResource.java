@@ -313,7 +313,13 @@ public class ProductoResource {
     public Page<Producto> searchProductos(@RequestBody ProductoSearchCriteria criteria) {
         int page = criteria.getPage() != null ? criteria.getPage() : 0;
         int size = criteria.getSize() != null ? criteria.getSize() : 10;
-        return productoService.consultaProductos(criteria.getSearch(), criteria.getCategories(), page, size);
+        return productoService.consultaProductos(
+                criteria.getSearch(),
+                criteria.getSearchType(),
+                criteria.getCategories(),
+                page,
+                size
+        );
     }
 
     /**

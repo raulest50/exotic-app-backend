@@ -14,6 +14,8 @@ import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoItemDTO;
 import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO;
 import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
+import exotic.app.planta.model.inventarios.dto.LoteDisponiblePageResponseDTO;
+import exotic.app.planta.model.inventarios.dto.LoteRecomendadoDTO;
 import exotic.app.planta.model.inventarios.dto.TransaccionAlmacenResponseDTO;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
@@ -177,6 +179,50 @@ public class MovimientosService {
         return transaccionAlmacenRepo.findByProducto_ProductoIdOrderByFechaMovimientoDesc(productoId, pageable);
     }
 
+    public LoteDisponiblePageResponseDTO getLotesDisponiblesAjusteSalida(String productoId, int page, int size) {
+        Producto producto = productoRepo.findById(productoId)
+                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + productoId));
+
+        List<Object[]> lotesConStock = transaccionAlmacenRepo
+                .findLotesWithStockByProductoIdAndAlmacenOrderByExpirationDate(productoId, Movimiento.Almacen.GENERAL);
+
+        List<LoteRecomendadoDTO> lotes = lotesConStock.stream()
+                .map(this::mapLoteConStock)
+                .filter(Objects::nonNull)
+                .filter(lote -> lote.getCantidadDisponible() > 0)
+                .collect(Collectors.toList());
+
+        return buildLotesPageResponse(producto, lotes, page, size);
+    }
+
+    public LoteDisponiblePageResponseDTO getLotesExistentesAjusteEntrada(String productoId, int page, int size) {
+        Producto producto = productoRepo.findById(productoId)
+                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + productoId));
+
+        List<LoteRecomendadoDTO> lotes = transaccionAlmacenRepo
+                .findDistinctLotesByProductoIdOrderByExpirationDate(productoId)
+                .stream()
+                .map(lote -> {
+                    Double stockActual = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndLoteIdAndAlmacen(
+                            productoId,
+                            lote.getId(),
+                            Movimiento.Almacen.GENERAL
+                    );
+
+                    return new LoteRecomendadoDTO(
+                            lote.getId(),
+                            lote.getBatchNumber(),
+                            lote.getProductionDate(),
+                            lote.getExpirationDate(),
+                            stockActual != null ? stockActual : 0.0,
+                            0
+                    );
+                })
+                .collect(Collectors.toList());
+
+        return buildLotesPageResponse(producto, lotes, page, size);
+    }
+
 
     public TransaccionAlmacen createAjusteInventario(AjusteInventarioDTO ajusteInventarioDTO) {
         return createAjusteInventario(ajusteInventarioDTO, TransaccionAlmacen.TipoEntidadCausante.OAA);
@@ -187,6 +233,14 @@ public class MovimientosService {
         if (isCargaMasiva) {
             log.info("[CARGA_MASIVA-Movimientos] createAjusteInventario CM. Items={}", 
                     ajusteInventarioDTO.getItems() != null ? ajusteInventarioDTO.getItems().size() : 0);
+        }
+
+        if (ajusteInventarioDTO.getItems() == null || ajusteInventarioDTO.getItems().isEmpty()) {
+            throw new IllegalArgumentException("El ajuste debe incluir al menos un item.");
+        }
+
+        if (tipoEntidadCausante == TransaccionAlmacen.TipoEntidadCausante.OAA) {
+            validarItemsAjusteInventario(ajusteInventarioDTO.getItems());
         }
 
         TransaccionAlmacen transaccion = new TransaccionAlmacen();
@@ -229,6 +283,12 @@ public class MovimientosService {
                             .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
                     movimiento.setLote(lote);
                 } else {
+                    if (tipoEntidadCausante == TransaccionAlmacen.TipoEntidadCausante.OAA) {
+                        throw new IllegalArgumentException(
+                                "loteId es obligatorio para cada item del ajuste de inventario (productoId: "
+                                        + item.getProductoId() + ")"
+                        );
+                    }
                     Lote savedLote = isCargaMasiva
                             ? crearLoteCargaMasivaConBatchUnico(producto)
                             : crearLoteAutomatico(producto);
@@ -249,6 +309,143 @@ public class MovimientosService {
                     saved.getTransaccionId(), movimientos.size());
         }
         return saved;
+    }
+
+    private void validarItemsAjusteInventario(List<AjusteItemDTO> items) {
+        Map<String, Double> salidaAcumuladaPorProducto = new HashMap<>();
+        Map<String, Double> salidaAcumuladaPorProductoYLote = new HashMap<>();
+
+        for (AjusteItemDTO item : items) {
+            if (item.getProductoId() == null || item.getProductoId().isBlank()) {
+                throw new IllegalArgumentException("Cada item del ajuste debe incluir un productoId válido.");
+            }
+
+            if (item.getCantidad() == 0) {
+                throw new IllegalArgumentException(
+                        "La cantidad no puede ser 0 en un ajuste de inventario (productoId: " + item.getProductoId() + ")"
+                );
+            }
+
+            if (item.getAlmacen() == null || item.getAlmacen() != Movimiento.Almacen.GENERAL) {
+                throw new IllegalArgumentException(
+                        "Los ajustes de inventario solo están permitidos en el almacén GENERAL (productoId: "
+                                + item.getProductoId() + ")"
+                );
+            }
+
+            productoRepo.findById(item.getProductoId())
+                    .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + item.getProductoId()));
+
+            if (item.getLoteId() == null) {
+                throw new IllegalArgumentException(
+                        "loteId es obligatorio para cada item del ajuste de inventario (productoId: "
+                                + item.getProductoId() + ")"
+                );
+            }
+
+            Long loteId = item.getLoteId().longValue();
+            loteRepo.findById(loteId)
+                    .orElseThrow(() -> new IllegalArgumentException("Lote no encontrado con ID: " + item.getLoteId()));
+
+            boolean lotePerteneceProducto = transaccionAlmacenRepo.existsByProducto_ProductoIdAndLote_Id(
+                    item.getProductoId(),
+                    loteId
+            );
+            if (!lotePerteneceProducto) {
+                throw new IllegalArgumentException(
+                        "El lote " + item.getLoteId() + " no pertenece al producto " + item.getProductoId()
+                );
+            }
+
+            if (item.getCantidad() < 0) {
+                double salidaSolicitada = Math.abs(item.getCantidad());
+                String keyProducto = item.getProductoId();
+                String keyProductoLote = item.getProductoId() + "::" + loteId;
+
+                double salidaProductoAcumulada = salidaAcumuladaPorProducto.getOrDefault(keyProducto, 0.0) + salidaSolicitada;
+                salidaAcumuladaPorProducto.put(keyProducto, salidaProductoAcumulada);
+
+                double salidaLoteAcumulada = salidaAcumuladaPorProductoYLote.getOrDefault(keyProductoLote, 0.0) + salidaSolicitada;
+                salidaAcumuladaPorProductoYLote.put(keyProductoLote, salidaLoteAcumulada);
+
+                Double stockDisponibleLote = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndLoteIdAndAlmacen(
+                        item.getProductoId(),
+                        loteId,
+                        Movimiento.Almacen.GENERAL
+                );
+                double stockLote = stockDisponibleLote != null ? stockDisponibleLote : 0.0;
+                if (salidaLoteAcumulada - stockLote > 0.0001d) {
+                    throw new IllegalStateException(
+                            "La salida solicitada para el lote " + item.getLoteId()
+                                    + " del producto " + item.getProductoId()
+                                    + " excede el stock disponible en GENERAL. Disponible: "
+                                    + stockLote + ", solicitado: " + salidaLoteAcumulada
+                    );
+                }
+
+                Double stockDisponibleProducto = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(
+                        item.getProductoId(),
+                        Movimiento.Almacen.GENERAL,
+                        LocalDateTime.now().plusNanos(1)
+                );
+                double stockProducto = stockDisponibleProducto != null ? stockDisponibleProducto : 0.0;
+                if (salidaProductoAcumulada - stockProducto > 0.0001d) {
+                    throw new IllegalStateException(
+                            "La salida total solicitada para el producto " + item.getProductoId()
+                                    + " excede el stock disponible consolidado en GENERAL. Disponible: "
+                                    + stockProducto + ", solicitado: " + salidaProductoAcumulada
+                    );
+                }
+            }
+        }
+    }
+
+    private LoteRecomendadoDTO mapLoteConStock(Object[] result) {
+        try {
+            if (result == null || result.length < 2 || !(result[0] instanceof Lote)) {
+                return null;
+            }
+
+            Lote lote = (Lote) result[0];
+            double cantidadDisponible = ((Number) result[1]).doubleValue();
+
+            return new LoteRecomendadoDTO(
+                    lote.getId(),
+                    lote.getBatchNumber(),
+                    lote.getProductionDate(),
+                    lote.getExpirationDate(),
+                    cantidadDisponible,
+                    0
+            );
+        } catch (Exception e) {
+            log.warn("No se pudo mapear un lote con stock para ajustes: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private LoteDisponiblePageResponseDTO buildLotesPageResponse(
+            Producto producto,
+            List<LoteRecomendadoDTO> lotes,
+            int page,
+            int size
+    ) {
+        int pageSize = Math.max(size, 1);
+        int currentPage = Math.max(page, 0);
+        int totalElements = lotes.size();
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / pageSize);
+        int startIndex = Math.min(currentPage * pageSize, totalElements);
+        int endIndex = Math.min(startIndex + pageSize, totalElements);
+        List<LoteRecomendadoDTO> lotesPaginados = lotes.subList(startIndex, endIndex);
+
+        LoteDisponiblePageResponseDTO response = new LoteDisponiblePageResponseDTO();
+        response.setProductoId(producto.getProductoId());
+        response.setNombreProducto(producto.getNombre());
+        response.setLotesDisponibles(lotesPaginados);
+        response.setTotalPages(totalPages);
+        response.setTotalElements(totalElements);
+        response.setCurrentPage(currentPage);
+        response.setSize(pageSize);
+        return response;
     }
 
 

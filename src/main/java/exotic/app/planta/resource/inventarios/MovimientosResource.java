@@ -21,6 +21,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/movimientos")
 @RequiredArgsConstructor
@@ -88,11 +90,38 @@ public class MovimientosResource {
 
 
     @PostMapping("/ajustes")
-    public ResponseEntity<TransaccionAlmacen> createAjusteInventario(@RequestBody AjusteInventarioDTO ajusteInventarioDTO) {
-        // Llamar directamente al servicio con el DTO original
-        TransaccionAlmacen transaccion = movimientoService.createAjusteInventario(ajusteInventarioDTO);
-        return ResponseEntity.created(java.net.URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
-                .body(transaccion);
+    public ResponseEntity<?> createAjusteInventario(@RequestBody AjusteInventarioDTO ajusteInventarioDTO) {
+        try {
+            TransaccionAlmacen transaccion = movimientoService.createAjusteInventario(ajusteInventarioDTO);
+            return ResponseEntity.created(java.net.URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
+                    .body(transaccion);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/ajustes/lotes-disponibles")
+    public ResponseEntity<?> getLotesDisponiblesAjusteSalida(
+            @RequestParam String productoId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        try {
+            return ResponseEntity.ok(movimientoService.getLotesDisponiblesAjusteSalida(productoId, page, size));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/ajustes/lotes-existentes")
+    public ResponseEntity<?> getLotesExistentesAjusteEntrada(
+            @RequestParam String productoId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        try {
+            return ResponseEntity.ok(movimientoService.getLotesExistentesAjusteEntrada(productoId, page, size));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /**

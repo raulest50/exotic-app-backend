@@ -19,6 +19,9 @@
 --     esos asientos no sigan referenciados por otros modulos.
 -- ============================================================================
 
+ROLLBACK;
+SET inventory_reboot.confirmation = 'RESET_INVENTARIO_CONFIRMADO';
+
 BEGIN;
 
 DO $$
@@ -32,26 +35,57 @@ BEGIN
 END $$;
 
 CREATE TEMP TABLE tmp_reboot_delete_counts (
-    table_name TEXT PRIMARY KEY,
+    sort_order INTEGER PRIMARY KEY,
+    table_name TEXT UNIQUE NOT NULL,
+    table_exists BOOLEAN NOT NULL,
     row_count BIGINT NOT NULL
 ) ON COMMIT DROP;
 
-INSERT INTO tmp_reboot_delete_counts (table_name, row_count)
-SELECT 'transaccion_almacen_usuarios_realizadores', COUNT(*) FROM public.transaccion_almacen_usuarios_realizadores
-UNION ALL SELECT 'movimientos', COUNT(*) FROM public.movimientos
-UNION ALL SELECT 'seguimiento_orden_area', COUNT(*) FROM public.seguimiento_orden_area
-UNION ALL SELECT 'recurso_asignado_orden', COUNT(*) FROM public.recurso_asignado_orden
-UNION ALL SELECT 'ordenes_seguimiento', COUNT(*) FROM public.ordenes_seguimiento
-UNION ALL SELECT 'movimiento_reserva', COUNT(*) FROM public.movimiento_reserva
-UNION ALL SELECT 'lote', COUNT(*) FROM public.lote
-UNION ALL SELECT 'item_orden_compra', COUNT(*) FROM public.item_orden_compra
-UNION ALL SELECT 'items_factura_compra', COUNT(*) FROM public.items_factura_compra
-UNION ALL SELECT 'orden_compra', COUNT(*) FROM public.orden_compra
-UNION ALL SELECT 'facturas_compras', COUNT(*) FROM public.facturas_compras
-UNION ALL SELECT 'ordenes_produccion', COUNT(*) FROM public.ordenes_produccion
-UNION ALL SELECT 'planificacion_recurso', COUNT(*) FROM public.planificacion_recurso
-UNION ALL SELECT 'planificacion_produccion', COUNT(*) FROM public.planificacion_produccion
-UNION ALL SELECT 'transaccion_almacen', COUNT(*) FROM public.transaccion_almacen;
+CREATE TEMP TABLE tmp_reboot_delete_targets (
+    sort_order INTEGER PRIMARY KEY,
+    table_name TEXT UNIQUE NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO tmp_reboot_delete_targets (sort_order, table_name)
+VALUES
+    (1, 'transaccion_almacen_usuarios_realizadores'),
+    (2, 'movimientos'),
+    (3, 'seguimiento_orden_area'),
+    (4, 'recurso_asignado_orden'),
+    (5, 'ordenes_seguimiento'),
+    (6, 'movimiento_reserva'),
+    (7, 'lote'),
+    (8, 'item_orden_compra'),
+    (9, 'items_factura_compra'),
+    (10, 'orden_compra'),
+    (11, 'facturas_compras'),
+    (12, 'ordenes_produccion'),
+    (13, 'planificacion_recurso'),
+    (14, 'planificacion_produccion'),
+    (15, 'transaccion_almacen');
+
+DO $$
+DECLARE
+    rec RECORD;
+    current_count BIGINT;
+BEGIN
+    FOR rec IN
+        SELECT sort_order, table_name
+        FROM tmp_reboot_delete_targets
+        ORDER BY sort_order
+    LOOP
+        IF to_regclass(format('public.%I', rec.table_name)) IS NULL THEN
+            INSERT INTO tmp_reboot_delete_counts (sort_order, table_name, table_exists, row_count)
+            VALUES (rec.sort_order, rec.table_name, FALSE, 0);
+        ELSE
+            EXECUTE format('SELECT COUNT(*) FROM public.%I', rec.table_name)
+            INTO current_count;
+
+            INSERT INTO tmp_reboot_delete_counts (sort_order, table_name, table_exists, row_count)
+            VALUES (rec.sort_order, rec.table_name, TRUE, current_count);
+        END IF;
+    END LOOP;
+END $$;
 
 CREATE TEMP TABLE tmp_reboot_preserve_counts (
     table_name TEXT PRIMARY KEY,
@@ -111,11 +145,15 @@ BEGIN
     RAISE NOTICE '==== PRECHECK REBOOT INVENTARIO ====';
 
     FOR rec IN
-        SELECT table_name, row_count
+        SELECT table_name, table_exists, row_count
         FROM tmp_reboot_delete_counts
-        ORDER BY table_name
+        ORDER BY sort_order
     LOOP
-        RAISE NOTICE 'Tabla a limpiar: % -> % fila(s)', rec.table_name, rec.row_count;
+        IF rec.table_exists THEN
+            RAISE NOTICE 'Tabla a limpiar: % -> % fila(s)', rec.table_name, rec.row_count;
+        ELSE
+            RAISE NOTICE 'Tabla a limpiar: % -> ausente en este ambiente (se omitira)', rec.table_name;
+        END IF;
     END LOOP;
 
     FOR rec IN
@@ -130,21 +168,26 @@ BEGIN
         (SELECT COUNT(*) FROM tmp_asientos_inventario_borrables);
 END $$;
 
-DELETE FROM public.transaccion_almacen_usuarios_realizadores;
-DELETE FROM public.movimientos;
-DELETE FROM public.seguimiento_orden_area;
-DELETE FROM public.recurso_asignado_orden;
-DELETE FROM public.ordenes_seguimiento;
-DELETE FROM public.movimiento_reserva;
-DELETE FROM public.lote;
-DELETE FROM public.item_orden_compra;
-DELETE FROM public.items_factura_compra;
-DELETE FROM public.orden_compra;
-DELETE FROM public.facturas_compras;
-DELETE FROM public.ordenes_produccion;
-DELETE FROM public.planificacion_recurso;
-DELETE FROM public.planificacion_produccion;
-DELETE FROM public.transaccion_almacen;
+DO $$
+DECLARE
+    rec RECORD;
+    deleted_count BIGINT;
+BEGIN
+    FOR rec IN
+        SELECT sort_order, table_name, table_exists
+        FROM tmp_reboot_delete_counts
+        ORDER BY sort_order
+    LOOP
+        IF rec.table_exists THEN
+            EXECUTE format('DELETE FROM public.%I WHERE TRUE', rec.table_name);
+            GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+            RAISE NOTICE 'Tabla limpiada: % -> % fila(s) eliminada(s)', rec.table_name, deleted_count;
+        ELSE
+            RAISE NOTICE 'Tabla omitida por ausencia en este ambiente: %', rec.table_name;
+        END IF;
+    END LOOP;
+END $$;
 
 DELETE FROM public.linea_asiento_contable lac
 USING tmp_asientos_inventario_borrables t
@@ -185,6 +228,11 @@ BEGIN
         FROM tmp_reboot_sequences
         ORDER BY table_name
     LOOP
+        IF to_regclass(format('public.%I', rec.table_name)) IS NULL THEN
+            RAISE NOTICE 'Tabla ausente; se omite reinicio de secuencia para %.%', rec.table_name, rec.column_name;
+            CONTINUE;
+        END IF;
+
         SELECT pg_get_serial_sequence(format('public.%I', rec.table_name), rec.column_name)
         INTO seq_name;
 
@@ -203,10 +251,14 @@ DECLARE
     current_count BIGINT;
 BEGIN
     FOR rec IN
-        SELECT table_name
+        SELECT table_name, table_exists
         FROM tmp_reboot_delete_counts
-        ORDER BY table_name
+        ORDER BY sort_order
     LOOP
+        IF NOT rec.table_exists THEN
+            CONTINUE;
+        END IF;
+
         EXECUTE format('SELECT COUNT(*) FROM public.%I', rec.table_name)
         INTO current_count;
 
