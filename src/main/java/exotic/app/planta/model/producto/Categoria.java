@@ -30,11 +30,22 @@ public class Categoria {
     @Getter(AccessLevel.NONE)
     private Integer loteSize;
 
+    @Column(name = "tiempo_dias_fabricacion", nullable = false)
+    @Getter(AccessLevel.NONE)
+    private Integer tiempoDiasFabricacion = 0;
+
     /**
      * @return the lote size assigned to the category, or 0 if it has not been set
      */
     public Integer getLoteSize() {
         return loteSize !=null ? loteSize : 0;
+    }
+
+    /**
+     * @return los dias de fabricacion configurados para la categoria, o 0 si no se han definido
+     */
+    public Integer getTiempoDiasFabricacion() {
+        return tiempoDiasFabricacion != null ? tiempoDiasFabricacion : 0;
     }
 
 }

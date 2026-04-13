@@ -117,7 +117,8 @@ public class IngresoTerminadosAlmacenService {
                     terminado.getCategoria().getCategoriaId(),
                     terminado.getCategoria().getCategoriaNombre(),
                     terminado.getCategoria().getCategoriaDescripcion(),
-                    terminado.getCategoria().getLoteSize()
+                    terminado.getCategoria().getLoteSize(),
+                    terminado.getCategoria().getTiempoDiasFabricacion()
             );
             terminadoDTO.setCategoria(catDTO);
         }

@@ -158,4 +158,22 @@ public class CategoriaService {
         categoria.setLoteSize(loteSize);
         return categoriaRepo.save(categoria);
     }
+    /**
+     * Actualiza el tiempo de fabricacion predeterminado de una categoria en dias calendario.
+     * @param categoriaId ID de la categoria
+     * @param tiempoDiasFabricacion nuevo tiempo de fabricacion (debe ser >= 0)
+     * @return la categoria actualizada
+     * @throws ValidationException si la categoria no existe
+     * @throws IllegalArgumentException si tiempoDiasFabricacion es negativo
+     */
+    @Transactional
+    public Categoria updateTiempoDiasFabricacion(int categoriaId, int tiempoDiasFabricacion) {
+        if (tiempoDiasFabricacion < 0) {
+            throw new IllegalArgumentException("El tiempo de fabricacion debe ser mayor o igual a 0");
+        }
+        Categoria categoria = categoriaRepo.findById(categoriaId)
+                .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
+        categoria.setTiempoDiasFabricacion(tiempoDiasFabricacion);
+        return categoriaRepo.save(categoria);
+    }
 }

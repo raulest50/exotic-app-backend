@@ -96,6 +96,25 @@ public class CategoriaResource {
      * @return Mensaje de éxito o error
      * @throws ValidationException si la categoría no existe
      */
+    /**
+     * Endpoint para actualizar el tiempo de fabricacion por defecto de una categoria
+     * @param categoriaId ID de la categoria
+     * @param body map con clave "tiempoDiasFabricacion" y valor numerico >= 0
+     * @return categoria actualizada
+     */
+    @PatchMapping("/{categoriaId}/tiempo-dias-fabricacion")
+    public ResponseEntity<Categoria> updateTiempoDiasFabricacion(
+            @PathVariable int categoriaId,
+            @RequestBody Map<String, Integer> body
+    ) {
+        Integer tiempoDiasFabricacion = body != null ? body.get("tiempoDiasFabricacion") : null;
+        if (tiempoDiasFabricacion == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        Categoria updated = categoriaService.updateTiempoDiasFabricacion(categoriaId, tiempoDiasFabricacion);
+        return ResponseEntity.ok(updated);
+    }
+
     @DeleteMapping("/{categoriaId}")
     public ResponseEntity<Map<String, Object>> deleteCategoria(@PathVariable int categoriaId) {
         boolean deleted = categoriaService.deleteCategoriaById(categoriaId);

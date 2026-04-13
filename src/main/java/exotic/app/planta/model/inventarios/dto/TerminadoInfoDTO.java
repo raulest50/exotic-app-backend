@@ -41,5 +41,6 @@ public class TerminadoInfoDTO {
         private String categoriaNombre;
         private String categoriaDescripcion;
         private int loteSize;
+        private int tiempoDiasFabricacion;
     }
 }
