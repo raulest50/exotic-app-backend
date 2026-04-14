@@ -56,6 +56,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -90,6 +91,7 @@ public class MovimientosService {
     private final ContabilidadService contabilidadService;
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
+    private final Clock applicationClock;
 
 
 
@@ -386,7 +388,7 @@ public class MovimientosService {
                 Double stockDisponibleProducto = transaccionAlmacenRepo.findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(
                         item.getProductoId(),
                         Movimiento.Almacen.GENERAL,
-                        LocalDateTime.now().plusNanos(1)
+                        LocalDateTime.now(applicationClock).plusNanos(1)
                 );
                 double stockProducto = stockDisponibleProducto != null ? stockDisponibleProducto : 0.0;
                 if (salidaProductoAcumulada - stockProducto > 0.0001d) {
@@ -463,7 +465,7 @@ public class MovimientosService {
         log.info("Iniciando creación de documento de ingreso OCM. userId: {}", ingresoOCM_dta.getUserId());
         try {
             // Create folder based on current date (yyyyMMdd)
-            String currentDateFolder = LocalDate.now()
+            String currentDateFolder = LocalDate.now(applicationClock)
                     .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             Path folderPath = Paths.get("data", currentDateFolder);
             Files.createDirectories(folderPath);
@@ -622,7 +624,7 @@ public class MovimientosService {
     private String generateBatchNumber(Producto producto) {
         // Formato: MP-YYYYMMDD-XXXX (MP=Materia Prima, fecha, secuencial)
         String prefix = "MP";
-        String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String date = LocalDate.now(applicationClock).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String random = String.format("%04d", new Random().nextInt(10000));
         return prefix + "-" + date + "-" + random;
     }
@@ -630,8 +632,8 @@ public class MovimientosService {
     private Lote crearLoteAutomatico(Producto producto) {
         Lote nuevoLote = new Lote();
         nuevoLote.setBatchNumber(generateBatchNumber(producto));
-        nuevoLote.setProductionDate(LocalDate.now());
-        nuevoLote.setExpirationDate(LocalDate.now().plusMonths(6));
+        nuevoLote.setProductionDate(LocalDate.now(applicationClock));
+        nuevoLote.setExpirationDate(LocalDate.now(applicationClock).plusMonths(6));
         return loteRepo.save(nuevoLote);
     }
 
@@ -649,8 +651,8 @@ public class MovimientosService {
 
             Lote nuevoLote = new Lote();
             nuevoLote.setBatchNumber(candidateBatchNumber);
-            nuevoLote.setProductionDate(LocalDate.now());
-            nuevoLote.setExpirationDate(LocalDate.now().plusMonths(6));
+            nuevoLote.setProductionDate(LocalDate.now(applicationClock));
+            nuevoLote.setExpirationDate(LocalDate.now(applicationClock).plusMonths(6));
 
             try {
                 Lote savedLote = loteRepo.save(nuevoLote);

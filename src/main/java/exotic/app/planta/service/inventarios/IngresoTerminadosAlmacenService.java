@@ -28,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +43,7 @@ public class IngresoTerminadosAlmacenService {
     private final LoteRepo loteRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final UserRepository userRepository;
+    private final Clock applicationClock;
 
     /**
      * Busca una OrdenProduccion activa (no TERMINADA ni CANCELADA) por su loteAsignado exacto.
@@ -176,7 +178,7 @@ public class IngresoTerminadosAlmacenService {
         } else {
             lote = new Lote();
             lote.setBatchNumber(op.getLoteAsignado());
-            lote.setProductionDate(LocalDate.now());
+            lote.setProductionDate(LocalDate.now(applicationClock));
             lote.setExpirationDate(dto.getFechaVencimiento());
             lote.setOrdenProduccion(op);
             lote = loteRepo.save(lote);
@@ -213,7 +215,7 @@ public class IngresoTerminadosAlmacenService {
         TransaccionAlmacen saved = transaccionAlmacenHeaderRepo.save(transaccion);
 
         // Cerrar la OrdenProduccion
-        ordenProduccionRepo.updateEstadoOrdenById(op.getOrdenId(), 2);
+        ordenProduccionRepo.updateEstadoOrdenById(op.getOrdenId(), 2, java.time.LocalDateTime.now(applicationClock));
 
         log.info("Ingreso de producto terminado registrado: OP={}, lote={}, cantidad={}, transaccionId={}",
                 op.getOrdenId(), op.getLoteAsignado(), dto.getCantidadIngresada(), saved.getTransaccionId());
@@ -286,7 +288,7 @@ public class IngresoTerminadosAlmacenService {
             }
 
             // Fecha por defecto: hoy + 2 años
-            LocalDate fechaVencimientoDefault = LocalDate.now().plusYears(2);
+            LocalDate fechaVencimientoDefault = LocalDate.now(applicationClock).plusYears(2);
 
             // Filas de datos
             int rowIdx = 1;

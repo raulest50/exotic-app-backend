@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.inventarios;
 
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.IngresoMasivoRequestDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoMasivoResponseDTO;
@@ -14,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/ingresos_terminados_almacen")
@@ -65,7 +65,7 @@ public class IngresoTerminadosAlmacenResource {
     public ResponseEntity<byte[]> descargarPlantilla() {
         byte[] excel = ingresoTerminadosAlmacenService.generarPlantillaExcel();
 
-        String filename = "plantilla_ingreso_terminados_" + LocalDate.now() + ".xlsx";
+        String filename = "plantilla_ingreso_terminados_" + AppTime.today() + ".xlsx";
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")

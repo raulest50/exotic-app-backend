@@ -1,6 +1,7 @@
 package exotic.app.planta.service.commons;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.commons.dto.exportacion.ExportacionProveedoresConContactosDTO;
 import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -28,7 +28,7 @@ public class ExportacionProveedorService {
 
         ExportacionProveedoresConContactosDTO exportacion = new ExportacionProveedoresConContactosDTO(
                 1,
-                LocalDateTime.now(),
+                AppTime.now(),
                 proveedores.stream().map(this::mapProveedor).toList()
         );
 

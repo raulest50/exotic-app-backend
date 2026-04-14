@@ -77,8 +77,8 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
 
     @Transactional
     @Modifying
-    @Query("UPDATE OrdenProduccion o SET o.estadoOrden = :estadoOrden, o.fechaFinal = CURRENT_TIMESTAMP WHERE o.ordenId = :id")
-    void updateEstadoOrdenById(@Param("id") int id, @Param("estadoOrden") int estadoOrden);
+    @Query("UPDATE OrdenProduccion o SET o.estadoOrden = :estadoOrden, o.fechaFinal = :fechaFinal WHERE o.ordenId = :id")
+    void updateEstadoOrdenById(@Param("id") int id, @Param("estadoOrden") int estadoOrden, @Param("fechaFinal") LocalDateTime fechaFinal);
 
     /**
      * Encuentra todas las órdenes de producción en estado abierto (0) o en curso (1)

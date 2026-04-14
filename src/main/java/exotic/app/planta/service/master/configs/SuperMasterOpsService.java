@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Random;
@@ -29,6 +30,7 @@ public class SuperMasterOpsService {
     private final SuperMasterVerificationCodeRepo verificationCodeRepo;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final Clock applicationClock;
 
     public Optional<SuperMasterConfig> getConfig() {
         return superMasterConfigRepo.findFirstByOrderByIdAsc();
@@ -54,7 +56,7 @@ public class SuperMasterOpsService {
         SuperMasterVerificationCode entity = SuperMasterVerificationCode.builder()
                 .email(email.trim())
                 .code(code)
-                .expiryDate(LocalDateTime.now().plusMinutes(CODE_EXPIRY_MINUTES))
+                .expiryDate(LocalDateTime.now(applicationClock).plusMinutes(CODE_EXPIRY_MINUTES))
                 .build();
         verificationCodeRepo.save(entity);
         String html = createVerificationEmailContent(code);

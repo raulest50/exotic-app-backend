@@ -25,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +48,7 @@ public class ActivoFijoService {
     private final IncorporacionActivoLineRepo incorporacionActivoLineRepo;
     private final FacturaCompraActivoRepo facturaCompraActivoRepo;
     private final FileStorageService fileStorageService;
+    private final Clock applicationClock;
 
     /**
      * Obtiene todos los activos fijos paginados.
@@ -77,7 +79,7 @@ public class ActivoFijoService {
     @Transactional
     public ActivoFijo save(ActivoFijo activoFijo) {
         if (activoFijo.getFechaCodificacion() == null) {
-            activoFijo.setFechaCodificacion(LocalDateTime.now());
+            activoFijo.setFechaCodificacion(LocalDateTime.now(applicationClock));
         }
         return activoFijoRepo.save(activoFijo);
     }
@@ -340,7 +342,7 @@ public class ActivoFijoService {
                 if (grupo.getActivos() != null) {
                     for (ActivoFijo af : grupo.getActivos()) {
                         if (af.getFechaCodificacion() == null) {
-                            af.setFechaCodificacion(LocalDateTime.now());
+                            af.setFechaCodificacion(LocalDateTime.now(applicationClock));
                         }
                         ActivoFijo saved = activoFijoRepo.save(af);
                         IncorporacionActivoLine line = new IncorporacionActivoLine();

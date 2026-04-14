@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.productos.exceptions;
 
+import exotic.app.planta.config.AppTime;
 import lombok.Getter;
 import java.time.LocalDateTime;
 
@@ -21,7 +22,7 @@ public class FamiliaExceptions {
         public ErrorResponse(String message) {
             this.success = false;
             this.message = message;
-            this.timestamp = LocalDateTime.now();
+            this.timestamp = AppTime.now();
         }
     }
 

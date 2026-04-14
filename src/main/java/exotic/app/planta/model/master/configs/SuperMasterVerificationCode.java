@@ -1,5 +1,6 @@
 package exotic.app.planta.model.master.configs;
 
+import exotic.app.planta.config.AppTime;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -27,6 +28,6 @@ public class SuperMasterVerificationCode {
     private LocalDateTime expiryDate;
 
     public boolean isExpired() {
-        return expiryDate != null && LocalDateTime.now().isAfter(expiryDate);
+        return expiryDate != null && AppTime.now().isAfter(expiryDate);
     }
 }

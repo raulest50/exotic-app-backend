@@ -1,5 +1,6 @@
 package exotic.app.planta.model.users.auth;
 
+import exotic.app.planta.config.AppTime;
 import jakarta.persistence.*;
 import exotic.app.planta.model.users.User;
 import lombok.Getter;
@@ -34,7 +35,7 @@ public class PasswordResetToken {
     public PasswordResetToken(String token, User user) {
         this.token = token;
         this.user = user;
-        this.expiryDate = LocalDateTime.now().plusHours(1); // Token valid for 1 hour
+        this.expiryDate = AppTime.now().plusHours(1); // Token valid for 1 hour
     }
 
     /**
@@ -43,6 +44,6 @@ public class PasswordResetToken {
      * @return true if the token has expired, false otherwise
      */
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiryDate);
+        return AppTime.now().isAfter(expiryDate);
     }
 }

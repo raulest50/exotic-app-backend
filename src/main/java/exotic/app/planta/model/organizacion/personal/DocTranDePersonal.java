@@ -1,5 +1,6 @@
 package exotic.app.planta.model.organizacion.personal;
 
+import exotic.app.planta.config.AppTime;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -100,7 +101,7 @@ public class DocTranDePersonal {
         DocTranDePersonal documento = new DocTranDePersonal();
         //documento.setIdIntegrante(integrante);
         documento.setTipoDocTran(TipoDocTran.INGRESO);
-        documento.setFechaHora(LocalDateTime.now());
+        documento.setFechaHora(AppTime.now());
         documento.setDescripcion("Ingreso de nuevo integrante de personal");
         documento.setUsuarioResponsable(usuarioResponsable);
         return documento;
@@ -120,7 +121,7 @@ public class DocTranDePersonal {
         DocTranDePersonal documento = new DocTranDePersonal();
         //documento.setIdIntegrante(integrante);
         documento.setTipoDocTran(tipoDocTran);
-        documento.setFechaHora(LocalDateTime.now());
+        documento.setFechaHora(AppTime.now());
         documento.setDescripcion(descripcion);
         documento.setValoresAnteriores(valoresAnteriores);
         documento.setValoresNuevos(valoresNuevos);
@@ -139,7 +140,7 @@ public class DocTranDePersonal {
         DocTranDePersonal documento = new DocTranDePersonal();
         //documento.setIdIntegrante(integrante);
         documento.setTipoDocTran(TipoDocTran.SALIDA);
-        documento.setFechaHora(LocalDateTime.now());
+        documento.setFechaHora(AppTime.now());
         documento.setDescripcion("Salida de integrante: " + motivo);
         documento.setUsuarioResponsable(usuarioResponsable);
         return documento;

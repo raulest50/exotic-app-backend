@@ -20,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -35,6 +36,7 @@ public class SeguimientoOrdenAreaService {
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final UserRepository userRepository;
+    private final Clock applicationClock;
 
     /**
      * Inicializa el seguimiento para una nueva orden de producción.
@@ -78,7 +80,7 @@ public class SeguimientoOrdenAreaService {
 
         // Crear registros de seguimiento
         int posicion = 0;
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
 
         for (RutaProcesoNode node : ruta.getNodes()) {
             if (node.getAreaOperativa() == null) {
@@ -156,7 +158,7 @@ public class SeguimientoOrdenAreaService {
 
     private void completarSeguimiento(SeguimientoOrdenArea seguimiento, Long userId, String observaciones) {
         seguimiento.setEstado(SeguimientoOrdenArea.ESTADO_COMPLETADO);
-        seguimiento.setFechaCompletado(LocalDateTime.now());
+        seguimiento.setFechaCompletado(LocalDateTime.now(applicationClock));
         seguimiento.setObservaciones(observaciones);
 
         if (userId != null) {
@@ -175,7 +177,7 @@ public class SeguimientoOrdenAreaService {
     private void propagarVisibilidad(int ordenId, Long sourceNodeId) {
         List<SeguimientoOrdenArea> sucesoresPendientes = seguimientoRepo.findSucesoresPendientes(ordenId, sourceNodeId);
 
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
         for (SeguimientoOrdenArea sucesor : sucesoresPendientes) {
             // Verificar si todos los predecesores del sucesor están completados
             long predecesoresNoCompletados = seguimientoRepo.countPredecesoresNoCompletados(

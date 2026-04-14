@@ -1,5 +1,6 @@
 package exotic.app.planta.security;
 
+import exotic.app.planta.config.AppTime;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
@@ -39,7 +40,7 @@ public class JwtTokenProvider {
     public String generateToken(Authentication authentication) {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        Date now = new Date();
+        Date now = Date.from(AppTime.instant());
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
 
         String authorities = authentication.getAuthorities().stream()

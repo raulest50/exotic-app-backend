@@ -1,6 +1,7 @@
 package exotic.app.planta.service.commons;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.commons.dto.exportacion.ExportacionTerminadosConInsumosDTO;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Producto;
@@ -19,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -64,7 +64,7 @@ public class ExportacionTerminadoService {
 
         ExportacionTerminadosConInsumosDTO exportacion = new ExportacionTerminadosConInsumosDTO(
                 1,
-                LocalDateTime.now(),
+                AppTime.now(),
                 terminados.stream().map(this::mapTerminado).toList()
         );
 

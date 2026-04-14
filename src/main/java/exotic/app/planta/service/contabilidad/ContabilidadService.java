@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +36,7 @@ public class ContabilidadService {
     private final AsientoContableRepo asientoContableRepo;
     private final CuentaContableRepo cuentaContableRepo;
     private final IncorporacionActivoHeaderRepo incorporacionActivoHeaderRepo;
+    private final Clock applicationClock;
 
     /**
      * Registra un asiento contable para un ingreso de mercancía por OCM
@@ -56,7 +58,7 @@ public class ContabilidadService {
         );
 
         AsientoContable asiento = new AsientoContable();
-        asiento.setFecha(LocalDateTime.now());
+        asiento.setFecha(LocalDateTime.now(applicationClock));
         asiento.setDescripcion("Ingreso de mercancía por OCM #" + ocm.getOrdenCompraId());
         asiento.setModulo("INVENTARIO");
         asiento.setDocumentoOrigen("OCM-" + ocm.getOrdenCompraId());
@@ -139,7 +141,7 @@ public class ContabilidadService {
         );
 
         AsientoContable asiento = new AsientoContable();
-        asiento.setFecha(LocalDateTime.now());
+        asiento.setFecha(LocalDateTime.now(applicationClock));
         asiento.setDescripcion("Ingreso de producto terminado por OP #" + ordenProduccion.getOrdenId());
         asiento.setModulo("PRODUCCION");
         asiento.setDocumentoOrigen("OP-" + ordenProduccion.getOrdenId());
@@ -229,7 +231,7 @@ public class ContabilidadService {
         // cuando se defina la lógica contable específica para incorporaciones de activos
 
         AsientoContable asiento = new AsientoContable();
-        asiento.setFecha(LocalDateTime.now());
+        asiento.setFecha(LocalDateTime.now(applicationClock));
         asiento.setDescripcion("Incorporación de activos fijos #" + incorporacion.getIncorporacionId());
         asiento.setModulo("ACTIVOS_FIJOS");
         asiento.setDocumentoOrigen("INCORP-" + incorporacion.getIncorporacionId());
@@ -259,7 +261,7 @@ public class ContabilidadService {
         );
 
         AsientoContable asiento = new AsientoContable();
-        asiento.setFecha(LocalDateTime.now());
+        asiento.setFecha(LocalDateTime.now(applicationClock));
         asiento.setDescripcion("Consumo no planificado de materiales");
         asiento.setModulo("INVENTARIO");
         asiento.setDocumentoOrigen("DISP-NP-" + transaccion.getTransaccionId());
@@ -313,7 +315,7 @@ public class ContabilidadService {
         );
 
         AsientoContable asiento = new AsientoContable();
-        asiento.setFecha(LocalDateTime.now());
+        asiento.setFecha(LocalDateTime.now(applicationClock));
         asiento.setDescripcion("Ingreso no planificado de producto: " + producto.getNombre());
         asiento.setModulo("INVENTARIO");
         asiento.setDocumentoOrigen("BF-NP-" + transaccion.getTransaccionId());

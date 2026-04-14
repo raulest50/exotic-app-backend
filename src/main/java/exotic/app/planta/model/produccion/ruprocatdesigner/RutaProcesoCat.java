@@ -1,5 +1,6 @@
 package exotic.app.planta.model.produccion.ruprocatdesigner;
 
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.producto.Categoria;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -38,12 +39,12 @@ public class RutaProcesoCat {
 
     @PrePersist
     protected void onCreate() {
-        fechaCreacion = LocalDateTime.now();
-        fechaModificacion = LocalDateTime.now();
+        fechaCreacion = AppTime.now();
+        fechaModificacion = AppTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        fechaModificacion = LocalDateTime.now();
+        fechaModificacion = AppTime.now();
     }
 }

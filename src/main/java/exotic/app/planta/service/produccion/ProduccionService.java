@@ -36,6 +36,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.*;
@@ -64,6 +65,7 @@ public class ProduccionService {
     //private final UserRepository userRepository;
     private final VendedorRepository vendedorRepository;
     private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
+    private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
     public OrdenProduccion saveOrdenProduccion(OrdenProduccionDTO_save ordenProduccionDTO) {
@@ -189,7 +191,7 @@ public class ProduccionService {
             throw new IllegalArgumentException("El producto terminado no tiene prefijo de lote definido: " + productoId);
         }
         prefijo = prefijo.trim();
-        int year2 = Year.now().getValue() % 100;
+        int year2 = Year.now(applicationClock).getValue() % 100;
         String yearStr = String.format("%02d", year2);
 
         List<Lote> lotes = loteRepo.findByOrdenProduccion_Producto_ProductoId(productoId);
@@ -343,7 +345,7 @@ public class ProduccionService {
      */
     @Transactional
     public OrdenProduccionDTO updateEstadoOrdenProduccion(int ordenId, int estadoOrden) {
-        ordenProduccionRepo.updateEstadoOrdenById(ordenId, estadoOrden);
+        ordenProduccionRepo.updateEstadoOrdenById(ordenId, estadoOrden, LocalDateTime.now(applicationClock));
 
         // Fetch updated OrdenProduccion
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId).orElseThrow(() -> new RuntimeException("OrdenProduccion not found"));
@@ -413,7 +415,7 @@ public class ProduccionService {
 
         ordenProduccion.setEstadoOrden(-1);
         if (ordenProduccion.getFechaFinal() == null) {
-            ordenProduccion.setFechaFinal(LocalDateTime.now());
+            ordenProduccion.setFechaFinal(LocalDateTime.now(applicationClock));
         }
 
         ordenProduccionRepo.save(ordenProduccion);

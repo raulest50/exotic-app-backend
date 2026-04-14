@@ -1,5 +1,6 @@
 package exotic.app.planta.service.commons;
 
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.commons.divisas.TRM;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,7 @@ public class TRMService {
     public TRM getTRMActual() {
         log.info("Devolviendo TRM constante");
         TRM trm = new TRM();
-        trm.setFecha(LocalDate.now());
+        trm.setFecha(AppTime.today());
         trm.setValor(TRM_VALUE);
         trm.setUnidad("COP");
         return trm;

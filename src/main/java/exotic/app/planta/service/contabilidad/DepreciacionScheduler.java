@@ -2,6 +2,7 @@ package exotic.app.planta.service.contabilidad;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -39,15 +40,16 @@ public class DepreciacionScheduler {
     private final AsientoContableRepo asientoContableRepo;
     private final LineaAsientoContableRepo lineaAsientoContableRepo;
     private final PeriodoContableService periodoContableService;
+    private final Clock applicationClock;
 
     /**
      * Ejecuta el proceso de depreciación el último día de cada mes a las 23:59.
      * Utiliza la expresión cron "0 59 23 L * ?" donde L representa el último día del mes.
      */
-    @Scheduled(cron = "0 59 23 L * ?")
+    @Scheduled(cron = "0 59 23 L * ?", zone = "America/Bogota")
     @Transactional
     public void depreciarActivosMesVencido() {
-        YearMonth mesActual = YearMonth.now();
+        YearMonth mesActual = YearMonth.now(applicationClock);
         LocalDate fechaDepreciacion = mesActual.atEndOfMonth();
 
         log.info("Iniciando proceso de depreciación automática para {}", mesActual);
