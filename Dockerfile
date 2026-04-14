@@ -31,6 +31,10 @@ RUN ./gradlew clean build -x test -Pprod --no-daemon
 # Runtime stage
 FROM amazoncorretto:21
 
+# Reinforce the application's timezone policy at the container level.
+ENV TZ=America/Bogota
+ENV JAVA_TOOL_OPTIONS="-Duser.timezone=America/Bogota"
+
 # Create and set the working directory for runtime
 WORKDIR /app
 
