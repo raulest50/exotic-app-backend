@@ -233,7 +233,7 @@ public class ProduccionService {
 
         // Map entities to DTOs
         List<OrdenProduccionDTO> dtoList = page.getContent().stream()
-                .map(this::convertToDto)
+                .map(this::convertToHistorialDto)
                 .collect(Collectors.toList());
 
         return new PageImpl<>(dtoList, pageable, page.getTotalElements());
@@ -311,6 +311,25 @@ public class ProduccionService {
         dto.setLoteAsignado(orden.getLoteAsignado());
         if (orden.getVendedorResponsable() != null) {
             dto.setResponsableId(orden.getVendedorResponsable().getCedula());
+        }
+
+        return dto;
+    }
+
+    private OrdenProduccionDTO convertToHistorialDto(OrdenProduccion orden) {
+        OrdenProduccionDTO dto = convertToDto(orden);
+        Producto producto = orden.getProducto();
+
+        if (producto == null) {
+            return dto;
+        }
+
+        dto.setProductoTipo(producto.getTipo_producto());
+        dto.setProductoUnidad(producto.getTipoUnidades());
+
+        if (producto instanceof Terminado terminado && terminado.getCategoria() != null) {
+            dto.setProductoCategoriaId(terminado.getCategoria().getCategoriaId());
+            dto.setProductoCategoriaNombre(terminado.getCategoria().getCategoriaNombre());
         }
 
         return dto;
