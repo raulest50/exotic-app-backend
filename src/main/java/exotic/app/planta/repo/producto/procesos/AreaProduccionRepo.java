@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface AreaProduccionRepo extends JpaRepository<AreaOperativa, Integer>, JpaSpecificationExecutor<AreaOperativa> {
     Optional<AreaOperativa> findByNombre(String nombre);
     List<AreaOperativa> findAllByResponsableArea_Id(Long userId);
+    List<AreaOperativa> findAllByResponsableAreaIsNotNullAndAreaIdNotOrderByNombreAsc(Integer areaId);
     boolean existsByResponsableArea_Id(Long userId);
     boolean existsByResponsableArea_IdAndAreaIdNot(Long userId, Integer areaId);
 }
