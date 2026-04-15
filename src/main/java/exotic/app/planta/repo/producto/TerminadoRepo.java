@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +25,9 @@ public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpec
 
     @EntityGraph(attributePaths = {"insumos", "insumos.producto"})
     List<Terminado> findByInsumos_Producto(Producto producto);
+
+    @EntityGraph(attributePaths = {"categoria"})
+    List<Terminado> findByProductoIdIn(Collection<String> productoIds);
 
     List<Terminado> findDistinctByCasePack_InsumosEmpaque_Material_ProductoId(String productoId);
 
