@@ -12,4 +12,5 @@ public class TerminadoConVentasDTO {
     private Terminado terminado;
     private double cantidadVendida;
     private double valorTotal;
+    private double stockActualConsolidado;
 }

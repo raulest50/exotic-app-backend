@@ -19,6 +19,14 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId")
     Double findTotalCantidadByProductoId(@Param("productoId") String productoId);
 
+    @Query("""
+            SELECT m.producto.productoId, COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId IN :productoIds
+            GROUP BY m.producto.productoId
+            """)
+    List<Object[]> findTotalCantidadByProductoIds(@Param("productoIds") Collection<String> productoIds);
+
     /**
      * Todos los materiales con stock agregado (suma de movimientos). Una fila por material.
      */

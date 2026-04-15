@@ -176,4 +176,23 @@ public class CategoriaService {
         categoria.setTiempoDiasFabricacion(tiempoDiasFabricacion);
         return categoriaRepo.save(categoria);
     }
+
+    /**
+     * Actualiza la capacidad productiva diaria total de una categoria.
+     * @param categoriaId ID de la categoria
+     * @param capacidadProductivaDiaria nueva capacidad productiva diaria (debe ser >= 0)
+     * @return la categoria actualizada
+     * @throws ValidationException si la categoria no existe
+     * @throws IllegalArgumentException si capacidadProductivaDiaria es negativa
+     */
+    @Transactional
+    public Categoria updateCapacidadProductivaDiaria(int categoriaId, int capacidadProductivaDiaria) {
+        if (capacidadProductivaDiaria < 0) {
+            throw new IllegalArgumentException("La capacidad productiva diaria debe ser mayor o igual a 0");
+        }
+        Categoria categoria = categoriaRepo.findById(categoriaId)
+                .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
+        categoria.setCapacidadProductivaDiaria(capacidadProductivaDiaria);
+        return categoriaRepo.save(categoria);
+    }
 }

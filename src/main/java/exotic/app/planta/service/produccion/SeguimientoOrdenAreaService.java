@@ -1,14 +1,17 @@
 package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
-import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
@@ -22,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,15 +38,18 @@ public class SeguimientoOrdenAreaService {
 
     public static final int ALMACEN_GENERAL_AREA_ID = -1;
 
+    private static final String NOTA_INICIALIZACION = "Inicializacion de seguimiento";
+    private static final String NOTA_DEPENDENCIAS_RESUELTAS = "Paso habilitado automaticamente por resolucion de dependencias previas";
+
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
+    private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final UserRepository userRepository;
     private final Clock applicationClock;
 
     /**
-     * Inicializa el seguimiento para una nueva orden de producción.
-     * Crea registros de seguimiento para cada nodo de la ruta de proceso de la categoría del producto.
-     * Los nodos iniciales (sin predecesores) se marcan como VISIBLE.
+     * Inicializa el seguimiento para una nueva orden de produccion.
+     * Los nodos iniciales nacen en ESPERA y los demas nacen en COLA.
      */
     public void inicializarSeguimiento(OrdenProduccion orden) {
         if (orden == null || orden.getProducto() == null) {
@@ -49,7 +57,6 @@ public class SeguimientoOrdenAreaService {
             return;
         }
 
-        // Solo para productos terminados que tienen categoría
         if (!(orden.getProducto() instanceof Terminado terminado)) {
             log.info("Producto {} no es Terminado, no se inicializa seguimiento", orden.getProducto().getProductoId());
             return;
@@ -57,34 +64,32 @@ public class SeguimientoOrdenAreaService {
 
         Categoria categoria = terminado.getCategoria();
         if (categoria == null) {
-            log.info("Producto terminado {} no tiene categoría asignada", terminado.getProductoId());
+            log.info("Producto terminado {} no tiene categoria asignada", terminado.getProductoId());
             return;
         }
 
         Optional<RutaProcesoCat> rutaOpt = rutaProcesoCatRepo.findByCategoria_CategoriaId(categoria.getCategoriaId());
         if (rutaOpt.isEmpty()) {
-            log.info("Categoría {} no tiene ruta de proceso definida", categoria.getCategoriaId());
+            log.info("Categoria {} no tiene ruta de proceso definida", categoria.getCategoriaId());
             return;
         }
 
         RutaProcesoCat ruta = rutaOpt.get();
         if (ruta.getNodes() == null || ruta.getNodes().isEmpty()) {
-            log.info("Ruta de proceso para categoría {} no tiene nodos definidos", categoria.getCategoriaId());
+            log.info("Ruta de proceso para categoria {} no tiene nodos definidos", categoria.getCategoriaId());
             return;
         }
 
-        // Construir conjunto de nodos que tienen predecesores
         Set<Long> nodosConPredecesores = ruta.getEdges().stream()
                 .map(edge -> edge.getTargetNode().getId())
                 .collect(Collectors.toSet());
 
-        // Crear registros de seguimiento
         int posicion = 0;
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
 
         for (RutaProcesoNode node : ruta.getNodes()) {
             if (node.getAreaOperativa() == null) {
-                log.warn("Nodo {} no tiene área operativa asignada, se omite", node.getId());
+                log.warn("Nodo {} no tiene area operativa asignada, se omite", node.getId());
                 continue;
             }
 
@@ -93,58 +98,107 @@ public class SeguimientoOrdenAreaService {
             seguimiento.setRutaProcesoNode(node);
             seguimiento.setAreaOperativa(node.getAreaOperativa());
             seguimiento.setPosicionSecuencia(posicion++);
+            seguimiento.setFechaEstadoActual(ahora);
 
-            // Nodos sin predecesores son nodos iniciales -> VISIBLE
             boolean esNodoInicial = !nodosConPredecesores.contains(node.getId());
             if (esNodoInicial) {
-                seguimiento.setEstado(SeguimientoOrdenArea.ESTADO_VISIBLE);
+                seguimiento.setEstadoEnum(EstadoSeguimientoOrdenArea.ESPERA);
                 seguimiento.setFechaVisible(ahora);
             } else {
-                seguimiento.setEstado(SeguimientoOrdenArea.ESTADO_PENDIENTE);
+                seguimiento.setEstadoEnum(EstadoSeguimientoOrdenArea.COLA);
             }
 
-            seguimientoRepo.save(seguimiento);
+            seguimiento = seguimientoRepo.save(seguimiento);
+            registrarEvento(
+                    seguimiento,
+                    null,
+                    seguimiento.getEstadoEnum(),
+                    ActorTipoEventoSeguimiento.SYSTEM,
+                    null,
+                    NOTA_INICIALIZACION,
+                    ahora
+            );
         }
 
         log.info("Seguimiento inicializado para orden {} con {} nodos", orden.getOrdenId(), posicion);
     }
 
-    /**
-     * Reporta como completado el trabajo de un área para una orden.
-     * Propaga la visibilidad a los nodos sucesores si todos sus predecesores están completados.
-     */
-    public SeguimientoOrdenAreaDTO reportarCompletado(int ordenId, int areaId, Long userId, String observaciones) {
-        // Buscar el seguimiento visible para esta orden y área
+    public SeguimientoOrdenAreaDTO reportarEnProceso(int ordenId, int areaId, Long userId, String observaciones) {
         SeguimientoOrdenArea seguimiento = seguimientoRepo
                 .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
-                        ordenId, areaId, SeguimientoOrdenArea.ESTADO_VISIBLE)
+                        ordenId,
+                        areaId,
+                        EstadoSeguimientoOrdenArea.ESPERA.getCode())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "No se encontró seguimiento visible para orden " + ordenId + " y área " + areaId));
+                        "No se encontro seguimiento en espera para orden " + ordenId + " y area " + areaId));
 
-        completarSeguimiento(seguimiento, userId, observaciones);
+        transicionarSeguimiento(
+                seguimiento,
+                EstadoSeguimientoOrdenArea.EN_PROCESO,
+                ActorTipoEventoSeguimiento.USER,
+                requireUser(userId),
+                observaciones
+        );
+
+        return toDTO(seguimiento);
+    }
+
+    public SeguimientoOrdenAreaDTO pausarProceso(int ordenId, int areaId, Long userId, String observaciones) {
+        SeguimientoOrdenArea seguimiento = seguimientoRepo
+                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
+                        ordenId,
+                        areaId,
+                        EstadoSeguimientoOrdenArea.EN_PROCESO.getCode())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
+
+        transicionarSeguimiento(
+                seguimiento,
+                EstadoSeguimientoOrdenArea.ESPERA,
+                ActorTipoEventoSeguimiento.USER,
+                requireUser(userId),
+                observaciones
+        );
 
         return toDTO(seguimiento);
     }
 
     /**
-     * Marca automÃ¡ticamente como completado el nodo visible de Almacen General cuando
-     * una dispensaciÃ³n normal de materiales se registra exitosamente.
+     * El cierre manual solo es valido para pasos actualmente en proceso.
+     */
+    public SeguimientoOrdenAreaDTO reportarCompletado(int ordenId, int areaId, Long userId, String observaciones) {
+        SeguimientoOrdenArea seguimiento = seguimientoRepo
+                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
+                        ordenId,
+                        areaId,
+                        EstadoSeguimientoOrdenArea.EN_PROCESO.getCode())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
+
+        completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.USER, requireUser(userId), observaciones);
+        return toDTO(seguimiento);
+    }
+
+    /**
+     * Mantiene la automatizacion existente de Almacen General cuando la dispensacion normal
+     * registra exitosamente la salida de materiales.
      */
     public SeguimientoOrdenAreaDTO autoCompletarAlmacenGeneralPorDispensacion(int ordenId, Long userId, String observaciones) {
         Optional<SeguimientoOrdenArea> seguimientoOpt = seguimientoRepo
                 .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
                         ordenId,
                         ALMACEN_GENERAL_AREA_ID,
-                        SeguimientoOrdenArea.ESTADO_VISIBLE
+                        EstadoSeguimientoOrdenArea.ESPERA.getCode()
                 );
 
         if (seguimientoOpt.isEmpty()) {
-            log.info("No hay seguimiento visible de Almacen General para orden {}. Se omite auto-completado.", ordenId);
+            log.info("No hay seguimiento en espera de Almacen General para orden {}. Se omite auto-completado.", ordenId);
             return null;
         }
 
         SeguimientoOrdenArea seguimiento = seguimientoOpt.get();
-        completarSeguimiento(seguimiento, userId, observaciones);
+        User actor = userId != null ? userRepository.findById(userId).orElse(null) : null;
+        completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.SYSTEM, actor, observaciones);
         return toDTO(seguimiento);
     }
 
@@ -156,63 +210,18 @@ public class SeguimientoOrdenAreaService {
                         && seguimiento.getAreaOperativa().getAreaId() == areaId);
     }
 
-    private void completarSeguimiento(SeguimientoOrdenArea seguimiento, Long userId, String observaciones) {
-        seguimiento.setEstado(SeguimientoOrdenArea.ESTADO_COMPLETADO);
-        seguimiento.setFechaCompletado(LocalDateTime.now(applicationClock));
-        seguimiento.setObservaciones(observaciones);
-
-        if (userId != null) {
-            User usuario = userRepository.findById(userId).orElse(null);
-            seguimiento.setUsuarioReporta(usuario);
-        }
-
-        seguimientoRepo.save(seguimiento);
-        propagarVisibilidad(seguimiento.getOrdenProduccion().getOrdenId(), seguimiento.getRutaProcesoNode().getId());
-    }
-
-    /**
-     * Propaga la visibilidad a los nodos sucesores.
-     * Un sucesor se hace visible solo si todos sus predecesores están completados.
-     */
-    private void propagarVisibilidad(int ordenId, Long sourceNodeId) {
-        List<SeguimientoOrdenArea> sucesoresPendientes = seguimientoRepo.findSucesoresPendientes(ordenId, sourceNodeId);
-
-        LocalDateTime ahora = LocalDateTime.now(applicationClock);
-        for (SeguimientoOrdenArea sucesor : sucesoresPendientes) {
-            // Verificar si todos los predecesores del sucesor están completados
-            long predecesoresNoCompletados = seguimientoRepo.countPredecesoresNoCompletados(
-                    ordenId, sucesor.getRutaProcesoNode().getId());
-
-            if (predecesoresNoCompletados == 0) {
-                sucesor.setEstado(SeguimientoOrdenArea.ESTADO_VISIBLE);
-                sucesor.setFechaVisible(ahora);
-                seguimientoRepo.save(sucesor);
-                log.info("Nodo {} ahora visible para orden {}", sucesor.getRutaProcesoNode().getId(), ordenId);
-            }
-        }
-    }
-
-    /**
-     * Obtiene las órdenes pendientes (visibles) para un área específica
-     */
     @Transactional(readOnly = true)
     public Page<SeguimientoOrdenAreaDTO> getOrdenesPendientesPorArea(int areaId, Pageable pageable) {
         return seguimientoRepo.findOrdenesVisiblesByAreaId(areaId, pageable)
                 .map(this::toDTO);
     }
 
-    /**
-     * Obtiene las órdenes pendientes (visibles) para las áreas donde el usuario es responsable
-     */
     @Transactional(readOnly = true)
     public Page<SeguimientoOrdenAreaDTO> getOrdenesPendientesPorUsuario(Long userId, Pageable pageable) {
         return seguimientoRepo.findOrdenesVisiblesByResponsableUserId(userId, pageable)
                 .map(this::toDTO);
     }
 
-    /**
-     * Obtiene el progreso completo de una orden (todos los nodos con su estado)
-     */
     @Transactional(readOnly = true)
     public List<SeguimientoOrdenAreaDTO> getProgresoOrden(int ordenId) {
         return seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
@@ -221,12 +230,151 @@ public class SeguimientoOrdenAreaService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Verifica si una orden ya tiene seguimiento inicializado
-     */
     @Transactional(readOnly = true)
     public boolean tieneSegumiento(int ordenId) {
         return seguimientoRepo.existsByOrdenProduccion_OrdenId(ordenId);
+    }
+
+    private void completarSeguimiento(
+            SeguimientoOrdenArea seguimiento,
+            ActorTipoEventoSeguimiento actorTipo,
+            User actor,
+            String observaciones
+    ) {
+        transicionarSeguimiento(
+                seguimiento,
+                EstadoSeguimientoOrdenArea.COMPLETADO,
+                actorTipo,
+                actor,
+                observaciones
+        );
+        propagarVisibilidad(seguimiento.getOrdenProduccion().getOrdenId(), seguimiento.getRutaProcesoNode().getId());
+    }
+
+    private void propagarVisibilidad(int ordenId, Long sourceNodeId) {
+        List<SeguimientoOrdenArea> sucesoresPendientes = seguimientoRepo.findSucesoresPendientes(ordenId, sourceNodeId);
+
+        for (SeguimientoOrdenArea sucesor : sucesoresPendientes) {
+            long predecesoresNoCompletados = seguimientoRepo.countPredecesoresNoCompletados(
+                    ordenId, sucesor.getRutaProcesoNode().getId());
+
+            if (predecesoresNoCompletados == 0) {
+                transicionarSeguimiento(
+                        sucesor,
+                        EstadoSeguimientoOrdenArea.ESPERA,
+                        ActorTipoEventoSeguimiento.SYSTEM,
+                        null,
+                        NOTA_DEPENDENCIAS_RESUELTAS
+                );
+                log.info("Nodo {} ahora en espera para orden {}", sucesor.getRutaProcesoNode().getId(), ordenId);
+            }
+        }
+    }
+
+    private void transicionarSeguimiento(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoDestino,
+            ActorTipoEventoSeguimiento actorTipo,
+            User actor,
+            String nota
+    ) {
+        EstadoSeguimientoOrdenArea estadoOrigen = seguimiento.getEstadoEnum();
+        validarTransicion(seguimiento, estadoOrigen, estadoDestino, actorTipo);
+
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        String notaNormalizada = normalizeNota(nota);
+
+        seguimiento.setEstadoEnum(estadoDestino);
+        seguimiento.setFechaEstadoActual(ahora);
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.ESPERA && seguimiento.getFechaVisible() == null) {
+            seguimiento.setFechaVisible(ahora);
+        }
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO) {
+            seguimiento.setFechaCompletado(ahora);
+            seguimiento.setUsuarioReporta(actor);
+            seguimiento.setObservaciones(notaNormalizada);
+        }
+
+        seguimientoRepo.save(seguimiento);
+        registrarEvento(seguimiento, estadoOrigen, estadoDestino, actorTipo, actor, notaNormalizada, ahora);
+    }
+
+    private void validarTransicion(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoOrigen,
+            EstadoSeguimientoOrdenArea estadoDestino,
+            ActorTipoEventoSeguimiento actorTipo
+    ) {
+        if (estadoOrigen == estadoDestino) {
+            throw new IllegalArgumentException("La orden ya se encuentra en estado " + estadoDestino.getDescripcion() + ".");
+        }
+
+        if (estadoOrigen == EstadoSeguimientoOrdenArea.COMPLETADO) {
+            throw new IllegalArgumentException("No se puede modificar un seguimiento ya completado.");
+        }
+
+        if (estadoOrigen == EstadoSeguimientoOrdenArea.OMITIDO) {
+            throw new IllegalArgumentException("No se puede modificar un seguimiento omitido.");
+        }
+
+        if (seguimiento.getAreaOperativa() != null
+                && seguimiento.getAreaOperativa().getAreaId() == ALMACEN_GENERAL_AREA_ID
+                && actorTipo == ActorTipoEventoSeguimiento.SYSTEM
+                && estadoOrigen == EstadoSeguimientoOrdenArea.ESPERA
+                && estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO) {
+            return;
+        }
+
+        boolean transitionAllowed = switch (estadoOrigen) {
+            case COLA -> estadoDestino == EstadoSeguimientoOrdenArea.ESPERA;
+            case ESPERA -> estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO;
+            case EN_PROCESO -> estadoDestino == EstadoSeguimientoOrdenArea.ESPERA
+                    || estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO;
+            case COMPLETADO, OMITIDO -> false;
+        };
+
+        if (!transitionAllowed) {
+            throw new IllegalArgumentException(
+                    "Transicion no permitida de " + estadoOrigen.getDescripcion() + " a " + estadoDestino.getDescripcion() + ".");
+        }
+    }
+
+    private void registrarEvento(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoOrigen,
+            EstadoSeguimientoOrdenArea estadoDestino,
+            ActorTipoEventoSeguimiento actorTipo,
+            User actor,
+            String nota,
+            LocalDateTime fechaEvento
+    ) {
+        SeguimientoOrdenAreaEvento evento = new SeguimientoOrdenAreaEvento();
+        evento.setSeguimientoOrdenArea(seguimiento);
+        evento.setEstadoOrigen(estadoOrigen != null ? estadoOrigen.getCode() : null);
+        evento.setEstadoDestino(estadoDestino.getCode());
+        evento.setFechaEvento(fechaEvento);
+        evento.setActorTipo(actorTipo);
+        evento.setUsuario(actor);
+        evento.setNota(normalizeNota(nota));
+        seguimientoEventoRepo.save(evento);
+    }
+
+    private User requireUser(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("Se requiere un usuario para registrar esta transicion.");
+        }
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con ID: " + userId));
+    }
+
+    private String normalizeNota(String nota) {
+        if (nota == null) {
+            return null;
+        }
+        String trimmed = nota.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private SeguimientoOrdenAreaDTO toDTO(SeguimientoOrdenArea entity) {
@@ -265,16 +413,9 @@ public class SeguimientoOrdenAreaService {
     }
 
     private String getEstadoDescripcion(int estado) {
-        return switch (estado) {
-            case SeguimientoOrdenArea.ESTADO_PENDIENTE -> "Pendiente";
-            case SeguimientoOrdenArea.ESTADO_VISIBLE -> "Visible";
-            case SeguimientoOrdenArea.ESTADO_COMPLETADO -> "Completado";
-            case SeguimientoOrdenArea.ESTADO_OMITIDO -> "Omitido";
-            default -> "Desconocido";
-        };
+        return EstadoSeguimientoOrdenArea.fromCode(estado).getDescripcion();
     }
 
-    // DTO interno
     @Data
     public static class SeguimientoOrdenAreaDTO {
         private Long id;

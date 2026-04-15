@@ -11,6 +11,8 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "seguimiento_orden_area")
@@ -20,10 +22,13 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class SeguimientoOrdenArea {
 
-    public static final int ESTADO_PENDIENTE = 0;
-    public static final int ESTADO_VISIBLE = 1;
+    public static final int ESTADO_COLA = 0;
+    public static final int ESTADO_PENDIENTE = ESTADO_COLA;
+    public static final int ESTADO_ESPERA = 1;
+    public static final int ESTADO_VISIBLE = ESTADO_ESPERA;
     public static final int ESTADO_COMPLETADO = 2;
     public static final int ESTADO_OMITIDO = 3;
+    public static final int ESTADO_EN_PROCESO = 4;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,6 +49,9 @@ public class SeguimientoOrdenArea {
     @Column(nullable = false)
     private int estado = ESTADO_PENDIENTE;
 
+    @Column(name = "fecha_estado_actual", nullable = false)
+    private LocalDateTime fechaEstadoActual;
+
     @Column(name = "posicion_secuencia")
     private Integer posicionSecuencia;
 
@@ -63,4 +71,16 @@ public class SeguimientoOrdenArea {
 
     @Column(length = 500)
     private String observaciones;
+
+    @OneToMany(mappedBy = "seguimientoOrdenArea", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("fechaEvento ASC, id ASC")
+    private List<SeguimientoOrdenAreaEvento> eventos = new ArrayList<>();
+
+    public EstadoSeguimientoOrdenArea getEstadoEnum() {
+        return EstadoSeguimientoOrdenArea.fromCode(estado);
+    }
+
+    public void setEstadoEnum(EstadoSeguimientoOrdenArea estado) {
+        this.estado = estado.getCode();
+    }
 }

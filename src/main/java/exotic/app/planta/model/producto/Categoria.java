@@ -34,6 +34,10 @@ public class Categoria {
     @Getter(AccessLevel.NONE)
     private Integer tiempoDiasFabricacion = 0;
 
+    @Column(name = "capacidad_productiva_diaria", nullable = true)
+    @Getter(AccessLevel.NONE)
+    private Integer capacidadProductivaDiaria;
+
     /**
      * @return the lote size assigned to the category, or 0 if it has not been set
      */
@@ -46,6 +50,13 @@ public class Categoria {
      */
     public Integer getTiempoDiasFabricacion() {
         return tiempoDiasFabricacion != null ? tiempoDiasFabricacion : 0;
+    }
+
+    /**
+     * @return la capacidad productiva diaria configurada para la categoria, o 0 si no se ha definido
+     */
+    public Integer getCapacidadProductivaDiaria() {
+        return capacidadProductivaDiaria != null ? capacidadProductivaDiaria : 0;
     }
 
 }

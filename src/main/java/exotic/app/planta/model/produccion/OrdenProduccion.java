@@ -1,6 +1,7 @@
 package exotic.app.planta.model.produccion;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.ventas.Vendedor;
@@ -38,6 +39,11 @@ public class OrdenProduccion {
     @ManyToOne
     @JoinColumn(name = "producto_id")
     private Producto producto;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "mps_id")
+    private MasterProductionScheduleSemanal mpsSemanal;
 
     /**
      * Estados de la orden de producción:

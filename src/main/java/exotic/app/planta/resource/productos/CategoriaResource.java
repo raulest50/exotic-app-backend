@@ -115,6 +115,25 @@ public class CategoriaResource {
         return ResponseEntity.ok(updated);
     }
 
+    /**
+     * Endpoint para actualizar la capacidad productiva diaria total de una categoria
+     * @param categoriaId ID de la categoria
+     * @param body map con clave "capacidadProductivaDiaria" y valor numerico >= 0
+     * @return categoria actualizada
+     */
+    @PatchMapping("/{categoriaId}/capacidad-productiva-diaria")
+    public ResponseEntity<Categoria> updateCapacidadProductivaDiaria(
+            @PathVariable int categoriaId,
+            @RequestBody Map<String, Integer> body
+    ) {
+        Integer capacidadProductivaDiaria = body != null ? body.get("capacidadProductivaDiaria") : null;
+        if (capacidadProductivaDiaria == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        Categoria updated = categoriaService.updateCapacidadProductivaDiaria(categoriaId, capacidadProductivaDiaria);
+        return ResponseEntity.ok(updated);
+    }
+
     @DeleteMapping("/{categoriaId}")
     public ResponseEntity<Map<String, Object>> deleteCategoria(@PathVariable int categoriaId) {
         boolean deleted = categoriaService.deleteCategoriaById(categoriaId);
