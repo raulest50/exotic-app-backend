@@ -3,8 +3,10 @@ package exotic.app.planta.resource.produccion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.OrdenSeguimientoDetalleDTO;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.ReportarCompletadoRequest;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.SeguimientoOrdenAreaDTO;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroOperativoDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -12,7 +14,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -25,10 +33,6 @@ public class SeguimientoOrdenAreaResource {
     private final SeguimientoOrdenAreaService seguimientoService;
     private final UserRepository userRepository;
 
-    /**
-     * Obtiene las órdenes pendientes para el usuario logueado
-     * (basado en las áreas donde el usuario es responsable)
-     */
     @GetMapping("/mis-ordenes-pendientes")
     public ResponseEntity<Page<SeguimientoOrdenAreaDTO>> getMisOrdenesPendientes(
             Authentication authentication,
@@ -37,16 +41,20 @@ public class SeguimientoOrdenAreaResource {
 
         User user = getCurrentUser(authentication);
         Pageable pageable = PageRequest.of(page, size);
-
         Page<SeguimientoOrdenAreaDTO> ordenes = seguimientoService.getOrdenesPendientesPorUsuario(
-                user.getId(), pageable);
+                user.getId(),
+                pageable
+        );
 
         return ResponseEntity.ok(ordenes);
     }
 
-    /**
-     * Obtiene las órdenes pendientes para un área específica
-     */
+    @GetMapping("/mis-ordenes-tablero")
+    public ResponseEntity<TableroOperativoDTO> getMisOrdenesTablero(Authentication authentication) {
+        User user = getCurrentUser(authentication);
+        return ResponseEntity.ok(seguimientoService.getTableroOperativoUsuario(user.getId()));
+    }
+
     @GetMapping("/area/{areaId}/pendientes")
     public ResponseEntity<Page<SeguimientoOrdenAreaDTO>> getOrdenesPendientesPorArea(
             @PathVariable int areaId,
@@ -55,34 +63,61 @@ public class SeguimientoOrdenAreaResource {
 
         Pageable pageable = PageRequest.of(page, size);
         Page<SeguimientoOrdenAreaDTO> ordenes = seguimientoService.getOrdenesPendientesPorArea(areaId, pageable);
-
         return ResponseEntity.ok(ordenes);
     }
 
-    /**
-     * Obtiene el progreso completo de una orden
-     */
     @GetMapping("/orden/{ordenId}/progreso")
     public ResponseEntity<List<SeguimientoOrdenAreaDTO>> getProgresoOrden(@PathVariable int ordenId) {
-        List<SeguimientoOrdenAreaDTO> progreso = seguimientoService.getProgresoOrden(ordenId);
-        return ResponseEntity.ok(progreso);
+        return ResponseEntity.ok(seguimientoService.getProgresoOrden(ordenId));
     }
 
-    /**
-     * Reporta como completado el trabajo de un área para una orden
-     */
+    @GetMapping("/orden/{ordenId}/detalle")
+    public ResponseEntity<OrdenSeguimientoDetalleDTO> getDetalleOrden(@PathVariable int ordenId) {
+        return ResponseEntity.ok(seguimientoService.getDetalleOrden(ordenId));
+    }
+
+    @PostMapping("/reportar-en-proceso")
+    public ResponseEntity<SeguimientoOrdenAreaDTO> reportarEnProceso(
+            Authentication authentication,
+            @RequestBody ReportarCompletadoRequest request) {
+
+        User user = getCurrentUser(authentication);
+        SeguimientoOrdenAreaDTO result = seguimientoService.reportarEnProceso(
+                request.getOrdenId(),
+                request.getAreaId(),
+                user.getId(),
+                request.getObservaciones()
+        );
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/pausar-proceso")
+    public ResponseEntity<SeguimientoOrdenAreaDTO> pausarProceso(
+            Authentication authentication,
+            @RequestBody ReportarCompletadoRequest request) {
+
+        User user = getCurrentUser(authentication);
+        SeguimientoOrdenAreaDTO result = seguimientoService.pausarProceso(
+                request.getOrdenId(),
+                request.getAreaId(),
+                user.getId(),
+                request.getObservaciones()
+        );
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/reportar-completado")
     public ResponseEntity<SeguimientoOrdenAreaDTO> reportarCompletado(
             Authentication authentication,
             @RequestBody ReportarCompletadoRequest request) {
 
         User user = getCurrentUser(authentication);
-
         SeguimientoOrdenAreaDTO result = seguimientoService.reportarCompletado(
                 request.getOrdenId(),
                 request.getAreaId(),
                 user.getId(),
-                request.getObservaciones());
+                request.getObservaciones()
+        );
 
         return ResponseEntity.ok(result);
     }

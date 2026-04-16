@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -15,6 +16,7 @@ import java.util.List;
 public class MonitoreoAreasOperativasService {
 
     private final AreaProduccionRepo areaProduccionRepo;
+    private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
 
     @Transactional(readOnly = true)
     public List<AreaOperativaMonitoreoDTO> listarAreasMonitoreables() {
@@ -37,5 +39,10 @@ public class MonitoreoAreasOperativasService {
                         .nombreCompleto(area.getResponsableArea().getNombreCompleto())
                         .build())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public SeguimientoOrdenAreaService.AreaOperativaTableroDTO getTableroAreaPorFecha(int areaId, LocalDate fecha) {
+        return seguimientoOrdenAreaService.getTableroAreaPorFecha(areaId, fecha);
     }
 }

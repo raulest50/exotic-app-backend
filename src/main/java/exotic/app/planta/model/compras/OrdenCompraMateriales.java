@@ -1,6 +1,8 @@
 package exotic.app.planta.model.compras;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.persistence.*;
 import exotic.app.planta.model.commons.divisas.Divisas.DIVISAS;
 import lombok.AllArgsConstructor;
@@ -36,8 +38,10 @@ public class OrdenCompraMateriales {
      * This relationship uses the internal pk field rather than the business identifier
      * to maintain referential integrity even if the business ID changes.
      */
-    @ManyToOne
-    @JoinColumn(name = "proveedor_pk", referencedColumnName = "pk")
+    @Valid
+    @NotNull
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "proveedor_pk", referencedColumnName = "pk", nullable = false)
     private Proveedor proveedor;
 
     @OneToMany(mappedBy = "ordenCompraMateriales", cascade = CascadeType.ALL, orphanRemoval = true)

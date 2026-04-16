@@ -84,8 +84,14 @@ public class ComprasService {
      *
      */
     public OrdenCompraMateriales saveOrdenCompra(OrdenCompraMateriales ordenCompraMateriales) {
+        logProveedorPayloadAnomaly("saveOrdenCompra", ordenCompraMateriales);
+
+        if (ordenCompraMateriales == null || ordenCompraMateriales.getProveedor() == null || isBlank(ordenCompraMateriales.getProveedor().getId())) {
+            throw new IllegalArgumentException("La orden de compra debe incluir un proveedor valido.");
+        }
+
         // Verify the Proveedor exists
-        Optional<Proveedor> optProveedor = proveedorRepo.findById(ordenCompraMateriales.getProveedor().getId());
+        Optional<Proveedor> optProveedor = proveedorRepo.findById(ordenCompraMateriales.getProveedor().getId().trim());
         if (!optProveedor.isPresent()) {
             throw new RuntimeException("Proveedor not found with ID: " + ordenCompraMateriales.getProveedor().getId());
         }
@@ -513,12 +519,18 @@ public class ComprasService {
      */
     @Transactional
     public OrdenCompraMateriales updateOrdenCompra(int ordenCompraId, OrdenCompraMateriales ordenCompraMateriales) {
+        logProveedorPayloadAnomaly("updateOrdenCompra", ordenCompraMateriales);
+
+        if (ordenCompraMateriales == null || ordenCompraMateriales.getProveedor() == null || isBlank(ordenCompraMateriales.getProveedor().getId())) {
+            throw new IllegalArgumentException("La orden de compra debe incluir un proveedor valido.");
+        }
+
         // Verificar que la orden de compra existe
         OrdenCompraMateriales ordenExistente = ordenCompraRepo.findById(ordenCompraId)
                 .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada con ID: " + ordenCompraId));
 
         // Verificar que el proveedor existe
-        Proveedor proveedor = proveedorRepo.findById(ordenCompraMateriales.getProveedor().getId())
+        Proveedor proveedor = proveedorRepo.findById(ordenCompraMateriales.getProveedor().getId().trim())
                 .orElseThrow(() -> new RuntimeException("Proveedor no encontrado con ID: " + 
                         ordenCompraMateriales.getProveedor().getId()));
 
@@ -567,6 +579,49 @@ public class ComprasService {
 
         // Guardar y retornar la orden actualizada
         return ordenCompraRepo.save(ordenExistente);
+    }
+
+    private void logProveedorPayloadAnomaly(String operation, OrdenCompraMateriales ordenCompraMateriales) {
+        if (ordenCompraMateriales == null) {
+            log.warn("Payload OCM invalido en {}. ordenCompraMateriales=null", operation);
+            return;
+        }
+
+        Proveedor proveedor = ordenCompraMateriales.getProveedor();
+        List<String> issues = new ArrayList<>();
+
+        if (proveedor == null) {
+            issues.add("proveedor_null");
+        } else {
+            if (isBlank(proveedor.getId())) {
+                issues.add("proveedor_business_id_blank");
+            }
+            if (isBlank(proveedor.getNombre())) {
+                issues.add("proveedor_nombre_blank");
+            }
+        }
+
+        if (issues.isEmpty()) {
+            return;
+        }
+
+        log.warn(
+                "Payload OCM con proveedor inconsistente en {}. motivos={}, ordenCompraId={}, estado={}, fechaVencimiento={}, facturaCompraId={}, itemsCount={}, proveedorPk={}, proveedorId={}, proveedorNombre={}",
+                operation,
+                issues,
+                ordenCompraMateriales.getOrdenCompraId(),
+                ordenCompraMateriales.getEstado(),
+                ordenCompraMateriales.getFechaVencimiento(),
+                ordenCompraMateriales.getFacturaCompraId(),
+                ordenCompraMateriales.getItemsOrdenCompra() != null ? ordenCompraMateriales.getItemsOrdenCompra().size() : 0,
+                proveedor != null ? proveedor.getPk() : null,
+                proveedor != null ? proveedor.getId() : null,
+                proveedor != null ? proveedor.getNombre() : null
+        );
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
 

@@ -13,6 +13,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
+import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,7 @@ class SeguimientoOrdenAreaServiceTest {
     void inicializarSeguimiento_creaEstadosInicialesYBitacora() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         SeguimientoOrdenAreaEventoRepo eventoRepo = mock(SeguimientoOrdenAreaEventoRepo.class);
+        AreaProduccionRepo areaProduccionRepo = mock(AreaProduccionRepo.class);
         RutaProcesoCatRepo rutaProcesoCatRepo = mock(RutaProcesoCatRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         MutableClock clock = new MutableClock("2026-04-15T10:15:30Z");
@@ -54,6 +56,7 @@ class SeguimientoOrdenAreaServiceTest {
         SeguimientoOrdenAreaService service = new SeguimientoOrdenAreaService(
                 seguimientoRepo,
                 eventoRepo,
+                areaProduccionRepo,
                 rutaProcesoCatRepo,
                 userRepository,
                 clock
@@ -132,6 +135,7 @@ class SeguimientoOrdenAreaServiceTest {
     void reportarCompletado_rechazaSeguimientoQueNoEsteEnProceso() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         SeguimientoOrdenAreaEventoRepo eventoRepo = mock(SeguimientoOrdenAreaEventoRepo.class);
+        AreaProduccionRepo areaProduccionRepo = mock(AreaProduccionRepo.class);
         RutaProcesoCatRepo rutaProcesoCatRepo = mock(RutaProcesoCatRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         MutableClock clock = new MutableClock("2026-04-15T10:15:30Z");
@@ -139,6 +143,7 @@ class SeguimientoOrdenAreaServiceTest {
         SeguimientoOrdenAreaService service = new SeguimientoOrdenAreaService(
                 seguimientoRepo,
                 eventoRepo,
+                areaProduccionRepo,
                 rutaProcesoCatRepo,
                 userRepository,
                 clock
@@ -159,6 +164,7 @@ class SeguimientoOrdenAreaServiceTest {
     void cicloProceso_registraEventosYActualizaEstadoActual() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         SeguimientoOrdenAreaEventoRepo eventoRepo = mock(SeguimientoOrdenAreaEventoRepo.class);
+        AreaProduccionRepo areaProduccionRepo = mock(AreaProduccionRepo.class);
         RutaProcesoCatRepo rutaProcesoCatRepo = mock(RutaProcesoCatRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         MutableClock clock = new MutableClock("2026-04-15T10:00:00Z");
@@ -169,6 +175,7 @@ class SeguimientoOrdenAreaServiceTest {
         SeguimientoOrdenAreaService service = new SeguimientoOrdenAreaService(
                 seguimientoRepo,
                 eventoRepo,
+                areaProduccionRepo,
                 rutaProcesoCatRepo,
                 userRepository,
                 clock
@@ -239,6 +246,7 @@ class SeguimientoOrdenAreaServiceTest {
     void completarSeguimiento_promueveSucesorDeColaAEspera() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         SeguimientoOrdenAreaEventoRepo eventoRepo = mock(SeguimientoOrdenAreaEventoRepo.class);
+        AreaProduccionRepo areaProduccionRepo = mock(AreaProduccionRepo.class);
         RutaProcesoCatRepo rutaProcesoCatRepo = mock(RutaProcesoCatRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         MutableClock clock = new MutableClock("2026-04-15T12:00:00Z");
@@ -249,6 +257,7 @@ class SeguimientoOrdenAreaServiceTest {
         SeguimientoOrdenAreaService service = new SeguimientoOrdenAreaService(
                 seguimientoRepo,
                 eventoRepo,
+                areaProduccionRepo,
                 rutaProcesoCatRepo,
                 userRepository,
                 clock

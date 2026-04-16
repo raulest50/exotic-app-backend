@@ -54,7 +54,7 @@ public class ComprasResource {
      * Ordenes de Compra
      */
     @PostMapping("/save_orden_compra")
-    public ResponseEntity<OrdenCompraMateriales> saveOrdenCompra(@RequestBody OrdenCompraMateriales ordenCompraMateriales) {
+    public ResponseEntity<OrdenCompraMateriales> saveOrdenCompra(@Valid @RequestBody OrdenCompraMateriales ordenCompraMateriales) {
         OrdenCompraMateriales savedOrdenCompraMateriales = compraService.saveOrdenCompra(ordenCompraMateriales);
         return ResponseEntity.created(URI.create("/compras/save_orden_compra/" + savedOrdenCompraMateriales.getOrdenCompraId()))
                 .body(savedOrdenCompraMateriales);
@@ -121,7 +121,7 @@ public class ComprasResource {
     @PutMapping("/update_orden_compra/{ordenCompraId}")
     public ResponseEntity<?> updateOrdenCompra(
             @PathVariable int ordenCompraId,
-            @RequestBody OrdenCompraMateriales ordenCompraMateriales) {
+            @Valid @RequestBody OrdenCompraMateriales ordenCompraMateriales) {
         try {
             // Asegurarse de que el ID en el path coincida con el ID en el objeto
             if (ordenCompraId != ordenCompraMateriales.getOrdenCompraId()) {

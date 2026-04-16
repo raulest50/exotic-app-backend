@@ -13,6 +13,7 @@ import exotic.app.planta.repo.compras.OrdenCompraRepo;
 import exotic.app.planta.repo.compras.ProveedorRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class IngresoAlmacenService {
 
     private final OrdenCompraRepo ordenCompraRepo;
@@ -107,6 +109,7 @@ public class IngresoAlmacenService {
         // Calcular y asignar porcentajes de recepción en batch para optimizar performance
         // En lugar de hacer N queries (una por orden), hacemos una sola query para todas
         List<OrdenCompraMateriales> ordenes = pageResult.getContent();
+        Map<Integer, OrdenCompraRepo.OrdenCompraProveedorDiagnosticoProjection> proveedorDiagnosticoMap = Collections.emptyMap();
         if (!ordenes.isEmpty()) {
             // Extraer los IDs de todas las órdenes de la página
             List<Integer> ordenIds = ordenes.stream()
@@ -130,9 +133,81 @@ public class IngresoAlmacenService {
                 Double porcentaje = porcentajeMap.getOrDefault(orden.getOrdenCompraId(), 0.0);
                 orden.setPorcentajeRecibido(porcentaje);
             });
+
+            proveedorDiagnosticoMap = ordenCompraRepo.findProveedorDiagnosticsByOrdenIds(ordenIds).stream()
+                    .collect(Collectors.toMap(
+                            OrdenCompraRepo.OrdenCompraProveedorDiagnosticoProjection::getOrdenCompraId,
+                            diagnostico -> diagnostico,
+                            (existing, replacement) -> existing
+                    ));
         }
 
+        int anomaliasProveedor = logProveedorAnomalies(ordenes, proveedorDiagnosticoMap);
+        log.info(
+                "Consulta OCM pendientes recepcion. page={}, size={}, fechaInicio={}, fechaFin={}, proveedorId={}, ordenesEnPagina={}, totalElementos={}, totalPaginas={}, anomaliasProveedor={}",
+                page,
+                size,
+                fechaInicio,
+                fechaFin,
+                proveedorId,
+                ordenes.size(),
+                pageResult.getTotalElements(),
+                pageResult.getTotalPages(),
+                anomaliasProveedor
+        );
+
         return pageResult;
+    }
+
+    private int logProveedorAnomalies(
+            List<OrdenCompraMateriales> ordenes,
+            Map<Integer, OrdenCompraRepo.OrdenCompraProveedorDiagnosticoProjection> proveedorDiagnosticoMap
+    ) {
+        int anomalias = 0;
+
+        for (OrdenCompraMateriales orden : ordenes) {
+            OrdenCompraRepo.OrdenCompraProveedorDiagnosticoProjection diagnostico =
+                    proveedorDiagnosticoMap.get(orden.getOrdenCompraId());
+            List<String> issues = getProveedorIssues(diagnostico);
+            if (issues.isEmpty()) {
+                continue;
+            }
+
+            anomalias++;
+
+            log.warn(
+                    "OCM pendiente con proveedor_pk inconsistente. motivos={}, ordenCompraId={}, estado={}, fechaEmision={}, fechaVencimiento={}, facturaCompraId={}, itemsCount={}, proveedorPk={}, proveedorPkReal={}, proveedorId={}, proveedorNombre={}",
+                    issues,
+                    orden.getOrdenCompraId(),
+                    orden.getEstado(),
+                    orden.getFechaEmision(),
+                    orden.getFechaVencimiento(),
+                    orden.getFacturaCompraId(),
+                    orden.getItemsOrdenCompra() != null ? orden.getItemsOrdenCompra().size() : 0,
+                    diagnostico != null ? diagnostico.getProveedorPk() : null,
+                    diagnostico != null ? diagnostico.getProveedorPkReal() : null,
+                    diagnostico != null ? diagnostico.getProveedorId() : null,
+                    diagnostico != null ? diagnostico.getProveedorNombre() : null
+            );
+        }
+
+        return anomalias;
+    }
+
+    private List<String> getProveedorIssues(OrdenCompraRepo.OrdenCompraProveedorDiagnosticoProjection diagnostico) {
+        List<String> issues = new ArrayList<>();
+        if (diagnostico == null) {
+            issues.add("diagnostico_proveedor_no_disponible");
+            return issues;
+        }
+
+        if (diagnostico.getProveedorPk() == null) {
+            issues.add("proveedor_pk_null");
+        } else if (diagnostico.getProveedorPkReal() == null) {
+            issues.add("proveedor_pk_huerfano");
+        }
+
+        return issues;
     }
 
     public List<TransaccionAlmacen> consultarTransaccionesAlmacenDeOCM(

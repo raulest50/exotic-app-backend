@@ -63,6 +63,18 @@ public class InformesDiariosResource {
                 .body(excel);
     }
 
+    @GetMapping("/compras/excel")
+    public ResponseEntity<byte[]> exportarComprasExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        byte[] excel = informesDiariosService.exportarComprasExcel(fecha);
+        String filename = "informe_compras_ocm_" + fecha + ".xlsx";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
+
     @GetMapping("/almacen/ajustes/excel")
     public ResponseEntity<byte[]> exportarAjustesAlmacenExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,

@@ -14,6 +14,14 @@ import java.util.Optional;
 
 public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, Integer> {
 
+    interface OrdenCompraProveedorDiagnosticoProjection {
+        Integer getOrdenCompraId();
+        Long getProveedorPk();
+        Long getProveedorPkReal();
+        String getProveedorId();
+        String getProveedorNombre();
+    }
+
     Page<OrdenCompraMateriales> findByFechaEmisionBetweenAndEstadoIn(
             LocalDateTime startDate,
             LocalDateTime endDate,
@@ -113,4 +121,17 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
         GROUP BY oc.orden_compra_id
         """, nativeQuery = true)
     List<Object[]> calcularPorcentajesRecibidos(@Param("ordenIds") List<Integer> ordenIds);
+
+    @Query(value = """
+        SELECT
+            oc.orden_compra_id AS ordenCompraId,
+            oc.proveedor_pk AS proveedorPk,
+            p.pk AS proveedorPkReal,
+            p.id AS proveedorId,
+            p.nombre AS proveedorNombre
+        FROM orden_compra oc
+        LEFT JOIN proveedores p ON p.pk = oc.proveedor_pk
+        WHERE oc.orden_compra_id IN :ordenIds
+        """, nativeQuery = true)
+    List<OrdenCompraProveedorDiagnosticoProjection> findProveedorDiagnosticsByOrdenIds(@Param("ordenIds") List<Integer> ordenIds);
 }

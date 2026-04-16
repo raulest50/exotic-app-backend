@@ -86,6 +86,18 @@
         </encoder>
     </appender>
 
+    <appender name="INGRESO_OCM_DIAGNOSTICO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/ingreso_ocm_diagnostico.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/ingreso_ocm_diagnostico.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{80} - %msg%n%ex</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- Logger especifico para carga masiva -->
     <logger name="exotic.app.planta.resource.commons.CargaMasivaResource" level="DEBUG" additivity="true">
         <appender-ref ref="CARGA_MASIVA_FILE"/>
@@ -123,5 +135,12 @@
     <logger name="exotic.app.planta.service.produccion.PlaneacionExcelDebugService" level="DEBUG" additivity="true">
         <appender-ref ref="PLANEACION_EXCEL_DEBUG_FILE"/>
         <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="exotic.app.planta.service.inventarios.IngresoAlmacenService" level="INFO" additivity="true">
+        <appender-ref ref="INGRESO_OCM_DIAGNOSTICO_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.compras.ComprasService" level="INFO" additivity="true">
+        <appender-ref ref="INGRESO_OCM_DIAGNOSTICO_FILE"/>
     </logger>
 </configuration>

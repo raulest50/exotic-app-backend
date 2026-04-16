@@ -1,7 +1,9 @@
 package exotic.app.planta.repo.inventarios;
 
+import exotic.app.planta.model.bi.dto.InformeDiarioComprasRowDTO;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
+import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Terminado;
 import org.springframework.data.domain.Page;
@@ -343,4 +345,48 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("end") LocalDateTime end,
             @Param("tipoAjustePositivo") Movimiento.TipoMovimiento tipoAjustePositivo,
             @Param("tipoAjusteNegativo") Movimiento.TipoMovimiento tipoAjusteNegativo);
+
+    @Query("""
+            SELECT new exotic.app.planta.model.bi.dto.InformeDiarioComprasRowDTO(
+                m.fechaMovimiento,
+                t.transaccionId,
+                oc.ordenCompraId,
+                oc.facturaCompraId,
+                prov.id,
+                prov.nombre,
+                m.producto.productoId,
+                m.producto.nombre,
+                CASE
+                    WHEN TREAT(m.producto AS Material).tipoMaterial = 1 THEN 'Materia Prima'
+                    WHEN TREAT(m.producto AS Material).tipoMaterial = 2 THEN 'Material de Empaque'
+                    ELSE 'Otro'
+                END,
+                m.cantidad,
+                m.producto.tipoUnidades,
+                l.batchNumber,
+                l.expirationDate,
+                m.almacen,
+                ua.nombreCompleto,
+                t.observaciones
+            )
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            LEFT JOIN m.lote l
+            LEFT JOIN t.usuarioAprobador ua,
+                 OrdenCompraMateriales oc
+            JOIN oc.proveedor prov
+            WHERE oc.ordenCompraId = t.idEntidadCausante
+              AND TYPE(m.producto) = Material
+              AND t.tipoEntidadCausante = :tipoEntidadCausante
+              AND m.tipoMovimiento = :tipoMovimientoCompra
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+              AND m.cantidad > 0
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<InformeDiarioComprasRowDTO> findInformeDiarioComprasPorDia(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+            @Param("tipoMovimientoCompra") Movimiento.TipoMovimiento tipoMovimientoCompra);
 }

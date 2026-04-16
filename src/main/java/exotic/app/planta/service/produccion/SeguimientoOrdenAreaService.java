@@ -13,6 +13,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
+import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.Data;
@@ -24,8 +25,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,6 +51,7 @@ public class SeguimientoOrdenAreaService {
 
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
+    private final AreaProduccionRepo areaProduccionRepo;
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final UserRepository userRepository;
     private final Clock applicationClock;
@@ -223,11 +232,90 @@ public class SeguimientoOrdenAreaService {
     }
 
     @Transactional(readOnly = true)
+    public TableroOperativoDTO getTableroOperativoUsuario(Long userId) {
+        List<SeguimientoOrdenAreaDTO> tarjetas = seguimientoRepo.findTableroByResponsableUserId(userId)
+                .stream()
+                .map(this::toDTO)
+                .toList();
+
+        return buildTableroOperativo(tarjetas);
+    }
+
+    @Transactional(readOnly = true)
     public List<SeguimientoOrdenAreaDTO> getProgresoOrden(int ordenId) {
         return seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
                 .stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public OrdenSeguimientoDetalleDTO getDetalleOrden(int ordenId) {
+        List<SeguimientoOrdenArea> ruta = seguimientoRepo.findDetalleByOrdenId(ordenId);
+        if (ruta.isEmpty()) {
+            throw new IllegalArgumentException("No se encontro seguimiento para la orden " + ordenId);
+        }
+
+        OrdenProduccion orden = ruta.get(0).getOrdenProduccion();
+        OrdenSeguimientoDetalleDTO detalle = new OrdenSeguimientoDetalleDTO();
+        detalle.setOrdenId(orden.getOrdenId());
+        detalle.setLoteAsignado(orden.getLoteAsignado());
+        detalle.setProductoId(orden.getProducto().getProductoId());
+        detalle.setProductoNombre(orden.getProducto().getNombre());
+        detalle.setCantidadProducir(orden.getCantidadProducir());
+        detalle.setEstadoOrden(orden.getEstadoOrden());
+        detalle.setOrdenObservaciones(orden.getObservaciones());
+        detalle.setFechaCreacion(orden.getFechaCreacion());
+        detalle.setFechaInicio(orden.getFechaInicio());
+        detalle.setFechaFinal(orden.getFechaFinal());
+        detalle.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
+        detalle.setRutaEstados(ruta.stream().map(this::toRutaEstadoDTO).toList());
+        return detalle;
+    }
+
+    @Transactional(readOnly = true)
+    public AreaOperativaTableroDTO getTableroAreaPorFecha(int areaId, LocalDate fecha) {
+        AreaOperativa area = areaProduccionRepo.findById(areaId)
+                .orElseThrow(() -> new IllegalArgumentException("Area operativa no encontrada: " + areaId));
+
+        LocalDate fechaConsulta = fecha == null ? LocalDate.now(applicationClock) : fecha;
+        LocalDate hoy = LocalDate.now(applicationClock);
+        if (fechaConsulta.isAfter(hoy)) {
+            fechaConsulta = hoy;
+        }
+
+        LocalDateTime instanteFoto = resolveInstanteFoto(fechaConsulta);
+        List<SeguimientoOrdenArea> seguimientos = seguimientoRepo.findTableroByAreaId(areaId);
+        Map<Long, List<SeguimientoOrdenAreaEvento>> eventosPorSeguimiento = loadEventosPorSeguimiento(seguimientos);
+
+        List<SeguimientoOrdenAreaDTO> snapshot = seguimientos.stream()
+                .map(seguimiento -> toSnapshotDTO(
+                        seguimiento,
+                        eventosPorSeguimiento.getOrDefault(seguimiento.getId(), List.of()),
+                        instanteFoto))
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
+        TableroOperativoDTO tablero = buildTableroOperativo(snapshot);
+
+        AreaOperativaTableroDTO dto = new AreaOperativaTableroDTO();
+        dto.setAreaId(area.getAreaId());
+        dto.setAreaNombre(area.getNombre());
+        dto.setAreaDescripcion(area.getDescripcion());
+        if (area.getResponsableArea() != null) {
+            dto.setResponsableArea(toResponsableResumen(area.getResponsableArea()));
+        }
+        dto.setFechaConsulta(fechaConsulta);
+        dto.setInstanteFoto(instanteFoto);
+        dto.setResumen(tablero.getResumen());
+        dto.setCola(tablero.getCola());
+        dto.setEspera(tablero.getEspera());
+        dto.setEnProceso(tablero.getEnProceso());
+        dto.setCompletado(tablero.getCompletado());
+        dto.setPromedioMinutosEspera(promedioMinutosEnEstado(dto.getEspera()));
+        dto.setPromedioMinutosEnProceso(promedioMinutosEnEstado(dto.getEnProceso()));
+        dto.setOrdenMasAtrasada(resolveOrdenMasAtrasada(snapshot));
+        return dto;
     }
 
     @Transactional(readOnly = true)
@@ -378,6 +466,10 @@ public class SeguimientoOrdenAreaService {
     }
 
     private SeguimientoOrdenAreaDTO toDTO(SeguimientoOrdenArea entity) {
+        return toDTO(entity, LocalDateTime.now(applicationClock));
+    }
+
+    private SeguimientoOrdenAreaDTO toDTO(SeguimientoOrdenArea entity, LocalDateTime instanteReferencia) {
         SeguimientoOrdenAreaDTO dto = new SeguimientoOrdenAreaDTO();
         dto.setId(entity.getId());
         dto.setOrdenId(entity.getOrdenProduccion().getOrdenId());
@@ -401,8 +493,10 @@ public class SeguimientoOrdenAreaService {
         dto.setPosicionSecuencia(entity.getPosicionSecuencia());
         dto.setFechaCreacion(entity.getFechaCreacion());
         dto.setFechaVisible(entity.getFechaVisible());
+        dto.setFechaEstadoActual(entity.getFechaEstadoActual());
         dto.setFechaCompletado(entity.getFechaCompletado());
         dto.setObservaciones(entity.getObservaciones());
+        dto.setMinutosEnEstadoActual(calculateMinutesBetween(entity.getFechaEstadoActual(), instanteReferencia));
 
         if (entity.getUsuarioReporta() != null) {
             dto.setUsuarioReportaId(entity.getUsuarioReporta().getId());
@@ -414,6 +508,184 @@ public class SeguimientoOrdenAreaService {
 
     private String getEstadoDescripcion(int estado) {
         return EstadoSeguimientoOrdenArea.fromCode(estado).getDescripcion();
+    }
+
+    private Map<Long, List<SeguimientoOrdenAreaEvento>> loadEventosPorSeguimiento(List<SeguimientoOrdenArea> seguimientos) {
+        List<Long> seguimientoIds = seguimientos.stream()
+                .map(SeguimientoOrdenArea::getId)
+                .toList();
+
+        if (seguimientoIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return seguimientoEventoRepo.findBySeguimientoOrdenArea_IdInOrderByFechaEventoAscIdAsc(seguimientoIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        evento -> evento.getSeguimientoOrdenArea().getId(),
+                        HashMap::new,
+                        Collectors.toList()
+                ));
+    }
+
+    private LocalDateTime resolveInstanteFoto(LocalDate fechaConsulta) {
+        LocalDate hoy = LocalDate.now(applicationClock);
+        if (!fechaConsulta.isBefore(hoy)) {
+            return LocalDateTime.now(applicationClock);
+        }
+        return LocalDateTime.of(fechaConsulta, LocalTime.MAX);
+    }
+
+    private SeguimientoOrdenAreaDTO toSnapshotDTO(
+            SeguimientoOrdenArea entity,
+            List<SeguimientoOrdenAreaEvento> eventos,
+            LocalDateTime instanteFoto
+    ) {
+        if (entity.getFechaCreacion() != null && entity.getFechaCreacion().isAfter(instanteFoto)) {
+            return null;
+        }
+
+        SeguimientoOrdenAreaEvento ultimoEvento = eventos.stream()
+                .filter(evento -> !evento.getFechaEvento().isAfter(instanteFoto))
+                .reduce((ignored, current) -> current)
+                .orElse(null);
+
+        if (ultimoEvento == null) {
+            return null;
+        }
+
+        SeguimientoOrdenAreaDTO dto = toDTO(entity, instanteFoto);
+        dto.setEstado(ultimoEvento.getEstadoDestino());
+        dto.setEstadoDescripcion(getEstadoDescripcion(ultimoEvento.getEstadoDestino()));
+        dto.setFechaEstadoActual(ultimoEvento.getFechaEvento());
+        dto.setMinutosEnEstadoActual(calculateMinutesBetween(ultimoEvento.getFechaEvento(), instanteFoto));
+
+        if (dto.getFechaVisible() != null && dto.getFechaVisible().isAfter(instanteFoto)) {
+            dto.setFechaVisible(null);
+        }
+
+        if (dto.getFechaCompletado() != null && dto.getFechaCompletado().isAfter(instanteFoto)) {
+            dto.setFechaCompletado(null);
+        }
+
+        dto.setObservaciones(ultimoEvento.getNota());
+        if (ultimoEvento.getUsuario() != null) {
+            dto.setUsuarioReportaId(ultimoEvento.getUsuario().getId());
+            dto.setUsuarioReportaNombre(ultimoEvento.getUsuario().getNombreCompleto());
+        } else {
+            dto.setUsuarioReportaId(null);
+            dto.setUsuarioReportaNombre(null);
+        }
+
+        return dto;
+    }
+
+    private RutaEstadoDTO toRutaEstadoDTO(SeguimientoOrdenArea entity) {
+        RutaEstadoDTO dto = new RutaEstadoDTO();
+        dto.setSeguimientoId(entity.getId());
+        dto.setNodeId(entity.getRutaProcesoNode().getId());
+        dto.setNodeLabel(entity.getRutaProcesoNode().getLabel());
+        dto.setAreaId(entity.getAreaOperativa().getAreaId());
+        dto.setAreaNombre(entity.getAreaOperativa().getNombre());
+        dto.setEstado(entity.getEstado());
+        dto.setEstadoDescripcion(getEstadoDescripcion(entity.getEstado()));
+        dto.setFechaVisible(entity.getFechaVisible());
+        dto.setFechaEstadoActual(entity.getFechaEstadoActual());
+        dto.setFechaCompletado(entity.getFechaCompletado());
+        dto.setObservaciones(entity.getObservaciones());
+        if (entity.getUsuarioReporta() != null) {
+            dto.setUsuarioReportaId(entity.getUsuarioReporta().getId());
+            dto.setUsuarioReportaNombre(entity.getUsuarioReporta().getNombreCompleto());
+        }
+        return dto;
+    }
+
+    private TableroOperativoDTO buildTableroOperativo(List<SeguimientoOrdenAreaDTO> tarjetas) {
+        TableroOperativoDTO dto = new TableroOperativoDTO();
+        dto.setCola(filterAndSortByEstado(tarjetas, EstadoSeguimientoOrdenArea.COLA));
+        dto.setEspera(filterAndSortByEstado(tarjetas, EstadoSeguimientoOrdenArea.ESPERA));
+        dto.setEnProceso(filterAndSortByEstado(tarjetas, EstadoSeguimientoOrdenArea.EN_PROCESO));
+        dto.setCompletado(filterAndSortByEstado(tarjetas, EstadoSeguimientoOrdenArea.COMPLETADO));
+
+        EstadoResumenDTO resumen = new EstadoResumenDTO();
+        resumen.setCola((long) dto.getCola().size());
+        resumen.setEspera((long) dto.getEspera().size());
+        resumen.setEnProceso((long) dto.getEnProceso().size());
+        resumen.setCompletado((long) dto.getCompletado().size());
+        resumen.setTotal(resumen.getCola() + resumen.getEspera() + resumen.getEnProceso() + resumen.getCompletado());
+        dto.setResumen(resumen);
+        return dto;
+    }
+
+    private List<SeguimientoOrdenAreaDTO> filterAndSortByEstado(
+            List<SeguimientoOrdenAreaDTO> tarjetas,
+            EstadoSeguimientoOrdenArea estado
+    ) {
+        Comparator<SeguimientoOrdenAreaDTO> comparator;
+        if (estado == EstadoSeguimientoOrdenArea.COMPLETADO) {
+            comparator = Comparator.comparing(
+                    SeguimientoOrdenAreaDTO::getFechaCompletado,
+                    Comparator.nullsLast(Comparator.reverseOrder())
+            );
+        } else {
+            comparator = Comparator
+                    .comparing(
+                            SeguimientoOrdenAreaDTO::getMinutosEnEstadoActual,
+                            Comparator.nullsLast(Comparator.reverseOrder())
+                    )
+                    .thenComparing(
+                            SeguimientoOrdenAreaDTO::getFechaEstadoActual,
+                            Comparator.nullsLast(Comparator.naturalOrder())
+                    );
+        }
+
+        return tarjetas.stream()
+                .filter(card -> card.getEstado() == estado.getCode())
+                .sorted(comparator)
+                .toList();
+    }
+
+    private Double promedioMinutosEnEstado(List<SeguimientoOrdenAreaDTO> tarjetas) {
+        var average = tarjetas.stream()
+                .map(SeguimientoOrdenAreaDTO::getMinutosEnEstadoActual)
+                .filter(java.util.Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .average();
+        return average.isPresent() ? average.getAsDouble() : null;
+    }
+
+    private OrdenMasAtrasadaDTO resolveOrdenMasAtrasada(List<SeguimientoOrdenAreaDTO> tarjetas) {
+        return tarjetas.stream()
+                .filter(card -> card.getEstado() != EstadoSeguimientoOrdenArea.COMPLETADO.getCode())
+                .filter(card -> card.getMinutosEnEstadoActual() != null)
+                .max(Comparator.comparing(SeguimientoOrdenAreaDTO::getMinutosEnEstadoActual))
+                .map(card -> {
+                    OrdenMasAtrasadaDTO dto = new OrdenMasAtrasadaDTO();
+                    dto.setOrdenId(card.getOrdenId());
+                    dto.setLoteAsignado(card.getLoteAsignado());
+                    dto.setProductoNombre(card.getProductoNombre());
+                    dto.setEstado(card.getEstado());
+                    dto.setEstadoDescripcion(card.getEstadoDescripcion());
+                    dto.setMinutosEnEstadoActual(card.getMinutosEnEstadoActual());
+                    return dto;
+                })
+                .orElse(null);
+    }
+
+    private ResponsableAreaResumenDTO toResponsableResumen(User user) {
+        ResponsableAreaResumenDTO dto = new ResponsableAreaResumenDTO();
+        dto.setId(user.getId());
+        dto.setUsername(user.getUsername());
+        dto.setNombreCompleto(user.getNombreCompleto());
+        return dto;
+    }
+
+    private Long calculateMinutesBetween(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null) {
+            return null;
+        }
+        long minutes = Duration.between(start, end).toMinutes();
+        return Math.max(minutes, 0);
     }
 
     @Data
@@ -440,11 +712,99 @@ public class SeguimientoOrdenAreaService {
 
         private LocalDateTime fechaCreacion;
         private LocalDateTime fechaVisible;
+        private LocalDateTime fechaEstadoActual;
         private LocalDateTime fechaCompletado;
+        private Long minutosEnEstadoActual;
 
         private Long usuarioReportaId;
         private String usuarioReportaNombre;
         private String observaciones;
+    }
+
+    @Data
+    public static class EstadoResumenDTO {
+        private Long total;
+        private Long cola;
+        private Long espera;
+        private Long enProceso;
+        private Long completado;
+    }
+
+    @Data
+    public static class TableroOperativoDTO {
+        private EstadoResumenDTO resumen;
+        private List<SeguimientoOrdenAreaDTO> cola = new ArrayList<>();
+        private List<SeguimientoOrdenAreaDTO> espera = new ArrayList<>();
+        private List<SeguimientoOrdenAreaDTO> enProceso = new ArrayList<>();
+        private List<SeguimientoOrdenAreaDTO> completado = new ArrayList<>();
+    }
+
+    @Data
+    public static class RutaEstadoDTO {
+        private Long seguimientoId;
+        private Long nodeId;
+        private String nodeLabel;
+        private Integer areaId;
+        private String areaNombre;
+        private int estado;
+        private String estadoDescripcion;
+        private LocalDateTime fechaVisible;
+        private LocalDateTime fechaEstadoActual;
+        private LocalDateTime fechaCompletado;
+        private Long usuarioReportaId;
+        private String usuarioReportaNombre;
+        private String observaciones;
+    }
+
+    @Data
+    public static class OrdenSeguimientoDetalleDTO {
+        private int ordenId;
+        private String loteAsignado;
+        private String productoId;
+        private String productoNombre;
+        private double cantidadProducir;
+        private int estadoOrden;
+        private String ordenObservaciones;
+        private LocalDateTime fechaCreacion;
+        private LocalDateTime fechaInicio;
+        private LocalDateTime fechaFinal;
+        private LocalDateTime fechaFinalPlanificada;
+        private List<RutaEstadoDTO> rutaEstados = new ArrayList<>();
+    }
+
+    @Data
+    public static class ResponsableAreaResumenDTO {
+        private Long id;
+        private String username;
+        private String nombreCompleto;
+    }
+
+    @Data
+    public static class OrdenMasAtrasadaDTO {
+        private int ordenId;
+        private String loteAsignado;
+        private String productoNombre;
+        private int estado;
+        private String estadoDescripcion;
+        private Long minutosEnEstadoActual;
+    }
+
+    @Data
+    public static class AreaOperativaTableroDTO {
+        private Integer areaId;
+        private String areaNombre;
+        private String areaDescripcion;
+        private ResponsableAreaResumenDTO responsableArea;
+        private LocalDate fechaConsulta;
+        private LocalDateTime instanteFoto;
+        private EstadoResumenDTO resumen;
+        private Double promedioMinutosEspera;
+        private Double promedioMinutosEnProceso;
+        private OrdenMasAtrasadaDTO ordenMasAtrasada;
+        private List<SeguimientoOrdenAreaDTO> cola = new ArrayList<>();
+        private List<SeguimientoOrdenAreaDTO> espera = new ArrayList<>();
+        private List<SeguimientoOrdenAreaDTO> enProceso = new ArrayList<>();
+        private List<SeguimientoOrdenAreaDTO> completado = new ArrayList<>();
     }
 
     @Data

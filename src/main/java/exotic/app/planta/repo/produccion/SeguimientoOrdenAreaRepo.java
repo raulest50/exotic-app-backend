@@ -54,6 +54,41 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         """)
     Page<SeguimientoOrdenArea> findOrdenesVisiblesByResponsableUserId(@Param("userId") Long userId, Pageable pageable);
 
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH op.producto p
+        JOIN FETCH s.areaOperativa a
+        JOIN FETCH s.rutaProcesoNode n
+        WHERE a.responsableArea.id = :userId
+        AND op.estadoOrden != -1
+        ORDER BY s.posicionSecuencia ASC, s.id ASC
+        """)
+    List<SeguimientoOrdenArea> findTableroByResponsableUserId(@Param("userId") Long userId);
+
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH op.producto p
+        JOIN FETCH s.areaOperativa a
+        JOIN FETCH s.rutaProcesoNode n
+        WHERE a.areaId = :areaId
+        AND op.estadoOrden != -1
+        ORDER BY s.posicionSecuencia ASC, s.id ASC
+        """)
+    List<SeguimientoOrdenArea> findTableroByAreaId(@Param("areaId") int areaId);
+
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH op.producto p
+        JOIN FETCH s.areaOperativa a
+        JOIN FETCH s.rutaProcesoNode n
+        WHERE op.ordenId = :ordenId
+        ORDER BY s.posicionSecuencia ASC
+        """)
+    List<SeguimientoOrdenArea> findDetalleByOrdenId(@Param("ordenId") int ordenId);
+
     /**
      * Cuenta predecesores no completados de un nodo para una orden.
      * Un predecesor no completado es aquel que apunta al nodo target y no tiene estado COMPLETADO (2) ni OMITIDO (3)

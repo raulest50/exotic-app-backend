@@ -1,5 +1,6 @@
 package exotic.app.planta.service.bi;
 
+import exotic.app.planta.model.bi.dto.InformeDiarioComprasRowDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
@@ -46,6 +47,25 @@ public class InformesDiariosService {
             "Lote (batch)"
     };
 
+    private static final String[] HEADERS_INFORME_COMPRAS = {
+            "Fecha ingreso",
+            "ID transacciÃ³n",
+            "ID OCM",
+            "ID factura compra",
+            "Proveedor NIT",
+            "Proveedor nombre",
+            "ID material",
+            "Material nombre",
+            "Tipo material",
+            "Cantidad ingresada",
+            "Unidad",
+            "Lote (batch)",
+            "Fecha vencimiento lote",
+            "AlmacÃ©n",
+            "Usuario aprobador",
+            "Observaciones"
+    };
+
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
 
     public Map<String, String> ping() {
@@ -83,6 +103,20 @@ public class InformesDiariosService {
         List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
                 start, end, Movimiento.TipoMovimiento.BACKFLUSH);
         return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado");
+    }
+
+    /**
+     * Excel con ingresos a almacÃ©n originados por OCM en el dÃ­a indicado.
+     */
+    public byte[] exportarComprasExcel(LocalDate fecha) {
+        LocalDateTime start = fecha.atStartOfDay();
+        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        List<InformeDiarioComprasRowDTO> rows = transaccionAlmacenRepo.findInformeDiarioComprasPorDia(
+                start,
+                end,
+                TransaccionAlmacen.TipoEntidadCausante.OCM,
+                Movimiento.TipoMovimiento.COMPRA);
+        return generarExcelCompras(rows, "Compras", "compras OCM");
     }
 
     /**
@@ -153,6 +187,33 @@ public class InformesDiariosService {
         }
     }
 
+    private byte[] generarExcelCompras(
+            List<InformeDiarioComprasRowDTO> rows, String nombreHoja, String contextoLog) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet(nombreHoja);
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < HEADERS_INFORME_COMPRAS.length; i++) {
+                headerRow.createCell(i).setCellValue(HEADERS_INFORME_COMPRAS[i]);
+            }
+
+            int rowIdx = 1;
+            for (InformeDiarioComprasRowDTO dto : rows) {
+                escribirFilaInformeCompras(dto, sheet.createRow(rowIdx++));
+            }
+
+            for (int i = 0; i < HEADERS_INFORME_COMPRAS.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            log.error("Error generando Excel {}", contextoLog, e);
+            throw new RuntimeException("Error generando Excel " + contextoLog, e);
+        }
+    }
+
     private static void escribirFilaMovimiento(Movimiento mov, Row row) {
         int c = 0;
         row.createCell(c++).setCellValue(
@@ -192,5 +253,28 @@ public class InformesDiariosService {
         } else {
             row.createCell(c).setCellValue("");
         }
+    }
+
+    private static void escribirFilaInformeCompras(InformeDiarioComprasRowDTO dto, Row row) {
+        int c = 0;
+        row.createCell(c++).setCellValue(dto.getFechaIngreso() != null ? dto.getFechaIngreso().toString() : "");
+        row.createCell(c++).setCellValue(dto.getTransaccionId() != null ? dto.getTransaccionId() : 0);
+        row.createCell(c++).setCellValue(dto.getOrdenCompraId() != null ? dto.getOrdenCompraId() : 0);
+        row.createCell(c++).setCellValue(
+                dto.getFacturaCompraId() != null ? String.valueOf(dto.getFacturaCompraId()) : "");
+        row.createCell(c++).setCellValue(dto.getProveedorNit() != null ? dto.getProveedorNit() : "");
+        row.createCell(c++).setCellValue(dto.getProveedorNombre() != null ? dto.getProveedorNombre() : "");
+        row.createCell(c++).setCellValue(dto.getMaterialId() != null ? dto.getMaterialId() : "");
+        row.createCell(c++).setCellValue(dto.getMaterialNombre() != null ? dto.getMaterialNombre() : "");
+        row.createCell(c++).setCellValue(dto.getTipoMaterial() != null ? dto.getTipoMaterial() : "");
+        row.createCell(c++).setCellValue(dto.getCantidadIngresada() != null ? dto.getCantidadIngresada() : 0d);
+        row.createCell(c++).setCellValue(dto.getUnidad() != null ? dto.getUnidad() : "");
+        row.createCell(c++).setCellValue(dto.getBatchNumber() != null ? dto.getBatchNumber() : "");
+        row.createCell(c++).setCellValue(
+                dto.getFechaVencimientoLote() != null ? dto.getFechaVencimientoLote().toString() : "");
+        row.createCell(c++).setCellValue(dto.getAlmacen() != null ? dto.getAlmacen().name() : "");
+        row.createCell(c++).setCellValue(
+                dto.getUsuarioAprobadorNombre() != null ? dto.getUsuarioAprobadorNombre() : "");
+        row.createCell(c).setCellValue(dto.getObservaciones() != null ? dto.getObservaciones() : "");
     }
 }

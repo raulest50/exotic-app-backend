@@ -2,6 +2,7 @@ package exotic.app.planta.model.compras;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,6 +54,7 @@ public class Proveedor {
      * While unique, it is not used as the primary key to allow for corrections
      * without breaking database relationships.
      */
+    @NotBlank
     @Column(name = "id", unique = true, updatable = true, nullable = false)
     private String id;
 

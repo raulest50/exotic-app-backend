@@ -14,4 +14,5 @@ public class PropuestaMpsSemanalResponseDTO {
     private LocalDate weekEndDate;
     private PropuestaMpsSemanalSummaryDTO summary = new PropuestaMpsSemanalSummaryDTO();
     private List<PropuestaMpsSemanalItemDTO> items = new ArrayList<>();
+    private PropuestaMpsSemanalCalendarDTO calendar = new PropuestaMpsSemanalCalendarDTO();
 }
