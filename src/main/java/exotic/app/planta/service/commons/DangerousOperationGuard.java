@@ -1,20 +1,14 @@
 package exotic.app.planta.service.commons;
 
+import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
-
-import java.util.Arrays;
-import java.util.Locale;
 
 @Component
 @RequiredArgsConstructor
 public class DangerousOperationGuard {
 
-    private static final String PRODUCTION_ENV_FLAG = "true";
-    private static final String PRODUCTION_PROFILE = "prod";
-
-    private final Environment environment;
+    private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
 
     public void assertNotProduction(String operationName) {
         if (isProductionEnvironment()) {
@@ -22,32 +16,29 @@ public class DangerousOperationGuard {
         }
     }
 
+    public void assertLocalOrStagingOnly(String operationName) {
+        if (!isLocalOrStaging()) {
+            throw new IllegalStateException(buildLocalOrStagingOnlyBlockedMessage(operationName));
+        }
+    }
+
     public boolean isProductionEnvironment() {
-        String productionFlag = normalize(System.getenv("PRODUCTION"));
-        if (PRODUCTION_ENV_FLAG.equals(productionFlag)) {
-            return true;
-        }
+        return applicationRuntimeEnvironmentResolver.isProduction();
+    }
 
-        String profilesEnv = normalize(System.getenv("SPRING_PROFILES_ACTIVE"));
-        if (!profilesEnv.isEmpty()) {
-            boolean envContainsProd = Arrays.stream(profilesEnv.split(","))
-                    .map(this::normalize)
-                    .anyMatch(PRODUCTION_PROFILE::equals);
-            if (envContainsProd) {
-                return true;
-            }
-        }
-
-        return Arrays.stream(environment.getActiveProfiles())
-                .map(this::normalize)
-                .anyMatch(PRODUCTION_PROFILE::equals);
+    public boolean isLocalOrStaging() {
+        return applicationRuntimeEnvironmentResolver.isLocalOrStaging();
     }
 
     public String buildBlockedMessage(String operationName) {
-        return operationName + " está bloqueada en producción. Requiere PRODUCTION != TRUE y SPRING_PROFILES_ACTIVE != prod.";
+        return operationName + " está bloqueada en producción. Entorno actual: "
+                + applicationRuntimeEnvironmentResolver.getCurrentEnvironment().value()
+                + ".";
     }
 
-    private String normalize(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    public String buildLocalOrStagingOnlyBlockedMessage(String operationName) {
+        return operationName + " solo está disponible en local o staging. Entorno actual: "
+                + applicationRuntimeEnvironmentResolver.getCurrentEnvironment().value()
+                + ".";
     }
 }

@@ -35,6 +35,10 @@ FROM amazoncorretto:21
 ENV TZ=America/Bogota
 ENV JAVA_TOOL_OPTIONS="-Duser.timezone=America/Bogota"
 
+RUN yum install -y postgresql15 tzdata \
+    && yum clean all \
+    && rm -rf /var/cache/yum
+
 # Create and set the working directory for runtime
 WORKDIR /app
 
