@@ -1,7 +1,6 @@
 package exotic.app.planta.resource.commons;
 
 import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
-import exotic.app.planta.config.runtime.ConditionalOnLocalOrStagingEnvironment;
 import exotic.app.planta.model.commons.dto.eliminaciones.PurgaBaseDatosResultDTO;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/eliminaciones-forzadas")
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnLocalOrStagingEnvironment
 public class DatabasePurgeResource {
 
     private static final String OPERATION_NAME = "La purga total de base de datos";
@@ -43,10 +41,12 @@ public class DatabasePurgeResource {
 
             PurgaBaseDatosResultDTO result = databasePurgeService.purgeDatabaseKeepingMasterLikeAccess();
             return ResponseEntity.ok(result);
+        } catch (UnsupportedOperationException e) {
+            log.warn("[PURGA_TOTAL_BD] Purga no soportada en el entorno actual. message={}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(buildBlockedResult(e.getMessage()));
         } catch (IllegalStateException e) {
-            HttpStatus status = dangerousOperationGuard.isLocalOrStaging() ? HttpStatus.CONFLICT : HttpStatus.FORBIDDEN;
             log.warn("[PURGA_TOTAL_BD] Purga bloqueada. message={}", e.getMessage());
-            return ResponseEntity.status(status).body(buildBlockedResult(e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(buildBlockedResult(e.getMessage()));
         }
     }
 

@@ -39,7 +39,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         boolean isDevelopment = applicationRuntimeEnvironmentResolver.isLocal();
-        boolean allowDatabasePurge = applicationRuntimeEnvironmentResolver.isLocalOrStaging();
 
         http
                 .cors(withDefaults())
@@ -48,12 +47,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll();
                     auth.requestMatchers("/api/auth/**").permitAll();
-
-                    if (allowDatabasePurge) {
-                        auth.requestMatchers("/api/eliminaciones-forzadas/base-datos").authenticated();
-                    } else {
-                        auth.requestMatchers("/api/eliminaciones-forzadas/base-datos").denyAll();
-                    }
 
                     if (isDevelopment) {
                         auth.requestMatchers("/api/backend-info/**").permitAll();

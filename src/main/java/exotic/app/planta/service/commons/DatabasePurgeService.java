@@ -1,7 +1,6 @@
 package exotic.app.planta.service.commons;
 
 import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
-import exotic.app.planta.config.runtime.ConditionalOnLocalOrStagingEnvironment;
 import exotic.app.planta.model.commons.dto.eliminaciones.PurgaBaseDatosResultDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +15,6 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnLocalOrStagingEnvironment
 public class DatabasePurgeService {
 
     private static final String OPERATION_NAME = "La purga total de base de datos";

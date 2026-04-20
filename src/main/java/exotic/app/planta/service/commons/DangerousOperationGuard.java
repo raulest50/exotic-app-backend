@@ -18,7 +18,7 @@ public class DangerousOperationGuard {
 
     public void assertLocalOrStagingOnly(String operationName) {
         if (!isLocalOrStaging()) {
-            throw new IllegalStateException(buildLocalOrStagingOnlyBlockedMessage(operationName));
+            throw new UnsupportedOperationException(buildLocalOrStagingOnlyBlockedMessage(operationName));
         }
     }
 
@@ -37,7 +37,7 @@ public class DangerousOperationGuard {
     }
 
     public String buildLocalOrStagingOnlyBlockedMessage(String operationName) {
-        return operationName + " solo está disponible en local o staging. Entorno actual: "
+        return operationName + " no está soportada en producción. Solo está disponible en local o staging. Entorno actual: "
                 + applicationRuntimeEnvironmentResolver.getCurrentEnvironment().value()
                 + ".";
     }
