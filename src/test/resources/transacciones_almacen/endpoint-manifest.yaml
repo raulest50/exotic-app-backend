@@ -1,0 +1,42 @@
+module: TransaccionesAlmacen
+frontendRoot: exotic-app-frontend/src/pages/TransaccionesAlmacen
+tag: transacciones-almacen-local
+flows:
+  bootstrap:
+    - GET /api/super-master-ops/config
+  ingreso_ocm:
+    - GET /ingresos_almacen/ocms_pendientes_ingreso
+    - GET /ingresos_almacen/consultar_transin_de_ocm
+    - GET /ingresos_almacen/transaccion/{transaccionId}/movimientos
+    - GET /ingresos_almacen/ocm/{ordenCompraId}/consolidado-materiales
+    - POST /movimientos/save_doc_ingreso_oc
+    - PUT /compras/orden_compra/{ordenCompraId}/close
+  dispensacion:
+    - GET /produccion/dispensacion_odp_consulta
+    - GET /produccion/dispensacion_odp_busqueda_lote
+    - GET /salidas_almacen/orden-produccion/{ordenProduccionId}/insumos-desglosados
+    - GET /salidas_almacen/orden-produccion/{ordenProduccionId}/dispensacion-resumen
+    - GET /salidas_almacen/lotes-disponibles
+    - POST /salidas_almacen/dispensacion
+    - POST /salidas_almacen/dispensacion-reposicion-averia
+    - POST /salidas_almacen/historial_dispensacion_filter
+    - GET /api/seguimiento-orden-area/orden/{ordenId}/progreso
+  ingreso_terminados:
+    - GET /ingresos_terminados_almacen/buscar-op-por-lote
+    - GET /ingresos_terminados_almacen/plantilla
+    - POST /ingresos_terminados_almacen/registrar
+    - POST /ingresos_terminados_almacen/registrar-masivo
+  ajustes:
+    - POST /productos/consulta1
+    - GET /movimientos/ajustes/lotes-disponibles
+    - GET /movimientos/ajustes/lotes-existentes
+    - POST /movimientos/ajustes
+  averias:
+    - GET /productos/search_mprima
+    - GET /api/averias/search_orden_by_lote
+    - GET /api/averias/orden/{ordenProduccionId}/items-dispensados
+    - GET /api/averias/orden/{ordenProduccionId}/historial
+    - GET /api/averias/almacen/search-material-by-lote
+    - POST /api/averias/almacen/registrar
+    - POST /api/averias/registrar
+    - POST /api/areas-produccion/search_by_name

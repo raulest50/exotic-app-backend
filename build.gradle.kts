@@ -42,7 +42,9 @@ dependencies {
 	//runtimeOnly("com.mysql:mysql-connector-j") // ya no uso mysql sino postgres pq es la disponible en render
 	annotationProcessor("org.projectlombok:lombok")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
-	//testImplementation("org.springframework.security:spring-security-test")
+	testImplementation("org.springframework.security:spring-security-test")
+	testImplementation("org.testcontainers:junit-jupiter:1.20.4")
+	testImplementation("org.testcontainers:postgresql:1.20.4")
 
 	// Added line for Spring Boot DevTools
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
@@ -80,6 +82,17 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+tasks.register<Test>("transaccionesAlmacenLocalTest") {
+	group = "verification"
+	description = "Runs the local integration suite that protects the frontend TransaccionesAlmacen module."
+	testClassesDirs = sourceSets.test.get().output.classesDirs
+	classpath = sourceSets.test.get().runtimeClasspath
+	shouldRunAfter(tasks.test)
+	useJUnitPlatform {
+		includeTags("transacciones-almacen-local")
+	}
 }
 
 tasks.register<JavaExec>("buildWithoutTest") {

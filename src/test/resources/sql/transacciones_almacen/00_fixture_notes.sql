@@ -1,0 +1,2 @@
+-- The first iteration of TransaccionesAlmacen integration tests seeds data from repositories.
+-- Keep this folder for future SQL-heavy scenarios that are easier to express as fixtures.

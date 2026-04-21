@@ -1,0 +1,1 @@
+Soporte documental de prueba para ingreso OCM del modulo TransaccionesAlmacen.
