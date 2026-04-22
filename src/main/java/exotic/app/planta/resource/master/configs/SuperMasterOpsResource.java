@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.master.configs;
 
+import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import exotic.app.planta.model.master.configs.SuperMasterConfig;
 import exotic.app.planta.service.master.configs.SuperMasterOpsService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class SuperMasterOpsResource {
     private static final String SUPER_MASTER_USERNAME = "super_master";
 
     private final SuperMasterOpsService superMasterOpsService;
+    private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
 
     private boolean isSuperMaster(Authentication auth) {
         return auth != null && auth.isAuthenticated() && SUPER_MASTER_USERNAME.equals(auth.getName());
@@ -34,7 +36,10 @@ public class SuperMasterOpsResource {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return superMasterOpsService.getConfig()
-                .map(ResponseEntity::ok)
+                .map(config -> {
+                    config.setAllowTotalDatabaseImport(applicationRuntimeEnvironmentResolver.isLocalOrStaging());
+                    return ResponseEntity.ok(config);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 

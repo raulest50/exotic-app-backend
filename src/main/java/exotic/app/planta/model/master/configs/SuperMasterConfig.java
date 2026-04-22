@@ -23,4 +23,7 @@ public class SuperMasterConfig {
     private boolean habilitarEliminacionForzada;
     private boolean habilitarCargaMasiva;
     private boolean habilitarAjustesInventario;
+
+    @Transient
+    private boolean allowTotalDatabaseImport;
 }

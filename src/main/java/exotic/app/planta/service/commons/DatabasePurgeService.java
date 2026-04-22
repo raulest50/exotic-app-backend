@@ -85,6 +85,23 @@ public class DatabasePurgeService {
         return result;
     }
 
+    public void resetCurrentSchemaForFullRestore() {
+        dangerousOperationGuard.assertLocalOrStagingOnly("La importacion total de base de datos");
+
+        String currentSchema = jdbcTemplate.queryForObject("select current_schema()", String.class);
+        if (currentSchema == null || currentSchema.isBlank()) {
+            throw new IllegalStateException("No fue posible identificar el esquema actual para la restauracion total.");
+        }
+
+        String quotedSchema = quoteIdentifier(currentSchema);
+        log.warn("[RESTORE_TOTAL_BD] Reiniciando esquema completo. environment={}, schema={}",
+                applicationRuntimeEnvironmentResolver.getCurrentEnvironment().value(),
+                currentSchema);
+
+        jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + quotedSchema + " CASCADE");
+        jdbcTemplate.execute("CREATE SCHEMA " + quotedSchema);
+    }
+
     private List<PreservedUserRow> loadPreservedUsers() {
         return jdbcTemplate.query(
                 """
