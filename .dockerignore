@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.gradle
+.gradle-user-home
+.junie
+build
+data
+docs
+logs
+deployment_production_log.txt
+id_rsa.ppk
+
+!MCP_EPOINT/
+!MCP_EPOINT/**
