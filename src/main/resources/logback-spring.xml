@@ -17,6 +17,7 @@
     <property name="DB_LOG_LEVEL" value="OFF"/>
 
     <property name="BACKUP_TOTAL_EXPORT_LOG_LEVEL" value="DEBUG"/>
+    <property name="BACKUP_TOTAL_IMPORT_FILE_LOG_LEVEL" value="DEBUG"/>
 
     <!-- Appender de consola para ver todos los logs -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -113,6 +114,15 @@
         </encoder>
     </appender>
 
+    <appender name="BACKUP_TOTAL_IMPORT_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${LOG_PATH}/backup_total_import.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{80} - %msg%n%ex</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <logger name="exotic.app.planta.resource.commons.ExportacionDatosResource" level="${BACKUP_TOTAL_EXPORT_LOG_LEVEL}" additivity="false">
         <appender-ref ref="BACKUP_TOTAL_EXPORT_FILE"/>
         <appender-ref ref="CONSOLE"/>
@@ -125,21 +135,40 @@
 
     <logger name="exotic.app.planta.service.commons.PgDumpExecutableResolver" level="${BACKUP_TOTAL_EXPORT_LOG_LEVEL}" additivity="false">
         <appender-ref ref="BACKUP_TOTAL_EXPORT_FILE"/>
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="exotic.app.planta.resource.commons.ImportacionDatosResource" level="${BACKUP_TOTAL_IMPORT_FILE_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="exotic.app.planta.service.commons.BackupTotalImportService" level="${BACKUP_TOTAL_IMPORT_FILE_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="exotic.app.planta.service.commons.DatabasePurgeService" level="${BACKUP_TOTAL_IMPORT_FILE_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <logger name="org.postgresql" level="WARN" additivity="false">
         <appender-ref ref="BACKUP_TOTAL_EXPORT_FILE"/>
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <logger name="org.hibernate.engine.jdbc.spi.SqlExceptionHelper" level="WARN" additivity="false">
         <appender-ref ref="BACKUP_TOTAL_EXPORT_FILE"/>
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <logger name="org.springframework.dao" level="ERROR" additivity="false">
         <appender-ref ref="BACKUP_TOTAL_EXPORT_FILE"/>
+        <appender-ref ref="BACKUP_TOTAL_IMPORT_FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
