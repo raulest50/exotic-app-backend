@@ -2,6 +2,7 @@ package exotic.app.planta.repo.produccion;
 
 import jakarta.transaction.Transactional;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.producto.Terminado;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -117,4 +118,14 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
            "AND TYPE(p) = exotic.app.planta.model.producto.Terminado " +
            "ORDER BY op.fechaCreacion DESC")
     List<OrdenProduccion> findOrdenesPendientesConTerminado();
+
+    @Query("""
+            SELECT COUNT(o)
+            FROM OrdenProduccion o
+            WHERE o.estadoOrden <> 2
+              AND o.estadoOrden <> -1
+              AND TYPE(o.producto) = Terminado
+              AND TREAT(o.producto AS Terminado).categoria.categoriaId = :categoriaId
+            """)
+    long countActiveByCategoriaId(@Param("categoriaId") int categoriaId);
 }

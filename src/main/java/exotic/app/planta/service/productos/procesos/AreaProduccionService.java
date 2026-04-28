@@ -1,23 +1,33 @@
 package exotic.app.planta.service.productos.procesos;
 
+import exotic.app.planta.dto.AreaOperativaResponseDTO;
 import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +35,7 @@ import java.util.Optional;
 public class AreaProduccionService {
 
     private final AreaProduccionRepo areaProduccionRepo;
+    private final CategoriaRepo categoriaRepo;
     private final UserRepository userRepository;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
 
@@ -47,7 +58,7 @@ public class AreaProduccionService {
     }
 
     @Transactional
-    public AreaOperativa createAreaProduccionFromDTO(AreaProduccionDTO dto) {
+    public AreaOperativaResponseDTO createAreaProduccionFromDTO(AreaProduccionDTO dto) {
         log.info("Creando area de produccion desde DTO: {}", dto.getNombre());
 
         if (areaProduccionRepo.findByNombre(dto.getNombre()).isPresent()) {
@@ -62,26 +73,29 @@ public class AreaProduccionService {
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
         area.setResponsableArea(responsable);
+        area.setCategoriasHabilitadas(resolveCategorias(dto.getCategoriaIds()));
 
-        return areaProduccionRepo.save(area);
+        return toResponseDto(areaProduccionRepo.save(area));
     }
 
     @Transactional(readOnly = true)
-    public List<AreaOperativa> searchAreasByName(SearchAreaProduccionDTO searchDTO, Pageable pageable) {
+    public List<AreaOperativaResponseDTO> searchAreasByName(SearchAreaProduccionDTO searchDTO, Pageable pageable) {
         log.info("Buscando areas de produccion por nombre: {}", searchDTO.getNombre());
 
+        List<AreaOperativa> areas;
         if (searchDTO.getNombre() == null || searchDTO.getNombre().trim().isEmpty()) {
-            return areaProduccionRepo.findAll(pageable).getContent();
+            areas = areaProduccionRepo.findAll(pageable).getContent();
+        } else {
+            Specification<AreaOperativa> spec = (root, query, cb) ->
+                    cb.like(cb.lower(root.get("nombre")), "%" + searchDTO.getNombre().toLowerCase() + "%");
+            areas = areaProduccionRepo.findAll(spec, pageable).getContent();
         }
 
-        Specification<AreaOperativa> spec = (root, query, cb) ->
-                cb.like(cb.lower(root.get("nombre")), "%" + searchDTO.getNombre().toLowerCase() + "%");
-
-        return areaProduccionRepo.findAll(spec, pageable).getContent();
+        return areas.stream().map(this::toResponseDto).toList();
     }
 
     @Transactional
-    public AreaOperativa updateAreaProduccion(Integer areaId, AreaProduccionDTO dto) {
+    public AreaOperativaResponseDTO updateAreaProduccion(Integer areaId, AreaProduccionDTO dto) {
         log.info("Actualizando area de produccion con ID: {}", areaId);
 
         AreaOperativa area = areaProduccionRepo.findById(areaId)
@@ -100,47 +114,115 @@ public class AreaProduccionService {
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
         area.setResponsableArea(responsable);
+        area.setCategoriasHabilitadas(resolveCategorias(dto.getCategoriaIds()));
 
-        return areaProduccionRepo.save(area);
+        return toResponseDto(areaProduccionRepo.save(area));
     }
 
     @Transactional(readOnly = true)
-    public Page<AreaOperativa> searchAreas(SearchAreaOperativaDTO searchDTO, Pageable pageable) {
+    public Page<AreaOperativaResponseDTO> searchAreas(SearchAreaOperativaDTO searchDTO, Pageable pageable) {
         log.info("Buscando areas operativas - tipo: {}", searchDTO.getSearchType());
 
         String searchType = searchDTO.getSearchType();
         if (searchType == null || searchType.isBlank()) {
-            return areaProduccionRepo.findAll(pageable);
+            return mapPage(areaProduccionRepo.findAll(pageable));
         }
 
         switch (searchType.toUpperCase()) {
             case "NOMBRE": {
                 if (searchDTO.getNombre() == null || searchDTO.getNombre().trim().isEmpty()) {
-                    return areaProduccionRepo.findAll(pageable);
+                    return mapPage(areaProduccionRepo.findAll(pageable));
                 }
                 Specification<AreaOperativa> spec = (root, query, cb) ->
                         cb.like(cb.lower(root.get("nombre")),
                                 "%" + searchDTO.getNombre().toLowerCase() + "%");
-                return areaProduccionRepo.findAll(spec, pageable);
+                return mapPage(areaProduccionRepo.findAll(spec, pageable));
             }
             case "RESPONSABLE": {
                 if (searchDTO.getResponsableId() == null) {
-                    return areaProduccionRepo.findAll(pageable);
+                    return mapPage(areaProduccionRepo.findAll(pageable));
                 }
                 Specification<AreaOperativa> spec = (root, query, cb) ->
                         cb.equal(root.get("responsableArea").get("id"), searchDTO.getResponsableId());
-                return areaProduccionRepo.findAll(spec, pageable);
+                return mapPage(areaProduccionRepo.findAll(spec, pageable));
             }
             case "ID": {
                 if (searchDTO.getAreaId() == null) {
-                    return areaProduccionRepo.findAll(pageable);
+                    return mapPage(areaProduccionRepo.findAll(pageable));
                 }
                 Specification<AreaOperativa> spec = (root, query, cb) ->
                         cb.equal(root.get("areaId"), searchDTO.getAreaId());
-                return areaProduccionRepo.findAll(spec, pageable);
+                return mapPage(areaProduccionRepo.findAll(spec, pageable));
             }
             default:
-                return areaProduccionRepo.findAll(pageable);
+                return mapPage(areaProduccionRepo.findAll(pageable));
         }
+    }
+
+    private Page<AreaOperativaResponseDTO> mapPage(Page<AreaOperativa> areasPage) {
+        return new PageImpl<>(
+                areasPage.getContent().stream().map(this::toResponseDto).toList(),
+                areasPage.getPageable(),
+                areasPage.getTotalElements()
+        );
+    }
+
+    private Set<Categoria> resolveCategorias(List<Integer> categoriaIds) {
+        if (categoriaIds == null || categoriaIds.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+
+        LinkedHashSet<Integer> uniqueIds = categoriaIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (uniqueIds.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+
+        List<Categoria> categorias = categoriaRepo.findAllById(uniqueIds);
+        Map<Integer, Categoria> categoriasById = categorias.stream()
+                .collect(Collectors.toMap(Categoria::getCategoriaId, Function.identity()));
+
+        List<Integer> missingIds = uniqueIds.stream()
+                .filter(id -> !categoriasById.containsKey(id))
+                .toList();
+
+        if (!missingIds.isEmpty()) {
+            throw new IllegalArgumentException("No se encontraron categorias con ID: " + missingIds);
+        }
+
+        return uniqueIds.stream()
+                .map(categoriasById::get)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private AreaOperativaResponseDTO toResponseDto(AreaOperativa area) {
+        AreaOperativaResponseDTO.ResponsableAreaDTO responsableDto = null;
+        if (area.getResponsableArea() != null) {
+            User responsable = area.getResponsableArea();
+            responsableDto = AreaOperativaResponseDTO.ResponsableAreaDTO.builder()
+                    .id(responsable.getId())
+                    .cedula(responsable.getCedula())
+                    .username(responsable.getUsername())
+                    .nombreCompleto(responsable.getNombreCompleto())
+                    .build();
+        }
+
+        List<AreaOperativaResponseDTO.CategoriaHabilitadaDTO> categoriasDto = area.getCategoriasHabilitadas().stream()
+                .sorted(Comparator.comparing(Categoria::getCategoriaNombre, String.CASE_INSENSITIVE_ORDER))
+                .map(categoria -> AreaOperativaResponseDTO.CategoriaHabilitadaDTO.builder()
+                        .categoriaId(categoria.getCategoriaId())
+                        .categoriaNombre(categoria.getCategoriaNombre())
+                        .build())
+                .toList();
+
+        return AreaOperativaResponseDTO.builder()
+                .areaId(area.getAreaId())
+                .nombre(area.getNombre())
+                .descripcion(area.getDescripcion())
+                .responsableArea(responsableDto)
+                .categoriasHabilitadas(categoriasDto)
+                .build();
     }
 }

@@ -1,5 +1,6 @@
 package exotic.app.planta.repo.compras;
 
+import exotic.app.planta.model.bi.dto.ProveedorMaterialOrdenHistRowDTO;
 import exotic.app.planta.model.compras.ItemOrdenCompra;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,4 +43,31 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
     List<ItemOrdenCompra> findPendientesIngresoByMaterialProductoIds(
             @Param("productoIds") Collection<String> productoIds,
             @Param("estado") int estado);
+
+    @Query("""
+            SELECT new exotic.app.planta.model.bi.dto.ProveedorMaterialOrdenHistRowDTO(
+                orden.ordenCompraId,
+                proveedor.id,
+                proveedor.nombre,
+                material.productoId,
+                material.nombre,
+                orden.fechaEmision,
+                item.cantidad
+            )
+            FROM ItemOrdenCompra item
+            JOIN item.ordenCompraMateriales orden
+            JOIN orden.proveedor proveedor
+            JOIN item.material material
+            WHERE material.productoId = :materialId
+              AND orden.fechaEmision >= :start
+              AND orden.fechaEmision <= :end
+              AND (:proveedorId IS NULL OR proveedor.id = :proveedorId)
+            ORDER BY orden.fechaEmision ASC, orden.ordenCompraId ASC
+            """)
+    List<ProveedorMaterialOrdenHistRowDTO> findLeadTimeOrderHistory(
+            @Param("materialId") String materialId,
+            @Param("proveedorId") String proveedorId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end
+    );
 }

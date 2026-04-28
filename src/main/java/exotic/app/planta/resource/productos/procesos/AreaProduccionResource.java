@@ -1,12 +1,12 @@
 package exotic.app.planta.resource.productos.procesos;
 
-import jakarta.validation.Valid;
+import exotic.app.planta.dto.AreaOperativaResponseDTO;
 import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.ErrorResponse;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
-import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.service.productos.procesos.AreaProduccionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -25,31 +25,25 @@ public class AreaProduccionResource {
 
     private final AreaProduccionService areaProduccionService;
 
-    /**
-     * Endpoint para crear un área de producción
-     * 
-     * @param areaProduccionDTO DTO con la información del área
-     * @return ResponseEntity con el área creada o error
-     */
     @PostMapping("/crear")
     public ResponseEntity<?> createAreaProduccion(@Valid @RequestBody AreaProduccionDTO areaProduccionDTO) {
-        log.info("REST request para crear una nueva área de producción: {}", areaProduccionDTO.getNombre());
+        log.info("REST request para crear una nueva area de produccion: {}", areaProduccionDTO.getNombre());
 
         try {
-            AreaOperativa result = areaProduccionService.createAreaProduccionFromDTO(areaProduccionDTO);
+            AreaOperativaResponseDTO result = areaProduccionService.createAreaProduccionFromDTO(areaProduccionDTO);
             return ResponseEntity
                     .created(URI.create("/api/areas-produccion/" + result.getAreaId()))
                     .body(result);
         } catch (IllegalArgumentException e) {
-            log.error("Error al crear área de producción: {}", e.getMessage());
+            log.error("Error al crear area de produccion: {}", e.getMessage());
             return ResponseEntity
                     .badRequest()
-                    .body(new ErrorResponse("Error al crear área", e.getMessage()));
+                    .body(new ErrorResponse("Error al crear area", e.getMessage()));
         } catch (Exception e) {
-            log.error("Error inesperado al crear área de producción", e);
+            log.error("Error inesperado al crear area de produccion", e);
             return ResponseEntity
                     .internalServerError()
-                    .body(new ErrorResponse("Error interno del servidor", "Ocurrió un error inesperado"));
+                    .body(new ErrorResponse("Error interno del servidor", "Ocurrio un error inesperado"));
         }
     }
 
@@ -58,68 +52,56 @@ public class AreaProduccionResource {
             @PathVariable Integer areaId,
             @Valid @RequestBody AreaProduccionDTO dto) {
 
-        log.info("REST request para actualizar área de producción con ID: {}", areaId);
+        log.info("REST request para actualizar area de produccion con ID: {}", areaId);
 
         try {
-            AreaOperativa result = areaProduccionService.updateAreaProduccion(areaId, dto);
+            AreaOperativaResponseDTO result = areaProduccionService.updateAreaProduccion(areaId, dto);
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
-            log.error("Error al actualizar área de producción: {}", e.getMessage());
+            log.error("Error al actualizar area de produccion: {}", e.getMessage());
             return ResponseEntity
                     .badRequest()
-                    .body(new ErrorResponse("Error al actualizar área", e.getMessage()));
+                    .body(new ErrorResponse("Error al actualizar area", e.getMessage()));
         } catch (Exception e) {
-            log.error("Error inesperado al actualizar área de producción", e);
+            log.error("Error inesperado al actualizar area de produccion", e);
             return ResponseEntity
                     .internalServerError()
-                    .body(new ErrorResponse("Error interno del servidor", "Ocurrió un error inesperado"));
+                    .body(new ErrorResponse("Error interno del servidor", "Ocurrio un error inesperado"));
         }
     }
 
     @PostMapping("/search")
-    public ResponseEntity<Page<AreaOperativa>> searchAreas(
+    public ResponseEntity<Page<AreaOperativaResponseDTO>> searchAreas(
             @RequestBody SearchAreaOperativaDTO searchDTO,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
-        log.info("REST request para buscar áreas operativas - tipo: {}", searchDTO.getSearchType());
+        log.info("REST request para buscar areas operativas - tipo: {}", searchDTO.getSearchType());
 
         try {
             PageRequest pageable = PageRequest.of(page, size);
-            Page<AreaOperativa> result = areaProduccionService.searchAreas(searchDTO, pageable);
+            Page<AreaOperativaResponseDTO> result = areaProduccionService.searchAreas(searchDTO, pageable);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            log.error("Error al buscar áreas operativas", e);
+            log.error("Error al buscar areas operativas", e);
             return ResponseEntity.internalServerError().build();
         }
     }
 
-    /**
-     * Endpoint para buscar áreas de producción por nombre
-     * 
-     * @param searchDTO DTO con el criterio de búsqueda (nombre)
-     * @param page Número de página (por defecto 0)
-     * @param size Tamaño de página (por defecto 10)
-     * @return ResponseEntity con la lista de áreas que coinciden con el criterio
-     */
     @PostMapping("/search_by_name")
-    public ResponseEntity<List<AreaOperativa>> searchAreasByName(
+    public ResponseEntity<List<AreaOperativaResponseDTO>> searchAreasByName(
             @RequestBody SearchAreaProduccionDTO searchDTO,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
-        log.info("REST request para buscar áreas de producción por nombre: {}", searchDTO.getNombre());
+        log.info("REST request para buscar areas de produccion por nombre: {}", searchDTO.getNombre());
 
         try {
-            // Crear objeto PageRequest para paginación
             PageRequest pageable = PageRequest.of(page, size);
-
-            // Realizar la búsqueda
-            List<AreaOperativa> areas = areaProduccionService.searchAreasByName(searchDTO, pageable);
-
+            List<AreaOperativaResponseDTO> areas = areaProduccionService.searchAreasByName(searchDTO, pageable);
             return ResponseEntity.ok(areas);
         } catch (Exception e) {
-            log.error("Error al buscar áreas de producción", e);
+            log.error("Error al buscar areas de produccion", e);
             return ResponseEntity.internalServerError().build();
         }
     }

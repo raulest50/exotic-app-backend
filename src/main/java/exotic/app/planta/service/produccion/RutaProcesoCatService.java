@@ -1,5 +1,6 @@
 package exotic.app.planta.service.produccion;
 
+import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
@@ -7,6 +8,7 @@ import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,7 @@ public class RutaProcesoCatService {
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final CategoriaRepo categoriaRepo;
     private final AreaProduccionRepo areaProduccionRepo;
+    private final OrdenProduccionRepo ordenProduccionRepo;
 
     public RutaProcesoCatDTO getRutaByCategoria(int categoriaId) {
         return rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
@@ -35,6 +38,12 @@ public class RutaProcesoCatService {
     public RutaProcesoCatDTO saveRuta(int categoriaId, RutaProcesoCatDTO dto) {
         Categoria categoria = categoriaRepo.findById(categoriaId)
                 .orElseThrow(() -> new IllegalArgumentException("Categoria no encontrada con ID: " + categoriaId));
+
+        if (ordenProduccionRepo.countActiveByCategoriaId(categoriaId) > 0) {
+            throw new IllegalStateException("No se puede editar la ruta porque la categoría tiene órdenes de producción activas.");
+        }
+
+        validateRuta(dto);
 
         RutaProcesoCat ruta = rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
                 .orElseGet(() -> {
@@ -105,6 +114,9 @@ public class RutaProcesoCatService {
     }
 
     public void deleteRuta(int categoriaId) {
+        if (ordenProduccionRepo.countActiveByCategoriaId(categoriaId) > 0) {
+            throw new IllegalStateException("No se puede eliminar la ruta porque la categoría tiene órdenes de producción activas.");
+        }
         rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
                 .ifPresent(rutaProcesoCatRepo::delete);
     }
@@ -158,6 +170,146 @@ public class RutaProcesoCatService {
         dto.setSourceNodeId(edge.getSourceNode().getFrontendId());
         dto.setTargetNodeId(edge.getTargetNode().getFrontendId());
         return dto;
+    }
+
+    private void validateRuta(RutaProcesoCatDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("La ruta de proceso no puede estar vacía.");
+        }
+
+        List<RutaProcesoNodeDTO> nodes = Optional.ofNullable(dto.getNodes()).orElse(Collections.emptyList());
+        List<RutaProcesoEdgeDTO> edges = Optional.ofNullable(dto.getEdges()).orElse(Collections.emptyList());
+
+        if (nodes.isEmpty()) {
+            throw new IllegalArgumentException("La ruta debe contener al menos un nodo.");
+        }
+
+        Map<String, RutaProcesoNodeDTO> nodesById = new LinkedHashMap<>();
+        Map<String, Integer> indegree = new LinkedHashMap<>();
+        Map<String, Set<String>> adjacency = new LinkedHashMap<>();
+        Set<Integer> usedAreaIds = new HashSet<>();
+        int almacenCount = 0;
+
+        for (RutaProcesoNodeDTO node : nodes) {
+            String nodeId = normalizeId(node.getId());
+            if (nodeId == null) {
+                throw new IllegalArgumentException("Todos los nodos deben tener un identificador válido.");
+            }
+            if (nodesById.containsKey(nodeId)) {
+                throw new IllegalArgumentException("La ruta contiene nodos duplicados.");
+            }
+            if (node.getAreaOperativaId() == null) {
+                throw new IllegalArgumentException("Todos los nodos deben tener un área operativa asignada.");
+            }
+            if (!usedAreaIds.add(node.getAreaOperativaId())) {
+                throw new IllegalArgumentException(
+                        "No se permite repetir la misma área operativa en la ruta de proceso.");
+            }
+            if (node.getAreaOperativaId() == AreaOperativaInitializer.ALMACEN_GENERAL_ID) {
+                almacenCount++;
+            }
+
+            nodesById.put(nodeId, node);
+            indegree.put(nodeId, 0);
+            adjacency.put(nodeId, new LinkedHashSet<>());
+        }
+
+        if (almacenCount != 1) {
+            throw new IllegalArgumentException("La ruta debe incluir exactamente un nodo de Almacen General.");
+        }
+
+        for (RutaProcesoEdgeDTO edge : edges) {
+            String sourceId = normalizeId(edge.getSourceNodeId());
+            String targetId = normalizeId(edge.getTargetNodeId());
+
+            if (sourceId == null || targetId == null) {
+                throw new IllegalArgumentException("Todas las conexiones deben tener origen y destino válidos.");
+            }
+            if (!nodesById.containsKey(sourceId) || !nodesById.containsKey(targetId)) {
+                throw new IllegalArgumentException("La ruta contiene conexiones hacia nodos inexistentes.");
+            }
+            if (sourceId.equals(targetId)) {
+                throw new IllegalArgumentException("No se permiten ciclos directos de un nodo hacia sí mismo.");
+            }
+            if (!adjacency.get(sourceId).add(targetId)) {
+                throw new IllegalArgumentException("No se permiten conexiones duplicadas entre la misma pareja de nodos.");
+            }
+
+            indegree.put(targetId, indegree.get(targetId) + 1);
+        }
+
+        List<String> rootIds = indegree.entrySet().stream()
+                .filter(entry -> entry.getValue() == 0)
+                .map(Map.Entry::getKey)
+                .toList();
+
+        if (rootIds.size() != 1) {
+            throw new IllegalArgumentException("La ruta debe tener exactamente un nodo raíz.");
+        }
+
+        String rootId = rootIds.get(0);
+        RutaProcesoNodeDTO rootNode = nodesById.get(rootId);
+        if (!Objects.equals(rootNode.getAreaOperativaId(), AreaOperativaInitializer.ALMACEN_GENERAL_ID)) {
+            throw new IllegalArgumentException("El nodo raíz debe ser Almacen General.");
+        }
+
+        for (Map.Entry<String, RutaProcesoNodeDTO> entry : nodesById.entrySet()) {
+            if (Objects.equals(entry.getValue().getAreaOperativaId(), AreaOperativaInitializer.ALMACEN_GENERAL_ID)
+                    && indegree.get(entry.getKey()) > 0) {
+                throw new IllegalArgumentException("Almacen General no puede tener predecesores.");
+            }
+        }
+
+        Set<String> reachable = new HashSet<>();
+        Deque<String> queue = new ArrayDeque<>();
+        queue.add(rootId);
+        reachable.add(rootId);
+
+        while (!queue.isEmpty()) {
+            String currentId = queue.removeFirst();
+            for (String targetId : adjacency.get(currentId)) {
+                if (reachable.add(targetId)) {
+                    queue.addLast(targetId);
+                }
+            }
+        }
+
+        if (reachable.size() != nodesById.size()) {
+            throw new IllegalArgumentException(
+                    "La ruta no puede contener nodos huérfanos o desconectados del flujo principal.");
+        }
+
+        Map<String, Integer> remainingIndegree = new LinkedHashMap<>(indegree);
+        Deque<String> zeroIndegreeQueue = remainingIndegree.entrySet().stream()
+                .filter(entry -> entry.getValue() == 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(ArrayDeque::new));
+
+        int processedNodes = 0;
+        while (!zeroIndegreeQueue.isEmpty()) {
+            String currentId = zeroIndegreeQueue.removeFirst();
+            processedNodes++;
+
+            for (String targetId : adjacency.get(currentId)) {
+                int nextIndegree = remainingIndegree.get(targetId) - 1;
+                remainingIndegree.put(targetId, nextIndegree);
+                if (nextIndegree == 0) {
+                    zeroIndegreeQueue.addLast(targetId);
+                }
+            }
+        }
+
+        if (processedNodes != nodesById.size()) {
+            throw new IllegalArgumentException("La ruta debe ser un grafo acíclico dirigido (DAG).");
+        }
+    }
+
+    private String normalizeId(String rawId) {
+        if (rawId == null) {
+            return null;
+        }
+        String normalized = rawId.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     // DTOs

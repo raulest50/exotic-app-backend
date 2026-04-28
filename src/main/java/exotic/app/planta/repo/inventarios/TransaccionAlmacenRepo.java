@@ -1,6 +1,7 @@
 package exotic.app.planta.repo.inventarios;
 
 import exotic.app.planta.model.bi.dto.InformeDiarioComprasRowDTO;
+import exotic.app.planta.model.bi.dto.ProveedorMaterialRecepcionRowDTO;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
@@ -389,4 +390,39 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("end") LocalDateTime end,
             @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
             @Param("tipoMovimientoCompra") Movimiento.TipoMovimiento tipoMovimientoCompra);
+
+    @Query("""
+            SELECT new exotic.app.planta.model.bi.dto.ProveedorMaterialRecepcionRowDTO(
+                oc.ordenCompraId,
+                prov.id,
+                prov.nombre,
+                m.producto.productoId,
+                m.producto.nombre,
+                oc.fechaEmision,
+                m.fechaMovimiento,
+                m.cantidad
+            )
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t,
+                 OrdenCompraMateriales oc
+            JOIN oc.proveedor prov
+            WHERE oc.ordenCompraId = t.idEntidadCausante
+              AND t.tipoEntidadCausante = :tipoEntidadCausante
+              AND m.producto.productoId = :materialId
+              AND m.tipoMovimiento = :tipoMovimientoCompra
+              AND m.cantidad > 0
+              AND oc.fechaEmision >= :start
+              AND oc.fechaEmision <= :end
+              AND m.fechaMovimiento <= :end
+              AND (:proveedorId IS NULL OR prov.id = :proveedorId)
+            ORDER BY oc.fechaEmision ASC, oc.ordenCompraId ASC, m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<ProveedorMaterialRecepcionRowDTO> findLeadTimeReceiptHistory(
+            @Param("materialId") String materialId,
+            @Param("proveedorId") String proveedorId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+            @Param("tipoMovimientoCompra") Movimiento.TipoMovimiento tipoMovimientoCompra
+    );
 }

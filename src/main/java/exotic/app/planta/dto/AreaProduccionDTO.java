@@ -6,21 +6,25 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
- * DTO para transferir datos de Área de Producción
+ * DTO para transferir datos de Area de Produccion.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class AreaProduccionDTO {
-    
+
     private Integer areaId;
-    
-    @NotBlank(message = "El nombre del área no puede estar vacío")
+
+    @NotBlank(message = "El nombre del area no puede estar vacio")
     private String nombre;
-    
+
     private String descripcion;
-    
-    @NotNull(message = "El responsable del área no puede ser nulo")
+
+    @NotNull(message = "El responsable del area no puede ser nulo")
     private Long responsableId;
+
+    private List<Integer> categoriaIds;
 }
