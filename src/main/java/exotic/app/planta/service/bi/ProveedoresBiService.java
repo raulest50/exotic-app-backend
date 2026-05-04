@@ -118,6 +118,12 @@ public class ProveedoresBiService {
             OrderAggregate sample = entry.getValue().get(0);
             Double representativeFirst = pair.firstReceipt().getRepresentativeLeadTimeDays();
             Integer firstConfidence = pair.firstReceipt().getConfidenceScore();
+            /*
+             * Modelo: ranking BI que penaliza lead times rapidos pero con baja confianza estadistica.
+             * Ecuacion: adjustedLeadTime = representativeFirst * (1 + (1 - confidenceNorm) * 0.50).
+             * Uso en esta v1: priorizar rapidez observada sin ignorar cobertura/estabilidad del historico.
+             * Referencia conceptual: heuristica interna de priorizacion BI; no corresponde a una formula estandar de ERP.
+             */
             Double adjustedLeadTimeDays = representativeFirst == null || firstConfidence == null
                     ? null
                     : round2(representativeFirst * (1.0d + (1.0d - (firstConfidence / 100.0d)) * 0.50d));
@@ -222,6 +228,12 @@ public class ProveedoresBiService {
         if (window.ventanaDias() >= FULL_STATISTICAL_MIN_DAYS
                 && leadTimeObs >= FULL_STATISTICAL_MIN_LT_OBS
                 && stdLeadTime > EPSILON) {
+            /*
+             * Modelo: punto de reorden con demanda y lead time variables.
+             * Ecuacion: ROP = d * L + z * sqrt(L * sigma_d^2 + d^2 * sigma_L^2).
+             * Uso en esta v1: estimar inventario de disparo cuando hay suficiente ventana historica y variabilidad de lead time.
+             * Referencia conceptual: literatura clasica de inventory control, safety stock y reorder point bajo incertidumbre conjunta.
+             */
             metodo = "FULL_STATISTICAL";
             puntoReorden = avgDemand * representativeLeadTime
                     + SERVICE_LEVEL_Z * Math.sqrt(
@@ -229,10 +241,22 @@ public class ProveedoresBiService {
                             + Math.pow(avgDemand, 2) * Math.pow(stdLeadTime, 2)
             );
         } else if (window.ventanaDias() >= FULL_STATISTICAL_MIN_DAYS) {
+            /*
+             * Modelo: punto de reorden con demanda variable y lead time tratado como practicamente fijo.
+             * Ecuacion: ROP = d * L + z * sigma_d * sqrt(L).
+             * Uso en esta v1: fallback cuando hay historia de demanda suficiente, pero no soporte robusto para variabilidad del lead time.
+             * Referencia conceptual: safety stock clasico bajo demanda aleatoria y lead time fijo.
+             */
             metodo = "DEMAND_ONLY_STATISTICAL";
             puntoReorden = avgDemand * representativeLeadTime
                     + SERVICE_LEVEL_Z * stdDemand * Math.sqrt(representativeLeadTime);
         } else {
+            /*
+             * Modelo: punto de reorden deterministico basico.
+             * Ecuacion: ROP = d * L.
+             * Uso en esta v1: fallback minimo cuando no hay base suficiente para componente estadistico de seguridad.
+             * Referencia conceptual: reorder point deterministico de reposicion basica.
+             */
             metodo = "DETERMINISTIC";
             puntoReorden = avgDemand * representativeLeadTime;
         }
@@ -425,6 +449,12 @@ public class ProveedoresBiService {
                 .max(LocalDateTime::compareTo)
                 .orElse(null);
 
+        /*
+         * Modelo: lead time representativo como resumen operativo del historico valido.
+         * Ecuacion/regla: si n >= 3 usar mediana; si n < 3 usar promedio.
+         * Uso en esta v1: la mediana aporta robustez ante atipicos cuando ya existe muestra minima; con pocas observaciones se usa el promedio por simplicidad.
+         * Referencia conceptual: criterio robusto interno de BI v1 para representar tendencia central util en decisiones operativas.
+         */
         return new LeadTimeStatsDTO(
                 true,
                 null,
@@ -522,6 +552,12 @@ public class ProveedoresBiService {
             double cv = std / mean;
             variabilityScore = clamp01(1.0d - Math.min(cv, MAX_CV_FOR_VARIABILITY_SCORE) / MAX_CV_FOR_VARIABILITY_SCORE);
         }
+        /*
+         * Modelo: score heuristico de calidad del estimado en escala 0..100.
+         * Ecuacion: confidence = 100 * (0.40 * coverage + 0.35 * sample + 0.25 * variability).
+         * Uso en esta v1: combinar cobertura, tamano de muestra y estabilidad via coeficiente de variacion para comunicar solidez del dato.
+         * Referencia conceptual: heuristica interna de BI; no es una metrica estadistica estandar unica de la literatura.
+         */
         return (int) Math.round(100.0d * (0.40d * coverageScore + 0.35d * sampleScore + 0.25d * variabilityScore));
     }
 
@@ -529,6 +565,12 @@ public class ProveedoresBiService {
         double leadTimeScore = leadTimeConfidence != null ? clamp01(leadTimeConfidence / 100.0d) : 0.0d;
         double windowScore = clamp01(totalDays / 90.0d);
         double demandSpreadScore = clamp01(nonZeroDemandDays / 30.0d);
+        /*
+         * Modelo: score de confianza del punto de reorden para comunicacion BI en UI.
+         * Ecuacion: ropConfidence = 100 * (0.45 * windowScore + 0.20 * demandSpreadScore + 0.35 * leadTimeScore).
+         * Uso en esta v1: mezclar amplitud temporal, presencia distribuida de demanda y confianza previa del lead time.
+         * Referencia conceptual: heuristica interna de comunicabilidad BI; no pretende reemplazar una validacion estadistica formal del ROP.
+         */
         return (int) Math.round(100.0d * (0.45d * windowScore + 0.20d * demandSpreadScore + 0.35d * leadTimeScore));
     }
 
