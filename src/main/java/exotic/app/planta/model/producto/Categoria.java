@@ -1,8 +1,11 @@
 package exotic.app.planta.model.producto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.*;
 
@@ -38,6 +41,12 @@ public class Categoria {
     @Getter(AccessLevel.NONE)
     private Integer capacidadProductivaDiaria;
 
+    @ManyToOne
+    @JoinColumn(name = "pool_capacidad_id")
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    private PoolCapacidad poolCapacidad;
+
     /**
      * @return the lote size assigned to the category, or 0 if it has not been set
      */
@@ -59,4 +68,8 @@ public class Categoria {
         return capacidadProductivaDiaria != null ? capacidadProductivaDiaria : 0;
     }
 
+    @JsonIgnore
+    public PoolCapacidad getPoolCapacidad() {
+        return poolCapacidad;
+    }
 }

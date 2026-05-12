@@ -12,6 +12,7 @@ import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalSummaryDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsUnscheduledBlockDTO;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.PoolCapacidad;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
@@ -35,6 +36,22 @@ public class MasterProductionScheduleService {
 
     private final TerminadoRepo terminadoRepo;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
+
+    private record CapacityUnit(
+            String rowKey,
+            Integer categoriaId,
+            String categoriaNombre,
+            Integer poolCapacidadId,
+            String poolCapacidadNombre,
+            int capacidadDiaria
+    ) {}
+
+    private record ProductCategoryContext(
+            Integer categoriaId,
+            String categoriaNombre,
+            Integer poolCapacidadId,
+            String poolCapacidadNombre
+    ) {}
 
     public PropuestaMpsSemanalResponseDTO calcularPropuestaSemanal(PropuestaMpsSemanalRequestDTO request) {
         if (request == null || request.getWeekStartDate() == null) {
@@ -101,14 +118,28 @@ public class MasterProductionScheduleService {
         LinkedHashMap<String, PropuestaMpsCalendarRowDTO> rowsMap = new LinkedHashMap<>();
         for (PropuestaMpsSemanalItemDTO item : items) {
             Terminado terminado = terminadosMap.get(item.getProductoId());
-            Categoria categoria = terminado != null ? terminado.getCategoria() : null;
-            Integer categoriaId = categoria != null ? categoria.getCategoriaId() : null;
-            String categoriaNombre = categoria != null ? categoria.getCategoriaNombre() : "Sin categoria";
-            int capacidadDiaria = categoria != null ? categoria.getCapacidadProductivaDiaria() : 0;
-            String rowKey = categoriaId != null ? String.valueOf(categoriaId) : "sin-categoria";
+            CapacityUnit capacityUnit = resolveCapacityUnit(terminado);
 
-            rowsMap.computeIfAbsent(rowKey, key -> createCalendarRow(categoriaId, categoriaNombre, capacidadDiaria, weekStartDate));
-            scheduleItemIntoCalendar(calendar, rowsMap.get(rowKey), item, categoriaId, categoriaNombre, capacidadDiaria);
+            rowsMap.computeIfAbsent(
+                    capacityUnit.rowKey(),
+                    key -> createCalendarRow(
+                            capacityUnit.rowKey(),
+                            capacityUnit.categoriaId(),
+                            capacityUnit.categoriaNombre(),
+                            capacityUnit.poolCapacidadId(),
+                            capacityUnit.poolCapacidadNombre(),
+                            capacityUnit.capacidadDiaria(),
+                            weekStartDate
+                    )
+            );
+            ProductCategoryContext productCategory = resolveProductCategoryContext(terminado);
+            scheduleItemIntoCalendar(
+                    calendar,
+                    rowsMap.get(capacityUnit.rowKey()),
+                    item,
+                    productCategory,
+                    capacityUnit.capacidadDiaria()
+            );
         }
 
         rowsMap.values().forEach(this::recalculateRowState);
@@ -117,14 +148,20 @@ public class MasterProductionScheduleService {
     }
 
     private PropuestaMpsCalendarRowDTO createCalendarRow(
+            String rowKey,
             Integer categoriaId,
             String categoriaNombre,
+            Integer poolCapacidadId,
+            String poolCapacidadNombre,
             int capacidadDiaria,
             LocalDate weekStartDate
     ) {
         PropuestaMpsCalendarRowDTO row = new PropuestaMpsCalendarRowDTO();
+        row.setRowKey(rowKey);
         row.setCategoriaId(categoriaId);
         row.setCategoriaNombre(categoriaNombre);
+        row.setPoolCapacidadId(poolCapacidadId);
+        row.setPoolCapacidadNombre(poolCapacidadNombre);
         row.setCapacidadDiaria(capacidadDiaria);
         row.setCapacidadTeoricaSemana(Math.max(capacidadDiaria, 0) * 6);
 
@@ -145,12 +182,15 @@ public class MasterProductionScheduleService {
             PropuestaMpsSemanalCalendarDTO calendar,
             PropuestaMpsCalendarRowDTO row,
             PropuestaMpsSemanalItemDTO item,
-            Integer categoriaId,
-            String categoriaNombre,
+            ProductCategoryContext productCategory,
             int capacidadDiaria
     ) {
         if (!item.isPlanificable()) {
-            calendar.getUnscheduled().add(createUnscheduledBlock(item, categoriaId, categoriaNombre, resolveUnscheduledReason(item)));
+            calendar.getUnscheduled().add(createUnscheduledBlock(
+                    item,
+                    productCategory,
+                    resolveUnscheduledReason(item)
+            ));
             return;
         }
 
@@ -159,17 +199,29 @@ public class MasterProductionScheduleService {
         }
 
         if (capacidadDiaria <= 0) {
-            calendar.getUnscheduled().add(createUnscheduledBlock(item, categoriaId, categoriaNombre, "Sin capacidad configurada"));
+            calendar.getUnscheduled().add(createUnscheduledBlock(
+                    item,
+                    productCategory,
+                    "Sin capacidad configurada"
+            ));
             return;
         }
 
         if (item.getLoteSize() <= 0) {
-            calendar.getUnscheduled().add(createUnscheduledBlock(item, categoriaId, categoriaNombre, "Sin lote size configurado"));
+            calendar.getUnscheduled().add(createUnscheduledBlock(
+                    item,
+                    productCategory,
+                    "Sin lote size configurado"
+            ));
             return;
         }
 
         if (item.getLoteSize() > capacidadDiaria) {
-            calendar.getUnscheduled().add(createUnscheduledBlock(item, categoriaId, categoriaNombre, "Lote mayor que capacidad diaria"));
+            calendar.getUnscheduled().add(createUnscheduledBlock(
+                    item,
+                    productCategory,
+                    "Lote mayor que capacidad diaria"
+            ));
             return;
         }
 
@@ -186,8 +238,10 @@ public class MasterProductionScheduleService {
             block.setBlockId(buildBlockId(item.getProductoId(), cell.getDayIndex()));
             block.setProductoId(item.getProductoId());
             block.setProductoNombre(item.getProductoNombre());
-            block.setCategoriaId(categoriaId);
-            block.setCategoriaNombre(categoriaNombre);
+            block.setCategoriaId(productCategory.categoriaId());
+            block.setCategoriaNombre(productCategory.categoriaNombre());
+            block.setPoolCapacidadId(productCategory.poolCapacidadId());
+            block.setPoolCapacidadNombre(productCategory.poolCapacidadNombre());
             block.setLoteSize(item.getLoteSize());
             block.setLotesAsignados(lotesAsignados);
             block.setCantidadAsignada(lotesAsignados * item.getLoteSize());
@@ -203,8 +257,7 @@ public class MasterProductionScheduleService {
         if (lotesRestantes > 0) {
             calendar.getUnscheduled().add(createUnscheduledBlock(
                     item,
-                    categoriaId,
-                    categoriaNombre,
+                    productCategory,
                     "Sin capacidad restante en la semana",
                     lotesRestantes
             ));
@@ -234,17 +287,20 @@ public class MasterProductionScheduleService {
 
     private PropuestaMpsUnscheduledBlockDTO createUnscheduledBlock(
             PropuestaMpsSemanalItemDTO item,
-            Integer categoriaId,
-            String categoriaNombre,
+            ProductCategoryContext productCategory,
             String reason
     ) {
-        return createUnscheduledBlock(item, categoriaId, categoriaNombre, reason, item.getLotesPropuestos());
+        return createUnscheduledBlock(
+                item,
+                productCategory,
+                reason,
+                item.getLotesPropuestos()
+        );
     }
 
     private PropuestaMpsUnscheduledBlockDTO createUnscheduledBlock(
             PropuestaMpsSemanalItemDTO item,
-            Integer categoriaId,
-            String categoriaNombre,
+            ProductCategoryContext productCategory,
             String reason,
             int lotesAsignados
     ) {
@@ -252,8 +308,10 @@ public class MasterProductionScheduleService {
         block.setBlockId(buildBlockId(item.getProductoId(), "unscheduled-" + reason.replace(" ", "-").toLowerCase()));
         block.setProductoId(item.getProductoId());
         block.setProductoNombre(item.getProductoNombre());
-        block.setCategoriaId(categoriaId);
-        block.setCategoriaNombre(categoriaNombre);
+        block.setCategoriaId(productCategory.categoriaId());
+        block.setCategoriaNombre(productCategory.categoriaNombre());
+        block.setPoolCapacidadId(productCategory.poolCapacidadId());
+        block.setPoolCapacidadNombre(productCategory.poolCapacidadNombre());
         block.setLoteSize(item.getLoteSize());
         block.setLotesAsignados(Math.max(lotesAsignados, 0));
         block.setCantidadAsignada(Math.max(lotesAsignados, 0) * item.getLoteSize());
@@ -357,9 +415,12 @@ public class MasterProductionScheduleService {
         item.setFechaLanzamientoSugerida(weekStartDate);
 
         Categoria categoria = terminado.getCategoria();
+        PoolCapacidad poolCapacidad = categoria != null ? categoria.getPoolCapacidad() : null;
         int loteSize = categoria != null ? categoria.getLoteSize() : 0;
         int tiempoDiasFabricacion = categoria != null ? categoria.getTiempoDiasFabricacion() : 0;
         item.setCategoriaNombre(categoria != null ? categoria.getCategoriaNombre() : null);
+        item.setPoolCapacidadId(poolCapacidad != null ? poolCapacidad.getId() : null);
+        item.setPoolCapacidadNombre(poolCapacidad != null ? poolCapacidad.getNombre() : null);
         item.setLoteSize(loteSize);
         item.setTiempoDiasFabricacion(tiempoDiasFabricacion);
 
@@ -406,6 +467,60 @@ public class MasterProductionScheduleService {
         }
 
         return item;
+    }
+
+    private CapacityUnit resolveCapacityUnit(Terminado terminado) {
+        Categoria categoria = terminado != null ? terminado.getCategoria() : null;
+        if (categoria == null) {
+            return new CapacityUnit("sin-categoria", null, "Sin categoria", null, null, 0);
+        }
+
+        PoolCapacidad poolCapacidad = categoria.getPoolCapacidad();
+        if (poolCapacidad != null && poolCapacidad.getId() != null) {
+            String poolNombre = poolCapacidad.getNombre() != null && !poolCapacidad.getNombre().isBlank()
+                    ? poolCapacidad.getNombre()
+                    : "Pool sin nombre";
+            return new CapacityUnit(
+                    "pool::" + poolCapacidad.getId(),
+                    null,
+                    null,
+                    poolCapacidad.getId(),
+                    poolNombre,
+                    normalizeCapacidad(poolCapacidad.getCapacidadDiaria())
+            );
+        }
+
+        Integer categoriaId = categoria.getCategoriaId();
+        String categoriaNombre = categoria.getCategoriaNombre() != null && !categoria.getCategoriaNombre().isBlank()
+                ? categoria.getCategoriaNombre()
+                : "Sin categoria";
+        return new CapacityUnit(
+                categoriaId != null ? "categoria::" + categoriaId : "sin-categoria",
+                categoriaId,
+                categoriaNombre,
+                null,
+                null,
+                normalizeCapacidad(categoria.getCapacidadProductivaDiaria())
+        );
+    }
+
+    private ProductCategoryContext resolveProductCategoryContext(Terminado terminado) {
+        Categoria categoria = terminado != null ? terminado.getCategoria() : null;
+        if (categoria == null) {
+            return new ProductCategoryContext(null, null, null, null);
+        }
+
+        PoolCapacidad poolCapacidad = categoria.getPoolCapacidad();
+        return new ProductCategoryContext(
+                categoria.getCategoriaId(),
+                categoria.getCategoriaNombre(),
+                poolCapacidad != null ? poolCapacidad.getId() : null,
+                poolCapacidad != null ? poolCapacidad.getNombre() : null
+        );
+    }
+
+    private int normalizeCapacidad(Integer capacidad) {
+        return capacidad != null ? Math.max(capacidad, 0) : 0;
     }
 
     private double normalizeStock(Double stock) {

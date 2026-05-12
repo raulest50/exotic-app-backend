@@ -1,11 +1,12 @@
 package exotic.app.planta.resource.productos;
 
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.dto.CategoriaResponseDTO;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateIdException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateNameException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.EmptyFieldException;
-import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.ValidationException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.ErrorResponse;
+import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.ValidationException;
 import exotic.app.planta.service.productos.CategoriaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,57 +28,32 @@ public class CategoriaResource {
 
     private final CategoriaService categoriaService;
 
-    /**
-     * Endpoint para guardar una nueva categoría o actualizar una existente
-     * @param categoria La categoría a guardar
-     * @return La categoría guardada
-     * @throws EmptyFieldException si el nombre de la categoría está vacío
-     * @throws DuplicateIdException si ya existe una categoría con el mismo ID
-     * @throws DuplicateNameException si ya existe una categoría con el mismo nombre
-     */
     @PostMapping
-    public ResponseEntity<Categoria> saveCategoria(@RequestBody Categoria categoria) {
-        Categoria savedCategoria = categoriaService.saveCategoria(categoria);
+    public ResponseEntity<CategoriaResponseDTO> saveCategoria(@RequestBody Categoria categoria) {
+        CategoriaResponseDTO savedCategoria = categoriaService.saveCategoria(categoria);
         return ResponseEntity
                 .created(URI.create("/categorias/" + savedCategoria.getCategoriaId()))
                 .body(savedCategoria);
     }
 
-    /**
-     * Endpoint para obtener todas las categorías registradas
-     * @return Lista de todas las categorías
-     */
     @GetMapping
-    public ResponseEntity<List<Categoria>> getAllCategorias() {
-        List<Categoria> categorias = categoriaService.getAllCategorias();
+    public ResponseEntity<List<CategoriaResponseDTO>> getAllCategorias() {
+        List<CategoriaResponseDTO> categorias = categoriaService.getAllCategorias();
         return ResponseEntity.ok(categorias);
     }
 
-    /**
-     * Endpoint para buscar categorías por nombre con coincidencia parcial y paginación
-     * @param nombre nombre o fragmento a buscar; vacío retorna todas las categorías
-     * @param page número de página (default 0)
-     * @param size tamaño de página (default 10)
-     * @return página de categorías
-     */
     @GetMapping("/search")
-    public ResponseEntity<Page<Categoria>> searchCategorias(
+    public ResponseEntity<Page<CategoriaResponseDTO>> searchCategorias(
             @RequestParam(value = "nombre", required = false) String nombre,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "10") int size
     ) {
-        Page<Categoria> categorias = categoriaService.searchCategorias(nombre, page, size);
+        Page<CategoriaResponseDTO> categorias = categoriaService.searchCategorias(nombre, page, size);
         return ResponseEntity.ok(categorias);
     }
 
-    /**
-     * Endpoint para actualizar el tamaño de lote de una categoría
-     * @param categoriaId ID de la categoría
-     * @param body map con clave "loteSize" y valor numérico >= 0
-     * @return categoría actualizada
-     */
     @PatchMapping("/{categoriaId}/lote-size")
-    public ResponseEntity<Categoria> updateLoteSize(
+    public ResponseEntity<CategoriaResponseDTO> updateLoteSize(
             @PathVariable int categoriaId,
             @RequestBody Map<String, Integer> body
     ) {
@@ -85,25 +61,12 @@ public class CategoriaResource {
         if (loteSize == null) {
             return ResponseEntity.badRequest().build();
         }
-        Categoria updated = categoriaService.updateLoteSize(categoriaId, loteSize);
+        CategoriaResponseDTO updated = categoriaService.updateLoteSize(categoriaId, loteSize);
         return ResponseEntity.ok(updated);
     }
 
-    /**
-     * Endpoint para eliminar una categoría por su ID
-     * Solo se puede eliminar si no está siendo referenciada por ningún producto terminado
-     * @param categoriaId ID de la categoría a eliminar
-     * @return Mensaje de éxito o error
-     * @throws ValidationException si la categoría no existe
-     */
-    /**
-     * Endpoint para actualizar el tiempo de fabricacion por defecto de una categoria
-     * @param categoriaId ID de la categoria
-     * @param body map con clave "tiempoDiasFabricacion" y valor numerico >= 0
-     * @return categoria actualizada
-     */
     @PatchMapping("/{categoriaId}/tiempo-dias-fabricacion")
-    public ResponseEntity<Categoria> updateTiempoDiasFabricacion(
+    public ResponseEntity<CategoriaResponseDTO> updateTiempoDiasFabricacion(
             @PathVariable int categoriaId,
             @RequestBody Map<String, Integer> body
     ) {
@@ -111,18 +74,12 @@ public class CategoriaResource {
         if (tiempoDiasFabricacion == null) {
             return ResponseEntity.badRequest().build();
         }
-        Categoria updated = categoriaService.updateTiempoDiasFabricacion(categoriaId, tiempoDiasFabricacion);
+        CategoriaResponseDTO updated = categoriaService.updateTiempoDiasFabricacion(categoriaId, tiempoDiasFabricacion);
         return ResponseEntity.ok(updated);
     }
 
-    /**
-     * Endpoint para actualizar la capacidad productiva diaria total de una categoria
-     * @param categoriaId ID de la categoria
-     * @param body map con clave "capacidadProductivaDiaria" y valor numerico >= 0
-     * @return categoria actualizada
-     */
     @PatchMapping("/{categoriaId}/capacidad-productiva-diaria")
-    public ResponseEntity<Categoria> updateCapacidadProductivaDiaria(
+    public ResponseEntity<CategoriaResponseDTO> updateCapacidadProductivaDiaria(
             @PathVariable int categoriaId,
             @RequestBody Map<String, Integer> body
     ) {
@@ -130,7 +87,32 @@ public class CategoriaResource {
         if (capacidadProductivaDiaria == null) {
             return ResponseEntity.badRequest().build();
         }
-        Categoria updated = categoriaService.updateCapacidadProductivaDiaria(categoriaId, capacidadProductivaDiaria);
+        CategoriaResponseDTO updated = categoriaService.updateCapacidadProductivaDiaria(categoriaId, capacidadProductivaDiaria);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/{categoriaId}/pool-capacidad")
+    public ResponseEntity<?> updatePoolCapacidad(
+            @PathVariable int categoriaId,
+            @RequestBody Map<String, Object> body
+    ) {
+        if (body == null || !body.containsKey("poolCapacidadId")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El campo poolCapacidadId es obligatorio."));
+        }
+
+        Object rawValue = body.get("poolCapacidadId");
+        Integer poolCapacidadId = null;
+        if (rawValue != null) {
+            if (!(rawValue instanceof Number number)
+                    || number.doubleValue() != Math.rint(number.doubleValue())
+                    || number.doubleValue() < Integer.MIN_VALUE
+                    || number.doubleValue() > Integer.MAX_VALUE) {
+                return ResponseEntity.badRequest().body(Map.of("error", "poolCapacidadId debe ser un entero o null."));
+            }
+            poolCapacidadId = number.intValue();
+        }
+
+        CategoriaResponseDTO updated = categoriaService.updatePoolCapacidad(categoriaId, poolCapacidadId);
         return ResponseEntity.ok(updated);
     }
 
@@ -140,42 +122,32 @@ public class CategoriaResource {
 
         if (deleted) {
             return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Categoría eliminada exitosamente"
-            ));
-        } else {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                "success", false,
-                "message", "No se puede eliminar la categoría porque está siendo utilizada por uno o más productos terminados"
+                    "success", true,
+                    "message", "Categoria eliminada exitosamente"
             ));
         }
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "success", false,
+                "message", "No se puede eliminar la categoria porque esta siendo utilizada por uno o mas productos terminados"
+        ));
     }
 
-    /**
-     * Manejador para argumentos inválidos (ej. loteSize negativo)
-     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException e) {
-        log.warn("Argumento inválido: {}", e.getMessage());
+        log.warn("Argumento invalido: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(e.getMessage()));
     }
 
-    /**
-     * Manejador para excepciones de campos vacíos
-     */
     @ExceptionHandler(EmptyFieldException.class)
     public ResponseEntity<ErrorResponse> handleEmptyFieldException(EmptyFieldException e) {
-        log.warn("Error de campo vacío: {}", e.getMessage());
+        log.warn("Error de campo vacio: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(e.getMessage()));
     }
 
-    /**
-     * Manejador para excepciones de ID duplicado
-     */
     @ExceptionHandler(DuplicateIdException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateIdException(DuplicateIdException e) {
         log.warn("Error de ID duplicado: {}", e.getMessage());
@@ -184,9 +156,6 @@ public class CategoriaResource {
                 .body(new ErrorResponse(e.getMessage()));
     }
 
-    /**
-     * Manejador para excepciones de nombre duplicado
-     */
     @ExceptionHandler(DuplicateNameException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateNameException(DuplicateNameException e) {
         log.warn("Error de nombre duplicado: {}", e.getMessage());
@@ -195,20 +164,14 @@ public class CategoriaResource {
                 .body(new ErrorResponse(e.getMessage()));
     }
 
-    /**
-     * Manejador para otras excepciones de validación
-     */
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(ValidationException e) {
-        log.warn("Error de validación: {}", e.getMessage());
+        log.warn("Error de validacion: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(e.getMessage()));
     }
 
-    /**
-     * Manejador para excepciones generales
-     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception e) {
         log.error("Error inesperado: {}", e.getMessage(), e);
@@ -217,20 +180,13 @@ public class CategoriaResource {
                 .body(new ErrorResponse("Error al procesar la solicitud: " + e.getMessage()));
     }
 
-    /**
-     * Endpoint para obtener una categoría por su ID
-     * @param categoriaId ID de la categoría
-     * @return La categoría encontrada
-     * @throws ValidationException si la categoría no existe
-     */
     @GetMapping("/{categoriaId}")
-    public ResponseEntity<Categoria> getCategoriaById(@PathVariable int categoriaId) {
-        Optional<Categoria> categoriaOpt = categoriaService.getCategoriaById(categoriaId);
+    public ResponseEntity<CategoriaResponseDTO> getCategoriaById(@PathVariable int categoriaId) {
+        Optional<CategoriaResponseDTO> categoriaOpt = categoriaService.getCategoriaById(categoriaId);
 
         if (categoriaOpt.isPresent()) {
             return ResponseEntity.ok(categoriaOpt.get());
-        } else {
-            throw new ValidationException("No se encontró categoría con ID: " + categoriaId);
         }
+        throw new ValidationException("No se encontro categoria con ID: " + categoriaId);
     }
 }

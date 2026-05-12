@@ -6,7 +6,9 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.commons.BackupTotalImportService;
+import exotic.app.planta.service.commons.ImportedPasswordSanitizationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
+
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
@@ -26,9 +30,11 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 @RestController
 @RequestMapping("/api/importacion-datos")
 @RequiredArgsConstructor
+@Slf4j
 public class ImportacionDatosResource {
 
     private final BackupTotalImportService backupTotalImportService;
+    private final ImportedPasswordSanitizationService importedPasswordSanitizationService;
     private final UserRepository userRepository;
 
     @PostMapping("/backup-total/jobs")
@@ -40,6 +46,38 @@ public class ImportacionDatosResource {
             User currentUser = requireAuthorizedUser(authentication);
             BackupTotalImportJobResponseDTO response = backupTotalImportService.createJob(currentUser, file);
             return ResponseEntity.accepted().body(response);
+        } catch (UnsupportedOperationException e) {
+            throw new ResponseStatusException(FORBIDDEN, e.getMessage());
+        }
+    }
+
+    @PostMapping("/password-sanitization/reset")
+    public ResponseEntity<PasswordSanitizationResetResponse> resetNonProductionPasswords(
+            Authentication authentication
+    ) {
+        try {
+            String username = requireAuthenticatedUsername(authentication);
+            if (!isMasterLike(username)) {
+                throw new ResponseStatusException(FORBIDDEN, "Solo master o super_master pueden resetear contrasenas en entornos no productivos.");
+            }
+
+            ImportedPasswordSanitizationService.PasswordSanitizationResult result =
+                    importedPasswordSanitizationService.sanitizeNonPrivilegedUserPasswords();
+
+            log.warn(
+                    "Reset no productivo de contrasenas ejecutado. requestedBy={}, sanitizedUsers={}, privilegedUsersSkipped={}, invalidUsersSkipped={}",
+                    username,
+                    result.sanitizedUsers(),
+                    result.privilegedUsersSkipped(),
+                    result.invalidUsersSkipped()
+            );
+
+            return ResponseEntity.ok(new PasswordSanitizationResetResponse(
+                    result.sanitizedUsers(),
+                    result.privilegedUsersSkipped(),
+                    result.invalidUsersSkipped(),
+                    "Reset de contrasenas no productivo ejecutado correctamente."
+            ));
         } catch (UnsupportedOperationException e) {
             throw new ResponseStatusException(FORBIDDEN, e.getMessage());
         }
@@ -97,7 +135,15 @@ public class ImportacionDatosResource {
 
     private boolean isMasterLike(String username) {
         if (username == null) return false;
-        String normalized = username.toLowerCase();
+        String normalized = username.trim().toLowerCase(Locale.ROOT);
         return "master".equals(normalized) || "super_master".equals(normalized);
+    }
+
+    public record PasswordSanitizationResetResponse(
+            int sanitizedUsers,
+            int privilegedUsersSkipped,
+            int invalidUsersSkipped,
+            String message
+    ) {
     }
 }

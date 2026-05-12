@@ -11,6 +11,8 @@ public class PropuestaMpsSemanalItemDTO {
     private String productoId;
     private String productoNombre;
     private String categoriaNombre;
+    private Integer poolCapacidadId;
+    private String poolCapacidadNombre;
     private int loteSize;
     private int tiempoDiasFabricacion;
     private double stockActual;

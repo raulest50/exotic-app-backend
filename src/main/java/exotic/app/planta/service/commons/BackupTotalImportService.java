@@ -55,6 +55,7 @@ public class BackupTotalImportService {
     private final PgDumpExecutableResolver pgDumpExecutableResolver;
     private final DangerousOperationGuard dangerousOperationGuard;
     private final DatabasePurgeService databasePurgeService;
+    private final ImportedPasswordSanitizationService importedPasswordSanitizationService;
 
     private final ConcurrentMap<String, ImportJob> jobsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> activeJobByUsername = new ConcurrentHashMap<>();
@@ -70,7 +71,8 @@ public class BackupTotalImportService {
             @Value("${spring.datasource.password}") String datasourcePassword,
             PgDumpExecutableResolver pgDumpExecutableResolver,
             DangerousOperationGuard dangerousOperationGuard,
-            DatabasePurgeService databasePurgeService
+            DatabasePurgeService databasePurgeService,
+            ImportedPasswordSanitizationService importedPasswordSanitizationService
     ) {
         this.dataSource = dataSource;
         this.datasourceUrl = datasourceUrl;
@@ -79,6 +81,7 @@ public class BackupTotalImportService {
         this.pgDumpExecutableResolver = pgDumpExecutableResolver;
         this.dangerousOperationGuard = dangerousOperationGuard;
         this.databasePurgeService = databasePurgeService;
+        this.importedPasswordSanitizationService = importedPasswordSanitizationService;
         this.importExecutor = Executors.newSingleThreadExecutor(new ImportThreadFactory());
     }
 
@@ -277,15 +280,32 @@ public class BackupTotalImportService {
                 return;
             }
 
+            job.message = "Saneando contrasenas importadas para entorno no productivo...";
+            ImportedPasswordSanitizationService.PasswordSanitizationResult sanitizationResult;
+            try {
+                sanitizationResult = importedPasswordSanitizationService.sanitizeImportedUserPasswords();
+            } catch (Exception e) {
+                markJobError(
+                        job,
+                        "PASSWORD_SANITIZATION_FAILED",
+                        "La importacion finalizo, pero no fue posible sanear las credenciales importadas.",
+                        e.getMessage()
+                );
+                return;
+            }
+
             job.status = JobStatus.LISTO;
             job.finishedAt = AppTime.now();
             job.expiresAt = job.finishedAt.plus(JOB_TTL);
             job.message = "La importacion total de la base de datos finalizo correctamente.";
 
-            log.warn("Importacion total PostgreSQL completada. jobId={}, user={}, durationSeconds={}",
+            log.warn("Importacion total PostgreSQL completada. jobId={}, user={}, durationSeconds={}, sanitizedUsers={}, privilegedUsersSkipped={}, invalidUsersSkipped={}",
                     job.jobId,
                     job.ownerUsername,
-                    Duration.between(startedAt, job.finishedAt).toSeconds());
+                    Duration.between(startedAt, job.finishedAt).toSeconds(),
+                    sanitizationResult.sanitizedUsers(),
+                    sanitizationResult.privilegedUsersSkipped(),
+                    sanitizationResult.invalidUsersSkipped());
         } catch (PgDumpExecutableResolver.PgDumpResolutionException e) {
             markJobError(job, e.getErrorCode(), e.getMessage(), null);
         } catch (UnsupportedOperationException e) {

@@ -9,8 +9,11 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class PropuestaMpsCalendarRowDTO {
+    private String rowKey;
     private Integer categoriaId;
     private String categoriaNombre;
+    private Integer poolCapacidadId;
+    private String poolCapacidadNombre;
     private int capacidadDiaria;
     private List<PropuestaMpsCalendarCellDTO> days = new ArrayList<>();
     private double totalAsignadoSemana;

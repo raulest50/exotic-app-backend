@@ -1,8 +1,11 @@
 package exotic.app.planta.service.productos;
 
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.PoolCapacidad;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.dto.CategoriaResponseDTO;
 import exotic.app.planta.repo.producto.CategoriaRepo;
+import exotic.app.planta.repo.producto.PoolCapacidadRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateIdException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateNameException;
@@ -27,172 +30,148 @@ public class CategoriaService {
 
     private final CategoriaRepo categoriaRepo;
     private final TerminadoRepo terminadoRepo;
+    private final PoolCapacidadRepo poolCapacidadRepo;
 
     /**
-     * Guarda una nueva categoría o actualiza una existente, verificando que el ID y nombre sean únicos
-     * @param categoria La categoría a guardar
-     * @return La categoría guardada
-     * @throws EmptyFieldException si el nombre de la categoría está vacío
-     * @throws DuplicateIdException si ya existe una categoría con el mismo ID
-     * @throws DuplicateNameException si ya existe una categoría con el mismo nombre
+     * Guarda una nueva categoria o actualiza una existente, verificando que el ID y nombre sean unicos.
+     * Cuando la categoria ya existe, solo actualiza nombre y descripcion; los parametros de planeacion
+     * y el pool de capacidad se administran por endpoints dedicados.
      */
     @Transactional
-    public Categoria saveCategoria(Categoria categoria) {
-        log.info("Intentando guardar categoría: {}", categoria.getCategoriaNombre());
+    public CategoriaResponseDTO saveCategoria(Categoria categoria) {
+        log.info("Intentando guardar categoria: {}", categoria.getCategoriaNombre());
 
-        // Validar que el nombre no esté vacío
         if (categoria.getCategoriaNombre() == null || categoria.getCategoriaNombre().trim().isEmpty()) {
-            throw new EmptyFieldException("El nombre de la categoría no puede estar vacío");
+            throw new EmptyFieldException("El nombre de la categoria no puede estar vacio");
         }
 
-        // Verificar si ya existe una categoría con el mismo ID
+        String categoriaNombre = categoria.getCategoriaNombre().trim();
+        categoria.setCategoriaNombre(categoriaNombre);
+
         if (categoria.getCategoriaId() > 0 && categoriaRepo.existsById(categoria.getCategoriaId())) {
-            Optional<Categoria> existingCategoria = categoriaRepo.findById(categoria.getCategoriaId());
-            // Si estamos actualizando la misma categoría (mismo ID), verificamos que el nombre no colisione con otra categoría
-            if (existingCategoria.isPresent() && !existingCategoria.get().getCategoriaNombre().equals(categoria.getCategoriaNombre())) {
-                if (categoriaRepo.existsByCategoriaNombre(categoria.getCategoriaNombre())) {
-                    throw new DuplicateNameException("Ya existe una categoría con el nombre: " + categoria.getCategoriaNombre());
-                }
+            Categoria existingCategoria = categoriaRepo.findById(categoria.getCategoriaId())
+                    .orElseThrow(() -> new ValidationException("No existe categoria con ID: " + categoria.getCategoriaId()));
+
+            if (!existingCategoria.getCategoriaNombre().equals(categoriaNombre)
+                    && categoriaRepo.existsByCategoriaNombre(categoriaNombre)) {
+                throw new DuplicateNameException("Ya existe una categoria con el nombre: " + categoriaNombre);
             }
-            // Es una actualización válida
-            log.info("Actualizando categoría existente con ID: {}", categoria.getCategoriaId());
-            return categoriaRepo.save(categoria);
+
+            log.info("Actualizando categoria existente con ID: {}", categoria.getCategoriaId());
+            existingCategoria.setCategoriaNombre(categoriaNombre);
+            existingCategoria.setCategoriaDescripcion(categoria.getCategoriaDescripcion());
+            return CategoriaResponseDTO.fromEntity(categoriaRepo.save(existingCategoria));
         }
 
-        // Es una nueva categoría, verificar que el ID no exista
         if (categoria.getCategoriaId() > 0 && categoriaRepo.existsById(categoria.getCategoriaId())) {
-            throw new DuplicateIdException("Ya existe una categoría con el ID: " + categoria.getCategoriaId());
+            throw new DuplicateIdException("Ya existe una categoria con el ID: " + categoria.getCategoriaId());
         }
 
-        // Verificar que el nombre no exista
-        if (categoriaRepo.existsByCategoriaNombre(categoria.getCategoriaNombre())) {
-            throw new DuplicateNameException("Ya existe una categoría con el nombre: " + categoria.getCategoriaNombre());
+        if (categoriaRepo.existsByCategoriaNombre(categoriaNombre)) {
+            throw new DuplicateNameException("Ya existe una categoria con el nombre: " + categoriaNombre);
         }
 
-        log.info("Guardando nueva categoría: {}", categoria.getCategoriaNombre());
-        return categoriaRepo.save(categoria);
+        log.info("Guardando nueva categoria: {}", categoria.getCategoriaNombre());
+        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
 
-    /**
-     * Obtiene todas las categorías registradas
-     * @return Lista de todas las categorías
-     */
-    public List<Categoria> getAllCategorias() {
-        log.info("Obteniendo todas las categorías");
-        return categoriaRepo.findAll();
+    @Transactional(readOnly = true)
+    public List<CategoriaResponseDTO> getAllCategorias() {
+        log.info("Obteniendo todas las categorias");
+        return categoriaRepo.findAllWithPoolCapacidad().stream()
+                .map(CategoriaResponseDTO::fromEntity)
+                .toList();
     }
 
-    /**
-     * Elimina una categoría por su ID, solo si no está siendo referenciada por ningún producto terminado
-     * @param categoriaId ID de la categoría a eliminar
-     * @return true si la categoría fue eliminada, false si no se pudo eliminar porque está siendo referenciada
-     * @throws ValidationException si la categoría no existe
-     */
     @Transactional
     public boolean deleteCategoriaById(int categoriaId) {
-        log.info("Intentando eliminar categoría con ID: {}", categoriaId);
+        log.info("Intentando eliminar categoria con ID: {}", categoriaId);
 
-        // Verificar si la categoría existe
         if (!categoriaRepo.existsById(categoriaId)) {
-            log.error("No se encontró categoría con ID: {}", categoriaId);
-            throw new ValidationException("No existe categoría con ID: " + categoriaId);
+            log.error("No se encontro categoria con ID: {}", categoriaId);
+            throw new ValidationException("No existe categoria con ID: " + categoriaId);
         }
 
-        // Verificar si hay productos terminados que referencian esta categoría
-        Specification<Terminado> spec = (root, query, cb) -> 
-            cb.equal(root.get("categoria").get("categoriaId"), categoriaId);
+        Specification<Terminado> spec = (root, query, cb) ->
+                cb.equal(root.get("categoria").get("categoriaId"), categoriaId);
 
         long count = terminadoRepo.count(spec);
 
         if (count > 0) {
-            log.warn("No se puede eliminar la categoría con ID: {} porque está siendo referenciada por {} productos terminados", 
+            log.warn("No se puede eliminar la categoria con ID: {} porque esta siendo referenciada por {} productos terminados",
                     categoriaId, count);
             return false;
         }
 
-        // Si no hay referencias, eliminar la categoría
         categoriaRepo.deleteById(categoriaId);
-        log.info("Categoría con ID: {} eliminada exitosamente", categoriaId);
+        log.info("Categoria con ID: {} eliminada exitosamente", categoriaId);
         return true;
     }
 
-    /**
-     * Obtiene una categoría por su ID
-     * @param categoriaId ID de la categoría
-     * @return La categoría encontrada o vacío si no existe
-     */
-    public Optional<Categoria> getCategoriaById(int categoriaId) {
-        return categoriaRepo.findById(categoriaId);
+    @Transactional(readOnly = true)
+    public Optional<CategoriaResponseDTO> getCategoriaById(int categoriaId) {
+        return categoriaRepo.findWithPoolCapacidadByCategoriaId(categoriaId)
+                .map(CategoriaResponseDTO::fromEntity);
     }
 
-    /**
-     * Busca categorías por nombre con coincidencia parcial (case-insensitive)
-     * @param nombre nombre o fragmento a buscar; null o vacío retorna todas las categorías
-     * @param page número de página (0-based)
-     * @param size tamaño de página
-     * @return página de categorías
-     */
-    public Page<Categoria> searchCategorias(String nombre, int page, int size) {
+    @Transactional(readOnly = true)
+    public Page<CategoriaResponseDTO> searchCategorias(String nombre, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         if (nombre == null || nombre.isBlank()) {
-            return categoriaRepo.findAll(pageable);
+            return categoriaRepo.findAllWithPoolCapacidad(pageable)
+                    .map(CategoriaResponseDTO::fromEntity);
         }
-        return categoriaRepo.findByCategoriaNombreContainingIgnoreCase(nombre.trim(), pageable);
+        return categoriaRepo.findByCategoriaNombreContainingIgnoreCase(nombre.trim(), pageable)
+                .map(CategoriaResponseDTO::fromEntity);
     }
 
-    /**
-     * Actualiza el tamaño de lote de una categoría
-     * @param categoriaId ID de la categoría
-     * @param loteSize nuevo tamaño de lote (debe ser >= 0)
-     * @return la categoría actualizada
-     * @throws ValidationException si la categoría no existe
-     * @throws IllegalArgumentException si loteSize es negativo
-     */
     @Transactional
-    public Categoria updateLoteSize(int categoriaId, int loteSize) {
+    public CategoriaResponseDTO updateLoteSize(int categoriaId, int loteSize) {
         if (loteSize < 0) {
-            throw new IllegalArgumentException("El tamaño de lote debe ser mayor o igual a 0");
+            throw new IllegalArgumentException("El tamano de lote debe ser mayor o igual a 0");
         }
         Categoria categoria = categoriaRepo.findById(categoriaId)
-                .orElseThrow(() -> new ValidationException("No se encontró categoría con ID: " + categoriaId));
+                .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
         categoria.setLoteSize(loteSize);
-        return categoriaRepo.save(categoria);
+        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
-    /**
-     * Actualiza el tiempo de fabricacion predeterminado de una categoria en dias calendario.
-     * @param categoriaId ID de la categoria
-     * @param tiempoDiasFabricacion nuevo tiempo de fabricacion (debe ser >= 0)
-     * @return la categoria actualizada
-     * @throws ValidationException si la categoria no existe
-     * @throws IllegalArgumentException si tiempoDiasFabricacion es negativo
-     */
+
     @Transactional
-    public Categoria updateTiempoDiasFabricacion(int categoriaId, int tiempoDiasFabricacion) {
+    public CategoriaResponseDTO updateTiempoDiasFabricacion(int categoriaId, int tiempoDiasFabricacion) {
         if (tiempoDiasFabricacion < 0) {
             throw new IllegalArgumentException("El tiempo de fabricacion debe ser mayor o igual a 0");
         }
         Categoria categoria = categoriaRepo.findById(categoriaId)
                 .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
         categoria.setTiempoDiasFabricacion(tiempoDiasFabricacion);
-        return categoriaRepo.save(categoria);
+        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
 
-    /**
-     * Actualiza la capacidad productiva diaria total de una categoria.
-     * @param categoriaId ID de la categoria
-     * @param capacidadProductivaDiaria nueva capacidad productiva diaria (debe ser >= 0)
-     * @return la categoria actualizada
-     * @throws ValidationException si la categoria no existe
-     * @throws IllegalArgumentException si capacidadProductivaDiaria es negativa
-     */
     @Transactional
-    public Categoria updateCapacidadProductivaDiaria(int categoriaId, int capacidadProductivaDiaria) {
+    public CategoriaResponseDTO updateCapacidadProductivaDiaria(int categoriaId, int capacidadProductivaDiaria) {
         if (capacidadProductivaDiaria < 0) {
             throw new IllegalArgumentException("La capacidad productiva diaria debe ser mayor o igual a 0");
         }
         Categoria categoria = categoriaRepo.findById(categoriaId)
                 .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
         categoria.setCapacidadProductivaDiaria(capacidadProductivaDiaria);
-        return categoriaRepo.save(categoria);
+        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
+    }
+
+    @Transactional
+    public CategoriaResponseDTO updatePoolCapacidad(int categoriaId, Integer poolCapacidadId) {
+        Categoria categoria = categoriaRepo.findById(categoriaId)
+                .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
+
+        if (poolCapacidadId == null) {
+            categoria.setPoolCapacidad(null);
+            return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
+        }
+
+        PoolCapacidad poolCapacidad = poolCapacidadRepo.findById(poolCapacidadId)
+                .orElseThrow(() -> new ValidationException("No se encontro pool de capacidad con ID: " + poolCapacidadId));
+
+        categoria.setPoolCapacidad(poolCapacidad);
+        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
 }

@@ -11,6 +11,8 @@ public class PropuestaMpsCalendarBlockDTO {
     private String productoNombre;
     private Integer categoriaId;
     private String categoriaNombre;
+    private Integer poolCapacidadId;
+    private String poolCapacidadNombre;
     private int loteSize;
     private int lotesAsignados;
     private double cantidadAsignada;

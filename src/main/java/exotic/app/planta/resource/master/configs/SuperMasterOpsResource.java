@@ -38,6 +38,7 @@ public class SuperMasterOpsResource {
         return superMasterOpsService.getConfig()
                 .map(config -> {
                     config.setAllowTotalDatabaseImport(applicationRuntimeEnvironmentResolver.isLocalOrStaging());
+                    config.setAllowNonProductionPasswordReset(applicationRuntimeEnvironmentResolver.isLocalOrStaging());
                     return ResponseEntity.ok(config);
                 })
                 .orElse(ResponseEntity.notFound().build());

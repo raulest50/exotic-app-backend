@@ -26,4 +26,7 @@ public class SuperMasterConfig {
 
     @Transient
     private boolean allowTotalDatabaseImport;
+
+    @Transient
+    private boolean allowNonProductionPasswordReset;
 }
