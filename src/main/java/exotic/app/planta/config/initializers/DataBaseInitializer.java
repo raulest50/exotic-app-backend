@@ -26,6 +26,7 @@ public class DataBaseInitializer {
     CommandLineRunner initDatabase() {
         return args -> {
             superMasterConfigInitializer.initializeSuperMasterConfig();
+            masterDirectiveInitializer.initializeMasterDirectives();
             maestraNotificacionInitializer.initializeMaestraNotificaciones();
             areaOperativaInitializer.verifyAlmacenGeneral();
             if (moduloAccesoRepository.count() == 0) {
@@ -33,7 +34,6 @@ public class DataBaseInitializer {
                 usersInitializer.initializeUsers();
                 //cargaMasiva.executeCargaMasiva();
                 cuentasInitializer.initializeCuentas();
-                masterDirectiveInitializer.initializeMasterDirectives();
             } else {
                 log.info("Database is already initialized. Skipping insert initialization.");
             }

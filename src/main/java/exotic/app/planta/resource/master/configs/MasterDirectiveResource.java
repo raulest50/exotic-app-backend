@@ -50,10 +50,11 @@ public class MasterDirectiveResource {
      */
     @PutMapping("/update")
     public ResponseEntity<?> updateMasterDirective(@RequestBody DTO_MasterD_Update updateDTO) {
-        log.info("REST request para actualizar directiva maestra con ID: {}", 
-                updateDTO.getOldMasterDirective().getId());
-        
         try {
+            Long directiveId = updateDTO != null && updateDTO.getOldMasterDirective() != null
+                    ? updateDTO.getOldMasterDirective().getId()
+                    : null;
+            log.info("REST request para actualizar directiva maestra con ID: {}", directiveId);
             MasterDirective updatedDirective = masterDirectiveService.updateMasterDirective(updateDTO);
             return ResponseEntity.ok(updatedDirective);
         } catch (Exception e) {

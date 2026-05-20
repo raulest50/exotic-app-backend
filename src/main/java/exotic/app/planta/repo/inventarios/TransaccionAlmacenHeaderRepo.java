@@ -62,6 +62,11 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         int idEntidadCausante
     );
 
+    long countByTipoEntidadCausanteAndIdEntidadCausante(
+        TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+        int idEntidadCausante
+    );
+
     boolean existsByAsientoContable_Id(Long asientoId);
 
     /**

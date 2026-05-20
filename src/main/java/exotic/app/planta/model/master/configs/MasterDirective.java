@@ -52,6 +52,7 @@ public class MasterDirective {
 
     public enum GRUPO {
         FLEXIBILIDAD_CONTROL,
+        COMPRAS_ALMACEN,
     }
 
     /**

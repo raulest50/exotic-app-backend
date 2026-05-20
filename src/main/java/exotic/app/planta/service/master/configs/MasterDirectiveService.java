@@ -1,6 +1,7 @@
 package exotic.app.planta.service.master.configs;
 
 import exotic.app.planta.model.master.configs.MasterDirective;
+import exotic.app.planta.model.master.configs.MasterDirectiveKeys;
 import exotic.app.planta.model.master.configs.dto.DTO_All_MasterDirectives;
 import exotic.app.planta.model.master.configs.dto.DTO_MasterD_Update;
 import exotic.app.planta.repo.master.configs.MasterDirectiveRepo;
@@ -34,6 +35,29 @@ public class MasterDirectiveService {
         return masterDirectiveRepo.findByNombre(nombre);
     }
 
+    public int getLimiteRecepcionesParcialesOcm() {
+        return getPositiveIntegerDirectiveValue(
+                MasterDirectiveKeys.LIMITE_RECEPCIONES_PARCIALES_OCM,
+                MasterDirectiveKeys.DEFAULT_LIMITE_RECEPCIONES_PARCIALES_OCM
+        );
+    }
+
+    public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
+        Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
+        if (directiveOpt.isEmpty()) {
+            log.warn("Directiva maestra {} no encontrada. Usando fallback {}", nombre, fallback);
+            return fallback;
+        }
+
+        try {
+            return parsePositiveInteger(directiveOpt.get().getValor(), nombre);
+        } catch (IllegalArgumentException e) {
+            log.warn("Valor invalido para directiva maestra {}. Usando fallback {}. Causa: {}",
+                    nombre, fallback, e.getMessage());
+            return fallback;
+        }
+    }
+
     /**
      * Actualiza una directiva maestra
      * @param updateDTO DTO con la directiva original y la nueva directiva
@@ -41,6 +65,10 @@ public class MasterDirectiveService {
      * @throws RuntimeException si la directiva no existe o si se intenta cambiar el nombre
      */
     public MasterDirective updateMasterDirective(DTO_MasterD_Update updateDTO) {
+        if (updateDTO == null || updateDTO.getOldMasterDirective() == null || updateDTO.getNewMasterDirective() == null) {
+            throw new RuntimeException("La solicitud de actualizacion de directiva maestra es invalida");
+        }
+
         MasterDirective oldDirective = updateDTO.getOldMasterDirective();
         MasterDirective newDirective = updateDTO.getNewMasterDirective();
         
@@ -56,13 +84,42 @@ public class MasterDirectiveService {
         if (!existingDirective.getNombre().equals(newDirective.getNombre())) {
             throw new RuntimeException("No se permite cambiar el nombre de una directiva maestra");
         }
+
+        validateValorByTipo(existingDirective, newDirective.getValor());
         
         // Actualizar solo los campos permitidos
-        existingDirective.setValor(newDirective.getValor());
+        existingDirective.setValor(newDirective.getValor() != null ? newDirective.getValor().trim() : null);
         existingDirective.setResumen(newDirective.getResumen());
         existingDirective.setAyuda(newDirective.getAyuda());
         
         // Guardar y retornar la directiva actualizada
         return masterDirectiveRepo.save(existingDirective);
+    }
+
+    private void validateValorByTipo(MasterDirective directive, String valor) {
+        if (directive.getTipoDato() == MasterDirective.TipoDato.NUMERO) {
+            parsePositiveInteger(valor, directive.getNombre());
+        }
+    }
+
+    private int parsePositiveInteger(String valor, String nombre) {
+        if (valor == null || valor.trim().isEmpty()) {
+            throw new IllegalArgumentException("La directiva " + nombre + " requiere un valor numerico entero positivo");
+        }
+
+        String normalized = valor.trim();
+        if (!normalized.matches("\\d+")) {
+            throw new IllegalArgumentException("La directiva " + nombre + " solo acepta enteros positivos");
+        }
+
+        try {
+            int parsed = Integer.parseInt(normalized);
+            if (parsed < 1) {
+                throw new IllegalArgumentException("La directiva " + nombre + " debe ser mayor o igual a 1");
+            }
+            return parsed;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("La directiva " + nombre + " excede el rango entero permitido", e);
+        }
     }
 }

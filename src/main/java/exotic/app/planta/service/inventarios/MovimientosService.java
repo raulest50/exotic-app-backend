@@ -36,6 +36,7 @@ import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import exotic.app.planta.service.produccion.ProduccionService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -89,6 +90,7 @@ public class MovimientosService {
     private final LoteRepo loteRepo;
     private final UserRepository userRepository;
     private final ContabilidadService contabilidadService;
+    private final MasterDirectiveService masterDirectiveService;
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final Clock applicationClock;
@@ -462,8 +464,31 @@ public class MovimientosService {
      */
     @Transactional
     public ResponseEntity<?> createDocIngreso(IngresoOCM_DTA ingresoOCM_dta, MultipartFile file) {
-        log.info("Iniciando creación de documento de ingreso OCM. userId: {}", ingresoOCM_dta.getUserId());
+        log.info("Iniciando creacion de documento de ingreso OCM. userId: {}",
+                ingresoOCM_dta != null ? ingresoOCM_dta.getUserId() : null);
         try {
+            if (ingresoOCM_dta == null || ingresoOCM_dta.getOrdenCompraMateriales() == null) {
+                return ResponseEntity.badRequest().body("La orden de compra de materiales es requerida para registrar el ingreso.");
+            }
+
+            int ordenCompraId = ingresoOCM_dta.getOrdenCompraMateriales().getOrdenCompraId();
+            int limiteRecepciones = masterDirectiveService.getLimiteRecepcionesParcialesOcm();
+            long recepcionesRegistradas = transaccionAlmacenHeaderRepo.countByTipoEntidadCausanteAndIdEntidadCausante(
+                    TransaccionAlmacen.TipoEntidadCausante.OCM,
+                    ordenCompraId
+            );
+
+            if (recepcionesRegistradas >= limiteRecepciones) {
+                String message = String.format(
+                        "Limite de recepciones parciales alcanzado para la OCM %d. Recepciones registradas: %d. Limite configurado: %d.",
+                        ordenCompraId,
+                        recepcionesRegistradas,
+                        limiteRecepciones
+                );
+                log.warn(message);
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+            }
+
             // Create folder based on current date (yyyyMMdd)
             String currentDateFolder = LocalDate.now(applicationClock)
                     .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
