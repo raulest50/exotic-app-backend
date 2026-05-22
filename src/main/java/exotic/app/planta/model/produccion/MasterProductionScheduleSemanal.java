@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,7 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "master_production_schedule_semanal")
+@Table(
+        name = "master_production_schedule_semanal",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_mps_week_start_date", columnNames = "week_start_date")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -33,6 +39,17 @@ public class MasterProductionScheduleSemanal {
     @CreationTimestamp
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
+
+    @UpdateTimestamp
+    @Column(name = "fecha_actualizacion")
+    private LocalDateTime fechaActualizacion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado", nullable = false, length = 20)
+    private EstadoMpsSemanal estado = EstadoMpsSemanal.BORRADOR;
+
+    @Column(name = "snapshot_json", columnDefinition = "TEXT")
+    private String snapshotJson;
 
     @JsonIgnore
     @OneToMany(mappedBy = "mpsSemanal")

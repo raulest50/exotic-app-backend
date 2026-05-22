@@ -53,6 +53,82 @@
 
     <!-- Appender para logs de carga masiva (archivo dedicado para diagnostico) -->
     <property name="LOG_PATH" value="logs"/>
+
+    <springProfile name="login-diagnostics">
+        <springProperty scope="context" name="LOGIN_DIAGNOSTIC_APP_LEVEL" source="LOGIN_DIAGNOSTIC_APP_LEVEL" defaultValue="DEBUG"/>
+        <springProperty scope="context" name="LOGIN_DIAGNOSTIC_SECURITY_LEVEL" source="LOGIN_DIAGNOSTIC_SECURITY_LEVEL" defaultValue="TRACE"/>
+        <springProperty scope="context" name="LOGIN_DIAGNOSTIC_WEB_LEVEL" source="LOGIN_DIAGNOSTIC_WEB_LEVEL" defaultValue="DEBUG"/>
+        <springProperty scope="context" name="LOGIN_DIAGNOSTIC_DB_LEVEL" source="LOGIN_DIAGNOSTIC_DB_LEVEL" defaultValue="DEBUG"/>
+        <springProperty scope="context" name="LOGIN_DIAGNOSTIC_SQL_LEVEL" source="LOGIN_DIAGNOSTIC_SQL_LEVEL" defaultValue="DEBUG"/>
+        <springProperty scope="context" name="LOGIN_DIAGNOSTIC_SQL_BIND_LEVEL" source="LOGIN_DIAGNOSTIC_SQL_BIND_LEVEL" defaultValue="TRACE"/>
+
+        <appender name="LOGIN_TROUBLESHOOTING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/login_troubleshooting.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/login_troubleshooting.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+                <maxFileSize>10MB</maxFileSize>
+                <maxHistory>3</maxHistory>
+                <totalSizeCap>50MB</totalSizeCap>
+            </rollingPolicy>
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{100} - %msg%n%xEx{full}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <logger name="exotic.app.planta.resource.users" level="${LOGIN_DIAGNOSTIC_APP_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="exotic.app.planta.service.users" level="${LOGIN_DIAGNOSTIC_APP_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="exotic.app.planta.security" level="${LOGIN_DIAGNOSTIC_APP_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+
+        <logger name="org.springframework.security" level="${LOGIN_DIAGNOSTIC_SECURITY_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.springframework.web" level="${LOGIN_DIAGNOSTIC_WEB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.springframework.web.servlet.DispatcherServlet" level="${LOGIN_DIAGNOSTIC_WEB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.springframework.web.cors" level="${LOGIN_DIAGNOSTIC_WEB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+
+        <logger name="com.zaxxer.hikari" level="${LOGIN_DIAGNOSTIC_DB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.postgresql" level="${LOGIN_DIAGNOSTIC_DB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.springframework.jdbc" level="${LOGIN_DIAGNOSTIC_DB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.springframework.transaction" level="${LOGIN_DIAGNOSTIC_DB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.springframework.dao" level="${LOGIN_DIAGNOSTIC_DB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.hibernate.engine.jdbc.spi.SqlExceptionHelper" level="${LOGIN_DIAGNOSTIC_DB_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+
+        <logger name="org.hibernate.SQL" level="${LOGIN_DIAGNOSTIC_SQL_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.hibernate.orm.jdbc.bind" level="${LOGIN_DIAGNOSTIC_SQL_BIND_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="${LOGIN_DIAGNOSTIC_SQL_BIND_LEVEL}" additivity="false">
+            <appender-ref ref="LOGIN_TROUBLESHOOTING_FILE"/>
+        </logger>
+    </springProfile>
+
     <appender name="CARGA_MASIVA_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/carga_masiva.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">

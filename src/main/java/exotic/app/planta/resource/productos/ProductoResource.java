@@ -4,6 +4,7 @@ package exotic.app.planta.resource.productos;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
 import exotic.app.planta.model.producto.dto.ProductoBasicUpdateDTO;
 import exotic.app.planta.model.producto.dto.ProductoCategoriaEditabilityDTO;
+import exotic.app.planta.model.producto.dto.ProductoInventareableUpdateDTO;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
 import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminado;
@@ -29,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 @RestController
@@ -380,6 +382,38 @@ public class ProductoResource {
             log.error("Error al actualizar el producto (edicion basica): {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Error al actualizar el producto: " + e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{productoId}/inventareable")
+    public ResponseEntity<Object> updateMaterialInventareable(
+            @PathVariable String productoId,
+            @RequestBody ProductoInventareableUpdateDTO dto) {
+        try {
+            if (dto == null || dto.getInventareable() == null) {
+                throw new IllegalArgumentException("El campo inventareable es requerido.");
+            }
+            Material updatedMaterial = productoService.updateMaterialInventareable(productoId, dto.getInventareable());
+            return ResponseEntity.ok(updatedMaterial);
+        } catch (NoSuchElementException e) {
+            log.error("Producto no encontrado al actualizar inventareable: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            log.error("Conflicto al actualizar inventareable: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                            "error", e.getMessage(),
+                            "reason", e.getMessage()
+                    ));
+        } catch (IllegalArgumentException e) {
+            log.error("Error de validacion al actualizar inventareable: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error al actualizar inventareable: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error al actualizar inventareable: " + e.getMessage()));
         }
     }
 

@@ -33,6 +33,18 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
     long countByOrdenCompraMateriales_OrdenCompraId(int ordenCompraId);
 
     @Query("""
+            SELECT CASE WHEN COUNT(item) > 0 THEN true ELSE false END
+            FROM ItemOrdenCompra item
+            JOIN item.ordenCompraMateriales orden
+            JOIN item.material material
+            WHERE material.productoId = :productoId
+              AND orden.estado IN :estados
+            """)
+    boolean existsByMaterialProductoIdAndOrdenCompraEstadoIn(
+            @Param("productoId") String productoId,
+            @Param("estados") Collection<Integer> estados);
+
+    @Query("""
             SELECT item
             FROM ItemOrdenCompra item
             JOIN FETCH item.ordenCompraMateriales orden

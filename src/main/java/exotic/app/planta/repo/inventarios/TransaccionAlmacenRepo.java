@@ -23,6 +23,18 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     Double findTotalCantidadByProductoId(@Param("productoId") String productoId);
 
     @Query("""
+            SELECT m.almacen, lote.id, COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            LEFT JOIN m.lote lote
+            WHERE m.producto.productoId = :productoId
+            GROUP BY m.almacen, lote.id
+            HAVING ABS(COALESCE(SUM(m.cantidad), 0)) > :tolerance
+            """)
+    List<Object[]> findNonZeroStockGroupsByProductoId(
+            @Param("productoId") String productoId,
+            @Param("tolerance") double tolerance);
+
+    @Query("""
             SELECT m.producto.productoId, COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.producto.productoId IN :productoIds

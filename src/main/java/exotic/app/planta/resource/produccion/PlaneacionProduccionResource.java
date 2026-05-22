@@ -1,12 +1,16 @@
 package exotic.app.planta.resource.produccion;
 
 import exotic.app.planta.model.produccion.dto.FilaInfVentasDTO;
+import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
+import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
 import exotic.app.planta.model.produccion.dto.TerminadoConVentasDTO;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.resource.produccion.exceptions.MpsSemanalDraftNotFoundException;
+import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +34,7 @@ public class PlaneacionProduccionResource {
     private final TerminadoRepo terminadoRepo;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final MasterProductionScheduleService masterProductionScheduleService;
+    private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
 
     @PostMapping("/asociar_terminados")
     public ResponseEntity<List<TerminadoConVentasDTO>> asociarTerminados(
@@ -81,6 +87,35 @@ public class PlaneacionProduccionResource {
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/mps-semanal/borrador")
+    public ResponseEntity<?> guardarBorradorMpsSemanal(
+            @RequestBody GuardarMpsSemanalDraftRequestDTO request
+    ) {
+        try {
+            MpsSemanalDraftDTO response = masterProductionScheduleDraftService.saveDraft(request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/mps-semanal/borrador")
+    public ResponseEntity<?> obtenerBorradorMpsSemanal(
+            @RequestParam LocalDate weekStartDate
+    ) {
+        try {
+            return ResponseEntity.ok(masterProductionScheduleDraftService.getDraftByWeekStartDate(weekStartDate));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (MpsSemanalDraftNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 }

@@ -44,6 +44,8 @@ import java.util.stream.Collectors;
 public class ProductoService {
 
     private static final List<Integer> TERMINAL_ORDER_STATES = List.of(2, -1);
+    private static final List<Integer> OPEN_PURCHASE_ORDER_STATES = List.of(0, 1, 2);
+    private static final double STOCK_ZERO_TOLERANCE = 0.0001d;
 
     private final ProductoRepo productoRepo;
     private final MaterialRepo materialRepo;
@@ -576,6 +578,56 @@ public class ProductoService {
         }
 
         return productoRepo.save(productoOriginal);
+    }
+
+    @Transactional
+    public Material updateMaterialInventareable(String productoId, Boolean inventareable) {
+        if (inventareable == null) {
+            throw new IllegalArgumentException("El campo inventareable es requerido.");
+        }
+
+        Producto productoOriginal = productoRepo.findById(productoId)
+                .orElseThrow(() -> new NoSuchElementException("Producto no encontrado: " + productoId));
+
+        if (!(productoOriginal instanceof Material materialOriginal)) {
+            throw new IllegalArgumentException("Solo los materiales pueden cambiar el estado inventareable.");
+        }
+
+        if (materialOriginal.isInventareable() == inventareable) {
+            return materialOriginal;
+        }
+
+        if (!inventareable) {
+            validateMaterialCanBecomeNonInventareable(materialOriginal);
+        }
+
+        materialOriginal.setInventareable(inventareable);
+        log.info("Actualizando inventareable de material {} a {}", productoId, inventareable);
+        return materialRepo.save(materialOriginal);
+    }
+
+    private void validateMaterialCanBecomeNonInventareable(Material material) {
+        String productoId = material.getProductoId();
+
+        List<Object[]> nonZeroStockGroups = transaccionAlmacenRepo.findNonZeroStockGroupsByProductoId(
+                productoId,
+                STOCK_ZERO_TOLERANCE
+        );
+        if (!nonZeroStockGroups.isEmpty()) {
+            throw new IllegalStateException(
+                    "No se puede marcar el material como no inventariable porque tiene stock distinto de cero por almacen/lote."
+            );
+        }
+
+        boolean hasOpenPurchaseOrders = itemOrdenCompraRepo.existsByMaterialProductoIdAndOrdenCompraEstadoIn(
+                productoId,
+                OPEN_PURCHASE_ORDER_STATES
+        );
+        if (hasOpenPurchaseOrders) {
+            throw new IllegalStateException(
+                    "No se puede marcar el material como no inventariable porque existe una orden de compra abierta asociada."
+            );
+        }
     }
 
     /**

@@ -77,7 +77,9 @@ public class ProductoManufacturingService {
         dto.setProductoId(productoId);
         validateTipoCompatibility(existing, dto.getTipoProducto());
 
+        boolean originalInventareable = existing.isInventareable();
         applyCommonProductFields(existing, dto);
+        existing.setInventareable(originalInventareable);
         updateTypedFields(existing, dto);
         assignInsumos(existing, dto.getInsumos());
         assignProceso(existing, dto.getProcesoProduccionCompleto());
