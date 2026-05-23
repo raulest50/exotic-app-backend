@@ -111,4 +111,11 @@ public class Proveedor {
     private String rutUrl;
     private String camaraUrl;
 
+    /**
+     * Limite operativo propio de recepciones parciales OCM para este proveedor.
+     * Debe ser mayor o igual a 1 y se valida contra el tope global al configurarlo.
+     */
+    @Column(name = "limite_recepciones_parciales_ocm", nullable = false)
+    private Integer limiteRecepcionesParcialesOcm;
+
 }

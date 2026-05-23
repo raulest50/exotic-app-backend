@@ -7,6 +7,7 @@ import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.compras.dto.search.DTO_SearchProveedor;
 import exotic.app.planta.repo.compras.ProveedorRepo;
 import exotic.app.planta.service.commons.FileStorageService;
+import exotic.app.planta.service.inventarios.RecepcionOcmPolicyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -32,6 +34,8 @@ public class ProveedorService {
     private final ProveedorRepo proveedorRepo;
 
     private final FileStorageService fileStorageService;
+
+    private final RecepcionOcmPolicyService recepcionOcmPolicyService;
 
 
     /**
@@ -56,6 +60,8 @@ public class ProveedorService {
         if(proveedorRepo.findById(proveedor.getId()).isPresent()) {
             throw new IllegalArgumentException("Ya existe un Proveedor con el Id " + proveedor.getId());
         }
+
+        recepcionOcmPolicyService.validarLimiteProveedor(proveedor.getLimiteRecepcionesParcialesOcm());
 
         // Save files if provided using the file storage service.
         if (rutFile != null && !rutFile.isEmpty()) {
@@ -202,9 +208,16 @@ public class ProveedorService {
             throw new IllegalArgumentException("El archivo Cámara de Comercio debe ser un PDF");
         }
 
+        Integer nuevoLimiteRecepciones = proveedor.getLimiteRecepcionesParcialesOcm();
+        if (nuevoLimiteRecepciones == null ||
+                !Objects.equals(nuevoLimiteRecepciones, proveedorOriginal.getLimiteRecepcionesParcialesOcm())) {
+            recepcionOcmPolicyService.validarLimiteProveedor(proveedor.getLimiteRecepcionesParcialesOcm());
+        }
+
         // Actualizar solo los campos editables
         proveedorOriginal.setRegimenTributario(proveedor.getRegimenTributario());
         proveedorOriginal.setCondicionPago(proveedor.getCondicionPago());
+        proveedorOriginal.setLimiteRecepcionesParcialesOcm(proveedor.getLimiteRecepcionesParcialesOcm());
 
         // Reemplazar contactos: clear dispara orphanRemoval, luego se añaden los nuevos
         // con el back-reference correctamente establecido.
@@ -218,8 +231,11 @@ public class ProveedorService {
         }
 
         // Registrar en log los cambios realizados
-        log.info("Actualizando proveedor {}: regimenTributario={}, condicionPago={}", 
-                 id, proveedor.getRegimenTributario(), proveedor.getCondicionPago());
+        log.info("Actualizando proveedor {}: regimenTributario={}, condicionPago={}, limiteRecepcionesParcialesOcm={}",
+                 id,
+                 proveedor.getRegimenTributario(),
+                 proveedor.getCondicionPago(),
+                 proveedor.getLimiteRecepcionesParcialesOcm());
 
         // Guardar archivos si se proporcionan utilizando el servicio de almacenamiento de archivos
         if (rutFile != null && !rutFile.isEmpty()) {

@@ -41,7 +41,7 @@ class TransaccionesAlmacenBootstrapIntegrationTest extends AbstractTransacciones
 
     @Test
     void getMasterDirectives_returnsDefaultOcmReceptionLimitForAuthenticatedUser() throws Exception {
-        setLimiteRecepcionesParcialesOcm("2");
+        setLimiteRecepcionesParcialesOcm("3");
 
         mockMvc.perform(get("/api/master-directives")
                         .with(bearerToken())
@@ -49,7 +49,7 @@ class TransaccionesAlmacenBootstrapIntegrationTest extends AbstractTransacciones
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.masterDirectives[*].nombre").value(hasItem(MasterDirectiveKeys.LIMITE_RECEPCIONES_PARCIALES_OCM)))
                 .andExpect(jsonPath("$.masterDirectives[*].tipoDato").value(hasItem("NUMERO")))
-                .andExpect(jsonPath("$.masterDirectives[*].valor").value(hasItem("2")));
+                .andExpect(jsonPath("$.masterDirectives[*].valor").value(hasItem("3")));
     }
 
     @Test

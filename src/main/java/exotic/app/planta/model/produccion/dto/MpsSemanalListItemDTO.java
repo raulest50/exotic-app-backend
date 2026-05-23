@@ -7,12 +7,10 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
-public class MpsSemanalDraftDTO {
+public class MpsSemanalListItemDTO {
     private Integer mpsId;
     private EstadoMpsSemanal estado;
     private LocalDateTime fechaCreacion;
@@ -24,14 +22,23 @@ public class MpsSemanalDraftDTO {
     private LocalDate weekStartDate;
     private LocalDate weekEndDate;
     private PropuestaMpsSemanalSummaryDTO summary = new PropuestaMpsSemanalSummaryDTO();
-    private List<PropuestaMpsSemanalItemDTO> items = new ArrayList<>();
-    private PropuestaMpsSemanalCalendarDTO calendar = new PropuestaMpsSemanalCalendarDTO();
+    private int totalOrdenesEsperadas;
+    private long totalOrdenesGeneradas;
+    private boolean odpsGeneradasCompletas;
+    private int totalBloquesNoProgramados;
+    private int totalLotesNoProgramados;
+    private double totalUnidadesNoProgramadas;
 
-    public static MpsSemanalDraftDTO fromEntityAndSnapshot(
+    public static MpsSemanalListItemDTO fromEntityAndSnapshot(
             MasterProductionScheduleSemanal entity,
-            PropuestaMpsSemanalResponseDTO snapshot
+            PropuestaMpsSemanalResponseDTO snapshot,
+            int totalOrdenesEsperadas,
+            long totalOrdenesGeneradas,
+            int totalBloquesNoProgramados,
+            int totalLotesNoProgramados,
+            double totalUnidadesNoProgramadas
     ) {
-        MpsSemanalDraftDTO dto = new MpsSemanalDraftDTO();
+        MpsSemanalListItemDTO dto = new MpsSemanalListItemDTO();
         dto.setMpsId(entity.getMpsId());
         dto.setEstado(entity.getEstado());
         dto.setFechaCreacion(entity.getFechaCreacion());
@@ -43,8 +50,12 @@ public class MpsSemanalDraftDTO {
         dto.setWeekStartDate(snapshot.getWeekStartDate());
         dto.setWeekEndDate(snapshot.getWeekEndDate());
         dto.setSummary(snapshot.getSummary());
-        dto.setItems(snapshot.getItems());
-        dto.setCalendar(snapshot.getCalendar());
+        dto.setTotalOrdenesEsperadas(totalOrdenesEsperadas);
+        dto.setTotalOrdenesGeneradas(totalOrdenesGeneradas);
+        dto.setOdpsGeneradasCompletas(totalOrdenesEsperadas == totalOrdenesGeneradas);
+        dto.setTotalBloquesNoProgramados(totalBloquesNoProgramados);
+        dto.setTotalLotesNoProgramados(totalLotesNoProgramados);
+        dto.setTotalUnidadesNoProgramadas(totalUnidadesNoProgramadas);
         return dto;
     }
 }

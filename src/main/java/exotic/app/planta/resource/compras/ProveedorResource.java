@@ -31,7 +31,7 @@ public class ProveedorResource {
     private final ObjectMapper objectMapper;
 
     @PostMapping(value = "/save", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Proveedor> saveProveedor(
+    public ResponseEntity<Object> saveProveedor(
             @RequestPart("proveedor") String proveedorJson,
             @RequestPart(value = "rutFile", required = false) MultipartFile rutFile,
             @RequestPart(value = "camaraFile", required = false) MultipartFile camaraFile
@@ -42,15 +42,19 @@ public class ProveedorResource {
             // Delegate all logic to the service method.
             Proveedor saved = proveedorService.saveProveedorWithFiles(proveedor, rutFile, camaraFile);
             return ResponseEntity.created(URI.create("/proveedor/" + saved.getId())).body(saved);
+        } catch (IllegalArgumentException e) {
+            log.error("Error de validacion al guardar el proveedor: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
         } catch (IOException e) {
             // Log error as needed and return error response.
             log.error("Error al procesar los archivos del proveedor: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(null);
+                    .body(Map.of("error", "Error al procesar los archivos: " + e.getMessage()));
         } catch (Exception e) {
             log.error("Error inesperado al guardar el proveedor: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(null);
+                    .body(Map.of("error", "Error al guardar el proveedor: " + e.getMessage()));
         }
     }
 

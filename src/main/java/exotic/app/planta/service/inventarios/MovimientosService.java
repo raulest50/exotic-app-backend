@@ -36,7 +36,6 @@ import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
-import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import exotic.app.planta.service.produccion.ProduccionService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +77,7 @@ import exotic.app.planta.model.inventarios.dto.MovimientoExcelRequestDTO;
 public class MovimientosService {
 
     private static final int MAX_CARGA_MASIVA_BATCH_SUFFIX_ATTEMPTS = 1000;
+    private static final int ESTADO_PENDIENTE_INGRESO_ALMACEN = 2;
 
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final ProductoRepo productoRepo;
@@ -90,7 +90,7 @@ public class MovimientosService {
     private final LoteRepo loteRepo;
     private final UserRepository userRepository;
     private final ContabilidadService contabilidadService;
-    private final MasterDirectiveService masterDirectiveService;
+    private final RecepcionOcmPolicyService recepcionOcmPolicyService;
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final Clock applicationClock;
@@ -472,7 +472,30 @@ public class MovimientosService {
             }
 
             int ordenCompraId = ingresoOCM_dta.getOrdenCompraMateriales().getOrdenCompraId();
-            int limiteRecepciones = masterDirectiveService.getLimiteRecepcionesParcialesOcm();
+            if (ordenCompraId <= 0) {
+                return ResponseEntity.badRequest().body("El ID de la orden de compra de materiales es invalido.");
+            }
+
+            OrdenCompraMateriales ordenCompraPersistida = ordenCompraRepo.findByOrdenCompraIdForUpdate(ordenCompraId)
+                    .orElse(null);
+            if (ordenCompraPersistida == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("No existe una orden de compra de materiales con ID: " + ordenCompraId);
+            }
+
+            if (ordenCompraPersistida.getEstado() != ESTADO_PENDIENTE_INGRESO_ALMACEN) {
+                String message = String.format(
+                        "La OCM %d no esta en estado pendiente ingreso almacen. Estado actual: %d.",
+                        ordenCompraId,
+                        ordenCompraPersistida.getEstado()
+                );
+                log.warn(message);
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+            }
+
+            int limiteRecepciones = recepcionOcmPolicyService.resolverLimiteEfectivoRecepcionesParciales(
+                    ordenCompraPersistida
+            );
             long recepcionesRegistradas = transaccionAlmacenHeaderRepo.countByTipoEntidadCausanteAndIdEntidadCausante(
                     TransaccionAlmacen.TipoEntidadCausante.OCM,
                     ordenCompraId

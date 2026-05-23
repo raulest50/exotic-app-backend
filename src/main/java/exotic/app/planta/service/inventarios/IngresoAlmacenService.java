@@ -33,6 +33,7 @@ public class IngresoAlmacenService {
     private final OrdenCompraRepo ordenCompraRepo;
     private final ProveedorRepo proveedorRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
+    private final RecepcionOcmPolicyService recepcionOcmPolicyService;
 
     private static final int ESTADO_PENDIENTE_INGRESO_ALMACEN = 2;
 
@@ -132,6 +133,9 @@ public class IngresoAlmacenService {
             ordenes.forEach(orden -> {
                 Double porcentaje = porcentajeMap.getOrDefault(orden.getOrdenCompraId(), 0.0);
                 orden.setPorcentajeRecibido(porcentaje);
+                orden.setLimiteRecepcionesParcialesEfectivo(
+                        recepcionOcmPolicyService.resolverLimiteEfectivoRecepcionesParciales(orden)
+                );
             });
 
             proveedorDiagnosticoMap = ordenCompraRepo.findProveedorDiagnosticsByOrdenIds(ordenIds).stream()

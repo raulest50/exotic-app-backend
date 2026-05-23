@@ -103,4 +103,11 @@ public class OrdenCompraMateriales {
     @Transient
     private Double porcentajeRecibido;
 
+    /**
+     * Limite efectivo de recepciones parciales para esta OCM.
+     * Calculado desde el limite operativo propio del proveedor y no persistido.
+     */
+    @Transient
+    private Integer limiteRecepcionesParcialesEfectivo;
+
 }

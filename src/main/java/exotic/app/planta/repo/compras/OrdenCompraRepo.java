@@ -2,9 +2,11 @@ package exotic.app.planta.repo.compras;
 
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.compras.Proveedor;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -64,6 +66,10 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
     );
 
     Optional<OrdenCompraMateriales> findByOrdenCompraIdAndEstado(Integer ordenCompraId, int estado);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT orden FROM OrdenCompraMateriales orden WHERE orden.ordenCompraId = :ordenCompraId")
+    Optional<OrdenCompraMateriales> findByOrdenCompraIdForUpdate(@Param("ordenCompraId") Integer ordenCompraId);
 
     /**
      * Verifica si existe al menos una orden de compra con el estado especificado

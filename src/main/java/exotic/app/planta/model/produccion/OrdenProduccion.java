@@ -45,6 +45,12 @@ public class OrdenProduccion {
     @JoinColumn(name = "mps_id")
     private MasterProductionScheduleSemanal mpsSemanal;
 
+    @Column(name = "mps_block_id", length = 120)
+    private String mpsBlockId;
+
+    @Column(name = "mps_lote_ordinal")
+    private Integer mpsLoteOrdinal;
+
     /**
      * Estados de la orden de producción:
      * 0: ABIERTA - Orden creada, sin dispensaciones

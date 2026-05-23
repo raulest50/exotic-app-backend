@@ -15,6 +15,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.NodoProceso;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
+import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionBatchDTO;
@@ -609,5 +610,56 @@ public class ProduccionService {
                     .collect(Collectors.toList());
         }
         return List.of();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public OrdenProduccion saveOrdenProduccionDesdeMps(
+            OrdenProduccionDTO_save ordenProduccionDTO,
+            MasterProductionScheduleSemanal mpsSemanal,
+            String mpsBlockId,
+            Integer mpsLoteOrdinal
+    ) {
+        Producto producto = productoRepo.findById(ordenProduccionDTO.getProductoId())
+                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
+
+        Long vendedorResponsableId = ordenProduccionDTO.getVendedorResponsableId();
+        Vendedor vendedorResponsable = null;
+        if (vendedorResponsableId != null) {
+            vendedorResponsable = vendedorRepository.findById(vendedorResponsableId)
+                    .orElseThrow(() -> new IllegalArgumentException("Responsable no encontrado con ID: " + vendedorResponsableId));
+        }
+
+        OrdenProduccion ordenProduccion = new OrdenProduccion(producto, ordenProduccionDTO.getObservaciones(), ordenProduccionDTO.getCantidadProducir());
+        ordenProduccion.setFechaLanzamiento(ordenProduccionDTO.getFechaLanzamiento());
+        ordenProduccion.setFechaFinalPlanificada(ordenProduccionDTO.getFechaFinalPlanificada());
+        ordenProduccion.setNumeroPedidoComercial(ordenProduccionDTO.getNumeroPedidoComercial());
+        ordenProduccion.setAreaOperativa(ordenProduccionDTO.getAreaOperativa());
+        ordenProduccion.setDepartamentoOperativo(ordenProduccionDTO.getDepartamentoOperativo());
+        ordenProduccion.setVendedorResponsable(vendedorResponsable);
+        ordenProduccion.setMpsSemanal(mpsSemanal);
+        ordenProduccion.setMpsBlockId(mpsBlockId);
+        ordenProduccion.setMpsLoteOrdinal(mpsLoteOrdinal);
+
+        OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
+
+        if (ordenProduccionDTO.getLoteBatchNumber() != null && !ordenProduccionDTO.getLoteBatchNumber().isBlank()) {
+            Lote loteExistente = loteRepo.findByBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
+            if (loteExistente != null) {
+                throw new IllegalArgumentException(
+                        "El nÃºmero de lote '" + ordenProduccionDTO.getLoteBatchNumber() +
+                                "' ya estÃ¡ asignado a otra orden de producciÃ³n"
+                );
+            }
+
+            Lote lote = new Lote();
+            lote.setBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
+            lote.setOrdenProduccion(savedOrden);
+            loteRepo.save(lote);
+            savedOrden.setLoteAsignado(lote.getBatchNumber());
+            ordenProduccionRepo.save(savedOrden);
+        }
+
+        seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
+        return savedOrden;
     }
 }

@@ -49,6 +49,13 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
      */
     List<OrdenProduccion> findByProducto_ProductoId(String productoId);
 
+    long countByMpsSemanal_MpsId(Integer mpsId);
+
+    boolean existsByMpsSemanal_MpsId(Integer mpsId);
+
+    @EntityGraph(attributePaths = {"producto"})
+    List<OrdenProduccion> findByMpsSemanal_MpsIdOrderByOrdenIdAsc(Integer mpsId);
+
 
     /**
      * Finds OrdenProduccion within a date range and estadoOrden.

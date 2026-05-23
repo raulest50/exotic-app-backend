@@ -8,15 +8,25 @@ import exotic.app.planta.model.master.configs.MasterDirective;
 import exotic.app.planta.model.master.configs.MasterDirectiveKeys;
 import exotic.app.planta.modules.transaccionesalmacen.support.AbstractTransaccionesAlmacenIntegrationTest;
 import exotic.app.planta.modules.transaccionesalmacen.support.TransaccionesAlmacenFixtureFactory.ModuleFixture;
+import exotic.app.planta.repo.compras.OrdenCompraRepo;
+import exotic.app.planta.repo.compras.ProveedorRepo;
+import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.master.configs.MasterDirectiveRepo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -33,8 +43,18 @@ class TransaccionesAlmacenIngresoOcmIntegrationTest extends AbstractTransaccione
     @Autowired
     private TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
 
+    @Autowired
+    private ProveedorRepo proveedorRepo;
+
+    @Autowired
+    private LoteRepo loteRepo;
+
+    @Autowired
+    private OrdenCompraRepo ordenCompraRepo;
+
     @Test
     void consultaOcmsPendientes_returnsSeededOrder() throws Exception {
+        setLimiteRecepcionesParcialesOcm("2");
         ModuleFixture fixture = fixtureFactory.seedModuleFixture();
 
         mockMvc.perform(get("/ingresos_almacen/ocms_pendientes_ingreso")
@@ -44,7 +64,33 @@ class TransaccionesAlmacenIngresoOcmIntegrationTest extends AbstractTransaccione
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].ordenCompraId").value(fixture.ordenCompra().getOrdenCompraId()))
                 .andExpect(jsonPath("$.content[0].proveedor.id").value(fixture.proveedor().getId()))
+                .andExpect(jsonPath("$.content[0].limiteRecepcionesParcialesEfectivo").value(2))
                 .andExpect(jsonPath("$.content[0].porcentajeRecibido").value(100.0));
+    }
+
+    @Test
+    void consultaOcmsPendientes_exposesProviderReceptionLimitWithoutApplyingGlobalCap() throws Exception {
+        setLimiteRecepcionesParcialesOcm("4");
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        setLimiteRecepcionesProveedor(fixture, 2);
+
+        mockMvc.perform(get("/ingresos_almacen/ocms_pendientes_ingreso")
+                        .with(bearerToken())
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].ordenCompraId").value(fixture.ordenCompra().getOrdenCompraId()))
+                .andExpect(jsonPath("$.content[0].limiteRecepcionesParcialesEfectivo").value(2));
+
+        setLimiteRecepcionesProveedor(fixture, 6);
+
+        mockMvc.perform(get("/ingresos_almacen/ocms_pendientes_ingreso")
+                        .with(bearerToken())
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].ordenCompraId").value(fixture.ordenCompra().getOrdenCompraId()))
+                .andExpect(jsonPath("$.content[0].limiteRecepcionesParcialesEfectivo").value(6));
     }
 
     @Test
@@ -116,6 +162,7 @@ class TransaccionesAlmacenIngresoOcmIntegrationTest extends AbstractTransaccione
     void saveDocIngresoOc_allowsThirdReceptionWhenConfiguredLimitIsThreeAndRejectsFourth() throws Exception {
         setLimiteRecepcionesParcialesOcm("3");
         ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        setLimiteRecepcionesProveedor(fixture, 3);
 
         mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
                         .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-LIMIT3-002", 1.0)))
@@ -138,6 +185,172 @@ class TransaccionesAlmacenIngresoOcmIntegrationTest extends AbstractTransaccione
                 .andExpect(status().isConflict());
 
         assertThat(countRecepcionesOcm(fixture)).isEqualTo(3);
+    }
+
+    @Test
+    void saveDocIngresoOc_usesProviderLimitWhenItIsLowerThanGlobalLimit() throws Exception {
+        setLimiteRecepcionesParcialesOcm("3");
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        setLimiteRecepcionesProveedor(fixture, 2);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-PROV-002", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isOk());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(2);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-PROV-003", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isConflict());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(2);
+    }
+
+    @Test
+    void saveDocIngresoOc_usesPersistedProviderLimitWhenPayloadOmitsProviderLimit() throws Exception {
+        setLimiteRecepcionesParcialesOcm("3");
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        setLimiteRecepcionesProveedor(fixture, 2);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-STALE-002", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isOk());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(2);
+
+        IngresoOCM_DTA stalePayload = buildIngresoPayload(fixture, "MPLOT-STALE-003", 1.0);
+        stalePayload.getOrdenCompraMateriales().getProveedor().setLimiteRecepcionesParcialesOcm(null);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", stalePayload))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isConflict());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(2);
+    }
+
+    @Test
+    void saveDocIngresoOc_rejectsUnknownOrdenCompraBeforeCreatingInventoryData() throws Exception {
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        long transaccionesBefore = transaccionAlmacenHeaderRepo.count();
+        long lotesBefore = loteRepo.count();
+
+        IngresoOCM_DTA payload = buildIngresoPayload(fixture, "MPLOT-UNKNOWN-OCM", 1.0);
+        payload.getOrdenCompraMateriales().setOrdenCompraId(999999);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", payload))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isNotFound());
+
+        assertThat(transaccionAlmacenHeaderRepo.count()).isEqualTo(transaccionesBefore);
+        assertThat(loteRepo.count()).isEqualTo(lotesBefore);
+    }
+
+    @Test
+    void saveDocIngresoOc_rejectsOrdenCompraWhenItIsNotRecepcionableBeforeCreatingInventoryData() throws Exception {
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        fixture.ordenCompra().setEstado(3);
+        ordenCompraRepo.save(fixture.ordenCompra());
+        long transaccionesBefore = transaccionAlmacenHeaderRepo.count();
+        long lotesBefore = loteRepo.count();
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-CLOSED-OCM", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isConflict());
+
+        assertThat(transaccionAlmacenHeaderRepo.count()).isEqualTo(transaccionesBefore);
+        assertThat(loteRepo.count()).isEqualTo(lotesBefore);
+    }
+
+    @Test
+    void saveDocIngresoOc_serializesConcurrentReceptionsForSameOrdenCompra() throws Exception {
+        setLimiteRecepcionesParcialesOcm("2");
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(1);
+
+        String token = loginAsMaster();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try {
+            Future<Integer> first = executor.submit(() -> {
+                start.await();
+                return performSaveDocIngreso(token, fixture, "MPLOT-CONCURRENT-002-A");
+            });
+            Future<Integer> second = executor.submit(() -> {
+                start.await();
+                return performSaveDocIngreso(token, fixture, "MPLOT-CONCURRENT-002-B");
+            });
+
+            start.countDown();
+
+            List<Integer> statuses = List.of(
+                    first.get(30, TimeUnit.SECONDS),
+                    second.get(30, TimeUnit.SECONDS)
+            );
+
+            assertThat(statuses).containsExactlyInAnyOrder(
+                    HttpStatus.OK.value(),
+                    HttpStatus.CONFLICT.value()
+            );
+            assertThat(countRecepcionesOcm(fixture)).isEqualTo(2);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void saveDocIngresoOc_usesProviderLimitEvenWhenItIsHigherThanGlobalLimit() throws Exception {
+        setLimiteRecepcionesParcialesOcm("3");
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+        setLimiteRecepcionesProveedor(fixture, 5);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-CAP-002", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-CAP-003", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isOk());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(3);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-CAP-004", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-CAP-005", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isOk());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(5);
+
+        mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, "MPLOT-CAP-006", 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .with(bearerToken()))
+                .andExpect(status().isConflict());
+
+        assertThat(countRecepcionesOcm(fixture)).isEqualTo(5);
     }
 
     @Test
@@ -202,5 +415,21 @@ class TransaccionesAlmacenIngresoOcmIntegrationTest extends AbstractTransaccione
                 TransaccionAlmacen.TipoEntidadCausante.OCM,
                 fixture.ordenCompra().getOrdenCompraId()
         );
+    }
+
+    private int performSaveDocIngreso(String token, ModuleFixture fixture, String batchNumber) throws Exception {
+        MvcResult result = mockMvc.perform(multipart("/movimientos/save_doc_ingreso_oc")
+                        .file(jsonPart("docIngresoDTA", buildIngresoPayload(fixture, batchNumber, 1.0)))
+                        .file(classpathFile("files/transacciones_almacen/ingreso_ocm_soporte.txt", MediaType.TEXT_PLAIN_VALUE))
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+
+        return result.getResponse().getStatus();
+    }
+
+    private void setLimiteRecepcionesProveedor(ModuleFixture fixture, Integer limite) {
+        fixture.proveedor().setLimiteRecepcionesParcialesOcm(limite);
+        fixture.ordenCompra().getProveedor().setLimiteRecepcionesParcialesOcm(limite);
+        proveedorRepo.save(fixture.proveedor());
     }
 }

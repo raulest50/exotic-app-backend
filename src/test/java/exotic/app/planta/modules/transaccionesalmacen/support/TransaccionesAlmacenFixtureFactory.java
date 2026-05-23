@@ -7,6 +7,7 @@ import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.master.configs.MasterDirectiveKeys;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Material;
@@ -204,6 +205,7 @@ public class TransaccionesAlmacenFixtureFactory {
         proveedor.setCondicionPago("credito");
         proveedor.setCategorias(new int[] {1, 2});
         proveedor.setObservacion("Proveedor fixture");
+        proveedor.setLimiteRecepcionesParcialesOcm(MasterDirectiveKeys.DEFAULT_LIMITE_RECEPCIONES_PARCIALES_OCM_PROVEEDOR);
         return proveedorRepo.save(proveedor);
     }
 

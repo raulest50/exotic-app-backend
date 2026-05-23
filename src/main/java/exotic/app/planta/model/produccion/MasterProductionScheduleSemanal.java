@@ -48,6 +48,18 @@ public class MasterProductionScheduleSemanal {
     @Column(name = "estado", nullable = false, length = 20)
     private EstadoMpsSemanal estado = EstadoMpsSemanal.BORRADOR;
 
+    @Column(name = "fecha_aprobacion")
+    private LocalDateTime fechaAprobacion;
+
+    @Column(name = "aprobado_por_username", length = 100)
+    private String aprobadoPorUsername;
+
+    @Column(name = "fecha_generacion_odps")
+    private LocalDateTime fechaGeneracionOdps;
+
+    @Column(name = "generado_por_username", length = 100)
+    private String generadoPorUsername;
+
     @Column(name = "snapshot_json", columnDefinition = "TEXT")
     private String snapshotJson;
 
