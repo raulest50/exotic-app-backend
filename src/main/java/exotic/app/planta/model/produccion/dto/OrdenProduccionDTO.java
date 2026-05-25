@@ -4,6 +4,7 @@ package exotic.app.planta.model.produccion.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
@@ -43,4 +44,19 @@ public class OrdenProduccionDTO {
     private String departamentoOperativo; // departamento responsable de coordinar
     private String loteAsignado; // numero de lote asignado a la orden
     private Long responsableId;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String origenOrden;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer mpsId;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private LocalDate mpsWeekStartDate;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String mpsBlockId;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer mpsLoteOrdinal;
 }

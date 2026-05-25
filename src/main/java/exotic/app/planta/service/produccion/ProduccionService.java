@@ -310,6 +310,15 @@ public class ProduccionService {
         dto.setAreaOperativa(orden.getAreaOperativa());
         dto.setDepartamentoOperativo(orden.getDepartamentoOperativo());
         dto.setLoteAsignado(orden.getLoteAsignado());
+        if (orden.getMpsSemanal() != null) {
+            dto.setOrigenOrden("MPS");
+            dto.setMpsId(orden.getMpsSemanal().getMpsId());
+            dto.setMpsWeekStartDate(orden.getMpsSemanal().getWeekStartDate());
+            dto.setMpsBlockId(orden.getMpsBlockId());
+            dto.setMpsLoteOrdinal(orden.getMpsLoteOrdinal());
+        } else {
+            dto.setOrigenOrden("MANUAL");
+        }
         if (orden.getVendedorResponsable() != null) {
             dto.setResponsableId(orden.getVendedorResponsable().getCedula());
         }

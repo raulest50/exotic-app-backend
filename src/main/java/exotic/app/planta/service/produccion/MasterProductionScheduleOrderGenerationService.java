@@ -67,6 +67,11 @@ public class MasterProductionScheduleOrderGenerationService {
         }
 
         PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(mps);
+        MpsSemanalSnapshotMetrics metrics = MpsSemanalSnapshotMetrics.fromSnapshot(snapshot);
+        if (!metrics.hasExpectedOrders()) {
+            throw new IllegalStateException("No se pueden generar ODPs para una semana sin ODPs esperadas.");
+        }
+
         Map<String, PropuestaMpsSemanalItemDTO> itemsByProductoId = buildItemsByProductoId(snapshot);
         Map<String, LoteSequenceState> lotesPorProducto = new HashMap<>();
         List<Integer> ordenesIds = new ArrayList<>();

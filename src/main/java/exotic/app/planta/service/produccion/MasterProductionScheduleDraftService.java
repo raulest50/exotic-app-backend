@@ -107,17 +107,16 @@ public class MasterProductionScheduleDraftService {
         return entities.stream()
                 .map(entity -> {
                     PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(entity);
-                    int totalOrdenesEsperadas = countExpectedOrders(snapshot);
+                    MpsSemanalSnapshotMetrics metrics = MpsSemanalSnapshotMetrics.fromSnapshot(snapshot);
                     long totalOrdenesGeneradas = ordenProduccionRepo.countByMpsSemanal_MpsId(entity.getMpsId());
-                    NoProgramadosMetrics noProgramadosMetrics = countUnscheduledMetrics(snapshot);
                     return MpsSemanalListItemDTO.fromEntityAndSnapshot(
                             entity,
                             snapshot,
-                            totalOrdenesEsperadas,
+                            metrics.totalOrdenesEsperadas(),
                             totalOrdenesGeneradas,
-                            noProgramadosMetrics.totalBloquesNoProgramados(),
-                            noProgramadosMetrics.totalLotesNoProgramados(),
-                            noProgramadosMetrics.totalUnidadesNoProgramadas()
+                            metrics.totalBloquesNoProgramados(),
+                            metrics.totalLotesNoProgramados(),
+                            metrics.totalUnidadesNoProgramadas()
                     );
                 })
                 .toList();
@@ -139,12 +138,17 @@ public class MasterProductionScheduleDraftService {
             throw new IllegalStateException("Solo se pueden aprobar semanas en estado BORRADOR.");
         }
 
+        PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(entity);
+        MpsSemanalSnapshotMetrics metrics = MpsSemanalSnapshotMetrics.fromSnapshot(snapshot);
+        if (!metrics.hasExpectedOrders()) {
+            throw new IllegalStateException("No se puede aprobar una semana sin ODPs esperadas.");
+        }
+
         entity.setEstado(EstadoMpsSemanal.APROBADO);
         entity.setFechaAprobacion(LocalDateTime.now());
         entity.setAprobadoPorUsername(approvedByUsername);
 
         MasterProductionScheduleSemanal saved = masterProductionScheduleSemanalRepo.save(entity);
-        PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(saved);
         return MpsSemanalDraftDTO.fromEntityAndSnapshot(saved, snapshot);
     }
 
@@ -179,34 +183,6 @@ public class MasterProductionScheduleDraftService {
         }
     }
 
-    private int countExpectedOrders(PropuestaMpsSemanalResponseDTO snapshot) {
-        if (snapshot.getCalendar() == null || snapshot.getCalendar().getRows() == null) {
-            return 0;
-        }
-
-        return snapshot.getCalendar().getRows().stream()
-                .flatMap(row -> row.getDays().stream())
-                .flatMap(day -> day.getBlocks().stream())
-                .mapToInt(block -> Math.max(block.getLotesAsignados(), 0))
-                .sum();
-    }
-
-    private NoProgramadosMetrics countUnscheduledMetrics(PropuestaMpsSemanalResponseDTO snapshot) {
-        if (snapshot.getCalendar() == null || snapshot.getCalendar().getUnscheduled() == null) {
-            return new NoProgramadosMetrics(0, 0, 0.0);
-        }
-
-        int totalBloques = snapshot.getCalendar().getUnscheduled().size();
-        int totalLotes = snapshot.getCalendar().getUnscheduled().stream()
-                .mapToInt(block -> Math.max(block.getLotesAsignados(), 0))
-                .sum();
-        double totalUnidades = snapshot.getCalendar().getUnscheduled().stream()
-                .mapToDouble(block -> Math.max(block.getCantidadAsignada(), 0.0))
-                .sum();
-
-        return new NoProgramadosMetrics(totalBloques, totalLotes, totalUnidades);
-    }
-
     private String writeSnapshot(PropuestaMpsSemanalResponseDTO snapshot) {
         try {
             return objectMapper.writeValueAsString(snapshot);
@@ -228,10 +204,4 @@ public class MasterProductionScheduleDraftService {
         }
     }
 
-    private record NoProgramadosMetrics(
-            int totalBloquesNoProgramados,
-            int totalLotesNoProgramados,
-            double totalUnidadesNoProgramadas
-    ) {
-    }
 }
