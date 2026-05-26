@@ -29,6 +29,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -133,7 +134,10 @@ class TransaccionesAlmacenIngresoOcmIntegrationTest extends AbstractTransaccione
                         .with(bearerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.idEntidadCausante").value(fixture.ordenCompra().getOrdenCompraId()))
-                .andExpect(jsonPath("$.movimientosTransaccion[0].producto.productoId").value(fixture.materialPrincipal().getProductoId()));
+                .andExpect(jsonPath("$.movimientosTransaccion[0].producto.productoId").value(fixture.materialPrincipal().getProductoId()))
+                .andExpect(jsonPath("$.movimientosTransaccion[0].lote.batchNumber").value(matchesPattern(
+                        "MPTA00-\\d{6}-" + String.format("%06d", fixture.ordenCompra().getOrdenCompraId()) + "-01"
+                )));
     }
 
     @Test

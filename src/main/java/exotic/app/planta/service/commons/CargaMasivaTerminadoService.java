@@ -266,11 +266,11 @@ public class CargaMasivaTerminadoService {
                 }
                 String prefijoLote = getCellValueAsString(row, 11);
                 if (prefijoLote != null && !prefijoLote.trim().isEmpty()) {
-                    String prefijoNormalizado = prefijoLote.trim();
+                    String prefijoNormalizado = prefijoLote.trim().toUpperCase(Locale.ROOT);
                     if (!seenPrefijos.add(prefijoNormalizado)) {
                         errors.add(new ErrorRecord(rowNum + 1, productoId, "prefijo_lote duplicado dentro del archivo", "prefijo_lote"));
                     }
-                    Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(prefijoNormalizado);
+                    Optional<Producto> existing = productoRepo.findByPrefijoLoteIgnoreCase(prefijoNormalizado);
                     if (existing.isPresent() && !existing.get().getProductoId().equals(productoId)) {
                         errors.add(new ErrorRecord(rowNum + 1, productoId, "prefijo_lote ya existe en la base de datos", "prefijo_lote"));
                     }
@@ -345,12 +345,12 @@ public class CargaMasivaTerminadoService {
             if (categoriaId != null && !categoriaRepo.existsById(categoriaId)) {
                 errors.add(new ErrorRecord(rowNumber, productoIdForError, "categoria.categoriaId no existe en la base de datos", "categoria.categoriaId"));
             }
-            String prefijoLote = safeTrim(terminado.prefijoLote());
+            String prefijoLote = normalizeNullable(terminado.prefijoLote());
             if (prefijoLote != null && !prefijoLote.isEmpty()) {
                 if (!seenPrefijos.add(prefijoLote)) {
                     errors.add(new ErrorRecord(rowNumber, productoIdForError, "prefijoLote duplicado dentro del archivo", "prefijoLote"));
                 }
-                Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(prefijoLote);
+                Optional<Producto> existing = productoRepo.findByPrefijoLoteIgnoreCase(prefijoLote);
                 if (existing.isPresent() && !existing.get().getProductoId().equals(productoId)) {
                     errors.add(new ErrorRecord(rowNumber, productoIdForError, "prefijoLote ya existe en la base de datos", "prefijoLote"));
                 }
@@ -409,7 +409,7 @@ public class CargaMasivaTerminadoService {
                     }
                     terminado.setFotoUrl(getCellValueAsString(row, 10));
                     String prefijoLote = getCellValueAsString(row, 11);
-                    terminado.setPrefijoLote(prefijoLote != null && !prefijoLote.trim().isEmpty() ? prefijoLote.trim() : null);
+                    terminado.setPrefijoLote(normalizeNullable(prefijoLote));
                     terminado.setInsumos(new ArrayList<>());
                     terminado.setProcesoProduccionCompleto(null);
                     terminado.setCasePack(null);
@@ -563,7 +563,7 @@ public class CargaMasivaTerminadoService {
 
     private String normalizeNullable(String value) {
         String trimmed = safeTrim(value);
-        return (trimmed == null || trimmed.isEmpty()) ? null : trimmed;
+        return (trimmed == null || trimmed.isEmpty()) ? null : trimmed.toUpperCase(Locale.ROOT);
     }
 
     private Integer extractCategoriaId(ExportacionTerminadosConInsumosDTO.CategoriaResumenDTO categoria) {

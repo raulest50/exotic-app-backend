@@ -16,6 +16,8 @@ import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.LoteDisponiblePageResponseDTO;
 import exotic.app.planta.model.inventarios.dto.LoteRecomendadoDTO;
+import exotic.app.planta.model.inventarios.dto.OcmLotePreviewRequestDTO;
+import exotic.app.planta.model.inventarios.dto.OcmLotePreviewResponseDTO;
 import exotic.app.planta.model.inventarios.dto.TransaccionAlmacenResponseDTO;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
@@ -91,6 +93,7 @@ public class MovimientosService {
     private final UserRepository userRepository;
     private final ContabilidadService contabilidadService;
     private final RecepcionOcmPolicyService recepcionOcmPolicyService;
+    private final MaterialLoteGenerationService materialLoteGenerationService;
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final Clock applicationClock;
@@ -112,6 +115,60 @@ public class MovimientosService {
         } else{
             return Optional.of(new ProductoStockDTO());
         }
+    }
+
+    @Transactional(readOnly = true)
+    public OcmLotePreviewResponseDTO previewLotesOcm(int ordenCompraId, OcmLotePreviewRequestDTO request) {
+        if (ordenCompraId <= 0) {
+            throw new IllegalArgumentException("El ID de la orden de compra de materiales es invalido.");
+        }
+        if (request == null || request.getItems() == null) {
+            throw new IllegalArgumentException("La lista de items para previsualizar es requerida.");
+        }
+
+        Optional<OrdenCompraMateriales> ordenCompraOpt = ordenCompraRepo.findById(ordenCompraId);
+        if (ordenCompraOpt.isEmpty()) {
+            throw new IllegalArgumentException("No existe una orden de compra de materiales con ID: " + ordenCompraId);
+        }
+        OrdenCompraMateriales ordenCompra = ordenCompraOpt.get();
+
+        LocalDate fechaIngreso = LocalDate.now(applicationClock);
+        Set<String> batchNumbersReservados = new LinkedHashSet<>();
+        List<OcmLotePreviewResponseDTO.Item> responseItems = new ArrayList<>();
+
+        for (OcmLotePreviewRequestDTO.Item item : request.getItems()) {
+            if (item == null) {
+                continue;
+            }
+            if (item.getLineKey() == null || item.getLineKey().isBlank()) {
+                throw new IllegalArgumentException("Cada item de preview debe incluir lineKey.");
+            }
+            if (item.getProductoId() == null || item.getProductoId().isBlank()) {
+                throw new IllegalArgumentException("Cada item de preview debe incluir productoId.");
+            }
+
+            Optional<Material> materialOpt = materialRepo.findById(item.getProductoId());
+            if (materialOpt.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "El producto del preview OCM no corresponde a un material: " + item.getProductoId()
+                );
+            }
+            Material material = materialOpt.get();
+            String batchNumber = materialLoteGenerationService.generarLoteRecepcionOcmPreview(
+                    material,
+                    ordenCompra,
+                    fechaIngreso,
+                    batchNumbersReservados
+            );
+            batchNumbersReservados.add(batchNumber);
+            responseItems.add(new OcmLotePreviewResponseDTO.Item(
+                    item.getLineKey(),
+                    material.getProductoId(),
+                    batchNumber
+            ));
+        }
+
+        return new OcmLotePreviewResponseDTO(fechaIngreso, responseItems);
     }
 
     public Optional<ProductoStockDTO> getStockOf2(String producto_id){
@@ -513,8 +570,8 @@ public class MovimientosService {
             }
 
             // Create folder based on current date (yyyyMMdd)
-            String currentDateFolder = LocalDate.now(applicationClock)
-                    .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            LocalDate fechaIngreso = LocalDate.now(applicationClock);
+            String currentDateFolder = fechaIngreso.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             Path folderPath = Paths.get("data", currentDateFolder);
             Files.createDirectories(folderPath);
 
@@ -554,20 +611,16 @@ public class MovimientosService {
             if (ingresoOCM.getMovimientosTransaccion() != null) {
                 for (Movimiento movimiento : ingresoOCM.getMovimientosTransaccion()) {
                     movimiento.setTransaccionAlmacen(ingresoOCM);
+                    Material materialMovimiento = resolveMaterialForOcmLote(movimiento);
+                    movimiento.setProducto(materialMovimiento);
 
-                    // Crear un nuevo lote para este movimiento
+                    // Crear un nuevo lote para este movimiento. El batchNumber de cliente se ignora.
                     Lote lote = new Lote();
-                    
-                    // Verificar si el movimiento ya tiene un lote con batchNumber especificado
-                    if (movimiento.getLote() != null && 
-                        movimiento.getLote().getBatchNumber() != null && 
-                        !movimiento.getLote().getBatchNumber().trim().isEmpty()) {
-                        // Si se proporcionó un batchNumber, usarlo
-                        lote.setBatchNumber(movimiento.getLote().getBatchNumber().trim());
-                    } else {
-                        // Si no se proporcionó batchNumber, generar uno automáticamente
-                        lote.setBatchNumber(generateBatchNumber(movimiento.getProducto()));
-                    }
+                    lote.setBatchNumber(materialLoteGenerationService.generarLoteRecepcionOcm(
+                            materialMovimiento,
+                            ordenCompraPersistida,
+                            fechaIngreso
+                    ));
 
                     // Verificar si el movimiento ya tiene un lote con fecha de fabricación especificada
                     if (movimiento.getLote() != null && movimiento.getLote().getProductionDate() != null) {
@@ -584,7 +637,7 @@ public class MovimientosService {
                     // Si no se proporcionó fecha de vencimiento, se deja como null
 
                     // Asociar con la orden de compra
-                    lote.setOrdenCompraMateriales(ingresoOCM_dta.getOrdenCompraMateriales());
+                    lote.setOrdenCompraMateriales(ordenCompraPersistida);
 
                     // Guardar el lote
                     loteRepo.save(lote);
@@ -675,6 +728,18 @@ public class MovimientosService {
         String date = LocalDate.now(applicationClock).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String random = String.format("%04d", new Random().nextInt(10000));
         return prefix + "-" + date + "-" + random;
+    }
+
+    private Material resolveMaterialForOcmLote(Movimiento movimiento) {
+        if (movimiento == null || movimiento.getProducto() == null || movimiento.getProducto().getProductoId() == null) {
+            throw new IllegalArgumentException("Cada movimiento OCM debe incluir un material valido.");
+        }
+
+        Producto producto = movimiento.getProducto();
+        return materialRepo.findById(producto.getProductoId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El producto del movimiento OCM no corresponde a un material: " + producto.getProductoId()
+                ));
     }
 
     private Lote crearLoteAutomatico(Producto producto) {

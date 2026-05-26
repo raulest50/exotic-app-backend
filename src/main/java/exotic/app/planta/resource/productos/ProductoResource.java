@@ -67,6 +67,9 @@ public class ProductoResource {
             // You can customize the URI as needed.
             return ResponseEntity.created(URI.create("/productos/" + savedMP.getProductoId()))
                     .body(savedMP);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body("Error guardando el Material: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error guardando el Material: " + e.getMessage());
@@ -152,7 +155,7 @@ public class ProductoResource {
     }
 
     /**
-     * Valida si el prefijo de lote esta disponible (unico entre productos terminados).
+     * Valida si el prefijo de lote esta disponible (unico entre productos).
      * productoId es opcional: al editar, pasarlo para excluir el producto actual.
      */
     @GetMapping("/prefijo-lote/valido")
@@ -164,7 +167,7 @@ public class ProductoResource {
             return ResponseEntity.ok(Map.of("valido", true));
         }
         return ResponseEntity.ok(Map.of("valido", false, "mensaje",
-                "El prefijo de lote ya esta asignado a otro producto terminado."));
+                "El prefijo de lote ya esta asignado a otro producto."));
     }
 
     @GetMapping("/{productoId}")

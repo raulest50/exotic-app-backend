@@ -102,6 +102,9 @@ public class ProductoService {
                     " ya esta asignado a otro Material");
         }
         validatePuntoReorden(material.getPuntoReorden());
+        String prefijoLote = normalizeOptionalPrefijoLote(material.getPrefijoLote());
+        validatePrefijoLoteDisponibleForProduct(prefijoLote, material.getProductoId());
+        material.setPrefijoLote(prefijoLote);
         try {
             // Solo guardar la ficha técnica si se proporciona un archivo
             if (file != null && !file.isEmpty()) {
@@ -246,17 +249,17 @@ public class ProductoService {
     }
 
     /**
-     * Verifica si el prefijo de lote esta disponible (unico entre terminados).
+     * Verifica si el prefijo de lote esta disponible (unico entre productos).
      * Si se pasa productoIdExcluir, el prefijo se considera valido si el unico
-     * terminado que lo tiene es ese producto (edicion).
+     * producto que lo tiene es ese producto (edicion).
      */
     @Transactional(readOnly = true)
     public boolean isPrefijoLoteDisponible(String prefijoLote, String productoIdExcluir) {
-        if (prefijoLote == null || prefijoLote.isBlank()) {
+        String normalized = normalizeOptionalPrefijoLote(prefijoLote);
+        if (normalized == null) {
             return false;
         }
-        String trimmed = prefijoLote.trim();
-        Optional<Terminado> existing = terminadoRepo.findByPrefijoLote(trimmed);
+        Optional<Producto> existing = productoRepo.findByPrefijoLoteIgnoreCase(normalized);
         if (existing.isEmpty()) {
             return true;
         }
@@ -539,6 +542,11 @@ public class ProductoService {
                 validatePuntoReorden(dto.getPuntoReorden());
                 materialOriginal.setPuntoReorden(dto.getPuntoReorden());
             }
+            if (dto.getPrefijoLote() != null) {
+                String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
+                validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
+                materialOriginal.setPrefijoLote(prefijoLote);
+            }
             return materialRepo.save(materialOriginal);
         }
 
@@ -548,10 +556,12 @@ public class ProductoService {
 
         if (productoOriginal instanceof Terminado terminadoOriginal) {
             if (dto.getPrefijoLote() != null) {
-                if (dto.getPrefijoLote().trim().isEmpty()) {
+                String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
+                if (prefijoLote == null) {
                     throw new IllegalArgumentException("El prefijo de lote es requerido para productos terminados.");
                 }
-                terminadoOriginal.setPrefijoLote(dto.getPrefijoLote());
+                validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
+                terminadoOriginal.setPrefijoLote(prefijoLote);
             }
 
             Integer categoriaActualId = Optional.ofNullable(terminadoOriginal.getCategoria())
@@ -686,6 +696,9 @@ public class ProductoService {
                 validatePuntoReorden(materialNuevo.getPuntoReorden());
                 materialOriginal.setTipoMaterial(materialNuevo.getTipoMaterial());
                 materialOriginal.setPuntoReorden(materialNuevo.getPuntoReorden());
+                String prefijoLote = normalizeOptionalPrefijoLote(materialNuevo.getPrefijoLote());
+                validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
+                materialOriginal.setPrefijoLote(prefijoLote);
                 log.info("Actualizando tipo de material: {}, puntoReorden: {}",
                         materialNuevo.getTipoMaterial(), materialNuevo.getPuntoReorden());
             } else {
@@ -700,8 +713,10 @@ public class ProductoService {
             Terminado terminadoOriginal = (Terminado) productoOriginal;
             if (producto instanceof Terminado) {
                 Terminado terminadoRequest = (Terminado) producto;
-                terminadoOriginal.setPrefijoLote(terminadoRequest.getPrefijoLote());
-                log.info("Actualizando prefijo de lote: {}", terminadoRequest.getPrefijoLote());
+                String prefijoLote = normalizeOptionalPrefijoLote(terminadoRequest.getPrefijoLote());
+                validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
+                terminadoOriginal.setPrefijoLote(prefijoLote);
+                log.info("Actualizando prefijo de lote: {}", prefijoLote);
 
                 Integer categoriaActualId = Optional.ofNullable(terminadoOriginal.getCategoria())
                         .map(categoria -> categoria.getCategoriaId())
@@ -787,6 +802,25 @@ public class ProductoService {
 
         if (!productoRepo.existsById(productoId)) {
             throw new IllegalArgumentException("Producto no encontrado: " + productoId);
+        }
+    }
+
+    private String normalizeOptionalPrefijoLote(String prefijoLote) {
+        if (prefijoLote == null) {
+            return null;
+        }
+        String normalized = prefijoLote.trim().toUpperCase(Locale.ROOT);
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private void validatePrefijoLoteDisponibleForProduct(String prefijoLote, String productoIdExcluir) {
+        if (prefijoLote == null) {
+            return;
+        }
+
+        Optional<Producto> existing = productoRepo.findByPrefijoLoteIgnoreCase(prefijoLote);
+        if (existing.isPresent() && !existing.get().getProductoId().equals(productoIdExcluir)) {
+            throw new IllegalArgumentException("El prefijo de lote ya esta asignado a otro producto.");
         }
     }
 

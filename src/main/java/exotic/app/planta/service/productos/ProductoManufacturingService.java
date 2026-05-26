@@ -136,7 +136,9 @@ public class ProductoManufacturingService {
         if (producto instanceof Terminado terminado) {
             terminado.setStatus(dto.getStatus() != null ? dto.getStatus() : terminado.getStatus());
             terminado.setFotoUrl(dto.getFotoUrl());
-            terminado.setPrefijoLote(blankToNull(dto.getPrefijoLote()));
+            String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
+            validatePrefijoLoteDisponible(prefijoLote, producto.getProductoId());
+            terminado.setPrefijoLote(prefijoLote);
             terminado.setCategoria(resolveCategoria(dto.getCategoriaId()));
             terminado.setCasePack(buildCasePack(dto.getCasePack()));
             return;
@@ -622,5 +624,21 @@ public class ProductoManufacturingService {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeOptionalPrefijoLote(String value) {
+        String normalized = blankToNull(value);
+        return normalized != null ? normalized.toUpperCase(Locale.ROOT) : null;
+    }
+
+    private void validatePrefijoLoteDisponible(String prefijoLote, String productoIdExcluir) {
+        if (prefijoLote == null) {
+            return;
+        }
+
+        Optional<Producto> existing = productoRepo.findByPrefijoLoteIgnoreCase(prefijoLote);
+        if (existing.isPresent() && !existing.get().getProductoId().equals(productoIdExcluir)) {
+            throw new IllegalArgumentException("El prefijo de lote ya esta asignado a otro producto.");
+        }
     }
 }

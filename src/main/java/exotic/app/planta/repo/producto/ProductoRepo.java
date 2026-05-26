@@ -12,4 +12,6 @@ public interface ProductoRepo extends JpaRepository<Producto, String>, JpaSpecif
 
     Optional<Producto> findByProductoId(String id);
 
+    Optional<Producto> findByPrefijoLoteIgnoreCase(String prefijoLote);
+
 }

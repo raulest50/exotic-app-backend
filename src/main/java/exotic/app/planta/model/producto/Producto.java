@@ -94,4 +94,11 @@ public abstract class Producto {
     @Column
     private boolean inventareable = true;
 
+    /**
+     * Prefijo opcional usado para generar lotes internos.
+     * En terminados identifica lotes de producción; en materiales identifica lotes internos de recepción.
+     */
+    @Column(name = "prefijo_lote", unique = true, nullable = true, length = 20)
+    private String prefijoLote;
+
 }

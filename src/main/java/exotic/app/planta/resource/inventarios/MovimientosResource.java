@@ -7,6 +7,7 @@ import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO
 import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.MovimientoExcelRequestDTO;
+import exotic.app.planta.model.inventarios.dto.OcmLotePreviewRequestDTO;
 import exotic.app.planta.model.inventarios.dto.TransaccionAlmacenResponseDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
@@ -145,6 +146,18 @@ public class MovimientosResource {
                 docIngresoDTO.getObservaciones(),
                 docIngresoDTO.getTransaccionAlmacen() != null);
         return movimientoService.createDocIngreso(docIngresoDTO, file);
+    }
+
+    @PostMapping("/ocm/{ordenCompraId}/lotes-preview")
+    public ResponseEntity<?> previewLotesOcm(
+            @PathVariable int ordenCompraId,
+            @RequestBody OcmLotePreviewRequestDTO request) {
+        try {
+            Object response = movimientoService.previewLotesOcm(ordenCompraId, request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
 
