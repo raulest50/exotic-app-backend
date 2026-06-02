@@ -1,6 +1,7 @@
 package exotic.app.planta.repo.personal;
 
 import exotic.app.planta.model.organizacion.personal.RegistroHoraExtra;
+import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -36,5 +37,30 @@ public interface RegistroHoraExtraRepo extends JpaRepository<RegistroHoraExtra, 
             @Param("estado") RegistroHoraExtra.Estado estado,
             @Param("q") String q,
             Pageable pageable
+    );
+
+    @Query("""
+            SELECT r
+            FROM RegistroHoraExtra r
+            JOIN FETCH r.integrante i
+            JOIN FETCH r.registradoPor rp
+            LEFT JOIN FETCH r.aprobadoPor ap
+            WHERE r.fecha >= :fechaDesde
+              AND r.fecha <= :fechaHasta
+              AND (:integranteId IS NULL OR i.id = :integranteId)
+              AND (:departamento IS NULL OR i.departamento = :departamento)
+              AND (
+                    :cargo IS NULL
+                    OR :cargo = ''
+                    OR LOWER(i.cargo) LIKE LOWER(CONCAT('%', :cargo, '%'))
+                  )
+            ORDER BY r.fecha ASC, r.horaInicio ASC, r.id ASC
+            """)
+    List<RegistroHoraExtra> buscarBiHorasExtra(
+            @Param("fechaDesde") LocalDate fechaDesde,
+            @Param("fechaHasta") LocalDate fechaHasta,
+            @Param("integranteId") Long integranteId,
+            @Param("departamento") IntegrantePersonal.Departamento departamento,
+            @Param("cargo") String cargo
     );
 }
