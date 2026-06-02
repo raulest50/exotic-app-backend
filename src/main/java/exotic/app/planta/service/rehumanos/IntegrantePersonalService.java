@@ -11,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -50,14 +51,12 @@ public class IntegrantePersonalService {
         // Create and associate a document for the new integrante
         DocTranDePersonal documento = DocTranDePersonal.crearDocumentoIngreso(savedIntegrante, usuarioResponsable);
 
-        // The document will be persisted through cascade
-        /*if (savedIntegrante.getDocumentos() == null) {
-            savedIntegrante.setDocumentos(List.of(documento));
-        } else {
-            savedIntegrante.getDocumentos().add(documento);
-        }*/
+        if (savedIntegrante.getDocumentos() == null) {
+            savedIntegrante.setDocumentos(new ArrayList<>());
+        }
+        savedIntegrante.getDocumentos().add(documento);
 
-        return savedIntegrante;
+        return integrantePersonalRepo.save(savedIntegrante);
     }
 
     /**

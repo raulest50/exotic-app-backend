@@ -3,6 +3,8 @@ package exotic.app.planta.repo.personal;
 import exotic.app.planta.model.organizacion.personal.DocTranDePersonal;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
+
 /**
  * Repository for DocTranDePersonal entity
  * This interface provides CRUD operations and custom queries for DocTranDePersonal documents
@@ -15,7 +17,7 @@ public interface DocTranDePersonalRepo extends JpaRepository<DocTranDePersonal, 
      * @param integranteId The ID of the IntegrantePersonal
      * @return List of documents associated with the specified integrante
      */
-    //List<DocTranDePersonal> findByIdIntegrante_Id(Long integranteId);
+    List<DocTranDePersonal> findByIdIntegrante_IdOrderByFechaHoraDesc(Long integranteId);
 
     /**
      * Find documents by document type
@@ -23,5 +25,5 @@ public interface DocTranDePersonalRepo extends JpaRepository<DocTranDePersonal, 
      * @param tipoDocTran The type of document transaction
      * @return List of documents of the specified type
      */
-    //List<DocTranDePersonal> findByTipoDocTran(DocTranDePersonal.TipoDocTran tipoDocTran);
+    List<DocTranDePersonal> findByTipoDocTran(DocTranDePersonal.TipoDocTran tipoDocTran);
 }

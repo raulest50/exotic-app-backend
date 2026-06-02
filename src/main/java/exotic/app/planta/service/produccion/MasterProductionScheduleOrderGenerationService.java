@@ -38,6 +38,7 @@ import java.util.regex.Pattern;
 public class MasterProductionScheduleOrderGenerationService {
 
     private static final Pattern LOTE_PATTERN = Pattern.compile("^(.+)-(\\d+)-(\\d{2})$");
+    private static final double EPSILON = 0.000001;
 
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
@@ -66,6 +67,7 @@ public class MasterProductionScheduleOrderGenerationService {
             throw new IllegalStateException("La semana ya tiene ODPs generadas y no admite una nueva generacion.");
         }
 
+        LocalDate weekStartDate = mps.getWeekStartDate();
         PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(mps);
         MpsSemanalSnapshotMetrics metrics = MpsSemanalSnapshotMetrics.fromSnapshot(snapshot);
         if (!metrics.hasExpectedOrders()) {
@@ -88,7 +90,7 @@ public class MasterProductionScheduleOrderGenerationService {
                         continue;
                     }
                     for (PropuestaMpsCalendarBlockDTO block : cell.getBlocks()) {
-                        int lotesAsignados = Math.max(block.getLotesAsignados(), 0);
+                        int lotesAsignados = block.getLotesAsignados();
                         if (lotesAsignados == 0) {
                             continue;
                         }
@@ -107,10 +109,12 @@ public class MasterProductionScheduleOrderGenerationService {
                         if (cell.getDate() == null) {
                             throw new IllegalStateException("Se encontro una celda calendarizada sin fecha para el producto " + block.getProductoId() + ".");
                         }
+                        validateCellDate(weekStartDate, cell.getDate(), block.getProductoId());
+                        validateBlockForOrderGeneration(block, lotesAsignados);
 
                         for (int loteOrdinal = 1; loteOrdinal <= lotesAsignados; loteOrdinal++) {
                             String loteBatchNumber = nextLotForProduct(block.getProductoId(), lotesPorProducto);
-                            OrdenProduccionDTO_save dto = buildOrdenDto(snapshot.getWeekStartDate(), cell.getDate(), block, item, loteBatchNumber);
+                            OrdenProduccionDTO_save dto = buildOrdenDto(weekStartDate, cell.getDate(), block, item, loteBatchNumber);
                             OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(
                                     dto,
                                     mps,
@@ -152,6 +156,29 @@ public class MasterProductionScheduleOrderGenerationService {
         return ordenProduccionRepo.findByMpsSemanal_MpsIdOrderByOrdenIdAsc(mps.getMpsId()).stream()
                 .map(MpsSemanalOrdenProduccionListItemDTO::fromEntity)
                 .toList();
+    }
+
+    private void validateCellDate(LocalDate weekStartDate, LocalDate cellDate, String productoId) {
+        LocalDate weekEndDate = weekStartDate.plusDays(5);
+        if (cellDate.isBefore(weekStartDate) || cellDate.isAfter(weekEndDate)) {
+            throw new IllegalStateException("La fecha programada del producto " + productoId + " debe estar dentro de la semana lunes-sabado.");
+        }
+    }
+
+    private void validateBlockForOrderGeneration(PropuestaMpsCalendarBlockDTO block, int lotesAsignados) {
+        if (lotesAsignados < 0) {
+            throw new IllegalStateException("Los lotes asignados no pueden ser negativos para el producto " + block.getProductoId() + ".");
+        }
+        if (block.getLoteSize() <= 0) {
+            throw new IllegalStateException("El producto " + block.getProductoId() + " no tiene lote size valido para generar ODPs.");
+        }
+        if (block.getCantidadAsignada() <= 0) {
+            throw new IllegalStateException("El producto " + block.getProductoId() + " no tiene unidades asignadas para generar ODPs.");
+        }
+        double expectedUnits = block.getLoteSize() * (double) lotesAsignados;
+        if (Math.abs(block.getCantidadAsignada() - expectedUnits) > EPSILON) {
+            throw new IllegalStateException("Las unidades del producto " + block.getProductoId() + " no corresponden a lotes exactos.");
+        }
     }
 
     private PropuestaMpsSemanalResponseDTO readSnapshot(MasterProductionScheduleSemanal mps) {

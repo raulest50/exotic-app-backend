@@ -1,11 +1,15 @@
 package exotic.app.planta.model.organizacion.personal;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import exotic.app.planta.model.users.User;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Getter
@@ -55,8 +59,9 @@ public class IntegrantePersonal {
     @JoinColumn(name = "usuario_id")
     private User usuario;
 
-    /*@OneToMany(cascade = CascadeType.ALL, mappedBy = "idIntegrante")
-    private List<DocTranDePersonal> documentos;*/
+    @OneToMany(cascade = CascadeType.ALL, mappedBy = "idIntegrante", orphanRemoval = true)
+    @JsonIgnore
+    private List<DocTranDePersonal> documentos = new ArrayList<>();
 
     public enum Departamento {
         PRODUCCION,

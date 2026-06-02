@@ -1,5 +1,6 @@
 package exotic.app.planta.model.organizacion.personal;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import exotic.app.planta.config.AppTime;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -30,9 +31,10 @@ public class DocTranDePersonal {
     /**
      * Referencia al integrante de personal al que pertenece este documento
      */
-    /*@ManyToOne
-    @JoinColumn(name = "idIntegrante", nullable = false)
-    private IntegrantePersonal idIntegrante;*/
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "integrante_id")
+    @JsonIgnore
+    private IntegrantePersonal idIntegrante;
 
     /**
      * Tipo de cambio realizado
@@ -81,6 +83,10 @@ public class DocTranDePersonal {
         MODIFICACION_DATOS_PERSONALES("Modificación de datos personales"),
         CAMBIO_ESTADO("Cambio de estado"),
         SALIDA("Salida de personal"),
+        HORAS_EXTRA_REGISTRO("Registro de horas extra"),
+        HORAS_EXTRA_APROBACION("Aprobación de horas extra"),
+        HORAS_EXTRA_RECHAZO("Rechazo de horas extra"),
+        HORAS_EXTRA_ANULACION("Anulación de horas extra"),
         OTRO("Otro tipo de cambio");
 
         private final String descripcion;
@@ -99,7 +105,7 @@ public class DocTranDePersonal {
      */
     public static DocTranDePersonal crearDocumentoIngreso(IntegrantePersonal integrante, String usuarioResponsable) {
         DocTranDePersonal documento = new DocTranDePersonal();
-        //documento.setIdIntegrante(integrante);
+        documento.setIdIntegrante(integrante);
         documento.setTipoDocTran(TipoDocTran.INGRESO);
         documento.setFechaHora(AppTime.now());
         documento.setDescripcion("Ingreso de nuevo integrante de personal");
@@ -116,10 +122,10 @@ public class DocTranDePersonal {
             String descripcion,
             String valoresAnteriores,
             String valoresNuevos,
-            String usuarioResponsable) {
+        String usuarioResponsable) {
 
         DocTranDePersonal documento = new DocTranDePersonal();
-        //documento.setIdIntegrante(integrante);
+        documento.setIdIntegrante(integrante);
         documento.setTipoDocTran(tipoDocTran);
         documento.setFechaHora(AppTime.now());
         documento.setDescripcion(descripcion);
@@ -138,7 +144,7 @@ public class DocTranDePersonal {
             String usuarioResponsable) {
 
         DocTranDePersonal documento = new DocTranDePersonal();
-        //documento.setIdIntegrante(integrante);
+        documento.setIdIntegrante(integrante);
         documento.setTipoDocTran(TipoDocTran.SALIDA);
         documento.setFechaHora(AppTime.now());
         documento.setDescripcion("Salida de integrante: " + motivo);

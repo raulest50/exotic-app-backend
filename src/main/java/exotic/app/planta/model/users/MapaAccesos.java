@@ -37,6 +37,7 @@ public final class MapaAccesos {
                         "HISTORIAL",
                         "PARAMETROS_POR_CATEGORIA",
                         "PLANEACION_PRODUCCION",
+                        "PROGRAMACION_PRODUCCION",
                         "MONITOREAR_AREAS_OPERATIVAS",
                         "APROBACION_MPS_WEEK"
                 )

@@ -1,16 +1,33 @@
 package exotic.app.planta.resource.rehumanos;
 
 import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
+import exotic.app.planta.model.organizacion.personal.RegistroHoraExtra;
+import exotic.app.planta.model.organizacion.personal.dto.RegistroHoraExtraDecisionDTO;
+import exotic.app.planta.model.organizacion.personal.dto.RegistroHoraExtraRequestDTO;
+import exotic.app.planta.model.organizacion.personal.dto.RegistroHoraExtraResponseDTO;
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.rehumanos.IntegrantePersonalService;
+import exotic.app.planta.service.rehumanos.RegistroHoraExtraService;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 /**
  * REST controller for managing IntegrantePersonal entities
@@ -21,6 +38,8 @@ import java.util.Optional;
 public class IntegrantePersonalResource {
 
     private final IntegrantePersonalService integrantePersonalService;
+    private final RegistroHoraExtraService registroHoraExtraService;
+    private final UserRepository userRepository;
 
     /**
      * POST endpoint to save a new IntegrantePersonal entity
@@ -103,5 +122,117 @@ public class IntegrantePersonalResource {
     ) {
         List<IntegrantePersonal> integrantes = integrantePersonalService.findByEstado(estado);
         return ResponseEntity.ok(integrantes);
+    }
+
+    @PostMapping("/{integranteId}/horas-extra")
+    public ResponseEntity<RegistroHoraExtraResponseDTO> registrarHoraExtra(
+            Authentication authentication,
+            @PathVariable Long integranteId,
+            @RequestBody RegistroHoraExtraRequestDTO request
+    ) {
+        try {
+            RegistroHoraExtraResponseDTO response = registroHoraExtraService.registrar(
+                    integranteId,
+                    request,
+                    getCurrentUser(authentication)
+            );
+            return ResponseEntity.created(URI.create("/integrantes-personal/horas-extra/" + response.getId()))
+                    .body(response);
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
+    }
+
+    @GetMapping("/{integranteId}/horas-extra")
+    public ResponseEntity<List<RegistroHoraExtraResponseDTO>> listarHorasExtraPorIntegrante(
+            @PathVariable Long integranteId
+    ) {
+        try {
+            return ResponseEntity.ok(registroHoraExtraService.listarPorIntegrante(integranteId));
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
+    }
+
+    @GetMapping("/horas-extra")
+    public ResponseEntity<Page<RegistroHoraExtraResponseDTO>> buscarHorasExtra(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) RegistroHoraExtra.Estado estado,
+            @RequestParam(required = false) String q,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "10") int size
+    ) {
+        try {
+            return ResponseEntity.ok(registroHoraExtraService.buscar(
+                    desde,
+                    hasta,
+                    estado,
+                    q,
+                    PageRequest.of(page, size)
+            ));
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
+    }
+
+    @PutMapping("/horas-extra/{id}/aprobar")
+    public ResponseEntity<RegistroHoraExtraResponseDTO> aprobarHoraExtra(
+            Authentication authentication,
+            @PathVariable Long id
+    ) {
+        try {
+            return ResponseEntity.ok(registroHoraExtraService.aprobar(id, getCurrentUser(authentication)));
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
+    }
+
+    @PutMapping("/horas-extra/{id}/rechazar")
+    public ResponseEntity<RegistroHoraExtraResponseDTO> rechazarHoraExtra(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody RegistroHoraExtraDecisionDTO decision
+    ) {
+        try {
+            return ResponseEntity.ok(registroHoraExtraService.rechazar(id, decision, getCurrentUser(authentication)));
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
+    }
+
+    @PutMapping("/horas-extra/{id}/anular")
+    public ResponseEntity<RegistroHoraExtraResponseDTO> anularHoraExtra(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody RegistroHoraExtraDecisionDTO decision
+    ) {
+        try {
+            return ResponseEntity.ok(registroHoraExtraService.anular(id, decision, getCurrentUser(authentication)));
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
+    }
+
+    private User getCurrentUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(UNAUTHORIZED, "No autenticado");
+        }
+
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no encontrado"));
+    }
+
+    private ResponseStatusException toResponseStatusException(RuntimeException error) {
+        if (error instanceof ResponseStatusException responseStatusException) {
+            return responseStatusException;
+        }
+        if (error instanceof EntityNotFoundException) {
+            return new ResponseStatusException(NOT_FOUND, error.getMessage(), error);
+        }
+        if (error instanceof IllegalArgumentException) {
+            return new ResponseStatusException(BAD_REQUEST, error.getMessage(), error);
+        }
+        return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, error.getMessage(), error);
     }
 }
