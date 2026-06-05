@@ -33,6 +33,7 @@ public class MasterProductionScheduleDraftService {
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final SemanaMPSService semanaMPSService;
+    private final MpsSemanalEditWindowService mpsSemanalEditWindowService;
     private final ObjectMapper objectMapper;
 
     public MpsSemanalDraftDTO saveDraft(GuardarMpsSemanalDraftRequestDTO request) {
@@ -49,6 +50,9 @@ public class MasterProductionScheduleDraftService {
         if (entity.getMpsId() != null && entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
             throw new IllegalStateException("La semana ya no esta en estado BORRADOR y no puede sobrescribirse.");
         }
+        PropuestaMpsSemanalResponseDTO currentSnapshot = entity.getMpsId() != null
+                ? readSnapshot(entity)
+                : null;
 
         PropuestaMpsSemanalResponseDTO snapshot = new PropuestaMpsSemanalResponseDTO();
         snapshot.setWeekStartDate(weekStartDate);
@@ -56,6 +60,8 @@ public class MasterProductionScheduleDraftService {
         snapshot.setSummary(request.getSummary());
         snapshot.setItems(request.getItems());
         snapshot.setCalendar(request.getCalendar());
+
+        mpsSemanalEditWindowService.validateLockedDaysUnchanged(snapshot, currentSnapshot);
 
         entity.setSemanaMps(semanaMps);
         entity.setWeekStartDate(weekStartDate);

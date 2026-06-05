@@ -46,6 +46,9 @@ public class MasterProductionScheduleSemanal {
     @Column(name = "week_end_date", nullable = false)
     private LocalDate weekEndDate;
 
+    @Column(name = "revision_numero", nullable = false)
+    private Integer revisionNumero = 1;
+
     @CreationTimestamp
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
@@ -76,4 +79,8 @@ public class MasterProductionScheduleSemanal {
     @JsonIgnore
     @OneToMany(mappedBy = "mpsSemanal")
     private List<OrdenProduccion> ordenesProduccion = new ArrayList<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "mpsSemanal")
+    private List<MpsSemanalObservacion> observaciones = new ArrayList<>();
 }

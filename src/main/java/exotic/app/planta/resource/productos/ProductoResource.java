@@ -8,6 +8,7 @@ import exotic.app.planta.model.producto.dto.ProductoInventareableUpdateDTO;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
 import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminado;
+import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminadoMps;
 import exotic.app.planta.model.producto.dto.procdesigner.TargetDTO;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
@@ -264,6 +265,24 @@ public class ProductoResource {
         }
 
         // Ya no es necesario convertir a TargetDTO
+        return ResponseEntity.ok(pageResult);
+    }
+
+    @PostMapping("/search_terminados_picker_mps")
+    public ResponseEntity<Page<Terminado>> searchTerminadosPickerMps(
+            @RequestBody DTO_SearchTerminadoMps searchCriteria) {
+        DTO_SearchTerminadoMps criteria = searchCriteria != null ? searchCriteria : new DTO_SearchTerminadoMps();
+        int page = criteria.getPage() != null ? criteria.getPage() : 0;
+        int size = criteria.getSize() != null ? criteria.getSize() : 10;
+        String searchTerm = criteria.getSearchTerm() != null ? criteria.getSearchTerm() : "";
+
+        Page<Terminado> pageResult = productoService.searchTerminadosPickerMps(
+                searchTerm,
+                criteria.getTipoBusqueda(),
+                criteria.getCategoriaId(),
+                page,
+                size
+        );
         return ResponseEntity.ok(pageResult);
     }
 

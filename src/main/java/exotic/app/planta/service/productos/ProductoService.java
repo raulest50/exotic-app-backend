@@ -10,6 +10,7 @@ import exotic.app.planta.model.producto.dto.ProductoCategoriaEditabilityDTO;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
+import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminadoMps;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
@@ -27,6 +28,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -209,6 +211,52 @@ public class ProductoService {
             return criteriaBuilder.and(predicates);
         };
         return terminadoRepo.findAll(spec, PageRequest.of(page, size));
+    }
+
+    public Page<Terminado> searchTerminadosPickerMps(
+            String searchTerm,
+            DTO_SearchTerminadoMps.TipoBusqueda tipoBusqueda,
+            Integer categoriaId,
+            int page,
+            int size
+    ) {
+        String normalizedSearch = searchTerm != null ? searchTerm.trim().toLowerCase() : "";
+        DTO_SearchTerminadoMps.TipoBusqueda normalizedTipo =
+                tipoBusqueda != null ? tipoBusqueda : DTO_SearchTerminadoMps.TipoBusqueda.NOMBRE;
+
+        Specification<Terminado> spec = (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (!normalizedSearch.isBlank()) {
+                if (normalizedTipo == DTO_SearchTerminadoMps.TipoBusqueda.ID) {
+                    predicates.add(criteriaBuilder.like(
+                            criteriaBuilder.lower(root.get("productoId")),
+                            "%" + normalizedSearch + "%"
+                    ));
+                } else {
+                    String[] searchTerms = normalizedSearch.split("\\s+");
+                    for (String term : searchTerms) {
+                        if (!term.isBlank()) {
+                            predicates.add(criteriaBuilder.like(
+                                    criteriaBuilder.lower(root.get("nombre")),
+                                    "%" + term + "%"
+                            ));
+                        }
+                    }
+                }
+            }
+
+            if (categoriaId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("categoria").get("categoriaId"), categoriaId));
+            }
+
+            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+        };
+
+        return terminadoRepo.findAll(
+                spec,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "productoId"))
+        );
     }
 
     public Optional<Material> findMateriaPrimaByProductoId(String productoId) {
