@@ -17,7 +17,8 @@ import java.util.List;
 @Table(
         name = "master_production_schedule_semanal",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_mps_week_start_date", columnNames = "week_start_date")
+                @UniqueConstraint(name = "uk_mps_week_start_date", columnNames = "week_start_date"),
+                @UniqueConstraint(name = "uk_mps_semana_mps_id", columnNames = "semana_mps_id")
         }
 )
 @Getter
@@ -29,6 +30,15 @@ public class MasterProductionScheduleSemanal {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "mps_id", unique = true, updatable = false, nullable = false)
     private Integer mpsId;
+
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(
+            name = "semana_mps_id",
+            nullable = false,
+            unique = true,
+            foreignKey = @ForeignKey(name = "fk_mps_semana_mps")
+    )
+    private SemanaMPS semanaMps;
 
     @Column(name = "week_start_date", nullable = false)
     private LocalDate weekStartDate;

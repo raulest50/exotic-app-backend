@@ -2,6 +2,7 @@ package exotic.app.planta.model.produccion.dto;
 
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
+import exotic.app.planta.model.produccion.SemanaMPS;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -21,6 +22,11 @@ public class MpsSemanalDraftDTO {
     private String aprobadoPorUsername;
     private LocalDateTime fechaGeneracionOdps;
     private String generadoPorUsername;
+    private Long semanaMpsId;
+    private String semanaMpsCodigo;
+    private Integer anioSemana;
+    private Integer numeroSemana;
+    private String standard;
     private LocalDate weekStartDate;
     private LocalDate weekEndDate;
     private PropuestaMpsSemanalSummaryDTO summary = new PropuestaMpsSemanalSummaryDTO();
@@ -40,6 +46,14 @@ public class MpsSemanalDraftDTO {
         dto.setAprobadoPorUsername(entity.getAprobadoPorUsername());
         dto.setFechaGeneracionOdps(entity.getFechaGeneracionOdps());
         dto.setGeneradoPorUsername(entity.getGeneradoPorUsername());
+        SemanaMPS semanaMps = entity.getSemanaMps();
+        if (semanaMps != null) {
+            dto.setSemanaMpsId(semanaMps.getId());
+            dto.setSemanaMpsCodigo(semanaMps.getCodigo());
+            dto.setAnioSemana(semanaMps.getAnioSemana());
+            dto.setNumeroSemana(semanaMps.getNumeroSemana());
+            dto.setStandard(semanaMps.getStandard());
+        }
         dto.setWeekStartDate(snapshot.getWeekStartDate());
         dto.setWeekEndDate(snapshot.getWeekEndDate());
         dto.setSummary(snapshot.getSummary());

@@ -13,8 +13,12 @@ import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
 import exotic.app.planta.model.produccion.dto.TerminadoConVentasDTO;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalDraftNotFoundException;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
@@ -26,10 +30,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -45,6 +51,7 @@ public class PlaneacionProduccionResource {
     private final MasterProductionScheduleService masterProductionScheduleService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
+    private final UserRepository userRepository;
 
     @PostMapping("/asociar_terminados")
     public ResponseEntity<List<TerminadoConVentasDTO>> asociarTerminados(
@@ -102,9 +109,11 @@ public class PlaneacionProduccionResource {
 
     @PostMapping("/mps-semanal/borrador")
     public ResponseEntity<?> guardarBorradorMpsSemanal(
-            @RequestBody GuardarMpsSemanalDraftRequestDTO request
+            @RequestBody GuardarMpsSemanalDraftRequestDTO request,
+            Authentication authentication
     ) {
         try {
+            requireTabAccess(authentication, "PROGRAMACION_PRODUCCION");
             MpsSemanalDraftDTO response = masterProductionScheduleDraftService.saveDraft(request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -116,9 +125,11 @@ public class PlaneacionProduccionResource {
 
     @GetMapping("/mps-semanal/borrador")
     public ResponseEntity<?> obtenerBorradorMpsSemanal(
-            @RequestParam LocalDate weekStartDate
+            @RequestParam LocalDate weekStartDate,
+            Authentication authentication
     ) {
         try {
+            requireTabAccess(authentication, "PROGRAMACION_PRODUCCION");
             return ResponseEntity.ok(masterProductionScheduleDraftService.getDraftByWeekStartDate(weekStartDate));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
@@ -131,9 +142,11 @@ public class PlaneacionProduccionResource {
 
     @GetMapping("/mps-semanal")
     public ResponseEntity<?> obtenerMpsSemanal(
-            @RequestParam LocalDate weekStartDate
+            @RequestParam LocalDate weekStartDate,
+            Authentication authentication
     ) {
         try {
+            requireAnyTabAccess(authentication, "PROGRAMACION_PRODUCCION", "APROBACION_MPS_WEEK");
             return ResponseEntity.ok(masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
@@ -146,9 +159,11 @@ public class PlaneacionProduccionResource {
 
     @GetMapping("/mps-semanal/list")
     public ResponseEntity<?> listarMpsSemanales(
-            @RequestParam(required = false) EstadoMpsSemanal estado
+            @RequestParam(required = false) EstadoMpsSemanal estado,
+            Authentication authentication
     ) {
         try {
+            requireTabAccess(authentication, "APROBACION_MPS_WEEK");
             List<MpsSemanalListItemDTO> response = masterProductionScheduleDraftService.listByEstado(estado);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -164,7 +179,7 @@ public class PlaneacionProduccionResource {
             Authentication authentication
     ) {
         try {
-            String username = requireAuthenticatedUsername(authentication);
+            String username = requireAuthorizedUsername(authentication, "APROBACION_MPS_WEEK");
             MpsSemanalDraftDTO response = masterProductionScheduleDraftService.approveWeek(request, username);
             return ResponseEntity.ok(response);
         } catch (SecurityException e) {
@@ -184,7 +199,7 @@ public class PlaneacionProduccionResource {
             Authentication authentication
     ) {
         try {
-            String username = requireAuthenticatedUsername(authentication);
+            String username = requireAuthorizedUsername(authentication, "APROBACION_MPS_WEEK");
             GenerarOdpDesdeMpsResponseDTO response = masterProductionScheduleOrderGenerationService.generarOrdenesDesdeSemanaAprobada(request, username);
             return ResponseEntity.ok(response);
         } catch (SecurityException e) {
@@ -200,9 +215,11 @@ public class PlaneacionProduccionResource {
 
     @GetMapping("/mps-semanal/odps")
     public ResponseEntity<?> obtenerOdpsDesdeMpsSemanal(
-            @RequestParam LocalDate weekStartDate
+            @RequestParam LocalDate weekStartDate,
+            Authentication authentication
     ) {
         try {
+            requireTabAccess(authentication, "APROBACION_MPS_WEEK");
             List<MpsSemanalOrdenProduccionListItemDTO> response = masterProductionScheduleOrderGenerationService.getOrdenesGeneradasPorSemana(weekStartDate);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -212,10 +229,39 @@ public class PlaneacionProduccionResource {
         }
     }
 
-    private String requireAuthenticatedUsername(Authentication authentication) {
+    private void requireTabAccess(Authentication authentication, String tabId) {
+        requireAuthorizedUsername(authentication, tabId);
+    }
+
+    private void requireAnyTabAccess(Authentication authentication, String... tabIds) {
+        requireAuthorizedUsername(authentication, tabIds);
+    }
+
+    private String requireAuthorizedUsername(Authentication authentication, String... tabIds) {
         if (authentication == null || !authentication.isAuthenticated() || authentication.getName() == null || authentication.getName().isBlank()) {
-            throw new SecurityException("No se pudo determinar el usuario autenticado.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }
-        return authentication.getName();
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        if (isMasterLike(user.getUsername())) {
+            return user.getUsername();
+        }
+
+        for (String tabId : tabIds) {
+            boolean hasTabAccess = UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCCION, tabId)
+                    .orElse(0) >= 1;
+            if (hasTabAccess) {
+                return user.getUsername();
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permisos para esta operacion de MPS semanal.");
+    }
+
+    private boolean isMasterLike(String username) {
+        if (username == null) return false;
+        String normalized = username.trim().toLowerCase(Locale.ROOT);
+        return "master".equals(normalized) || "super_master".equals(normalized);
     }
 }

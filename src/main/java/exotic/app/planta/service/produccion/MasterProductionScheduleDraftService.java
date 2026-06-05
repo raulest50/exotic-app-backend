@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
+import exotic.app.planta.model.produccion.SemanaMPS;
 import exotic.app.planta.model.produccion.dto.MpsSemanalListItemDTO;
 import exotic.app.planta.model.produccion.dto.AprobarMpsSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
@@ -31,15 +32,18 @@ public class MasterProductionScheduleDraftService {
 
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
+    private final SemanaMPSService semanaMPSService;
     private final ObjectMapper objectMapper;
 
     public MpsSemanalDraftDTO saveDraft(GuardarMpsSemanalDraftRequestDTO request) {
         validateRequest(request);
 
-        LocalDate weekStartDate = request.getWeekStartDate();
-        LocalDate weekEndDate = weekStartDate.plusDays(5);
+        SemanaMPS semanaMps = semanaMPSService.getOrCreateByStartDate(request.getWeekStartDate());
+        LocalDate weekStartDate = semanaMps.getStartDate();
+        LocalDate weekEndDate = semanaMps.getEndDate();
 
-        MasterProductionScheduleSemanal entity = masterProductionScheduleSemanalRepo.findByWeekStartDate(weekStartDate)
+        MasterProductionScheduleSemanal entity = masterProductionScheduleSemanalRepo.findBySemanaMps_Id(semanaMps.getId())
+                .or(() -> masterProductionScheduleSemanalRepo.findByWeekStartDate(weekStartDate))
                 .orElseGet(MasterProductionScheduleSemanal::new);
 
         if (entity.getMpsId() != null && entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
@@ -53,6 +57,7 @@ public class MasterProductionScheduleDraftService {
         snapshot.setItems(request.getItems());
         snapshot.setCalendar(request.getCalendar());
 
+        entity.setSemanaMps(semanaMps);
         entity.setWeekStartDate(weekStartDate);
         entity.setWeekEndDate(weekEndDate);
         entity.setEstado(EstadoMpsSemanal.BORRADOR);

@@ -12,6 +12,8 @@ import java.util.Optional;
 @Repository
 public interface MasterProductionScheduleSemanalRepo extends JpaRepository<MasterProductionScheduleSemanal, Integer> {
     Optional<MasterProductionScheduleSemanal> findByWeekStartDate(LocalDate weekStartDate);
+    Optional<MasterProductionScheduleSemanal> findBySemanaMps_Id(Long semanaMpsId);
+    List<MasterProductionScheduleSemanal> findAllByWeekStartDateBetween(LocalDate startDate, LocalDate endDate);
     List<MasterProductionScheduleSemanal> findAllByEstadoOrderByWeekStartDateDesc(EstadoMpsSemanal estado);
     List<MasterProductionScheduleSemanal> findAllByOrderByWeekStartDateDesc();
 }
