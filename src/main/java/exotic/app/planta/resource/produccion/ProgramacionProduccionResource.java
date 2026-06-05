@@ -2,12 +2,15 @@ package exotic.app.planta.resource.produccion;
 
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.produccion.dto.AprobarMpsSemanalRequestDTO;
+import exotic.app.planta.model.produccion.dto.AtenderMpsSemanalObservacionRequestDTO;
+import exotic.app.planta.model.produccion.dto.CrearMpsSemanalObservacionRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsResponseDTO;
 import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
 import exotic.app.planta.model.produccion.dto.GuardarProgramacionProduccionSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalListItemDTO;
+import exotic.app.planta.model.produccion.dto.MpsSemanalObservacionDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalOrdenProduccionListItemDTO;
 import exotic.app.planta.model.produccion.dto.SemanaMPSDTO;
 import exotic.app.planta.model.users.ModuloSistema;
@@ -18,6 +21,7 @@ import exotic.app.planta.resource.produccion.exceptions.MpsSemanalDraftNotFoundE
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
+import exotic.app.planta.service.produccion.MpsSemanalObservacionService;
 import exotic.app.planta.service.produccion.ProgramacionProduccionSemanalService;
 import exotic.app.planta.service.produccion.SemanaMPSService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -45,6 +50,7 @@ public class ProgramacionProduccionResource {
     private final ProgramacionProduccionSemanalService programacionProduccionSemanalService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
+    private final MpsSemanalObservacionService mpsSemanalObservacionService;
     private final SemanaMPSService semanaMPSService;
     private final UserRepository userRepository;
 
@@ -139,6 +145,79 @@ public class ProgramacionProduccionResource {
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/mps-semanal/observaciones")
+    public ResponseEntity<?> listarObservacionesMpsSemanal(
+            @RequestParam LocalDate weekStartDate,
+            Authentication authentication
+    ) {
+        try {
+            requireAnyTabAccess(authentication, "PROGRAMACION_PRODUCCION", "APROBACION_MPS_WEEK");
+            List<MpsSemanalObservacionDTO> response = mpsSemanalObservacionService.listarPorSemana(weekStartDate);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/mps-semanal/observaciones")
+    public ResponseEntity<?> crearObservacionMpsSemanal(
+            @RequestBody CrearMpsSemanalObservacionRequestDTO request,
+            Authentication authentication
+    ) {
+        try {
+            String username = requireAuthorizedUsername(authentication, "APROBACION_MPS_WEEK");
+            MpsSemanalObservacionDTO response = mpsSemanalObservacionService.crearObservacion(request, username);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/mps-semanal/observaciones/{observacionId}/atender")
+    public ResponseEntity<?> atenderObservacionMpsSemanal(
+            @PathVariable Long observacionId,
+            @RequestBody AtenderMpsSemanalObservacionRequestDTO request,
+            Authentication authentication
+    ) {
+        try {
+            String username = requireAuthorizedUsername(authentication, "PROGRAMACION_PRODUCCION");
+            MpsSemanalObservacionDTO response = mpsSemanalObservacionService.atenderObservacion(observacionId, request, username);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/mps-semanal/observaciones/{observacionId}/cerrar")
+    public ResponseEntity<?> cerrarObservacionMpsSemanal(
+            @PathVariable Long observacionId,
+            Authentication authentication
+    ) {
+        try {
+            String username = requireAuthorizedUsername(authentication, "APROBACION_MPS_WEEK");
+            MpsSemanalObservacionDTO response = mpsSemanalObservacionService.cerrarObservacion(observacionId, username);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }

@@ -27,6 +27,7 @@ public class MpsSemanalDraftDTO {
     private Integer anioSemana;
     private Integer numeroSemana;
     private String standard;
+    private Integer revisionNumero;
     private LocalDate weekStartDate;
     private LocalDate weekEndDate;
     private PropuestaMpsSemanalSummaryDTO summary = new PropuestaMpsSemanalSummaryDTO();
@@ -46,6 +47,7 @@ public class MpsSemanalDraftDTO {
         dto.setAprobadoPorUsername(entity.getAprobadoPorUsername());
         dto.setFechaGeneracionOdps(entity.getFechaGeneracionOdps());
         dto.setGeneradoPorUsername(entity.getGeneradoPorUsername());
+        dto.setRevisionNumero(entity.getRevisionNumero());
         SemanaMPS semanaMps = entity.getSemanaMps();
         if (semanaMps != null) {
             dto.setSemanaMpsId(semanaMps.getId());

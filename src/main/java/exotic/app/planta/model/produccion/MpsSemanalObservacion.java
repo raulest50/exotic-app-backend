@@ -58,6 +58,10 @@ public class MpsSemanalObservacion {
     private String mensaje;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "tipo", nullable = false, length = 20)
+    private TipoMpsSemanalObservacion tipo = TipoMpsSemanalObservacion.BLOQUEANTE;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false, length = 20)
     private EstadoMpsSemanalObservacion estado = EstadoMpsSemanalObservacion.ABIERTA;
 

@@ -3,6 +3,7 @@ package exotic.app.planta.service.produccion;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalObservacion;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
 import exotic.app.planta.model.produccion.SemanaMPS;
 import exotic.app.planta.model.produccion.dto.MpsSemanalListItemDTO;
@@ -11,6 +12,7 @@ import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
 import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
+import exotic.app.planta.repo.produccion.MpsSemanalObservacionRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalDraftNotFoundException;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
@@ -32,6 +34,7 @@ public class MasterProductionScheduleDraftService {
 
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
+    private final MpsSemanalObservacionRepo mpsSemanalObservacionRepo;
     private final SemanaMPSService semanaMPSService;
     private final MpsSemanalEditWindowService mpsSemanalEditWindowService;
     private final ObjectMapper objectMapper;
@@ -63,6 +66,15 @@ public class MasterProductionScheduleDraftService {
 
         mpsSemanalEditWindowService.validateLockedDaysUnchanged(snapshot, currentSnapshot);
 
+        String snapshotJson = writeSnapshot(snapshot);
+        if (entity.getMpsId() == null) {
+            entity.setRevisionNumero(1);
+        } else if (!snapshotJson.equals(entity.getSnapshotJson())) {
+            entity.setRevisionNumero(resolveRevisionNumero(entity) + 1);
+        } else {
+            entity.setRevisionNumero(resolveRevisionNumero(entity));
+        }
+
         entity.setSemanaMps(semanaMps);
         entity.setWeekStartDate(weekStartDate);
         entity.setWeekEndDate(weekEndDate);
@@ -71,7 +83,7 @@ public class MasterProductionScheduleDraftService {
         entity.setAprobadoPorUsername(null);
         entity.setFechaGeneracionOdps(null);
         entity.setGeneradoPorUsername(null);
-        entity.setSnapshotJson(writeSnapshot(snapshot));
+        entity.setSnapshotJson(snapshotJson);
 
         MasterProductionScheduleSemanal saved = masterProductionScheduleSemanalRepo.save(entity);
         return MpsSemanalDraftDTO.fromEntityAndSnapshot(saved, snapshot);
@@ -148,6 +160,9 @@ public class MasterProductionScheduleDraftService {
         if (entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
             throw new IllegalStateException("Solo se pueden aprobar semanas en estado BORRADOR.");
         }
+        if (hasPendingObservaciones(entity.getMpsId())) {
+            throw new IllegalStateException("No se puede aprobar un MPS con observaciones abiertas o pendientes de aceptacion.");
+        }
 
         PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(entity);
         MpsSemanalSnapshotMetrics metrics = MpsSemanalSnapshotMetrics.fromSnapshot(snapshot);
@@ -192,6 +207,21 @@ public class MasterProductionScheduleDraftService {
         if (approvedByUsername == null || approvedByUsername.isBlank()) {
             throw new IllegalArgumentException("No se pudo determinar el usuario aprobador.");
         }
+    }
+
+    private boolean hasPendingObservaciones(Integer mpsId) {
+        return mpsSemanalObservacionRepo.existsByMpsSemanal_MpsIdAndEstado(
+                mpsId,
+                EstadoMpsSemanalObservacion.ABIERTA
+        ) || mpsSemanalObservacionRepo.existsByMpsSemanal_MpsIdAndEstado(
+                mpsId,
+                EstadoMpsSemanalObservacion.ATENDIDA
+        );
+    }
+
+    private int resolveRevisionNumero(MasterProductionScheduleSemanal entity) {
+        Integer revisionNumero = entity.getRevisionNumero();
+        return revisionNumero != null && revisionNumero > 0 ? revisionNumero : 1;
     }
 
     private String writeSnapshot(PropuestaMpsSemanalResponseDTO snapshot) {
