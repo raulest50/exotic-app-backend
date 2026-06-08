@@ -1,6 +1,6 @@
 package exotic.app.planta.resource.bi;
 
-import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialDTO;
+import exotic.app.planta.model.bi.dto.ProveedorMaterialLeadTimeMetricDTO;
 import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialPageRowDTO;
 import exotic.app.planta.model.bi.dto.PuntoReordenEstimadoDTO;
 import exotic.app.planta.service.bi.ProveedoresBiService;
@@ -35,7 +35,7 @@ public class ProveedoresBiResource {
             @RequestParam(defaultValue = "365") int ventanaDias
     ) {
         try {
-            LeadTimeProveedorMaterialDTO result = proveedoresBiService.calcularLeadTimeProveedorMaterial(
+            ProveedorMaterialLeadTimeMetricDTO result = proveedoresBiService.calcularLeadTimeProveedorMaterial(
                     proveedorId,
                     materialId,
                     fechaCorte,

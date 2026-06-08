@@ -1,8 +1,7 @@
 package exotic.app.planta.resource.bi;
 
-import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialDTO;
 import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialPageRowDTO;
-import exotic.app.planta.model.bi.dto.LeadTimeStatsDTO;
+import exotic.app.planta.model.bi.dto.ProveedorMaterialLeadTimeMetricDTO;
 import exotic.app.planta.model.bi.dto.PuntoReordenEstimadoDTO;
 import exotic.app.planta.service.bi.ProveedoresBiService;
 import org.junit.jupiter.api.Test;
@@ -36,30 +35,21 @@ class ProveedoresBiResourceTest {
 
     @Test
     void calcularLeadTimeProveedorMaterial_returnsPayload() throws Exception {
-        LeadTimeStatsDTO first = new LeadTimeStatsDTO(
-                true,
-                null,
-                3.0,
-                3.0,
-                3.0,
-                3.0,
-                3.0,
-                0.0,
-                1,
-                1,
-                81,
-                LocalDateTime.of(2026, 3, 10, 8, 0)
-        );
-        LeadTimeProveedorMaterialDTO dto = new LeadTimeProveedorMaterialDTO(
+        ProveedorMaterialLeadTimeMetricDTO dto = new ProveedorMaterialLeadTimeMetricDTO(
                 "PROV-1",
                 "Proveedor Uno",
                 "MAT-1",
                 "Material Uno",
                 LocalDate.of(2026, 3, 31),
                 365,
+                3.0,
+                2,
+                3,
+                true,
+                null,
+                LocalDateTime.of(2026, 3, 31, 8, 0),
                 1,
-                first,
-                first
+                1
         );
 
         when(proveedoresBiService.calcularLeadTimeProveedorMaterial(
@@ -77,7 +67,9 @@ class ProveedoresBiResourceTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.proveedorId").value("PROV-1"))
                 .andExpect(jsonPath("$.materialId").value("MAT-1"))
-                .andExpect(jsonPath("$.firstReceipt.representativeLeadTimeDays").value(3.0));
+                .andExpect(jsonPath("$.leadTimeMedianoDias").value(3.0))
+                .andExpect(jsonPath("$.observaciones").value(2))
+                .andExpect(jsonPath("$.observacionesConFallbackFechaEmision").value(1));
     }
 
     @Test

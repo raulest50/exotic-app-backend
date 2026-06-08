@@ -1,10 +1,9 @@
 package exotic.app.planta.service.produccion;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsRequestDTO;
 import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
+import exotic.app.planta.repo.produccion.MpsSemanalLotePlanificadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import org.junit.jupiter.api.Test;
 
@@ -20,13 +19,14 @@ class MasterProductionScheduleOrderGenerationServiceTest {
     @Test
     void generarOrdenesDesdeSemanaAprobada_rejectsWeekWithGeneratedOrders() {
         MasterProductionScheduleSemanalRepo mpsRepo = mock(MasterProductionScheduleSemanalRepo.class);
+        MpsSemanalLotePlanificadoRepo lotePlanificadoRepo = mock(MpsSemanalLotePlanificadoRepo.class);
         OrdenProduccionRepo ordenRepo = mock(OrdenProduccionRepo.class);
         ProduccionService produccionService = mock(ProduccionService.class);
         MasterProductionScheduleOrderGenerationService service = new MasterProductionScheduleOrderGenerationService(
                 mpsRepo,
+                lotePlanificadoRepo,
                 ordenRepo,
-                produccionService,
-                new ObjectMapper()
+                produccionService
         );
 
         LocalDate weekStartDate = LocalDate.of(2026, 6, 1);

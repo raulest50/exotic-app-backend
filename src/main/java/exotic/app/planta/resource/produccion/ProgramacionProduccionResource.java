@@ -6,7 +6,6 @@ import exotic.app.planta.model.produccion.dto.AtenderMpsSemanalObservacionReques
 import exotic.app.planta.model.produccion.dto.CrearMpsSemanalObservacionRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsResponseDTO;
-import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
 import exotic.app.planta.model.produccion.dto.GuardarProgramacionProduccionSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalListItemDTO;
@@ -86,12 +85,12 @@ public class ProgramacionProduccionResource {
 
     @PostMapping("/mps-semanal/borrador")
     public ResponseEntity<?> guardarBorradorMpsSemanal(
-            @RequestBody GuardarMpsSemanalDraftRequestDTO request,
+            @RequestBody GuardarProgramacionProduccionSemanalRequestDTO request,
             Authentication authentication
     ) {
         try {
             requireTabAccess(authentication, "PROGRAMACION_PRODUCCION");
-            MpsSemanalDraftDTO response = masterProductionScheduleDraftService.saveDraft(request);
+            MpsSemanalDraftDTO response = programacionProduccionSemanalService.guardarBorradorDirecto(request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));

@@ -1,21 +1,21 @@
 package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.model.producto.Categoria;
-import exotic.app.planta.model.producto.PoolCapacidad;
 import exotic.app.planta.model.producto.Terminado;
-import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
+import exotic.app.planta.model.produccion.EstadoMpsSemanal;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalLotePlanificado;
+import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
+import exotic.app.planta.model.produccion.MpsSemanalDia;
+import exotic.app.planta.model.produccion.MpsSemanalItem;
+import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
+import exotic.app.planta.model.produccion.SemanaMPS;
 import exotic.app.planta.model.produccion.dto.GuardarProgramacionProduccionSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
+import exotic.app.planta.model.produccion.dto.ProgramacionProduccionSemanalDiaRequestDTO;
 import exotic.app.planta.model.produccion.dto.ProgramacionProduccionSemanalItemRequestDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarBlockDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarCellDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarDayDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarRowDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalCalendarDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalItemDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalSummaryDTO;
-import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
+import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,9 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -34,120 +36,110 @@ import java.util.stream.Collectors;
 @Transactional(rollbackFor = Exception.class)
 public class ProgramacionProduccionSemanalService {
 
-    private static final double EPSILON = 0.000001;
-
     private final TerminadoRepo terminadoRepo;
-    private final TransaccionAlmacenRepo transaccionAlmacenRepo;
+    private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
+    private final MpsSemanalDiaRepo mpsSemanalDiaRepo;
+    private final SemanaMPSService semanaMPSService;
+    private final MpsSemanalEditWindowService mpsSemanalEditWindowService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
 
-    private record EntryKey(LocalDate date, String productoId) {}
+    private record EntryKey(LocalDate fecha, String terminadoId) {}
 
-    private record CapacityUnit(
-            String rowKey,
-            Integer categoriaId,
-            String categoriaNombre,
-            Integer poolCapacidadId,
-            String poolCapacidadNombre,
-            int capacidadDiaria
-    ) {}
-
-    private record ProductCategoryContext(
-            Integer categoriaId,
-            String categoriaNombre,
-            Integer poolCapacidadId,
-            String poolCapacidadNombre
-    ) {}
+    private record LockedEntry(int numeroLotes, String observacion) {}
 
     private static final class ConsolidatedEntry {
-        private final LocalDate date;
-        private final String productoId;
-        private double unidades;
+        private final LocalDate fecha;
+        private final int dayIndex;
+        private final String terminadoId;
+        private int numeroLotes;
+        private String observacion;
+        private final int displayOrder;
 
-        private ConsolidatedEntry(LocalDate date, String productoId, double unidades) {
-            this.date = date;
-            this.productoId = productoId;
-            this.unidades = unidades;
-        }
-    }
-
-    private static final class ValidatedEntry {
-        private final LocalDate date;
-        private final Terminado terminado;
-        private final double unidades;
-        private final int lotes;
-
-        private ValidatedEntry(LocalDate date, Terminado terminado, double unidades, int lotes) {
-            this.date = date;
-            this.terminado = terminado;
-            this.unidades = unidades;
-            this.lotes = lotes;
-        }
-    }
-
-    private static final class ProductTotal {
-        private final Terminado terminado;
-        private double unidades;
-        private int lotes;
-        private LocalDate firstDate;
-        private boolean desbordaSemana;
-
-        private ProductTotal(Terminado terminado) {
-            this.terminado = terminado;
+        private ConsolidatedEntry(LocalDate fecha, int dayIndex, String terminadoId, int numeroLotes, String observacion, int displayOrder) {
+            this.fecha = fecha;
+            this.dayIndex = dayIndex;
+            this.terminadoId = terminadoId;
+            this.numeroLotes = numeroLotes;
+            this.observacion = observacion;
+            this.displayOrder = displayOrder;
         }
 
-        private void add(LocalDate date, double unidades, int lotes, LocalDate weekEndDate) {
-            this.unidades += unidades;
-            this.lotes += lotes;
-            if (firstDate == null || date.isBefore(firstDate)) {
-                firstDate = date;
-            }
-
-            int tiempoDiasFabricacion = resolveTiempoDiasFabricacion(terminado);
-            if (date.plusDays(Math.max(tiempoDiasFabricacion, 0)).isAfter(weekEndDate)) {
-                desbordaSemana = true;
-            }
+        private void merge(int lotes, String nextObservacion) {
+            this.numeroLotes += lotes;
+            this.observacion = mergeObservacion(this.observacion, nextObservacion);
         }
     }
 
     public MpsSemanalDraftDTO guardarBorradorDirecto(GuardarProgramacionProduccionSemanalRequestDTO request) {
         validateRequestShell(request);
 
-        LocalDate weekStartDate = request.getWeekStartDate();
-        LocalDate weekEndDate = weekStartDate.plusDays(5);
-        List<ConsolidatedEntry> consolidatedEntries = consolidateEntries(request.getEntradas(), weekStartDate);
-        List<String> productoIds = consolidatedEntries.stream()
-                .map(entry -> entry.productoId)
-                .distinct()
-                .toList();
+        SemanaMPS semanaMps = semanaMPSService.getOrCreateByStartDate(request.getWeekStartDate());
+        LocalDate weekStartDate = semanaMps.getStartDate();
+        LocalDate weekEndDate = semanaMps.getEndDate();
+        List<ConsolidatedEntry> entries = consolidateEntries(request.getDias(), weekStartDate, weekEndDate);
 
-        Map<String, Terminado> terminadosById = productoIds.isEmpty()
-                ? Map.of()
-                : terminadoRepo.findByProductoIdIn(productoIds).stream()
-                .collect(Collectors.toMap(Terminado::getProductoId, Function.identity()));
+        MasterProductionScheduleSemanal entity = masterProductionScheduleSemanalRepo.findBySemanaMps_Id(semanaMps.getId())
+                .or(() -> masterProductionScheduleSemanalRepo.findByWeekStartDate(weekStartDate))
+                .orElseGet(MasterProductionScheduleSemanal::new);
 
-        List<ValidatedEntry> validatedEntries = new ArrayList<>();
-        LinkedHashMap<String, ProductTotal> totalsByProducto = new LinkedHashMap<>();
-
-        for (ConsolidatedEntry entry : consolidatedEntries) {
-            Terminado terminado = terminadosById.get(entry.productoId);
-            validateEntry(entry, terminado);
-
-            int loteSize = resolveLoteSize(terminado);
-            int lotes = calculateExactLotes(entry.unidades, loteSize, entry.productoId);
-            validatedEntries.add(new ValidatedEntry(entry.date, terminado, entry.unidades, lotes));
-
-            totalsByProducto
-                    .computeIfAbsent(terminado.getProductoId(), ignored -> new ProductTotal(terminado))
-                    .add(entry.date, entry.unidades, lotes, weekEndDate);
+        if (entity.getMpsId() != null && entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
+            throw new IllegalStateException("La semana ya no esta en estado BORRADOR y no puede sobrescribirse.");
         }
 
-        GuardarMpsSemanalDraftRequestDTO draftRequest = new GuardarMpsSemanalDraftRequestDTO();
-        draftRequest.setWeekStartDate(weekStartDate);
-        draftRequest.setSummary(buildSummary(totalsByProducto));
-        draftRequest.setItems(buildItems(totalsByProducto));
-        draftRequest.setCalendar(buildCalendar(validatedEntries, weekStartDate));
+        List<MpsSemanalDia> currentDias = entity.getMpsId() == null
+                ? List.of()
+                : mpsSemanalDiaRepo.findAllByMpsSemanal_MpsIdOrderByDayIndexAsc(entity.getMpsId());
 
-        return masterProductionScheduleDraftService.saveDraft(draftRequest);
+        validateLockedDaysUnchanged(entries, currentDias, weekEndDate, entity.getMpsId() != null);
+        int nextRevision = resolveNextRevision(entity, currentDias, entries);
+
+        List<String> terminadoIds = entries.stream()
+                .map(entry -> entry.terminadoId)
+                .distinct()
+                .toList();
+        Map<String, Terminado> terminadosById = terminadoRepo.findByProductoIdIn(terminadoIds).stream()
+                .collect(Collectors.toMap(Terminado::getProductoId, Function.identity()));
+
+        entity.setSemanaMps(semanaMps);
+        entity.setWeekStartDate(weekStartDate);
+        entity.setWeekEndDate(weekEndDate);
+        entity.setRevisionNumero(nextRevision);
+        entity.setEstado(EstadoMpsSemanal.BORRADOR);
+        entity.setFechaAprobacion(null);
+        entity.setAprobadoPorUsername(null);
+        entity.setFechaGeneracionOdps(null);
+        entity.setGeneradoPorUsername(null);
+
+        if (entity.getMpsId() != null) {
+            entity.getDias().clear();
+            mpsSemanalDiaRepo.deleteAll(currentDias);
+            masterProductionScheduleSemanalRepo.saveAndFlush(entity);
+        }
+
+        Map<Integer, List<ConsolidatedEntry>> entriesByDayIndex = entries.stream()
+                .collect(Collectors.groupingBy(entry -> entry.dayIndex, LinkedHashMap::new, Collectors.toList()));
+
+        for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
+            MpsSemanalDia dia = new MpsSemanalDia();
+            dia.setMpsSemanal(entity);
+            dia.setFecha(weekStartDate.plusDays(dayIndex));
+            dia.setDayIndex(dayIndex);
+            dia.setDisplayOrder(dayIndex);
+
+            List<ConsolidatedEntry> dayEntries = entriesByDayIndex.getOrDefault(dayIndex, List.of()).stream()
+                    .sorted(Comparator.comparingInt(entry -> entry.displayOrder))
+                    .toList();
+            int displayOrder = 0;
+            for (ConsolidatedEntry entry : dayEntries) {
+                Terminado terminado = terminadosById.get(entry.terminadoId);
+                validateTerminado(entry.terminadoId, terminado);
+                dia.getItems().add(buildItem(entity, dia, terminado, entry, displayOrder++));
+            }
+            entity.getDias().add(dia);
+        }
+
+        MasterProductionScheduleSemanal saved = masterProductionScheduleSemanalRepo.save(entity);
+        return masterProductionScheduleDraftService.getByWeekStartDate(saved.getWeekStartDate());
     }
 
     private void validateRequestShell(GuardarProgramacionProduccionSemanalRequestDTO request) {
@@ -160,258 +152,217 @@ public class ProgramacionProduccionSemanalService {
         if (request.getWeekStartDate().getDayOfWeek() != DayOfWeek.MONDAY) {
             throw new IllegalArgumentException("weekStartDate debe corresponder a un lunes.");
         }
-        if (request.getEntradas() == null || request.getEntradas().isEmpty()) {
-            throw new IllegalArgumentException("Se requiere al menos una entrada de programacion.");
+        if (request.getDias() == null || request.getDias().isEmpty()) {
+            throw new IllegalArgumentException("Se requiere la programacion de dias del MPS semanal.");
         }
     }
 
     private List<ConsolidatedEntry> consolidateEntries(
-            List<ProgramacionProduccionSemanalItemRequestDTO> inputEntries,
-            LocalDate weekStartDate
+            List<ProgramacionProduccionSemanalDiaRequestDTO> inputDias,
+            LocalDate weekStartDate,
+            LocalDate weekEndDate
     ) {
-        LocalDate weekEndDate = weekStartDate.plusDays(5);
         LinkedHashMap<EntryKey, ConsolidatedEntry> grouped = new LinkedHashMap<>();
-
-        for (ProgramacionProduccionSemanalItemRequestDTO inputEntry : inputEntries) {
-            if (inputEntry == null) {
+        int order = 0;
+        for (ProgramacionProduccionSemanalDiaRequestDTO inputDia : inputDias) {
+            if (inputDia == null) {
                 continue;
             }
-            if (inputEntry.getDate() == null) {
-                throw new IllegalArgumentException("La fecha de cada entrada es obligatoria.");
+            LocalDate fecha = inputDia.getFecha();
+            int dayIndex = inputDia.getDayIndex();
+            validateDia(fecha, dayIndex, weekStartDate, weekEndDate);
+            if (inputDia.getItems() == null) {
+                continue;
             }
-            if (inputEntry.getDate().isBefore(weekStartDate) || inputEntry.getDate().isAfter(weekEndDate)) {
-                throw new IllegalArgumentException("Todas las entradas deben estar dentro de la semana lunes-sabado.");
-            }
-            if (inputEntry.getProductoId() == null || inputEntry.getProductoId().isBlank()) {
-                throw new IllegalArgumentException("El productoId de cada entrada es obligatorio.");
-            }
-            if (!Double.isFinite(inputEntry.getUnidades()) || inputEntry.getUnidades() <= 0) {
-                throw new IllegalArgumentException("Las unidades de cada entrada deben ser mayores que cero.");
-            }
-
-            String productoId = inputEntry.getProductoId().trim();
-            EntryKey key = new EntryKey(inputEntry.getDate(), productoId);
-            ConsolidatedEntry existing = grouped.get(key);
-            if (existing == null) {
-                grouped.put(key, new ConsolidatedEntry(inputEntry.getDate(), productoId, inputEntry.getUnidades()));
-            } else {
-                existing.unidades += inputEntry.getUnidades();
+            for (ProgramacionProduccionSemanalItemRequestDTO item : inputDia.getItems()) {
+                if (item == null) {
+                    continue;
+                }
+                String terminadoId = normalizeRequiredText(item.getTerminadoId(), "terminadoId es obligatorio.");
+                if (item.getNumeroLotes() <= 0) {
+                    throw new IllegalArgumentException("numeroLotes debe ser mayor que cero para " + terminadoId + ".");
+                }
+                EntryKey key = new EntryKey(fecha, terminadoId);
+                ConsolidatedEntry existing = grouped.get(key);
+                if (existing == null) {
+                    grouped.put(key, new ConsolidatedEntry(
+                            fecha,
+                            dayIndex,
+                            terminadoId,
+                            item.getNumeroLotes(),
+                            normalizeOptionalText(item.getObservacion()),
+                            order++
+                    ));
+                } else {
+                    existing.merge(item.getNumeroLotes(), item.getObservacion());
+                }
             }
         }
 
         if (grouped.isEmpty()) {
-            throw new IllegalArgumentException("Se requiere al menos una entrada de programacion valida.");
+            throw new IllegalArgumentException("Se requiere al menos un item de programacion semanal.");
         }
-
         return new ArrayList<>(grouped.values());
     }
 
-    private void validateEntry(ConsolidatedEntry entry, Terminado terminado) {
+    private void validateDia(LocalDate fecha, int dayIndex, LocalDate weekStartDate, LocalDate weekEndDate) {
+        if (fecha == null) {
+            throw new IllegalArgumentException("La fecha de cada dia MPS es obligatoria.");
+        }
+        if (dayIndex < 0 || dayIndex > 5) {
+            throw new IllegalArgumentException("dayIndex debe estar entre 0 y 5.");
+        }
+        if (fecha.isBefore(weekStartDate) || fecha.isAfter(weekEndDate)) {
+            throw new IllegalArgumentException("Todas las fechas del MPS deben estar dentro de la semana lunes-sabado.");
+        }
+        if (!fecha.equals(weekStartDate.plusDays(dayIndex))) {
+            throw new IllegalArgumentException("La fecha del dia MPS no corresponde al dayIndex indicado.");
+        }
+    }
+
+    private void validateTerminado(String terminadoId, Terminado terminado) {
         if (terminado == null) {
-            throw new IllegalArgumentException("Producto no encontrado o no es un terminado: " + entry.productoId);
+            throw new IllegalArgumentException("Producto no encontrado o no es un terminado: " + terminadoId);
         }
         if (resolveLoteSize(terminado) <= 0) {
-            throw new IllegalArgumentException("El producto terminado no tiene lote size configurado: " + entry.productoId);
+            throw new IllegalArgumentException("El producto terminado no tiene lote size configurado: " + terminadoId);
         }
         if (terminado.getPrefijoLote() == null || terminado.getPrefijoLote().isBlank()) {
-            throw new IllegalArgumentException("El producto terminado no tiene prefijo de lote definido: " + entry.productoId);
+            throw new IllegalArgumentException("El producto terminado no tiene prefijo de lote definido: " + terminadoId);
         }
     }
 
-    private int calculateExactLotes(double unidades, int loteSize, String productoId) {
-        double rawLotes = unidades / loteSize;
-        long roundedLotes = Math.round(rawLotes);
-        if (roundedLotes <= 0 || Math.abs(unidades - (roundedLotes * loteSize)) > EPSILON) {
-            throw new IllegalArgumentException(
-                    "Las unidades del producto " + productoId + " deben ser multiplo exacto del lote size " + loteSize + "."
-            );
+    private MpsSemanalItem buildItem(
+            MasterProductionScheduleSemanal mps,
+            MpsSemanalDia dia,
+            Terminado terminado,
+            ConsolidatedEntry entry,
+            int displayOrder
+    ) {
+        int loteSize = resolveLoteSize(terminado);
+        int tiempoDiasFabricacion = resolveTiempoDiasFabricacion(terminado);
+        Categoria categoria = terminado.getCategoria();
+
+        MpsSemanalItem item = new MpsSemanalItem();
+        item.setMpsSemanal(mps);
+        item.setMpsDia(dia);
+        item.setTerminado(terminado);
+        item.setTerminadoNombre(terminado.getNombre() != null ? terminado.getNombre() : terminado.getProductoId());
+        item.setCategoriaId(categoria != null ? categoria.getCategoriaId() : null);
+        item.setCategoriaNombre(categoria != null ? categoria.getCategoriaNombre() : null);
+        item.setLoteSize(loteSize);
+        item.setTiempoDiasFabricacion(tiempoDiasFabricacion);
+        item.setNumeroLotes(entry.numeroLotes);
+        item.setCantidadTotal(entry.numeroLotes * (double) loteSize);
+        item.setFechaLanzamiento(entry.fecha);
+        item.setFechaFinalPlanificada(entry.fecha.plusDays(Math.max(tiempoDiasFabricacion, 0)));
+        item.setObservacion(entry.observacion);
+        item.setWarning(resolveWarning(item, mps.getWeekEndDate()));
+        item.setDisplayOrder(displayOrder);
+
+        for (int ordinal = 1; ordinal <= entry.numeroLotes; ordinal++) {
+            MpsSemanalLotePlanificado lotePlanificado = new MpsSemanalLotePlanificado();
+            lotePlanificado.setMpsItem(item);
+            lotePlanificado.setLoteOrdinal(ordinal);
+            lotePlanificado.setCantidadPlanificada(loteSize);
+            lotePlanificado.setEstado(EstadoMpsSemanalLotePlanificado.PENDIENTE_ODP);
+            item.getLotesPlanificados().add(lotePlanificado);
         }
-        if (roundedLotes > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("La cantidad de lotes excede el limite permitido para " + productoId + ".");
-        }
-        return (int) roundedLotes;
+
+        return item;
     }
 
-    private PropuestaMpsSemanalSummaryDTO buildSummary(Map<String, ProductTotal> totalsByProducto) {
-        PropuestaMpsSemanalSummaryDTO summary = new PropuestaMpsSemanalSummaryDTO();
-        summary.setTotalTerminadosEvaluados(totalsByProducto.size());
-        summary.setTotalPlanificables(totalsByProducto.size());
-        summary.setTotalNoPlanificablesPorFaltaLoteSize(0);
-        summary.setTotalLotesPropuestos(totalsByProducto.values().stream().mapToInt(total -> total.lotes).sum());
-        summary.setTotalUnidadesPropuestas(totalsByProducto.values().stream().mapToDouble(total -> total.unidades).sum());
-        return summary;
+    private String resolveWarning(MpsSemanalItem item, LocalDate weekEndDate) {
+        if (item.getFechaFinalPlanificada() != null && weekEndDate != null && item.getFechaFinalPlanificada().isAfter(weekEndDate)) {
+            return "La fecha final planificada desborda la semana lunes-sabado.";
+        }
+        return null;
     }
 
-    private List<PropuestaMpsSemanalItemDTO> buildItems(Map<String, ProductTotal> totalsByProducto) {
-        List<PropuestaMpsSemanalItemDTO> items = new ArrayList<>();
+    private void validateLockedDaysUnchanged(
+            List<ConsolidatedEntry> entries,
+            List<MpsSemanalDia> currentDias,
+            LocalDate weekEndDate,
+            boolean existingMps
+    ) {
+        LocalDate editableFromDate = mpsSemanalEditWindowService.getEditableFromDate();
+        if (weekEndDate.isBefore(editableFromDate)) {
+            throw new IllegalStateException("La semana MPS no tiene dias editables. "
+                    + "La primera fecha editable es " + editableFromDate + ".");
+        }
 
-        for (ProductTotal total : totalsByProducto.values()) {
-            Terminado terminado = total.terminado;
-            Categoria categoria = terminado.getCategoria();
-            PoolCapacidad poolCapacidad = categoria != null ? categoria.getPoolCapacidad() : null;
-            int tiempoDiasFabricacion = resolveTiempoDiasFabricacion(terminado);
-
-            PropuestaMpsSemanalItemDTO item = new PropuestaMpsSemanalItemDTO();
-            item.setProductoId(terminado.getProductoId());
-            item.setProductoNombre(terminado.getNombre());
-            item.setCategoriaNombre(categoria != null ? categoria.getCategoriaNombre() : null);
-            item.setPoolCapacidadId(poolCapacidad != null ? poolCapacidad.getId() : null);
-            item.setPoolCapacidadNombre(poolCapacidad != null ? poolCapacidad.getNombre() : null);
-            item.setLoteSize(resolveLoteSize(terminado));
-            item.setTiempoDiasFabricacion(tiempoDiasFabricacion);
-            item.setStockActual(normalizeStock(transaccionAlmacenRepo.findTotalCantidadByProductoId(terminado.getProductoId())));
-            item.setNecesidadManual(total.unidades);
-            item.setNecesidadNeta(total.unidades);
-            item.setLotesPropuestos(total.lotes);
-            item.setCantidadPropuesta(total.unidades);
-            item.setDeltaVsNecesidad(0);
-            item.setPorcentajeParticipacion(0);
-            item.setCantidadVendida(0);
-            item.setValorTotal(0);
-            item.setFechaLanzamientoSugerida(total.firstDate);
-            item.setFechaFinalPlanificadaSugerida(total.firstDate != null ? total.firstDate.plusDays(Math.max(tiempoDiasFabricacion, 0)) : null);
-            item.setDesbordaSemana(total.desbordaSemana);
-            item.setPlanificable(true);
-            if (total.desbordaSemana) {
-                item.setWarning("La fecha final sugerida desborda la semana lunes-sabado.");
+        Map<EntryKey, LockedEntry> nextLocked = lockedFromEntries(entries, editableFromDate);
+        if (!existingMps) {
+            if (!nextLocked.isEmpty()) {
+                throw new IllegalStateException(buildLockedDaysMessage(editableFromDate));
             }
-            items.add(item);
+            return;
         }
 
-        return items;
+        Map<EntryKey, LockedEntry> currentLocked = lockedFromDias(currentDias, editableFromDate);
+        if (!Objects.equals(currentLocked, nextLocked)) {
+            throw new IllegalStateException(buildLockedDaysMessage(editableFromDate));
+        }
     }
 
-    private PropuestaMpsSemanalCalendarDTO buildCalendar(List<ValidatedEntry> entries, LocalDate weekStartDate) {
-        PropuestaMpsSemanalCalendarDTO calendar = new PropuestaMpsSemanalCalendarDTO();
-        for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
-            PropuestaMpsCalendarDayDTO day = new PropuestaMpsCalendarDayDTO();
-            day.setDayIndex(dayIndex);
-            day.setDate(weekStartDate.plusDays(dayIndex));
-            calendar.getDays().add(day);
-        }
-
-        LinkedHashMap<String, PropuestaMpsCalendarRowDTO> rowsByKey = new LinkedHashMap<>();
-        for (ValidatedEntry entry : entries) {
-            CapacityUnit capacityUnit = resolveCapacityUnit(entry.terminado);
-            PropuestaMpsCalendarRowDTO row = rowsByKey.computeIfAbsent(
-                    capacityUnit.rowKey(),
-                    ignored -> createCalendarRow(capacityUnit, weekStartDate)
-            );
-
-            int dayIndex = (int) (entry.date.toEpochDay() - weekStartDate.toEpochDay());
-            PropuestaMpsCalendarCellDTO cell = row.getDays().get(dayIndex);
-            PropuestaMpsCalendarBlockDTO block = buildBlock(entry, dayIndex);
-            cell.getBlocks().add(block);
-            cell.setTotalAsignado(cell.getTotalAsignado() + block.getCantidadAsignada());
-            cell.setEstado(resolveEstado(cell.getTotalAsignado(), cell.getCapacidadDiaria()));
-        }
-
-        rowsByKey.values().forEach(this::recalculateRow);
-        calendar.setRows(new ArrayList<>(rowsByKey.values()));
-        return calendar;
+    private Map<EntryKey, LockedEntry> lockedFromEntries(List<ConsolidatedEntry> entries, LocalDate editableFromDate) {
+        return entries.stream()
+                .filter(entry -> entry.fecha.isBefore(editableFromDate))
+                .collect(Collectors.toMap(
+                        entry -> new EntryKey(entry.fecha, entry.terminadoId),
+                        entry -> new LockedEntry(entry.numeroLotes, normalizeOptionalText(entry.observacion)),
+                        (left, ignored) -> left,
+                        LinkedHashMap::new
+                ));
     }
 
-    private PropuestaMpsCalendarRowDTO createCalendarRow(CapacityUnit capacityUnit, LocalDate weekStartDate) {
-        PropuestaMpsCalendarRowDTO row = new PropuestaMpsCalendarRowDTO();
-        row.setRowKey(capacityUnit.rowKey());
-        row.setCategoriaId(capacityUnit.categoriaId());
-        row.setCategoriaNombre(capacityUnit.categoriaNombre());
-        row.setPoolCapacidadId(capacityUnit.poolCapacidadId());
-        row.setPoolCapacidadNombre(capacityUnit.poolCapacidadNombre());
-        row.setCapacidadDiaria(capacityUnit.capacidadDiaria());
-        row.setCapacidadTeoricaSemana(Math.max(capacityUnit.capacidadDiaria(), 0) * 6);
-        row.setEstadoSemana(resolveEstado(0, row.getCapacidadTeoricaSemana()));
-
-        for (int dayIndex = 0; dayIndex < 6; dayIndex++) {
-            PropuestaMpsCalendarCellDTO cell = new PropuestaMpsCalendarCellDTO();
-            cell.setDayIndex(dayIndex);
-            cell.setDate(weekStartDate.plusDays(dayIndex));
-            cell.setCapacidadDiaria(capacityUnit.capacidadDiaria());
-            cell.setEstado(resolveEstado(0, capacityUnit.capacidadDiaria()));
-            row.getDays().add(cell);
+    private Map<EntryKey, LockedEntry> lockedFromDias(List<MpsSemanalDia> dias, LocalDate editableFromDate) {
+        LinkedHashMap<EntryKey, LockedEntry> locked = new LinkedHashMap<>();
+        for (MpsSemanalDia dia : dias) {
+            if (dia.getFecha() == null || !dia.getFecha().isBefore(editableFromDate)) {
+                continue;
+            }
+            for (MpsSemanalItem item : dia.getItems()) {
+                String terminadoId = item.getTerminado() != null ? item.getTerminado().getProductoId() : null;
+                locked.put(
+                        new EntryKey(dia.getFecha(), terminadoId),
+                        new LockedEntry(item.getNumeroLotes(), normalizeOptionalText(item.getObservacion()))
+                );
+            }
         }
-
-        return row;
+        return locked;
     }
 
-    private PropuestaMpsCalendarBlockDTO buildBlock(ValidatedEntry entry, int dayIndex) {
-        ProductCategoryContext productCategory = resolveProductCategoryContext(entry.terminado);
-        PropuestaMpsCalendarBlockDTO block = new PropuestaMpsCalendarBlockDTO();
-        block.setBlockId(entry.terminado.getProductoId() + "__direct-" + dayIndex);
-        block.setProductoId(entry.terminado.getProductoId());
-        block.setProductoNombre(entry.terminado.getNombre());
-        block.setCategoriaId(productCategory.categoriaId());
-        block.setCategoriaNombre(productCategory.categoriaNombre());
-        block.setPoolCapacidadId(productCategory.poolCapacidadId());
-        block.setPoolCapacidadNombre(productCategory.poolCapacidadNombre());
-        block.setLoteSize(resolveLoteSize(entry.terminado));
-        block.setLotesAsignados(entry.lotes);
-        block.setCantidadAsignada(entry.unidades);
-        block.setWarning(null);
-        return block;
+    private int resolveNextRevision(
+            MasterProductionScheduleSemanal entity,
+            List<MpsSemanalDia> currentDias,
+            List<ConsolidatedEntry> nextEntries
+    ) {
+        if (entity.getMpsId() == null) {
+            return 1;
+        }
+        String currentFingerprint = fingerprintFromDias(currentDias);
+        String nextFingerprint = fingerprintFromEntries(nextEntries);
+        int currentRevision = entity.getRevisionNumero() != null && entity.getRevisionNumero() > 0
+                ? entity.getRevisionNumero()
+                : 1;
+        return currentFingerprint.equals(nextFingerprint) ? currentRevision : currentRevision + 1;
     }
 
-    private void recalculateRow(PropuestaMpsCalendarRowDTO row) {
-        double totalSemana = row.getDays().stream()
-                .mapToDouble(PropuestaMpsCalendarCellDTO::getTotalAsignado)
-                .sum();
-        row.setTotalAsignadoSemana(totalSemana);
-        row.setEstadoSemana(resolveEstado(totalSemana, row.getCapacidadTeoricaSemana()));
+    private String fingerprintFromDias(List<MpsSemanalDia> dias) {
+        return dias.stream()
+                .flatMap(dia -> dia.getItems().stream()
+                        .map(item -> dia.getFecha() + "|" + (item.getTerminado() != null ? item.getTerminado().getProductoId() : "")
+                                + "|" + item.getNumeroLotes() + "|" + normalizeOptionalText(item.getObservacion())))
+                .sorted()
+                .collect(Collectors.joining(";"));
     }
 
-    private CapacityUnit resolveCapacityUnit(Terminado terminado) {
-        Categoria categoria = terminado.getCategoria();
-        PoolCapacidad poolCapacidad = categoria != null ? categoria.getPoolCapacidad() : null;
-        if (poolCapacidad != null && poolCapacidad.getId() != null) {
-            String poolNombre = poolCapacidad.getNombre() != null && !poolCapacidad.getNombre().isBlank()
-                    ? poolCapacidad.getNombre()
-                    : "Pool sin nombre";
-            return new CapacityUnit(
-                    "pool::" + poolCapacidad.getId(),
-                    null,
-                    null,
-                    poolCapacidad.getId(),
-                    poolNombre,
-                    normalizeCapacidad(poolCapacidad.getCapacidadDiaria())
-            );
-        }
-
-        if (categoria == null) {
-            return new CapacityUnit("sin-categoria", null, "Sin categoria", null, null, 0);
-        }
-
-        return new CapacityUnit(
-                "categoria::" + categoria.getCategoriaId(),
-                categoria.getCategoriaId(),
-                categoria.getCategoriaNombre(),
-                null,
-                null,
-                normalizeCapacidad(categoria.getCapacidadProductivaDiaria())
-        );
-    }
-
-    private ProductCategoryContext resolveProductCategoryContext(Terminado terminado) {
-        Categoria categoria = terminado.getCategoria();
-        PoolCapacidad poolCapacidad = categoria != null ? categoria.getPoolCapacidad() : null;
-        return new ProductCategoryContext(
-                categoria != null ? categoria.getCategoriaId() : null,
-                categoria != null ? categoria.getCategoriaNombre() : null,
-                poolCapacidad != null ? poolCapacidad.getId() : null,
-                poolCapacidad != null ? poolCapacidad.getNombre() : null
-        );
-    }
-
-    private String resolveEstado(double totalAsignado, int capacidad) {
-        if (capacidad <= 0) {
-            return "sin_configurar";
-        }
-        if (totalAsignado > capacidad) {
-            return "excedida";
-        }
-        if (Double.compare(totalAsignado, capacidad) == 0) {
-            return "al_limite";
-        }
-        return "disponible";
+    private String fingerprintFromEntries(List<ConsolidatedEntry> entries) {
+        return entries.stream()
+                .map(entry -> entry.fecha + "|" + entry.terminadoId + "|" + entry.numeroLotes + "|" + normalizeOptionalText(entry.observacion))
+                .sorted()
+                .collect(Collectors.joining(";"));
     }
 
     private static int resolveLoteSize(Terminado terminado) {
@@ -424,11 +375,34 @@ public class ProgramacionProduccionSemanalService {
         return categoria != null ? categoria.getTiempoDiasFabricacion() : 0;
     }
 
-    private int normalizeCapacidad(Integer capacidad) {
-        return capacidad != null ? Math.max(capacidad, 0) : 0;
+    private static String normalizeRequiredText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 
-    private double normalizeStock(Double stock) {
-        return stock != null ? stock : 0.0;
+    private static String normalizeOptionalText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static String mergeObservacion(String current, String next) {
+        String normalizedNext = normalizeOptionalText(next);
+        if (normalizedNext == null) {
+            return normalizeOptionalText(current);
+        }
+        String normalizedCurrent = normalizeOptionalText(current);
+        if (normalizedCurrent == null) {
+            return normalizedNext;
+        }
+        if (normalizedCurrent.contains(normalizedNext)) {
+            return normalizedCurrent;
+        }
+        return normalizedCurrent + " | " + normalizedNext;
+    }
+
+    private String buildLockedDaysMessage(LocalDate editableFromDate) {
+        return "No se pueden crear, modificar ni eliminar programaciones en dias bloqueados. "
+                + "La primera fecha editable es " + editableFromDate + ".";
     }
 }

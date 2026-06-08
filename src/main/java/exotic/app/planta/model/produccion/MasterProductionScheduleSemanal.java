@@ -73,9 +73,6 @@ public class MasterProductionScheduleSemanal {
     @Column(name = "generado_por_username", length = 100)
     private String generadoPorUsername;
 
-    @Column(name = "snapshot_json", columnDefinition = "TEXT")
-    private String snapshotJson;
-
     @JsonIgnore
     @OneToMany(mappedBy = "mpsSemanal")
     private List<OrdenProduccion> ordenesProduccion = new ArrayList<>();
@@ -83,4 +80,9 @@ public class MasterProductionScheduleSemanal {
     @JsonIgnore
     @OneToMany(mappedBy = "mpsSemanal")
     private List<MpsSemanalObservacion> observaciones = new ArrayList<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "mpsSemanal", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("dayIndex ASC")
+    private List<MpsSemanalDia> dias = new ArrayList<>();
 }

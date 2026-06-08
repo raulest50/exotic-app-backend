@@ -53,7 +53,7 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
 
     boolean existsByMpsSemanal_MpsId(Integer mpsId);
 
-    @EntityGraph(attributePaths = {"producto"})
+    @EntityGraph(attributePaths = {"producto", "mpsLotePlanificado", "mpsLotePlanificado.mpsItem"})
     List<OrdenProduccion> findByMpsSemanal_MpsIdOrderByOrdenIdAsc(Integer mpsId);
 
 

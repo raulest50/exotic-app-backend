@@ -55,7 +55,7 @@ public class OrdenProduccionDTO {
     private LocalDate mpsWeekStartDate;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private String mpsBlockId;
+    private Long mpsLotePlanificadoId;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private Integer mpsLoteOrdinal;

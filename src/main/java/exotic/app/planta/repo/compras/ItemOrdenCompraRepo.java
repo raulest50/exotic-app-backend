@@ -64,6 +64,7 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
                 material.productoId,
                 material.nombre,
                 orden.fechaEmision,
+                orden.fechaEnvioProveedor,
                 item.cantidad
             )
             FROM ItemOrdenCompra item
@@ -71,10 +72,10 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
             JOIN orden.proveedor proveedor
             JOIN item.material material
             WHERE material.productoId = :materialId
-              AND orden.fechaEmision >= :start
-              AND orden.fechaEmision <= :end
+              AND COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) >= :start
+              AND COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) <= :end
               AND (:proveedorId IS NULL OR proveedor.id = :proveedorId)
-            ORDER BY orden.fechaEmision ASC, orden.ordenCompraId ASC
+            ORDER BY COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) ASC, orden.ordenCompraId ASC
             """)
     List<ProveedorMaterialOrdenHistRowDTO> findLeadTimeOrderHistory(
             @Param("materialId") String materialId,

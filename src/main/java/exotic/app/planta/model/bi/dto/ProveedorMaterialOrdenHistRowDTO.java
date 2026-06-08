@@ -19,6 +19,7 @@ public class ProveedorMaterialOrdenHistRowDTO {
     private String materialId;
     private String materialNombre;
     private LocalDateTime fechaEmision;
+    private LocalDateTime fechaEnvioProveedor;
     private Integer cantidadOrdenada;
 
 }

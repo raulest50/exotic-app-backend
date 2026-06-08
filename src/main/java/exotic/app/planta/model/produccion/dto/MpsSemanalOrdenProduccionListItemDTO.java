@@ -1,5 +1,6 @@
 package exotic.app.planta.model.produccion.dto;
 
+import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,7 +18,8 @@ public class MpsSemanalOrdenProduccionListItemDTO {
     private LocalDateTime fechaLanzamiento;
     private LocalDateTime fechaFinalPlanificada;
     private int estadoOrden;
-    private String mpsBlockId;
+    private Long mpsLotePlanificadoId;
+    private Long mpsItemId;
     private Integer mpsLoteOrdinal;
 
     public static MpsSemanalOrdenProduccionListItemDTO fromEntity(OrdenProduccion orden) {
@@ -30,8 +32,15 @@ public class MpsSemanalOrdenProduccionListItemDTO {
         dto.setFechaLanzamiento(orden.getFechaLanzamiento());
         dto.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
         dto.setEstadoOrden(orden.getEstadoOrden());
-        dto.setMpsBlockId(orden.getMpsBlockId());
-        dto.setMpsLoteOrdinal(orden.getMpsLoteOrdinal());
+
+        MpsSemanalLotePlanificado lotePlanificado = orden.getMpsLotePlanificado();
+        if (lotePlanificado != null) {
+            dto.setMpsLotePlanificadoId(lotePlanificado.getId());
+            dto.setMpsLoteOrdinal(lotePlanificado.getLoteOrdinal());
+            if (lotePlanificado.getMpsItem() != null) {
+                dto.setMpsItemId(lotePlanificado.getMpsItem().getId());
+            }
+        }
         return dto;
     }
 }

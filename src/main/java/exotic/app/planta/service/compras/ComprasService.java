@@ -1,5 +1,6 @@
 package exotic.app.planta.service.compras;
 
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.compras.*;
 import jakarta.mail.MessagingException;
 import jakarta.transaction.Transactional;
@@ -380,6 +381,10 @@ public class ComprasService {
                     throw e;
                 }
             }
+        }
+
+        if (ue.getNewEstado() == 2 && orden.getEstado() == 1 && orden.getFechaEnvioProveedor() == null) {
+            orden.setFechaEnvioProveedor(AppTime.now());
         }
 
         // Actualizar el estado solo después de que todo el proceso haya sido exitoso

@@ -1,9 +1,9 @@
 package exotic.app.planta.service.bi;
 
 import exotic.app.planta.config.AppTime;
-import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialDTO;
 import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialPageRowDTO;
 import exotic.app.planta.model.bi.dto.LeadTimeStatsDTO;
+import exotic.app.planta.model.bi.dto.ProveedorMaterialLeadTimeMetricDTO;
 import exotic.app.planta.model.bi.dto.ProveedorMaterialOrdenHistRowDTO;
 import exotic.app.planta.model.bi.dto.ProveedorMaterialRecepcionRowDTO;
 import exotic.app.planta.model.bi.dto.PuntoReordenEstimadoDTO;
@@ -58,7 +58,7 @@ public class ProveedoresBiService {
     private final ItemOrdenCompraRepo itemOrdenCompraRepo;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
 
-    public LeadTimeProveedorMaterialDTO calcularLeadTimeProveedorMaterial(
+    public ProveedorMaterialLeadTimeMetricDTO calcularLeadTimeProveedorMaterial(
             String proveedorId,
             String materialId,
             LocalDate fechaCorte,
@@ -71,19 +71,7 @@ public class ProveedoresBiService {
 
         EffectiveWindow window = resolveWindow(fechaCorte, ventanaDias);
         HistoricalContext context = loadHistoricalContext(materialId, proveedorId, window);
-        LeadTimePair leadTimePair = buildLeadTimePair(context.orders(), context.receiptsByOrder());
-
-        return new LeadTimeProveedorMaterialDTO(
-                proveedor.getId(),
-                proveedor.getNombre(),
-                material.getProductoId(),
-                material.getNombre(),
-                window.fechaCorte(),
-                window.ventanaDias(),
-                context.orders().size(),
-                leadTimePair.firstReceipt(),
-                leadTimePair.completeReceipt()
-        );
+        return buildProveedorMaterialLeadTimeMetric(proveedor, material, window, context);
     }
 
     public Page<LeadTimeProveedorMaterialPageRowDTO> listarLeadTimesPorMaterial(
@@ -338,6 +326,7 @@ public class ProveedoresBiService {
                             row.getMaterialId(),
                             row.getMaterialNombre(),
                             row.getFechaEmision(),
+                            row.getFechaEnvioProveedor(),
                             safeInt(row.getCantidadOrdenada())
                     );
                 }
@@ -346,10 +335,13 @@ public class ProveedoresBiService {
         }
 
         Map<Integer, ReceiptAggregate> receipts = new HashMap<>();
+        Map<Integer, List<ReceiptEvent>> receiptEvents = new HashMap<>();
         for (ProveedorMaterialRecepcionRowDTO row : receiptRows) {
             if (row.getFechaMovimiento() == null) {
                 continue;
             }
+            receiptEvents.computeIfAbsent(row.getOrdenCompraId(), ignored -> new ArrayList<>())
+                    .add(new ReceiptEvent(row.getOrdenCompraId(), safeDouble(row.getCantidadRecibida()), row.getFechaMovimiento()));
             receipts.compute(row.getOrdenCompraId(), (ignored, existing) -> {
                 if (existing == null) {
                     return new ReceiptAggregate(
@@ -363,7 +355,105 @@ public class ProveedoresBiService {
             });
         }
 
-        return new HistoricalContext(new ArrayList<>(orders.values()), receipts);
+        return new HistoricalContext(new ArrayList<>(orders.values()), receipts, receiptEvents);
+    }
+
+    private ProveedorMaterialLeadTimeMetricDTO buildProveedorMaterialLeadTimeMetric(
+            Proveedor proveedor,
+            Material material,
+            EffectiveWindow window,
+            HistoricalContext context
+    ) {
+        List<Double> leadTimes = new ArrayList<>();
+        int observationsWithFechaEnvio = 0;
+        int observationsWithFallbackFechaEmision = 0;
+
+        for (OrderAggregate order : context.orders()) {
+            if (order.cantidadOrdenada() <= 0) {
+                continue;
+            }
+
+            LocalDateTime startAt = order.leadTimeStartAt();
+            if (startAt == null) {
+                continue;
+            }
+
+            LocalDateTime completionAt = findCompleteReceiptAt(
+                    order,
+                    context.receiptEventsByOrder().getOrDefault(order.ordenCompraId(), List.of())
+            );
+            if (completionAt == null) {
+                continue;
+            }
+
+            double leadTimeDays = daysBetween(startAt, completionAt);
+            if (leadTimeDays < 0.0d) {
+                continue;
+            }
+
+            leadTimes.add(leadTimeDays);
+            if (order.fechaEnvioProveedor() != null) {
+                observationsWithFechaEnvio++;
+            } else {
+                observationsWithFallbackFechaEmision++;
+            }
+        }
+
+        if (leadTimes.isEmpty()) {
+            return new ProveedorMaterialLeadTimeMetricDTO(
+                    proveedor.getId(),
+                    proveedor.getNombre(),
+                    material.getProductoId(),
+                    material.getNombre(),
+                    window.fechaCorte(),
+                    window.ventanaDias(),
+                    null,
+                    0,
+                    context.orders().size(),
+                    false,
+                    context.orders().isEmpty()
+                            ? "No se registran ordenes del material y proveedor en la ventana consultada."
+                            : "No existen observaciones validas con recepcion completa en la ventana consultada.",
+                    AppTime.now(),
+                    observationsWithFechaEnvio,
+                    observationsWithFallbackFechaEmision
+            );
+        }
+
+        leadTimes.sort(Double::compareTo);
+        return new ProveedorMaterialLeadTimeMetricDTO(
+                proveedor.getId(),
+                proveedor.getNombre(),
+                material.getProductoId(),
+                material.getNombre(),
+                window.fechaCorte(),
+                window.ventanaDias(),
+                round4(median(leadTimes)),
+                leadTimes.size(),
+                context.orders().size(),
+                true,
+                null,
+                AppTime.now(),
+                observationsWithFechaEnvio,
+                observationsWithFallbackFechaEmision
+        );
+    }
+
+    private LocalDateTime findCompleteReceiptAt(OrderAggregate order, List<ReceiptEvent> receipts) {
+        if (receipts.isEmpty()) {
+            return null;
+        }
+
+        double cumulativeReceived = 0.0d;
+        List<ReceiptEvent> sorted = new ArrayList<>(receipts);
+        sorted.sort(Comparator.comparing(ReceiptEvent::receiptAt));
+        for (ReceiptEvent receipt : sorted) {
+            cumulativeReceived += receipt.quantity();
+            if (cumulativeReceived + EPSILON >= order.cantidadOrdenada()) {
+                return receipt.receiptAt();
+            }
+        }
+        return null;
     }
 
     private LeadTimePair buildLeadTimePair(List<OrderAggregate> orders, Map<Integer, ReceiptAggregate> receiptsByOrder) {
@@ -382,7 +472,8 @@ public class ProveedoresBiService {
         boolean hasAnyCompleteReceipt = false;
 
         for (OrderAggregate order : orders) {
-            if (order.fechaEmision() == null) {
+            LocalDateTime startAt = order.leadTimeStartAt();
+            if (startAt == null) {
                 continue;
             }
 
@@ -391,7 +482,7 @@ public class ProveedoresBiService {
                 continue;
             }
 
-            double firstReceiptLeadTime = daysBetween(order.fechaEmision(), receipt.firstReceiptAt());
+            double firstReceiptLeadTime = daysBetween(startAt, receipt.firstReceiptAt());
             if (firstReceiptLeadTime >= 0.0d) {
                 firstReceiptLeadTimes.add(firstReceiptLeadTime);
                 firstReceiptObservedAt.add(receipt.firstReceiptAt());
@@ -399,7 +490,7 @@ public class ProveedoresBiService {
             }
 
             if (receipt.totalCantidadRecibida() + EPSILON >= order.cantidadOrdenada() && receipt.lastReceiptAt() != null) {
-                double completeReceiptLeadTime = daysBetween(order.fechaEmision(), receipt.lastReceiptAt());
+                double completeReceiptLeadTime = daysBetween(startAt, receipt.lastReceiptAt());
                 if (completeReceiptLeadTime >= 0.0d) {
                     completeReceiptLeadTimes.add(completeReceiptLeadTime);
                     completeReceiptObservedAt.add(receipt.lastReceiptAt());
@@ -643,7 +734,8 @@ public class ProveedoresBiService {
 
     private record HistoricalContext(
             List<OrderAggregate> orders,
-            Map<Integer, ReceiptAggregate> receiptsByOrder
+            Map<Integer, ReceiptAggregate> receiptsByOrder,
+            Map<Integer, List<ReceiptEvent>> receiptEventsByOrder
     ) {
     }
 
@@ -654,8 +746,13 @@ public class ProveedoresBiService {
             String materialId,
             String materialNombre,
             LocalDateTime fechaEmision,
+            LocalDateTime fechaEnvioProveedor,
             int cantidadOrdenada
     ) {
+        private LocalDateTime leadTimeStartAt() {
+            return fechaEnvioProveedor != null ? fechaEnvioProveedor : fechaEmision;
+        }
+
         private OrderAggregate withAdditionalOrderedQuantity(int extraQty) {
             return new OrderAggregate(
                     ordenCompraId,
@@ -664,9 +761,17 @@ public class ProveedoresBiService {
                     materialId,
                     materialNombre,
                     fechaEmision,
+                    fechaEnvioProveedor,
                     cantidadOrdenada + extraQty
             );
         }
+    }
+
+    private record ReceiptEvent(
+            Integer ordenCompraId,
+            double quantity,
+            LocalDateTime receiptAt
+    ) {
     }
 
     private record ReceiptAggregate(

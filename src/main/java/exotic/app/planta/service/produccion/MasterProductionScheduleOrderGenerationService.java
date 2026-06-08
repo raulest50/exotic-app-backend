@@ -1,23 +1,20 @@
 package exotic.app.planta.service.produccion;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
+import exotic.app.planta.model.produccion.MpsSemanalItem;
+import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsResponseDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalOrdenProduccionListItemDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarBlockDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarCellDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalItemDTO;
-import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
 import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
+import exotic.app.planta.repo.produccion.MpsSemanalLotePlanificadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +22,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -33,17 +29,15 @@ import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 @Transactional(rollbackFor = Exception.class)
 public class MasterProductionScheduleOrderGenerationService {
 
     private static final Pattern LOTE_PATTERN = Pattern.compile("^(.+)-(\\d+)-(\\d{2})$");
-    private static final double EPSILON = 0.000001;
 
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
+    private final MpsSemanalLotePlanificadoRepo mpsSemanalLotePlanificadoRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final ProduccionService produccionService;
-    private final ObjectMapper objectMapper;
 
     public GenerarOdpDesdeMpsResponseDTO generarOrdenesDesdeSemanaAprobada(
             GenerarOdpDesdeMpsRequestDTO request,
@@ -62,81 +56,49 @@ public class MasterProductionScheduleOrderGenerationService {
         if (mps.getEstado() != EstadoMpsSemanal.APROBADO) {
             throw new IllegalStateException("Solo se pueden generar ODPs desde semanas en estado APROBADO.");
         }
-
         if (ordenProduccionRepo.existsByMpsSemanal_MpsId(mps.getMpsId())) {
             throw new IllegalStateException("La semana ya tiene ODPs generadas y no admite una nueva generacion.");
         }
 
-        LocalDate weekStartDate = mps.getWeekStartDate();
-        PropuestaMpsSemanalResponseDTO snapshot = readSnapshot(mps);
-        MpsSemanalSnapshotMetrics metrics = MpsSemanalSnapshotMetrics.fromSnapshot(snapshot);
-        if (!metrics.hasExpectedOrders()) {
-            throw new IllegalStateException("No se pueden generar ODPs para una semana sin ODPs esperadas.");
+        List<MpsSemanalLotePlanificado> lotesPendientes = mpsSemanalLotePlanificadoRepo
+                .findPendingByMpsIdOrdered(
+                        mps.getMpsId(),
+                        EstadoMpsSemanalLotePlanificado.PENDIENTE_ODP
+                );
+        if (lotesPendientes.isEmpty()) {
+            throw new IllegalStateException("No se pueden generar ODPs para una semana sin lotes planificados pendientes.");
         }
 
-        Map<String, PropuestaMpsSemanalItemDTO> itemsByProductoId = buildItemsByProductoId(snapshot);
         Map<String, LoteSequenceState> lotesPorProducto = new HashMap<>();
         List<Integer> ordenesIds = new ArrayList<>();
-        int totalBloquesProgramados = 0;
-        int totalLotesProgramados = 0;
+        for (MpsSemanalLotePlanificado lotePlanificado : lotesPendientes) {
+            MpsSemanalItem item = lotePlanificado.getMpsItem();
+            validateLotePlanificado(lotePlanificado, item);
 
-        if (snapshot.getCalendar() != null && snapshot.getCalendar().getRows() != null) {
-            for (var row : snapshot.getCalendar().getRows()) {
-                if (row.getDays() == null) {
-                    continue;
-                }
-                for (PropuestaMpsCalendarCellDTO cell : row.getDays()) {
-                    if (cell.getBlocks() == null || cell.getBlocks().isEmpty()) {
-                        continue;
-                    }
-                    for (PropuestaMpsCalendarBlockDTO block : cell.getBlocks()) {
-                        int lotesAsignados = block.getLotesAsignados();
-                        if (lotesAsignados == 0) {
-                            continue;
-                        }
+            String productoId = item.getTerminado().getProductoId();
+            String loteBatchNumber = nextLotForProduct(productoId, lotesPorProducto);
+            OrdenProduccionDTO_save dto = buildOrdenDto(item, lotePlanificado, loteBatchNumber);
+            OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(dto, mps, lotePlanificado);
 
-                        totalBloquesProgramados++;
-                        totalLotesProgramados += lotesAsignados;
-
-                        PropuestaMpsSemanalItemDTO item = itemsByProductoId.get(block.getProductoId());
-                        if (item == null) {
-                            throw new IllegalStateException("No se encontro el item MPS asociado al producto " + block.getProductoId() + ".");
-                        }
-
-                        if (block.getBlockId() == null || block.getBlockId().isBlank()) {
-                            throw new IllegalStateException("Se encontro un bloque calendarizado sin blockId para el producto " + block.getProductoId() + ".");
-                        }
-                        if (cell.getDate() == null) {
-                            throw new IllegalStateException("Se encontro una celda calendarizada sin fecha para el producto " + block.getProductoId() + ".");
-                        }
-                        validateCellDate(weekStartDate, cell.getDate(), block.getProductoId());
-                        validateBlockForOrderGeneration(block, lotesAsignados);
-
-                        for (int loteOrdinal = 1; loteOrdinal <= lotesAsignados; loteOrdinal++) {
-                            String loteBatchNumber = nextLotForProduct(block.getProductoId(), lotesPorProducto);
-                            OrdenProduccionDTO_save dto = buildOrdenDto(weekStartDate, cell.getDate(), block, item, loteBatchNumber);
-                            OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(
-                                    dto,
-                                    mps,
-                                    block.getBlockId(),
-                                    loteOrdinal
-                            );
-                            ordenesIds.add(orden.getOrdenId());
-                        }
-                    }
-                }
-            }
+            lotePlanificado.setEstado(EstadoMpsSemanalLotePlanificado.ODP_GENERADA);
+            lotePlanificado.setOrdenProduccion(orden);
+            mpsSemanalLotePlanificadoRepo.save(lotePlanificado);
+            ordenesIds.add(orden.getOrdenId());
         }
 
         mps.setFechaGeneracionOdps(LocalDateTime.now());
         mps.setGeneradoPorUsername(generatedByUsername);
+        mps.setEstado(EstadoMpsSemanal.CERRADO);
         masterProductionScheduleSemanalRepo.save(mps);
 
         GenerarOdpDesdeMpsResponseDTO response = new GenerarOdpDesdeMpsResponseDTO();
         response.setMpsId(mps.getMpsId());
         response.setWeekStartDate(mps.getWeekStartDate());
-        response.setTotalBloquesProgramados(totalBloquesProgramados);
-        response.setTotalLotesProgramados(totalLotesProgramados);
+        response.setTotalBloquesProgramados((int) lotesPendientes.stream()
+                .map(lote -> lote.getMpsItem().getId())
+                .distinct()
+                .count());
+        response.setTotalLotesProgramados(lotesPendientes.size());
         response.setTotalOrdenesCreadas(ordenesIds.size());
         response.setOrdenesIds(ordenesIds);
         return response;
@@ -158,67 +120,29 @@ public class MasterProductionScheduleOrderGenerationService {
                 .toList();
     }
 
-    private void validateCellDate(LocalDate weekStartDate, LocalDate cellDate, String productoId) {
-        LocalDate weekEndDate = weekStartDate.plusDays(5);
-        if (cellDate.isBefore(weekStartDate) || cellDate.isAfter(weekEndDate)) {
-            throw new IllegalStateException("La fecha programada del producto " + productoId + " debe estar dentro de la semana lunes-sabado.");
+    private void validateLotePlanificado(MpsSemanalLotePlanificado lotePlanificado, MpsSemanalItem item) {
+        if (item == null || item.getTerminado() == null) {
+            throw new IllegalStateException("Se encontro un lote planificado sin item o terminado asociado.");
         }
-    }
-
-    private void validateBlockForOrderGeneration(PropuestaMpsCalendarBlockDTO block, int lotesAsignados) {
-        if (lotesAsignados < 0) {
-            throw new IllegalStateException("Los lotes asignados no pueden ser negativos para el producto " + block.getProductoId() + ".");
+        if (item.getLoteSize() <= 0) {
+            throw new IllegalStateException("El producto " + item.getTerminado().getProductoId() + " no tiene lote size valido para generar ODPs.");
         }
-        if (block.getLoteSize() <= 0) {
-            throw new IllegalStateException("El producto " + block.getProductoId() + " no tiene lote size valido para generar ODPs.");
+        if (lotePlanificado.getCantidadPlanificada() <= 0) {
+            throw new IllegalStateException("El lote planificado " + lotePlanificado.getId() + " no tiene cantidad valida.");
         }
-        if (block.getCantidadAsignada() <= 0) {
-            throw new IllegalStateException("El producto " + block.getProductoId() + " no tiene unidades asignadas para generar ODPs.");
-        }
-        double expectedUnits = block.getLoteSize() * (double) lotesAsignados;
-        if (Math.abs(block.getCantidadAsignada() - expectedUnits) > EPSILON) {
-            throw new IllegalStateException("Las unidades del producto " + block.getProductoId() + " no corresponden a lotes exactos.");
-        }
-    }
-
-    private PropuestaMpsSemanalResponseDTO readSnapshot(MasterProductionScheduleSemanal mps) {
-        if (mps.getSnapshotJson() == null || mps.getSnapshotJson().isBlank()) {
-            throw new IllegalStateException("El MPS semanal no tiene snapshot persistido.");
-        }
-        try {
-            return objectMapper.readValue(mps.getSnapshotJson(), PropuestaMpsSemanalResponseDTO.class);
-        } catch (JsonProcessingException e) {
-            log.error("No se pudo deserializar el snapshot MPS para generar ODPs. mpsId={}", mps.getMpsId(), e);
-            throw new IllegalStateException("No se pudo leer el snapshot persistido del MPS semanal.");
-        }
-    }
-
-    private Map<String, PropuestaMpsSemanalItemDTO> buildItemsByProductoId(PropuestaMpsSemanalResponseDTO snapshot) {
-        Map<String, PropuestaMpsSemanalItemDTO> itemsByProductoId = new LinkedHashMap<>();
-        if (snapshot.getItems() != null) {
-            for (PropuestaMpsSemanalItemDTO item : snapshot.getItems()) {
-                itemsByProductoId.put(item.getProductoId(), item);
-            }
-        }
-        return itemsByProductoId;
     }
 
     private OrdenProduccionDTO_save buildOrdenDto(
-            LocalDate weekStartDate,
-            LocalDate blockDate,
-            PropuestaMpsCalendarBlockDTO block,
-            PropuestaMpsSemanalItemDTO item,
+            MpsSemanalItem item,
+            MpsSemanalLotePlanificado lotePlanificado,
             String loteBatchNumber
     ) {
-        LocalDateTime fechaLanzamiento = blockDate.atStartOfDay();
-        LocalDateTime fechaFinalPlanificada = fechaLanzamiento.plusDays(Math.max(item.getTiempoDiasFabricacion(), 0));
-
         OrdenProduccionDTO_save dto = new OrdenProduccionDTO_save();
-        dto.setProductoId(block.getProductoId());
-        dto.setObservaciones("Generada desde MPS semanal " + weekStartDate);
-        dto.setCantidadProducir(block.getLoteSize());
-        dto.setFechaLanzamiento(fechaLanzamiento);
-        dto.setFechaFinalPlanificada(fechaFinalPlanificada);
+        dto.setProductoId(item.getTerminado().getProductoId());
+        dto.setObservaciones("Generada desde MPS semanal " + item.getMpsSemanal().getWeekStartDate());
+        dto.setCantidadProducir(lotePlanificado.getCantidadPlanificada());
+        dto.setFechaLanzamiento(item.getFechaLanzamiento().atStartOfDay());
+        dto.setFechaFinalPlanificada(item.getFechaFinalPlanificada().atStartOfDay());
         dto.setNumeroPedidoComercial(null);
         dto.setAreaOperativa("Producción");
         dto.setDepartamentoOperativo("Dirección de Operaciones");

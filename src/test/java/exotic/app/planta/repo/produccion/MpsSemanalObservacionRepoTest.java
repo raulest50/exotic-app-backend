@@ -141,7 +141,6 @@ class MpsSemanalObservacionRepoTest {
         mps.setWeekEndDate(weekStartDate.plusDays(5));
         mps.setRevisionNumero(1);
         mps.setEstado(EstadoMpsSemanal.BORRADOR);
-        mps.setSnapshotJson("{}");
         return mpsRepo.saveAndFlush(mps);
     }
 }

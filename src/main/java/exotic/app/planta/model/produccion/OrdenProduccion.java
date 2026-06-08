@@ -45,11 +45,10 @@ public class OrdenProduccion {
     @JoinColumn(name = "mps_id")
     private MasterProductionScheduleSemanal mpsSemanal;
 
-    @Column(name = "mps_block_id", length = 120)
-    private String mpsBlockId;
-
-    @Column(name = "mps_lote_ordinal")
-    private Integer mpsLoteOrdinal;
+    @JsonIgnore
+    @OneToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "mps_lote_planificado_id", unique = true)
+    private MpsSemanalLotePlanificado mpsLotePlanificado;
 
     /**
      * Estados de la orden de producción:

@@ -31,6 +31,16 @@ public class OrdenCompraMateriales {
     @CreationTimestamp
     private LocalDateTime fechaEmision;
 
+    /**
+     * Fecha en que la OCM fue marcada como enviada al proveedor.
+     * <p>
+     * Es un dato operacional del flujo de compras y sirve como inicio preferente
+     * para metricas informativas de lead time. Si esta fecha no existe en OCMs
+     * historicas, BI puede usar fechaEmision como fallback explicito.
+     */
+    @Column(name = "fecha_envio_proveedor")
+    private LocalDateTime fechaEnvioProveedor;
+
     private LocalDateTime fechaVencimiento;
 
     /**

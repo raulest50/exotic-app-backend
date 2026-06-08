@@ -1,25 +1,29 @@
 package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.model.producto.Categoria;
-import exotic.app.planta.model.producto.PoolCapacidad;
 import exotic.app.planta.model.producto.Terminado;
-import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
+import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
+import exotic.app.planta.model.produccion.MpsSemanalDia;
+import exotic.app.planta.model.produccion.MpsSemanalItem;
+import exotic.app.planta.model.produccion.SemanaMPS;
 import exotic.app.planta.model.produccion.dto.GuardarProgramacionProduccionSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
+import exotic.app.planta.model.produccion.dto.ProgramacionProduccionSemanalDiaRequestDTO;
 import exotic.app.planta.model.produccion.dto.ProgramacionProduccionSemanalItemRequestDTO;
-import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
+import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,159 +34,171 @@ class ProgramacionProduccionSemanalServiceTest {
 
     @Test
     void guardarBorradorDirecto_rejectsNonMondayWeekStartDate() {
-        ProgramacionProduccionSemanalService service = buildService();
+        TestContext context = buildContext();
         GuardarProgramacionProduccionSemanalRequestDTO request = buildRequest(
                 LocalDate.of(2026, 6, 2),
-                List.of(entry(MONDAY, "T-001", 20))
+                List.of(day(LocalDate.of(2026, 6, 2), 0, item("T-001", 1)))
         );
 
-        assertThrows(IllegalArgumentException.class, () -> service.guardarBorradorDirecto(request));
+        assertThrows(IllegalArgumentException.class, () -> context.service.guardarBorradorDirecto(request));
     }
 
     @Test
     void guardarBorradorDirecto_rejectsDateOutsideMondayToSaturdayWeek() {
-        ProgramacionProduccionSemanalService service = buildService();
+        TestContext context = buildContext();
         GuardarProgramacionProduccionSemanalRequestDTO request = buildRequest(
                 MONDAY,
-                List.of(entry(MONDAY.plusDays(6), "T-001", 20))
+                List.of(day(MONDAY.plusDays(6), 6, item("T-001", 1)))
         );
 
-        assertThrows(IllegalArgumentException.class, () -> service.guardarBorradorDirecto(request));
-    }
-
-    @Test
-    void guardarBorradorDirecto_rejectsUnitsThatDoNotDivideExactlyByLoteSize() {
-        TerminadoRepo terminadoRepo = mock(TerminadoRepo.class);
-        TransaccionAlmacenRepo stockRepo = mock(TransaccionAlmacenRepo.class);
-        MasterProductionScheduleDraftService draftService = mock(MasterProductionScheduleDraftService.class);
-        ProgramacionProduccionSemanalService service = new ProgramacionProduccionSemanalService(terminadoRepo, stockRepo, draftService);
-
-        when(terminadoRepo.findByProductoIdIn(anyCollection())).thenReturn(List.of(buildTerminado("T-001", "Producto", 12, "PRD")));
-
-        GuardarProgramacionProduccionSemanalRequestDTO request = buildRequest(
-                MONDAY,
-                List.of(entry(MONDAY, "T-001", 25))
-        );
-
-        assertThrows(IllegalArgumentException.class, () -> service.guardarBorradorDirecto(request));
+        assertThrows(IllegalArgumentException.class, () -> context.service.guardarBorradorDirecto(request));
     }
 
     @Test
     void guardarBorradorDirecto_rejectsTerminadoWithoutLoteSize() {
-        TerminadoRepo terminadoRepo = mock(TerminadoRepo.class);
-        TransaccionAlmacenRepo stockRepo = mock(TransaccionAlmacenRepo.class);
-        MasterProductionScheduleDraftService draftService = mock(MasterProductionScheduleDraftService.class);
-        ProgramacionProduccionSemanalService service = new ProgramacionProduccionSemanalService(terminadoRepo, stockRepo, draftService);
-
-        when(terminadoRepo.findByProductoIdIn(anyCollection())).thenReturn(List.of(buildTerminado("T-001", "Producto", 0, "PRD")));
+        TestContext context = buildContext();
+        when(context.terminadoRepo.findByProductoIdIn(anyCollection()))
+                .thenReturn(List.of(buildTerminado("T-001", "Producto", 0, "PRD")));
 
         GuardarProgramacionProduccionSemanalRequestDTO request = buildRequest(
                 MONDAY,
-                List.of(entry(MONDAY, "T-001", 20))
+                List.of(day(MONDAY, 0, item("T-001", 1)))
         );
 
-        assertThrows(IllegalArgumentException.class, () -> service.guardarBorradorDirecto(request));
+        assertThrows(IllegalArgumentException.class, () -> context.service.guardarBorradorDirecto(request));
     }
 
     @Test
     void guardarBorradorDirecto_rejectsTerminadoWithoutPrefijoLote() {
-        TerminadoRepo terminadoRepo = mock(TerminadoRepo.class);
-        TransaccionAlmacenRepo stockRepo = mock(TransaccionAlmacenRepo.class);
-        MasterProductionScheduleDraftService draftService = mock(MasterProductionScheduleDraftService.class);
-        ProgramacionProduccionSemanalService service = new ProgramacionProduccionSemanalService(terminadoRepo, stockRepo, draftService);
-
-        when(terminadoRepo.findByProductoIdIn(anyCollection())).thenReturn(List.of(buildTerminado("T-001", "Producto", 10, "")));
+        TestContext context = buildContext();
+        when(context.terminadoRepo.findByProductoIdIn(anyCollection()))
+                .thenReturn(List.of(buildTerminado("T-001", "Producto", 10, "")));
 
         GuardarProgramacionProduccionSemanalRequestDTO request = buildRequest(
                 MONDAY,
-                List.of(entry(MONDAY, "T-001", 20))
+                List.of(day(MONDAY, 0, item("T-001", 1)))
         );
 
-        assertThrows(IllegalArgumentException.class, () -> service.guardarBorradorDirecto(request));
+        assertThrows(IllegalArgumentException.class, () -> context.service.guardarBorradorDirecto(request));
     }
 
     @Test
-    void guardarBorradorDirecto_buildsMpsSnapshotForMultipleProductsAndDays() {
-        TerminadoRepo terminadoRepo = mock(TerminadoRepo.class);
-        TransaccionAlmacenRepo stockRepo = mock(TransaccionAlmacenRepo.class);
-        MasterProductionScheduleDraftService draftService = mock(MasterProductionScheduleDraftService.class);
-        ProgramacionProduccionSemanalService service = new ProgramacionProduccionSemanalService(terminadoRepo, stockRepo, draftService);
-
+    void guardarBorradorDirecto_createsSixDaysAndPlannedLotsFromDailyPayload() {
+        TestContext context = buildContext();
         Terminado shampoo = buildTerminado("SH-001", "Shampoo", 10, "SHP");
         Terminado crema = buildTerminado("CR-001", "Crema", 5, "CRM");
-        when(terminadoRepo.findByProductoIdIn(anyCollection())).thenReturn(List.of(shampoo, crema));
-        when(stockRepo.findTotalCantidadByProductoId(anyString())).thenReturn(0.0);
-        when(draftService.saveDraft(any(GuardarMpsSemanalDraftRequestDTO.class))).thenReturn(new MpsSemanalDraftDTO());
+        when(context.terminadoRepo.findByProductoIdIn(anyCollection())).thenReturn(List.of(shampoo, crema));
 
         GuardarProgramacionProduccionSemanalRequestDTO request = buildRequest(
                 MONDAY,
                 List.of(
-                        entry(MONDAY, "SH-001", 20),
-                        entry(MONDAY.plusDays(1), "SH-001", 10),
-                        entry(MONDAY.plusDays(2), "CR-001", 15)
+                        day(MONDAY, 0, item("SH-001", 2), item("SH-001", 1)),
+                        day(MONDAY.plusDays(2), 2, item("CR-001", 3))
                 )
         );
 
-        service.guardarBorradorDirecto(request);
+        context.service.guardarBorradorDirecto(request);
 
-        ArgumentCaptor<GuardarMpsSemanalDraftRequestDTO> captor = ArgumentCaptor.forClass(GuardarMpsSemanalDraftRequestDTO.class);
-        verify(draftService).saveDraft(captor.capture());
-        GuardarMpsSemanalDraftRequestDTO draft = captor.getValue();
+        ArgumentCaptor<MasterProductionScheduleSemanal> captor =
+                ArgumentCaptor.forClass(MasterProductionScheduleSemanal.class);
+        verify(context.mpsRepo).save(captor.capture());
+        MasterProductionScheduleSemanal saved = captor.getValue();
 
-        assertEquals(MONDAY, draft.getWeekStartDate());
-        assertEquals(2, draft.getSummary().getTotalTerminadosEvaluados());
-        assertEquals(6, draft.getSummary().getTotalLotesPropuestos());
-        assertEquals(45.0, draft.getSummary().getTotalUnidadesPropuestas());
-        assertEquals(2, draft.getItems().size());
-        assertEquals(2, draft.getCalendar().getRows().size());
+        assertEquals(MONDAY, saved.getWeekStartDate());
+        assertEquals(MONDAY.plusDays(5), saved.getWeekEndDate());
+        assertEquals(6, saved.getDias().size());
 
-        int totalExpectedOrders = draft.getCalendar().getRows().stream()
-                .flatMap(row -> row.getDays().stream())
-                .flatMap(day -> day.getBlocks().stream())
-                .mapToInt(block -> Math.max(block.getLotesAsignados(), 0))
-                .sum();
-        assertEquals(6, totalExpectedOrders);
+        MpsSemanalDia monday = saved.getDias().getFirst();
+        assertEquals(MONDAY, monday.getFecha());
+        assertEquals(0, monday.getDayIndex());
+        assertEquals(1, monday.getItems().size());
+
+        MpsSemanalItem shampooItem = monday.getItems().getFirst();
+        assertEquals("SH-001", shampooItem.getTerminado().getProductoId());
+        assertEquals(3, shampooItem.getNumeroLotes());
+        assertEquals(30.0, shampooItem.getCantidadTotal());
+        assertEquals(3, shampooItem.getLotesPlanificados().size());
+        assertEquals(1, shampooItem.getLotesPlanificados().getFirst().getLoteOrdinal());
+
+        MpsSemanalDia wednesday = saved.getDias().get(2);
+        assertEquals(1, wednesday.getItems().size());
+        MpsSemanalItem cremaItem = wednesday.getItems().getFirst();
+        assertEquals("CR-001", cremaItem.getTerminado().getProductoId());
+        assertEquals(3, cremaItem.getNumeroLotes());
+        assertEquals(15.0, cremaItem.getCantidadTotal());
+        assertEquals(3, cremaItem.getLotesPlanificados().size());
     }
 
-    private ProgramacionProduccionSemanalService buildService() {
-        return new ProgramacionProduccionSemanalService(
-                mock(TerminadoRepo.class),
-                mock(TransaccionAlmacenRepo.class),
-                mock(MasterProductionScheduleDraftService.class)
+    private TestContext buildContext() {
+        TerminadoRepo terminadoRepo = mock(TerminadoRepo.class);
+        MasterProductionScheduleSemanalRepo mpsRepo = mock(MasterProductionScheduleSemanalRepo.class);
+        MpsSemanalDiaRepo diaRepo = mock(MpsSemanalDiaRepo.class);
+        SemanaMPSService semanaMPSService = mock(SemanaMPSService.class);
+        MpsSemanalEditWindowService editWindowService = mock(MpsSemanalEditWindowService.class);
+        MasterProductionScheduleDraftService draftService = mock(MasterProductionScheduleDraftService.class);
+
+        SemanaMPS semana = new SemanaMPS();
+        semana.setId(44L);
+        semana.setCodigo("S23-2026");
+        semana.setStartDate(MONDAY);
+        semana.setEndDate(MONDAY.plusDays(5));
+        semana.setStandard(SemanaMPS.STANDARD_ISO_8601_MONDAY_SATURDAY);
+
+        when(semanaMPSService.getOrCreateByStartDate(MONDAY)).thenReturn(semana);
+        when(mpsRepo.findBySemanaMps_Id(44L)).thenReturn(Optional.empty());
+        when(mpsRepo.findByWeekStartDate(MONDAY)).thenReturn(Optional.empty());
+        when(editWindowService.getEditableFromDate()).thenReturn(MONDAY);
+        when(mpsRepo.save(any(MasterProductionScheduleSemanal.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(draftService.getByWeekStartDate(MONDAY)).thenReturn(new MpsSemanalDraftDTO());
+
+        ProgramacionProduccionSemanalService service = new ProgramacionProduccionSemanalService(
+                terminadoRepo,
+                mpsRepo,
+                diaRepo,
+                semanaMPSService,
+                editWindowService,
+                draftService
         );
+
+        return new TestContext(service, terminadoRepo, mpsRepo);
     }
 
     private GuardarProgramacionProduccionSemanalRequestDTO buildRequest(
             LocalDate weekStartDate,
-            List<ProgramacionProduccionSemanalItemRequestDTO> entradas
+            List<ProgramacionProduccionSemanalDiaRequestDTO> dias
     ) {
         GuardarProgramacionProduccionSemanalRequestDTO request = new GuardarProgramacionProduccionSemanalRequestDTO();
         request.setWeekStartDate(weekStartDate);
-        request.setEntradas(entradas);
+        request.setDias(dias);
         return request;
     }
 
-    private ProgramacionProduccionSemanalItemRequestDTO entry(LocalDate date, String productoId, double unidades) {
-        ProgramacionProduccionSemanalItemRequestDTO entry = new ProgramacionProduccionSemanalItemRequestDTO();
-        entry.setDate(date);
-        entry.setProductoId(productoId);
-        entry.setUnidades(unidades);
-        return entry;
+    private ProgramacionProduccionSemanalDiaRequestDTO day(
+            LocalDate fecha,
+            int dayIndex,
+            ProgramacionProduccionSemanalItemRequestDTO... items
+    ) {
+        ProgramacionProduccionSemanalDiaRequestDTO day = new ProgramacionProduccionSemanalDiaRequestDTO();
+        day.setFecha(fecha);
+        day.setDayIndex(dayIndex);
+        day.setItems(List.of(items));
+        return day;
+    }
+
+    private ProgramacionProduccionSemanalItemRequestDTO item(String terminadoId, int numeroLotes) {
+        ProgramacionProduccionSemanalItemRequestDTO item = new ProgramacionProduccionSemanalItemRequestDTO();
+        item.setTerminadoId(terminadoId);
+        item.setNumeroLotes(numeroLotes);
+        return item;
     }
 
     private Terminado buildTerminado(String productoId, String nombre, int loteSize, String prefijoLote) {
-        PoolCapacidad pool = new PoolCapacidad();
-        pool.setId(productoId.startsWith("SH") ? 1 : 2);
-        pool.setNombre(productoId.startsWith("SH") ? "Pool Shampoo" : "Pool Cremas");
-        pool.setCapacidadDiaria(100);
-
         Categoria categoria = new Categoria();
         categoria.setCategoriaId(productoId.startsWith("SH") ? 10 : 20);
         categoria.setCategoriaNombre(productoId.startsWith("SH") ? "Shampoo" : "Cremas");
         categoria.setLoteSize(loteSize);
         categoria.setTiempoDiasFabricacion(1);
-        categoria.setCapacidadProductivaDiaria(100);
-        categoria.setPoolCapacidad(pool);
 
         Terminado terminado = new Terminado();
         terminado.setProductoId(productoId);
@@ -191,4 +207,10 @@ class ProgramacionProduccionSemanalServiceTest {
         terminado.setCategoria(categoria);
         return terminado;
     }
+
+    private record TestContext(
+            ProgramacionProduccionSemanalService service,
+            TerminadoRepo terminadoRepo,
+            MasterProductionScheduleSemanalRepo mpsRepo
+    ) {}
 }

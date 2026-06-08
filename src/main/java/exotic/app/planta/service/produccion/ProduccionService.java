@@ -16,6 +16,7 @@ import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.NodoProceso;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
+import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionBatchDTO;
@@ -314,8 +315,10 @@ public class ProduccionService {
             dto.setOrigenOrden("MPS");
             dto.setMpsId(orden.getMpsSemanal().getMpsId());
             dto.setMpsWeekStartDate(orden.getMpsSemanal().getWeekStartDate());
-            dto.setMpsBlockId(orden.getMpsBlockId());
-            dto.setMpsLoteOrdinal(orden.getMpsLoteOrdinal());
+            if (orden.getMpsLotePlanificado() != null) {
+                dto.setMpsLotePlanificadoId(orden.getMpsLotePlanificado().getId());
+                dto.setMpsLoteOrdinal(orden.getMpsLotePlanificado().getLoteOrdinal());
+            }
         } else {
             dto.setOrigenOrden("MANUAL");
         }
@@ -625,8 +628,7 @@ public class ProduccionService {
     public OrdenProduccion saveOrdenProduccionDesdeMps(
             OrdenProduccionDTO_save ordenProduccionDTO,
             MasterProductionScheduleSemanal mpsSemanal,
-            String mpsBlockId,
-            Integer mpsLoteOrdinal
+            MpsSemanalLotePlanificado lotePlanificado
     ) {
         Producto producto = productoRepo.findById(ordenProduccionDTO.getProductoId())
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
@@ -646,8 +648,7 @@ public class ProduccionService {
         ordenProduccion.setDepartamentoOperativo(ordenProduccionDTO.getDepartamentoOperativo());
         ordenProduccion.setVendedorResponsable(vendedorResponsable);
         ordenProduccion.setMpsSemanal(mpsSemanal);
-        ordenProduccion.setMpsBlockId(mpsBlockId);
-        ordenProduccion.setMpsLoteOrdinal(mpsLoteOrdinal);
+        ordenProduccion.setMpsLotePlanificado(lotePlanificado);
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 

@@ -1,8 +1,6 @@
 package exotic.app.planta.model.produccion.dto;
 
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
-import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
-import exotic.app.planta.model.produccion.SemanaMPS;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -30,37 +28,8 @@ public class MpsSemanalDraftDTO {
     private Integer revisionNumero;
     private LocalDate weekStartDate;
     private LocalDate weekEndDate;
-    private PropuestaMpsSemanalSummaryDTO summary = new PropuestaMpsSemanalSummaryDTO();
-    private List<PropuestaMpsSemanalItemDTO> items = new ArrayList<>();
-    private PropuestaMpsSemanalCalendarDTO calendar = new PropuestaMpsSemanalCalendarDTO();
-
-    public static MpsSemanalDraftDTO fromEntityAndSnapshot(
-            MasterProductionScheduleSemanal entity,
-            PropuestaMpsSemanalResponseDTO snapshot
-    ) {
-        MpsSemanalDraftDTO dto = new MpsSemanalDraftDTO();
-        dto.setMpsId(entity.getMpsId());
-        dto.setEstado(entity.getEstado());
-        dto.setFechaCreacion(entity.getFechaCreacion());
-        dto.setFechaActualizacion(entity.getFechaActualizacion());
-        dto.setFechaAprobacion(entity.getFechaAprobacion());
-        dto.setAprobadoPorUsername(entity.getAprobadoPorUsername());
-        dto.setFechaGeneracionOdps(entity.getFechaGeneracionOdps());
-        dto.setGeneradoPorUsername(entity.getGeneradoPorUsername());
-        dto.setRevisionNumero(entity.getRevisionNumero());
-        SemanaMPS semanaMps = entity.getSemanaMps();
-        if (semanaMps != null) {
-            dto.setSemanaMpsId(semanaMps.getId());
-            dto.setSemanaMpsCodigo(semanaMps.getCodigo());
-            dto.setAnioSemana(semanaMps.getAnioSemana());
-            dto.setNumeroSemana(semanaMps.getNumeroSemana());
-            dto.setStandard(semanaMps.getStandard());
-        }
-        dto.setWeekStartDate(snapshot.getWeekStartDate());
-        dto.setWeekEndDate(snapshot.getWeekEndDate());
-        dto.setSummary(snapshot.getSummary());
-        dto.setItems(snapshot.getItems());
-        dto.setCalendar(snapshot.getCalendar());
-        return dto;
-    }
+    private List<MpsSemanalDiaDTO> dias = new ArrayList<>();
+    private long totalItems;
+    private long totalLotesPlanificados;
+    private long totalOdpsGeneradas;
 }

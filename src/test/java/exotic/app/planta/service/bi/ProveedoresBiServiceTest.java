@@ -1,7 +1,7 @@
 package exotic.app.planta.service.bi;
 
-import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialDTO;
 import exotic.app.planta.model.bi.dto.LeadTimeProveedorMaterialPageRowDTO;
+import exotic.app.planta.model.bi.dto.ProveedorMaterialLeadTimeMetricDTO;
 import exotic.app.planta.model.bi.dto.ProveedorMaterialOrdenHistRowDTO;
 import exotic.app.planta.model.bi.dto.ProveedorMaterialRecepcionRowDTO;
 import exotic.app.planta.model.bi.dto.PuntoReordenEstimadoDTO;
@@ -51,7 +51,7 @@ class ProveedoresBiServiceTest {
     }
 
     @Test
-    void calcularLeadTimeProveedorMaterial_withoutReceipts_returnsNotCalculableStats() {
+    void calcularLeadTimeProveedorMaterial_withoutReceipts_returnsNotCalculableMetric() {
         Proveedor proveedor = proveedor("PROV-1", "Proveedor Uno");
         Material material = material("MAT-1", "Material Uno", true);
         when(proveedorRepo.findById("PROV-1")).thenReturn(Optional.of(proveedor));
@@ -63,23 +63,23 @@ class ProveedoresBiServiceTest {
         when(transaccionAlmacenRepo.findLeadTimeReceiptHistory(eq("MAT-1"), eq("PROV-1"), any(), any(), any(), any()))
                 .thenReturn(List.of());
 
-        LeadTimeProveedorMaterialDTO result = service.calcularLeadTimeProveedorMaterial(
+        ProveedorMaterialLeadTimeMetricDTO result = service.calcularLeadTimeProveedorMaterial(
                 "PROV-1",
                 "MAT-1",
                 LocalDate.of(2026, 3, 31),
                 365
         );
 
-        assertEquals(1, result.getTotalOrdersConsidered());
-        assertFalse(result.getFirstReceipt().isCalculable());
-        assertEquals("No se registran movimientos COMPRA del material relacionados con la consulta.",
-                result.getFirstReceipt().getReason());
-        assertFalse(result.getCompleteReceipt().isCalculable());
-        assertNull(result.getCompleteReceipt().getRepresentativeLeadTimeDays());
+        assertEquals(1, result.getOrdenesConsideradas());
+        assertFalse(result.isCalculable());
+        assertEquals(0, result.getObservaciones());
+        assertNull(result.getLeadTimeMedianoDias());
+        assertEquals("No existen observaciones validas con recepcion completa en la ventana consultada.",
+                result.getReason());
     }
 
     @Test
-    void calcularLeadTimeProveedorMaterial_withThreeOrders_usesMedianForRepresentativeLeadTime() {
+    void calcularLeadTimeProveedorMaterial_withThreeCompleteOrders_usesMedianLeadTime() {
         Proveedor proveedor = proveedor("PROV-1", "Proveedor Uno");
         Material material = material("MAT-1", "Material Uno", true);
         when(proveedorRepo.findById("PROV-1")).thenReturn(Optional.of(proveedor));
@@ -98,20 +98,139 @@ class ProveedoresBiServiceTest {
                         receiptRow(103, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-23T00:00:00", 10.0)
                 ));
 
-        LeadTimeProveedorMaterialDTO result = service.calcularLeadTimeProveedorMaterial(
+        ProveedorMaterialLeadTimeMetricDTO result = service.calcularLeadTimeProveedorMaterial(
                 "PROV-1",
                 "MAT-1",
                 LocalDate.of(2026, 3, 31),
                 365
         );
 
-        assertTrue(result.getFirstReceipt().isCalculable());
-        assertEquals(3, result.getFirstReceipt().getValidObservations());
-        assertEquals(3.0, result.getFirstReceipt().getRepresentativeLeadTimeDays());
-        assertEquals(2.6667, result.getFirstReceipt().getAverageLeadTimeDays());
-        assertEquals(3.0, result.getCompleteReceipt().getRepresentativeLeadTimeDays());
-        assertEquals(3, result.getCompleteReceipt().getValidObservations());
-        assertNotNull(result.getFirstReceipt().getConfidenceScore());
+        assertTrue(result.isCalculable());
+        assertEquals(3, result.getObservaciones());
+        assertEquals(3.0, result.getLeadTimeMedianoDias());
+        assertEquals(3, result.getObservacionesConFallbackFechaEmision());
+        assertEquals(0, result.getObservacionesConFechaEnvioProveedor());
+    }
+
+    @Test
+    void calcularLeadTimeProveedorMaterial_prefersFechaEnvioProveedorWhenPresent() {
+        Proveedor proveedor = proveedor("PROV-1", "Proveedor Uno");
+        Material material = material("MAT-1", "Material Uno", true);
+        when(proveedorRepo.findById("PROV-1")).thenReturn(Optional.of(proveedor));
+        when(materialRepo.findById("MAT-1")).thenReturn(Optional.of(material));
+        when(itemOrdenCompraRepo.findLeadTimeOrderHistory(eq("MAT-1"), eq("PROV-1"), any(), any()))
+                .thenReturn(List.of(
+                        orderRow(
+                                101,
+                                "PROV-1",
+                                "Proveedor Uno",
+                                "MAT-1",
+                                "Material Uno",
+                                "2026-01-01T00:00:00",
+                                "2026-01-02T00:00:00",
+                                10
+                        )
+                ));
+        when(transaccionAlmacenRepo.findLeadTimeReceiptHistory(eq("MAT-1"), eq("PROV-1"), any(), any(), any(), any()))
+                .thenReturn(List.of(
+                        receiptRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-05T00:00:00", 10.0)
+                ));
+
+        ProveedorMaterialLeadTimeMetricDTO result = service.calcularLeadTimeProveedorMaterial(
+                "PROV-1",
+                "MAT-1",
+                LocalDate.of(2026, 3, 31),
+                365
+        );
+
+        assertTrue(result.isCalculable());
+        assertEquals(3.0, result.getLeadTimeMedianoDias());
+        assertEquals(1, result.getObservacionesConFechaEnvioProveedor());
+        assertEquals(0, result.getObservacionesConFallbackFechaEmision());
+    }
+
+    @Test
+    void calcularLeadTimeProveedorMaterial_usesFechaEmisionFallbackWhenFechaEnvioProveedorIsMissing() {
+        Proveedor proveedor = proveedor("PROV-1", "Proveedor Uno");
+        Material material = material("MAT-1", "Material Uno", true);
+        when(proveedorRepo.findById("PROV-1")).thenReturn(Optional.of(proveedor));
+        when(materialRepo.findById("MAT-1")).thenReturn(Optional.of(material));
+        when(itemOrdenCompraRepo.findLeadTimeOrderHistory(eq("MAT-1"), eq("PROV-1"), any(), any()))
+                .thenReturn(List.of(
+                        orderRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-01T00:00:00", 10)
+                ));
+        when(transaccionAlmacenRepo.findLeadTimeReceiptHistory(eq("MAT-1"), eq("PROV-1"), any(), any(), any(), any()))
+                .thenReturn(List.of(
+                        receiptRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-04T00:00:00", 10.0)
+                ));
+
+        ProveedorMaterialLeadTimeMetricDTO result = service.calcularLeadTimeProveedorMaterial(
+                "PROV-1",
+                "MAT-1",
+                LocalDate.of(2026, 3, 31),
+                365
+        );
+
+        assertTrue(result.isCalculable());
+        assertEquals(3.0, result.getLeadTimeMedianoDias());
+        assertEquals(0, result.getObservacionesConFechaEnvioProveedor());
+        assertEquals(1, result.getObservacionesConFallbackFechaEmision());
+    }
+
+    @Test
+    void calcularLeadTimeProveedorMaterial_usesFirstReceiptDateThatCompletesOrderedQuantity() {
+        Proveedor proveedor = proveedor("PROV-1", "Proveedor Uno");
+        Material material = material("MAT-1", "Material Uno", true);
+        when(proveedorRepo.findById("PROV-1")).thenReturn(Optional.of(proveedor));
+        when(materialRepo.findById("MAT-1")).thenReturn(Optional.of(material));
+        when(itemOrdenCompraRepo.findLeadTimeOrderHistory(eq("MAT-1"), eq("PROV-1"), any(), any()))
+                .thenReturn(List.of(
+                        orderRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-01T00:00:00", 10)
+                ));
+        when(transaccionAlmacenRepo.findLeadTimeReceiptHistory(eq("MAT-1"), eq("PROV-1"), any(), any(), any(), any()))
+                .thenReturn(List.of(
+                        receiptRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-03T00:00:00", 4.0),
+                        receiptRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-05T00:00:00", 6.0),
+                        receiptRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-10T00:00:00", 1.0)
+                ));
+
+        ProveedorMaterialLeadTimeMetricDTO result = service.calcularLeadTimeProveedorMaterial(
+                "PROV-1",
+                "MAT-1",
+                LocalDate.of(2026, 3, 31),
+                365
+        );
+
+        assertTrue(result.isCalculable());
+        assertEquals(4.0, result.getLeadTimeMedianoDias());
+    }
+
+    @Test
+    void calcularLeadTimeProveedorMaterial_withEvenObservations_usesAverageOfMiddleLeadTimesAsMedian() {
+        Proveedor proveedor = proveedor("PROV-1", "Proveedor Uno");
+        Material material = material("MAT-1", "Material Uno", true);
+        when(proveedorRepo.findById("PROV-1")).thenReturn(Optional.of(proveedor));
+        when(materialRepo.findById("MAT-1")).thenReturn(Optional.of(material));
+        when(itemOrdenCompraRepo.findLeadTimeOrderHistory(eq("MAT-1"), eq("PROV-1"), any(), any()))
+                .thenReturn(List.of(
+                        orderRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-01T00:00:00", 10),
+                        orderRow(102, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-10T00:00:00", 10)
+                ));
+        when(transaccionAlmacenRepo.findLeadTimeReceiptHistory(eq("MAT-1"), eq("PROV-1"), any(), any(), any(), any()))
+                .thenReturn(List.of(
+                        receiptRow(101, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-03T00:00:00", 10.0),
+                        receiptRow(102, "PROV-1", "Proveedor Uno", "MAT-1", "Material Uno", "2026-01-16T00:00:00", 10.0)
+                ));
+
+        ProveedorMaterialLeadTimeMetricDTO result = service.calcularLeadTimeProveedorMaterial(
+                "PROV-1",
+                "MAT-1",
+                LocalDate.of(2026, 3, 31),
+                365
+        );
+
+        assertTrue(result.isCalculable());
+        assertEquals(4.0, result.getLeadTimeMedianoDias());
     }
 
     @Test
@@ -224,6 +343,28 @@ class ProveedoresBiServiceTest {
             String fechaEmision,
             int cantidad
     ) {
+        return orderRow(
+                ordenCompraId,
+                proveedorId,
+                proveedorNombre,
+                materialId,
+                materialNombre,
+                fechaEmision,
+                null,
+                cantidad
+        );
+    }
+
+    private static ProveedorMaterialOrdenHistRowDTO orderRow(
+            int ordenCompraId,
+            String proveedorId,
+            String proveedorNombre,
+            String materialId,
+            String materialNombre,
+            String fechaEmision,
+            String fechaEnvioProveedor,
+            int cantidad
+    ) {
         return new ProveedorMaterialOrdenHistRowDTO(
                 ordenCompraId,
                 proveedorId,
@@ -231,6 +372,7 @@ class ProveedoresBiServiceTest {
                 materialId,
                 materialNombre,
                 LocalDateTime.parse(fechaEmision),
+                fechaEnvioProveedor != null ? LocalDateTime.parse(fechaEnvioProveedor) : null,
                 cantidad
         );
     }
@@ -250,6 +392,7 @@ class ProveedoresBiServiceTest {
                 proveedorNombre,
                 materialId,
                 materialNombre,
+                null,
                 null,
                 LocalDateTime.parse(fechaMovimiento),
                 cantidadRecibida

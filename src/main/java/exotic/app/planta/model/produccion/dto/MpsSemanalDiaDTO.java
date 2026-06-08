@@ -9,7 +9,10 @@ import java.util.List;
 
 @Data
 @NoArgsConstructor
-public class GuardarProgramacionProduccionSemanalRequestDTO {
-    private LocalDate weekStartDate;
-    private List<ProgramacionProduccionSemanalDiaRequestDTO> dias = new ArrayList<>();
+public class MpsSemanalDiaDTO {
+    private Long id;
+    private LocalDate fecha;
+    private int dayIndex;
+    private int displayOrder;
+    private List<MpsSemanalItemDTO> items = new ArrayList<>();
 }

@@ -411,6 +411,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
                 m.producto.productoId,
                 m.producto.nombre,
                 oc.fechaEmision,
+                oc.fechaEnvioProveedor,
                 m.fechaMovimiento,
                 m.cantidad
             )
@@ -423,11 +424,11 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
               AND m.producto.productoId = :materialId
               AND m.tipoMovimiento = :tipoMovimientoCompra
               AND m.cantidad > 0
-              AND oc.fechaEmision >= :start
-              AND oc.fechaEmision <= :end
+              AND COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) >= :start
+              AND COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) <= :end
               AND m.fechaMovimiento <= :end
               AND (:proveedorId IS NULL OR prov.id = :proveedorId)
-            ORDER BY oc.fechaEmision ASC, oc.ordenCompraId ASC, m.fechaMovimiento ASC, m.movimientoId ASC
+            ORDER BY COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) ASC, oc.ordenCompraId ASC, m.fechaMovimiento ASC, m.movimientoId ASC
             """)
     List<ProveedorMaterialRecepcionRowDTO> findLeadTimeReceiptHistory(
             @Param("materialId") String materialId,

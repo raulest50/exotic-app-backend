@@ -19,6 +19,7 @@ public class ProveedorMaterialRecepcionRowDTO {
     private String materialId;
     private String materialNombre;
     private LocalDateTime fechaEmision;
+    private LocalDateTime fechaEnvioProveedor;
     private LocalDateTime fechaMovimiento;
     private Double cantidadRecibida;
 
