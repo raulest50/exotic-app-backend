@@ -6,6 +6,7 @@ import exotic.app.planta.model.produccion.dto.SemanaMPSDTO;
 import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
 import exotic.app.planta.repo.produccion.SemanaMPSRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(rollbackFor = Exception.class)
 public class SemanaMPSService {
 
@@ -31,6 +33,7 @@ public class SemanaMPSService {
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
 
     public SemanaMPS getOrCreateByStartDate(LocalDate weekStartDate) {
+        log.debug("[MPS_SEMANAL] service getOrCreateSemana begin weekStartDate={}", weekStartDate);
         WeekDefinition definition = buildDefinitionFromStartDate(weekStartDate);
         return semanaMPSRepo.findByStandardAndStartDate(STANDARD, definition.startDate())
                 .orElseGet(() -> saveNewSemana(definition));
@@ -38,6 +41,7 @@ public class SemanaMPSService {
 
     @Transactional(readOnly = true)
     public List<SemanaMPSDTO> listIsoWeeksForYear(int anioSemana) {
+        log.debug("[MPS_SEMANAL] service listIsoWeeksForYear begin anioSemana={}", anioSemana);
         validateAnioSemana(anioSemana);
 
         int maxWeeks = getMaxIsoWeeksInYear(anioSemana);
@@ -52,7 +56,7 @@ public class SemanaMPSService {
                 .stream()
                 .collect(Collectors.toMap(MasterProductionScheduleSemanal::getWeekStartDate, Function.identity(), (left, ignored) -> left));
 
-        return IntStream.rangeClosed(1, maxWeeks)
+        List<SemanaMPSDTO> response = IntStream.rangeClosed(1, maxWeeks)
                 .mapToObj(weekNumber -> {
                     SemanaMPS semana = existingByWeekNumber.getOrDefault(
                             weekNumber,
@@ -61,13 +65,24 @@ public class SemanaMPSService {
                     return SemanaMPSDTO.fromSemanaAndMps(semana, mpsByStartDate.get(semana.getStartDate()));
                 })
                 .toList();
+        log.info(
+                "[MPS_SEMANAL] service listIsoWeeksForYear success anioSemana={} maxWeeks={} persistedWeeks={} mpsWeeks={}",
+                anioSemana,
+                maxWeeks,
+                existingWeeks.size(),
+                mpsByStartDate.size()
+        );
+        return response;
     }
 
     private SemanaMPS saveNewSemana(WeekDefinition definition) {
         SemanaMPS semana = buildTransientSemana(definition);
         try {
-            return semanaMPSRepo.save(semana);
+            SemanaMPS saved = semanaMPSRepo.save(semana);
+            log.info("[MPS_SEMANAL] service saveNewSemana success semanaMpsId={} codigo={} startDate={} endDate={}", saved.getId(), saved.getCodigo(), saved.getStartDate(), saved.getEndDate());
+            return saved;
         } catch (DataIntegrityViolationException e) {
+            log.warn("[MPS_SEMANAL] service saveNewSemana duplicate_detected codigo={} startDate={} message={}", definition.codigo(), definition.startDate(), e.getMessage());
             return semanaMPSRepo.findByStandardAndStartDate(STANDARD, definition.startDate())
                     .orElseThrow(() -> e);
         }

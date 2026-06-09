@@ -23,6 +23,7 @@ import exotic.app.planta.repo.produccion.MpsSemanalObservacionRepo;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalDraftNotFoundException;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(rollbackFor = Exception.class)
 public class MasterProductionScheduleDraftService {
 
@@ -43,29 +45,43 @@ public class MasterProductionScheduleDraftService {
     private final MpsSemanalObservacionRepo mpsSemanalObservacionRepo;
 
     public MpsSemanalDraftDTO saveDraft(GuardarMpsSemanalDraftRequestDTO ignoredRequest) {
+        log.warn("[MPS_SEMANAL] service saveDraft rejected reason=deprecated_json_snapshot_flow");
         throw new IllegalStateException("El MPS semanal ya no se persiste desde snapshot JSON. Use la programacion semanal diaria.");
     }
 
     @Transactional(readOnly = true)
     public MpsSemanalDraftDTO getDraftByWeekStartDate(LocalDate weekStartDate) {
+        log.debug("[MPS_SEMANAL] service getDraftByWeekStartDate begin weekStartDate={}", weekStartDate);
         validateWeekStartDate(weekStartDate);
 
         MasterProductionScheduleSemanal entity = masterProductionScheduleSemanalRepo.findByWeekStartDate(weekStartDate)
                 .orElseThrow(() -> new MpsSemanalDraftNotFoundException(
                         "No existe borrador MPS para la semana iniciando en " + weekStartDate + "."
                 ));
+        log.debug("[MPS_SEMANAL] service getDraftByWeekStartDate found mpsId={} estado={} revision={}", entity.getMpsId(), entity.getEstado(), entity.getRevisionNumero());
 
         if (entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
+            log.warn("[MPS_SEMANAL] service getDraftByWeekStartDate rejected weekStartDate={} mpsId={} estado={}", weekStartDate, entity.getMpsId(), entity.getEstado());
             throw new MpsSemanalDraftNotFoundException(
                     "La semana " + weekStartDate + " existe, pero no se encuentra en estado BORRADOR."
             );
         }
 
-        return toDraftDTO(entity);
+        MpsSemanalDraftDTO response = toDraftDTO(entity);
+        log.debug(
+                "[MPS_SEMANAL] service getDraftByWeekStartDate success mpsId={} weekStartDate={} totalItems={} totalLotes={} totalOdps={}",
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                response.getTotalItems(),
+                response.getTotalLotesPlanificados(),
+                response.getTotalOdpsGeneradas()
+        );
+        return response;
     }
 
     @Transactional(readOnly = true)
     public MpsSemanalDraftDTO getByWeekStartDate(LocalDate weekStartDate) {
+        log.debug("[MPS_SEMANAL] service getByWeekStartDate begin weekStartDate={}", weekStartDate);
         validateWeekStartDate(weekStartDate);
 
         MasterProductionScheduleSemanal entity = masterProductionScheduleSemanalRepo.findByWeekStartDate(weekStartDate)
@@ -73,21 +89,36 @@ public class MasterProductionScheduleDraftService {
                         "No existe MPS semanal para la semana iniciando en " + weekStartDate + "."
                 ));
 
-        return toDraftDTO(entity);
+        MpsSemanalDraftDTO response = toDraftDTO(entity);
+        log.debug(
+                "[MPS_SEMANAL] service getByWeekStartDate success mpsId={} weekStartDate={} estado={} revision={} totalItems={} totalLotes={} totalOdps={}",
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                response.getEstado(),
+                response.getRevisionNumero(),
+                response.getTotalItems(),
+                response.getTotalLotesPlanificados(),
+                response.getTotalOdpsGeneradas()
+        );
+        return response;
     }
 
     @Transactional(readOnly = true)
     public List<MpsSemanalListItemDTO> listByEstado(EstadoMpsSemanal estado) {
+        log.debug("[MPS_SEMANAL] service listByEstado begin estado={}", estado);
         List<MasterProductionScheduleSemanal> entities = estado == null
                 ? masterProductionScheduleSemanalRepo.findAllByOrderByWeekStartDateDesc()
                 : masterProductionScheduleSemanalRepo.findAllByEstadoOrderByWeekStartDateDesc(estado);
 
-        return entities.stream()
+        List<MpsSemanalListItemDTO> response = entities.stream()
                 .map(this::toListItemDTO)
                 .toList();
+        log.info("[MPS_SEMANAL] service listByEstado success estado={} count={}", estado, response.size());
+        return response;
     }
 
     public MpsSemanalDraftDTO approveWeek(AprobarMpsSemanalRequestDTO request, String approvedByUsername) {
+        log.info("[MPS_SEMANAL] service approveWeek begin weekStartDate={} approvedByUsername={}", request != null ? request.getWeekStartDate() : null, approvedByUsername);
         if (request == null) {
             throw new IllegalArgumentException("La solicitud de aprobacion MPS no puede ser nula.");
         }
@@ -98,16 +129,20 @@ public class MasterProductionScheduleDraftService {
                 .orElseThrow(() -> new MpsSemanalNotFoundException(
                         "No existe MPS semanal para la semana iniciando en " + request.getWeekStartDate() + "."
                 ));
+        log.debug("[MPS_SEMANAL] service approveWeek found mpsId={} estado={} revision={}", entity.getMpsId(), entity.getEstado(), entity.getRevisionNumero());
 
         if (entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
+            log.warn("[MPS_SEMANAL] service approveWeek rejected reason=invalid_estado mpsId={} estado={}", entity.getMpsId(), entity.getEstado());
             throw new IllegalStateException("Solo se pueden aprobar semanas en estado BORRADOR.");
         }
         if (hasPendingObservaciones(entity.getMpsId())) {
+            log.warn("[MPS_SEMANAL] service approveWeek rejected reason=pending_observaciones mpsId={}", entity.getMpsId());
             throw new IllegalStateException("No se puede aprobar un MPS con observaciones abiertas o pendientes de aceptacion.");
         }
 
         long totalLotesPlanificados = mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsId(entity.getMpsId());
         if (totalLotesPlanificados <= 0) {
+            log.warn("[MPS_SEMANAL] service approveWeek rejected reason=no_lotes mpsId={}", entity.getMpsId());
             throw new IllegalStateException("No se puede aprobar una semana sin ODPs esperadas.");
         }
 
@@ -116,7 +151,15 @@ public class MasterProductionScheduleDraftService {
         entity.setAprobadoPorUsername(approvedByUsername);
 
         MasterProductionScheduleSemanal saved = masterProductionScheduleSemanalRepo.save(entity);
-        return toDraftDTO(saved);
+        MpsSemanalDraftDTO response = toDraftDTO(saved);
+        log.info(
+                "[MPS_SEMANAL] service approveWeek success mpsId={} weekStartDate={} approvedByUsername={} totalLotes={}",
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                approvedByUsername,
+                totalLotesPlanificados
+        );
+        return response;
     }
 
     @Transactional(readOnly = true)

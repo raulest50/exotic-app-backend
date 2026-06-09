@@ -15,6 +15,7 @@ import exotic.app.planta.repo.produccion.MpsSemanalLotePlanificadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,7 @@ import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(rollbackFor = Exception.class)
 public class MasterProductionScheduleOrderGenerationService {
 
@@ -43,6 +45,7 @@ public class MasterProductionScheduleOrderGenerationService {
             GenerarOdpDesdeMpsRequestDTO request,
             String generatedByUsername
     ) {
+        log.info("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada begin weekStartDate={} generatedByUsername={}", request != null ? request.getWeekStartDate() : null, generatedByUsername);
         if (request == null || request.getWeekStartDate() == null) {
             throw new IllegalArgumentException("weekStartDate es obligatorio.");
         }
@@ -52,11 +55,14 @@ public class MasterProductionScheduleOrderGenerationService {
                 .orElseThrow(() -> new MpsSemanalNotFoundException(
                         "No existe MPS semanal para la semana iniciando en " + request.getWeekStartDate() + "."
                 ));
+        log.debug("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada found mpsId={} estado={} revision={}", mps.getMpsId(), mps.getEstado(), mps.getRevisionNumero());
 
         if (mps.getEstado() != EstadoMpsSemanal.APROBADO) {
+            log.warn("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada rejected reason=invalid_estado mpsId={} estado={}", mps.getMpsId(), mps.getEstado());
             throw new IllegalStateException("Solo se pueden generar ODPs desde semanas en estado APROBADO.");
         }
         if (ordenProduccionRepo.existsByMpsSemanal_MpsId(mps.getMpsId())) {
+            log.warn("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada rejected reason=existing_odps mpsId={}", mps.getMpsId());
             throw new IllegalStateException("La semana ya tiene ODPs generadas y no admite una nueva generacion.");
         }
 
@@ -66,8 +72,10 @@ public class MasterProductionScheduleOrderGenerationService {
                         EstadoMpsSemanalLotePlanificado.PENDIENTE_ODP
                 );
         if (lotesPendientes.isEmpty()) {
+            log.warn("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada rejected reason=no_pending_lotes mpsId={}", mps.getMpsId());
             throw new IllegalStateException("No se pueden generar ODPs para una semana sin lotes planificados pendientes.");
         }
+        log.info("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada pendingLotes mpsId={} count={}", mps.getMpsId(), lotesPendientes.size());
 
         Map<String, LoteSequenceState> lotesPorProducto = new HashMap<>();
         List<Integer> ordenesIds = new ArrayList<>();
@@ -84,6 +92,14 @@ public class MasterProductionScheduleOrderGenerationService {
             lotePlanificado.setOrdenProduccion(orden);
             mpsSemanalLotePlanificadoRepo.save(lotePlanificado);
             ordenesIds.add(orden.getOrdenId());
+            log.debug(
+                    "[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada odpCreated mpsId={} lotePlanificadoId={} productoId={} loteBatchNumber={} ordenId={}",
+                    mps.getMpsId(),
+                    lotePlanificado.getId(),
+                    productoId,
+                    loteBatchNumber,
+                    orden.getOrdenId()
+            );
         }
 
         mps.setFechaGeneracionOdps(LocalDateTime.now());
@@ -101,11 +117,21 @@ public class MasterProductionScheduleOrderGenerationService {
         response.setTotalLotesProgramados(lotesPendientes.size());
         response.setTotalOrdenesCreadas(ordenesIds.size());
         response.setOrdenesIds(ordenesIds);
+        log.info(
+                "[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada success mpsId={} weekStartDate={} generatedByUsername={} totalBloques={} totalLotes={} totalOrdenes={}",
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                generatedByUsername,
+                response.getTotalBloquesProgramados(),
+                response.getTotalLotesProgramados(),
+                response.getTotalOrdenesCreadas()
+        );
         return response;
     }
 
     @Transactional(readOnly = true)
     public List<MpsSemanalOrdenProduccionListItemDTO> getOrdenesGeneradasPorSemana(LocalDate weekStartDate) {
+        log.debug("[MPS_SEMANAL] service getOrdenesGeneradasPorSemana begin weekStartDate={}", weekStartDate);
         if (weekStartDate == null) {
             throw new IllegalArgumentException("weekStartDate es obligatorio.");
         }
@@ -115,9 +141,11 @@ public class MasterProductionScheduleOrderGenerationService {
                         "No existe MPS semanal para la semana iniciando en " + weekStartDate + "."
                 ));
 
-        return ordenProduccionRepo.findByMpsSemanal_MpsIdOrderByOrdenIdAsc(mps.getMpsId()).stream()
+        List<MpsSemanalOrdenProduccionListItemDTO> response = ordenProduccionRepo.findByMpsSemanal_MpsIdOrderByOrdenIdAsc(mps.getMpsId()).stream()
                 .map(MpsSemanalOrdenProduccionListItemDTO::fromEntity)
                 .toList();
+        log.info("[MPS_SEMANAL] service getOrdenesGeneradasPorSemana success weekStartDate={} mpsId={} count={}", weekStartDate, mps.getMpsId(), response.size());
+        return response;
     }
 
     private void validateLotePlanificado(MpsSemanalLotePlanificado lotePlanificado, MpsSemanalItem item) {
@@ -166,6 +194,7 @@ public class MasterProductionScheduleOrderGenerationService {
     private LoteSequenceState buildInitialLoteState(String nextLot) {
         Matcher matcher = LOTE_PATTERN.matcher(nextLot);
         if (!matcher.matches()) {
+            log.warn("[MPS_SEMANAL] service buildInitialLoteState failed nextLot={}", nextLot);
             throw new IllegalStateException("No se pudo interpretar el numero de lote generado: " + nextLot);
         }
 

@@ -41,6 +41,10 @@ public class ProductoManufacturingService {
 
     @Transactional
     public ProductoManufacturingDTO createProductoManufacturing(ProductoManufacturingDTO dto) {
+        log.info("[PRODUCTOS_MANUFACTURING] service create begin {}", dtoContext(dto));
+        if (dto == null) {
+            throw new IllegalArgumentException("La solicitud de producto con manufactura no puede ser nula");
+        }
         if (dto.getProductoId() == null || dto.getProductoId().isBlank()) {
             throw new IllegalArgumentException("El productoId es obligatorio");
         }
@@ -49,17 +53,30 @@ public class ProductoManufacturingService {
         }
 
         Producto producto = instantiateProducto(dto.getTipoProducto());
+        log.debug("[PRODUCTOS_MANUFACTURING] service create instantiated productoId={} entityType={}", dto.getProductoId(), producto.getClass().getSimpleName());
         applyCommonProductFields(producto, dto);
         updateTypedFields(producto, dto);
         assignInsumos(producto, dto.getInsumos());
         assignProceso(producto, dto.getProcesoProduccionCompleto());
 
         Producto saved = productoRepo.save(producto);
+        log.info(
+                "[PRODUCTOS_MANUFACTURING] service create persisted productoId={} entityType={} insumos={} procesoNodes={} procesoEdges={}",
+                saved.getProductoId(),
+                saved.getClass().getSimpleName(),
+                getInsumos(saved).size(),
+                procesoNodesCount(getProcesoProduccionCompleto(saved)),
+                procesoEdgesCount(getProcesoProduccionCompleto(saved))
+        );
         return toDTO(saved);
     }
 
     @Transactional
     public ProductoManufacturingDTO updateProductoManufacturing(String productoId, ProductoManufacturingDTO dto) {
+        log.info("[PRODUCTOS_MANUFACTURING] service update begin pathProductoId={} {}", productoId, dtoContext(dto));
+        if (dto == null) {
+            throw new IllegalArgumentException("La solicitud de producto con manufactura no puede ser nula");
+        }
         if (productoId == null || productoId.isBlank()) {
             throw new IllegalArgumentException("El productoId es obligatorio");
         }
@@ -69,6 +86,7 @@ public class ProductoManufacturingService {
 
         Producto existing = productoRepo.findById(productoId)
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + productoId));
+        log.debug("[PRODUCTOS_MANUFACTURING] service update loaded productoId={} entityType={}", productoId, existing.getClass().getSimpleName());
 
         if (!(existing instanceof Terminado) && !(existing instanceof SemiTerminado)) {
             throw new IllegalArgumentException("Solo se puede actualizar manufactura de terminados o semiterminados");
@@ -86,11 +104,20 @@ public class ProductoManufacturingService {
 
         Producto saved = productoRepo.save(existing);
         saveManufacturingSnapshot(saved);
+        log.info(
+                "[PRODUCTOS_MANUFACTURING] service update persisted productoId={} entityType={} insumos={} procesoNodes={} procesoEdges={}",
+                saved.getProductoId(),
+                saved.getClass().getSimpleName(),
+                getInsumos(saved).size(),
+                procesoNodesCount(getProcesoProduccionCompleto(saved)),
+                procesoEdgesCount(getProcesoProduccionCompleto(saved))
+        );
         return toDTO(saved);
     }
 
     @Transactional(readOnly = true)
     public ProductoManufacturingDTO getProductoManufacturing(String productoId) {
+        log.debug("[PRODUCTOS_MANUFACTURING] service get begin productoId={}", productoId);
         Producto producto = productoRepo.findById(productoId)
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + productoId));
 
@@ -98,6 +125,7 @@ public class ProductoManufacturingService {
             throw new IllegalArgumentException("El producto no es terminado ni semiterminado: " + productoId);
         }
 
+        log.debug("[PRODUCTOS_MANUFACTURING] service get loaded productoId={} entityType={}", productoId, producto.getClass().getSimpleName());
         return toDTO(producto);
     }
 
@@ -162,6 +190,7 @@ public class ProductoManufacturingService {
                 .stream()
                 .map(this::buildInsumo)
                 .collect(Collectors.toList());
+        log.debug("[PRODUCTOS_MANUFACTURING] service assign insumos productoId={} count={}", producto.getProductoId(), nuevosInsumos.size());
 
         if (producto instanceof Terminado terminado) {
             List<Insumo> managed = terminado.getInsumos();
@@ -264,6 +293,14 @@ public class ProductoManufacturingService {
         }
 
         validateGraphConnectivity(nodeMap, managedEdges);
+        log.debug(
+                "[PRODUCTOS_MANUFACTURING] service proceso validated productoId={} inputInsumos={} nodes={} edges={} rendimientoTeorico={}",
+                producto.getProductoId(),
+                insumoByProductoId.size(),
+                managedNodes.size(),
+                managedEdges.size(),
+                proceso.getRendimientoTeorico()
+        );
         setProcesoProduccionCompleto(producto, proceso);
     }
 
@@ -432,6 +469,7 @@ public class ProductoManufacturingService {
 
     private void saveManufacturingSnapshot(Producto producto) {
         try {
+            log.debug("[PRODUCTOS_MANUFACTURING] service snapshot begin productoId={}", producto.getProductoId());
             ProductoManufacturingDTO dto = toDTO(producto);
             ManufacturingVersions version = new ManufacturingVersions();
             version.setProducto(producto);
@@ -443,7 +481,9 @@ public class ProductoManufacturingService {
             version.setProcesoProduccionJson(objectMapper.writeValueAsString(dto.getProcesoProduccionCompleto()));
             version.setCasePackJson(objectMapper.writeValueAsString(dto.getCasePack()));
             manufacturingVersionRepo.save(version);
+            log.info("[PRODUCTOS_MANUFACTURING] service snapshot saved productoId={} versionNumber={}", producto.getProductoId(), nextVersion);
         } catch (JsonProcessingException e) {
+            log.error("[PRODUCTOS_MANUFACTURING] service snapshot serialization_error productoId={} message={}", producto.getProductoId(), e.getMessage(), e);
             throw new IllegalStateException("No se pudo serializar el snapshot de manufactura", e);
         }
     }
@@ -640,5 +680,45 @@ public class ProductoManufacturingService {
         if (existing.isPresent() && !existing.get().getProductoId().equals(productoIdExcluir)) {
             throw new IllegalArgumentException("El prefijo de lote ya esta asignado a otro producto.");
         }
+    }
+
+    private String dtoContext(ProductoManufacturingDTO dto) {
+        if (dto == null) {
+            return "productoId=<null> tipoProducto=<null> categoriaId=<null> prefijoLotePresent=false insumos=0 casePackPresent=false casePackInsumos=0 procesoNodes=0 procesoEdges=0";
+        }
+
+        int insumosCount = dto.getInsumos() != null ? dto.getInsumos().size() : 0;
+        int casePackInsumosCount = dto.getCasePack() != null && dto.getCasePack().getInsumosEmpaque() != null
+                ? dto.getCasePack().getInsumosEmpaque().size()
+                : 0;
+        ProcesoProduccionCompletoDTO proceso = dto.getProcesoProduccionCompleto();
+        int nodesCount = proceso != null && proceso.getNodes() != null ? proceso.getNodes().size() : 0;
+        int edgesCount = proceso != null && proceso.getEdges() != null ? proceso.getEdges().size() : 0;
+
+        return "productoId=" + nullSafe(dto.getProductoId())
+                + " tipoProducto=" + nullSafe(dto.getTipoProducto())
+                + " categoriaId=" + dto.getCategoriaId()
+                + " prefijoLotePresent=" + hasText(dto.getPrefijoLote())
+                + " insumos=" + insumosCount
+                + " casePackPresent=" + (dto.getCasePack() != null)
+                + " casePackInsumos=" + casePackInsumosCount
+                + " procesoNodes=" + nodesCount
+                + " procesoEdges=" + edgesCount;
+    }
+
+    private int procesoNodesCount(ProcesoProduccionCompleto proceso) {
+        return proceso != null && proceso.getNodes() != null ? proceso.getNodes().size() : 0;
+    }
+
+    private int procesoEdgesCount(ProcesoProduccionCompleto proceso) {
+        return proceso != null && proceso.getEdges() != null ? proceso.getEdges().size() : 0;
+    }
+
+    private String nullSafe(String value) {
+        return hasText(value) ? value.trim() : "<null>";
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

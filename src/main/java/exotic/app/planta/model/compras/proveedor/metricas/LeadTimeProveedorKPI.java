@@ -3,6 +3,8 @@ package exotic.app.planta.model.compras.proveedor.metricas;
 import exotic.app.planta.model.compras.Proveedor;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -51,21 +53,61 @@ public class LeadTimeProveedorKPI {
     @JoinColumn(name = "proveedor_pk", referencedColumnName = "pk", nullable = false)
     private Proveedor proveedor;
 
+    /**
+     * Fecha de corte del ultimo KPI valido. En estado SIN_INFORMACION representa
+     * la ventana evaluada que no produjo un KPI calculable.
+     */
     @Column(name = "fecha_corte", nullable = false)
     private LocalDate fechaCorte;
 
+    /**
+     * Ventana en dias del ultimo KPI valido. En estado SIN_INFORMACION representa
+     * la ventana evaluada que no produjo un KPI calculable.
+     */
     @Column(name = "ventana_dias", nullable = false)
     private Integer ventanaDias;
 
-    @Column(name = "lead_time_mediano_dias", nullable = false)
+    /**
+     * Mediana historica vigente u obsoleta del proveedor. Puede ser nula si
+     * nunca ha existido informacion suficiente para calcular el KPI.
+     */
+    @Column(name = "lead_time_mediano_dias")
     private Double leadTimeMedianoDias;
 
+    /**
+     * Observaciones validas usadas por el ultimo KPI calculable.
+     */
     @Column(name = "observaciones", nullable = false)
     private Integer observaciones;
 
+    /**
+     * OCM distintas evaluadas para el ultimo KPI calculable.
+     */
     @Column(name = "ordenes_consideradas", nullable = false)
     private Integer ordenesConsideradas;
 
-    @Column(name = "calculado_en", nullable = false)
+    /**
+     * Momento en que se calculo el ultimo KPI valido.
+     */
+    @Column(name = "calculado_en")
     private LocalDateTime calculadoEn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado", nullable = false, length = 32)
+    private EstadoLeadTimeProveedorKPI estado = EstadoLeadTimeProveedorKPI.VIGENTE;
+
+    @Column(name = "motivo_estado", length = 255)
+    private String motivoEstado;
+
+    /**
+     * Ultimo momento en que el job intento evaluar este proveedor.
+     */
+    @Column(name = "ultima_evaluacion_en")
+    private LocalDateTime ultimaEvaluacionEn;
+
+    /**
+     * Ultima fecha de corte evaluada por el job, exista o no KPI calculable.
+     */
+    @Column(name = "ultima_fecha_corte_evaluada")
+    private LocalDate ultimaFechaCorteEvaluada;
 }

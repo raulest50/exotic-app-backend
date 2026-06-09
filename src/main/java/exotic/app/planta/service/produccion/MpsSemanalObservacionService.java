@@ -12,6 +12,7 @@ import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalObservacionRepo;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(rollbackFor = Exception.class)
 public class MpsSemanalObservacionService {
 
@@ -30,17 +32,27 @@ public class MpsSemanalObservacionService {
 
     @Transactional(readOnly = true)
     public List<MpsSemanalObservacionDTO> listarPorSemana(LocalDate weekStartDate) {
+        log.debug("[MPS_SEMANAL] service listarObservaciones begin weekStartDate={}", weekStartDate);
         MasterProductionScheduleSemanal mps = requireMpsByWeekStartDate(weekStartDate);
-        return observacionRepo.findAllByMpsSemanal_MpsIdOrderByFechaCreacionAsc(mps.getMpsId())
+        List<MpsSemanalObservacionDTO> response = observacionRepo.findAllByMpsSemanal_MpsIdOrderByFechaCreacionAsc(mps.getMpsId())
                 .stream()
                 .map(MpsSemanalObservacionDTO::fromEntity)
                 .toList();
+        log.info("[MPS_SEMANAL] service listarObservaciones success weekStartDate={} mpsId={} count={}", weekStartDate, mps.getMpsId(), response.size());
+        return response;
     }
 
     public MpsSemanalObservacionDTO crearObservacion(
             CrearMpsSemanalObservacionRequestDTO request,
             String autorUsername
     ) {
+        log.info(
+                "[MPS_SEMANAL] service crearObservacion begin weekStartDate={} tipo={} autorUsername={} mensajePresent={}",
+                request != null ? request.getWeekStartDate() : null,
+                request != null ? request.getTipo() : null,
+                autorUsername,
+                request != null && request.getMensaje() != null && !request.getMensaje().isBlank()
+        );
         if (request == null) {
             throw new IllegalArgumentException("La solicitud de observacion no puede ser nula.");
         }
@@ -60,7 +72,17 @@ public class MpsSemanalObservacionService {
         observacion.setTipo(tipo);
         observacion.setEstado(EstadoMpsSemanalObservacion.ABIERTA);
 
-        return MpsSemanalObservacionDTO.fromEntity(observacionRepo.save(observacion));
+        MpsSemanalObservacionDTO response = MpsSemanalObservacionDTO.fromEntity(observacionRepo.save(observacion));
+        log.info(
+                "[MPS_SEMANAL] service crearObservacion success observacionId={} mpsId={} weekStartDate={} tipo={} estado={} autorUsername={}",
+                response.getObservacionId(),
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                response.getTipo(),
+                response.getEstado(),
+                autorUsername
+        );
+        return response;
     }
 
     public MpsSemanalObservacionDTO atenderObservacion(
@@ -68,6 +90,12 @@ public class MpsSemanalObservacionService {
             AtenderMpsSemanalObservacionRequestDTO request,
             String atendidaPorUsername
     ) {
+        log.info(
+                "[MPS_SEMANAL] service atenderObservacion begin observacionId={} atendidaPorUsername={} respuestaPresent={}",
+                observacionId,
+                atendidaPorUsername,
+                request != null && request.getRespuestaCorreccion() != null && !request.getRespuestaCorreccion().isBlank()
+        );
         if (request == null) {
             throw new IllegalArgumentException("La solicitud de atencion no puede ser nula.");
         }
@@ -77,6 +105,7 @@ public class MpsSemanalObservacionService {
         MpsSemanalObservacion observacion = requireObservacion(observacionId);
         requireDraftMps(observacion.getMpsSemanal());
         if (observacion.getEstado() != EstadoMpsSemanalObservacion.ABIERTA) {
+            log.warn("[MPS_SEMANAL] service atenderObservacion rejected observacionId={} estado={}", observacionId, observacion.getEstado());
             throw new IllegalStateException("Solo se pueden atender observaciones ABIERTAS.");
         }
 
@@ -85,15 +114,26 @@ public class MpsSemanalObservacionService {
         observacion.setAtendidaPorUsername(atendidaPorUsername.trim());
         observacion.setFechaAtencion(LocalDateTime.now());
 
-        return MpsSemanalObservacionDTO.fromEntity(observacionRepo.save(observacion));
+        MpsSemanalObservacionDTO response = MpsSemanalObservacionDTO.fromEntity(observacionRepo.save(observacion));
+        log.info(
+                "[MPS_SEMANAL] service atenderObservacion success observacionId={} mpsId={} weekStartDate={} estado={} atendidaPorUsername={}",
+                response.getObservacionId(),
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                response.getEstado(),
+                atendidaPorUsername
+        );
+        return response;
     }
 
     public MpsSemanalObservacionDTO cerrarObservacion(Long observacionId, String cerradaPorUsername) {
+        log.info("[MPS_SEMANAL] service cerrarObservacion begin observacionId={} cerradaPorUsername={}", observacionId, cerradaPorUsername);
         validateUsername(cerradaPorUsername, "No se pudo determinar el usuario que cierra la observacion.");
 
         MpsSemanalObservacion observacion = requireObservacion(observacionId);
         requireDraftMps(observacion.getMpsSemanal());
         if (observacion.getEstado() != EstadoMpsSemanalObservacion.ATENDIDA) {
+            log.warn("[MPS_SEMANAL] service cerrarObservacion rejected observacionId={} estado={}", observacionId, observacion.getEstado());
             throw new IllegalStateException("Solo se pueden cerrar observaciones ATENDIDAS.");
         }
 
@@ -101,7 +141,16 @@ public class MpsSemanalObservacionService {
         observacion.setCerradaPorUsername(cerradaPorUsername.trim());
         observacion.setFechaCierre(LocalDateTime.now());
 
-        return MpsSemanalObservacionDTO.fromEntity(observacionRepo.save(observacion));
+        MpsSemanalObservacionDTO response = MpsSemanalObservacionDTO.fromEntity(observacionRepo.save(observacion));
+        log.info(
+                "[MPS_SEMANAL] service cerrarObservacion success observacionId={} mpsId={} weekStartDate={} estado={} cerradaPorUsername={}",
+                response.getObservacionId(),
+                response.getMpsId(),
+                response.getWeekStartDate(),
+                response.getEstado(),
+                cerradaPorUsername
+        );
+        return response;
     }
 
     private MasterProductionScheduleSemanal requireMpsByWeekStartDate(LocalDate weekStartDate) {
@@ -133,6 +182,7 @@ public class MpsSemanalObservacionService {
 
     private void requireDraftMps(MasterProductionScheduleSemanal mps) {
         if (mps.getEstado() != EstadoMpsSemanal.BORRADOR) {
+            log.warn("[MPS_SEMANAL] service requireDraftMps rejected mpsId={} estado={}", mps.getMpsId(), mps.getEstado());
             throw new IllegalStateException("Solo se pueden gestionar observaciones de MPS en estado BORRADOR.");
         }
     }

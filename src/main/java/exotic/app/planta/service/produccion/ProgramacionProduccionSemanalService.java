@@ -17,6 +17,7 @@ import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(rollbackFor = Exception.class)
 public class ProgramacionProduccionSemanalService {
 
@@ -71,16 +73,32 @@ public class ProgramacionProduccionSemanalService {
     }
 
     public MpsSemanalDraftDTO guardarBorradorDirecto(GuardarProgramacionProduccionSemanalRequestDTO request) {
+        log.info("[MPS_SEMANAL] service guardarBorradorDirecto begin {}", requestContext(request));
         validateRequestShell(request);
 
         SemanaMPS semanaMps = semanaMPSService.getOrCreateByStartDate(request.getWeekStartDate());
         LocalDate weekStartDate = semanaMps.getStartDate();
         LocalDate weekEndDate = semanaMps.getEndDate();
         List<ConsolidatedEntry> entries = consolidateEntries(request.getDias(), weekStartDate, weekEndDate);
+        log.debug(
+                "[MPS_SEMANAL] service guardarBorradorDirecto consolidated weekStartDate={} weekEndDate={} entries={} totalLotes={} distinctTerminados={}",
+                weekStartDate,
+                weekEndDate,
+                entries.size(),
+                totalLotes(entries),
+                distinctTerminados(entries)
+        );
 
         MasterProductionScheduleSemanal entity = masterProductionScheduleSemanalRepo.findBySemanaMps_Id(semanaMps.getId())
                 .or(() -> masterProductionScheduleSemanalRepo.findByWeekStartDate(weekStartDate))
                 .orElseGet(MasterProductionScheduleSemanal::new);
+        log.debug(
+                "[MPS_SEMANAL] service guardarBorradorDirecto shellResolved weekStartDate={} semanaMpsId={} existingMpsId={} estado={}",
+                weekStartDate,
+                semanaMps.getId(),
+                entity.getMpsId(),
+                entity.getEstado()
+        );
 
         if (entity.getMpsId() != null && entity.getEstado() != EstadoMpsSemanal.BORRADOR) {
             throw new IllegalStateException("La semana ya no esta en estado BORRADOR y no puede sobrescribirse.");
@@ -92,6 +110,13 @@ public class ProgramacionProduccionSemanalService {
 
         validateLockedDaysUnchanged(entries, currentDias, weekEndDate, entity.getMpsId() != null);
         int nextRevision = resolveNextRevision(entity, currentDias, entries);
+        log.debug(
+                "[MPS_SEMANAL] service guardarBorradorDirecto revisionResolved weekStartDate={} existingMpsId={} currentDias={} nextRevision={}",
+                weekStartDate,
+                entity.getMpsId(),
+                currentDias.size(),
+                nextRevision
+        );
 
         List<String> terminadoIds = entries.stream()
                 .map(entry -> entry.terminadoId)
@@ -99,6 +124,12 @@ public class ProgramacionProduccionSemanalService {
                 .toList();
         Map<String, Terminado> terminadosById = terminadoRepo.findByProductoIdIn(terminadoIds).stream()
                 .collect(Collectors.toMap(Terminado::getProductoId, Function.identity()));
+        log.debug(
+                "[MPS_SEMANAL] service guardarBorradorDirecto terminadosResolved weekStartDate={} requested={} found={}",
+                weekStartDate,
+                terminadoIds.size(),
+                terminadosById.size()
+        );
 
         entity.setSemanaMps(semanaMps);
         entity.setWeekStartDate(weekStartDate);
@@ -139,6 +170,16 @@ public class ProgramacionProduccionSemanalService {
         }
 
         MasterProductionScheduleSemanal saved = masterProductionScheduleSemanalRepo.save(entity);
+        log.info(
+                "[MPS_SEMANAL] service guardarBorradorDirecto saved mpsId={} weekStartDate={} estado={} revision={} dias={} entries={} totalLotes={}",
+                saved.getMpsId(),
+                saved.getWeekStartDate(),
+                saved.getEstado(),
+                saved.getRevisionNumero(),
+                saved.getDias().size(),
+                entries.size(),
+                totalLotes(entries)
+        );
         return masterProductionScheduleDraftService.getByWeekStartDate(saved.getWeekStartDate());
     }
 
@@ -222,12 +263,15 @@ public class ProgramacionProduccionSemanalService {
 
     private void validateTerminado(String terminadoId, Terminado terminado) {
         if (terminado == null) {
+            log.warn("[MPS_SEMANAL] service validateTerminado failed terminadoId={} reason=not_found_or_not_terminado", terminadoId);
             throw new IllegalArgumentException("Producto no encontrado o no es un terminado: " + terminadoId);
         }
         if (resolveLoteSize(terminado) <= 0) {
+            log.warn("[MPS_SEMANAL] service validateTerminado failed terminadoId={} reason=invalid_lote_size", terminadoId);
             throw new IllegalArgumentException("El producto terminado no tiene lote size configurado: " + terminadoId);
         }
         if (terminado.getPrefijoLote() == null || terminado.getPrefijoLote().isBlank()) {
+            log.warn("[MPS_SEMANAL] service validateTerminado failed terminadoId={} reason=missing_prefijo_lote", terminadoId);
             throw new IllegalArgumentException("El producto terminado no tiene prefijo de lote definido: " + terminadoId);
         }
     }
@@ -287,6 +331,11 @@ public class ProgramacionProduccionSemanalService {
     ) {
         LocalDate editableFromDate = mpsSemanalEditWindowService.getEditableFromDate();
         if (weekEndDate.isBefore(editableFromDate)) {
+            log.warn(
+                    "[MPS_SEMANAL] service lockedDaysValidation failed reason=week_without_editable_days weekEndDate={} editableFromDate={}",
+                    weekEndDate,
+                    editableFromDate
+            );
             throw new IllegalStateException("La semana MPS no tiene dias editables. "
                     + "La primera fecha editable es " + editableFromDate + ".");
         }
@@ -294,6 +343,11 @@ public class ProgramacionProduccionSemanalService {
         Map<EntryKey, LockedEntry> nextLocked = lockedFromEntries(entries, editableFromDate);
         if (!existingMps) {
             if (!nextLocked.isEmpty()) {
+                log.warn(
+                        "[MPS_SEMANAL] service lockedDaysValidation failed reason=new_mps_has_locked_entries editableFromDate={} nextLocked={}",
+                        editableFromDate,
+                        nextLocked.size()
+                );
                 throw new IllegalStateException(buildLockedDaysMessage(editableFromDate));
             }
             return;
@@ -301,6 +355,12 @@ public class ProgramacionProduccionSemanalService {
 
         Map<EntryKey, LockedEntry> currentLocked = lockedFromDias(currentDias, editableFromDate);
         if (!Objects.equals(currentLocked, nextLocked)) {
+            log.warn(
+                    "[MPS_SEMANAL] service lockedDaysValidation failed reason=locked_entries_changed editableFromDate={} currentLocked={} nextLocked={}",
+                    editableFromDate,
+                    currentLocked.size(),
+                    nextLocked.size()
+            );
             throw new IllegalStateException(buildLockedDaysMessage(editableFromDate));
         }
     }
@@ -404,5 +464,39 @@ public class ProgramacionProduccionSemanalService {
     private String buildLockedDaysMessage(LocalDate editableFromDate) {
         return "No se pueden crear, modificar ni eliminar programaciones en dias bloqueados. "
                 + "La primera fecha editable es " + editableFromDate + ".";
+    }
+
+    private String requestContext(GuardarProgramacionProduccionSemanalRequestDTO request) {
+        if (request == null) {
+            return "weekStartDate=<null> dias=0 items=0 totalLotes=0";
+        }
+        int diasCount = request.getDias() != null ? request.getDias().size() : 0;
+        int itemsCount = 0;
+        int lotesCount = 0;
+        if (request.getDias() != null) {
+            for (ProgramacionProduccionSemanalDiaRequestDTO dia : request.getDias()) {
+                if (dia == null || dia.getItems() == null) {
+                    continue;
+                }
+                itemsCount += dia.getItems().size();
+                for (ProgramacionProduccionSemanalItemRequestDTO item : dia.getItems()) {
+                    if (item != null) {
+                        lotesCount += item.getNumeroLotes();
+                    }
+                }
+            }
+        }
+        return "weekStartDate=" + request.getWeekStartDate()
+                + " dias=" + diasCount
+                + " items=" + itemsCount
+                + " totalLotes=" + lotesCount;
+    }
+
+    private int totalLotes(List<ConsolidatedEntry> entries) {
+        return entries.stream().mapToInt(entry -> entry.numeroLotes).sum();
+    }
+
+    private long distinctTerminados(List<ConsolidatedEntry> entries) {
+        return entries.stream().map(entry -> entry.terminadoId).distinct().count();
     }
 }

@@ -18,6 +18,8 @@
 
     <property name="BACKUP_TOTAL_EXPORT_LOG_LEVEL" value="DEBUG"/>
     <property name="BACKUP_TOTAL_IMPORT_FILE_LOG_LEVEL" value="DEBUG"/>
+    <springProperty scope="context" name="PRODUCTOS_MANUFACTURING_LOG_LEVEL" source="PRODUCTOS_MANUFACTURING_LOG_LEVEL" defaultValue="DEBUG"/>
+    <springProperty scope="context" name="MPS_SEMANAL_LOG_LEVEL" source="MPS_SEMANAL_LOG_LEVEL" defaultValue="DEBUG"/>
 
     <!-- Appender de consola para ver todos los logs -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -177,6 +179,34 @@
         </encoder>
     </appender>
 
+    <appender name="PRODUCTOS_MANUFACTURING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/productos_manufacturing.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/productos_manufacturing.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{100} - %msg%n%xEx{full}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="MPS_SEMANAL_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/mps_semanal.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/mps_semanal.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{100} - %msg%n%xEx{full}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
 
     <appender name="BACKUP_TOTAL_EXPORT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/backup_total_export.log</file>
@@ -253,6 +283,33 @@
 
 
 
+
+    <!-- Loggers para diagnostico de productos manufacturados y MPS semanal -->
+    <logger name="exotic.app.planta.resource.productos.ProductoManufacturingResource" level="${PRODUCTOS_MANUFACTURING_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="PRODUCTOS_MANUFACTURING_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.productos.ProductoManufacturingService" level="${PRODUCTOS_MANUFACTURING_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="PRODUCTOS_MANUFACTURING_FILE"/>
+    </logger>
+
+    <logger name="exotic.app.planta.resource.produccion.ProgramacionProduccionResource" level="${MPS_SEMANAL_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="MPS_SEMANAL_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.produccion.ProgramacionProduccionSemanalService" level="${MPS_SEMANAL_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="MPS_SEMANAL_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.produccion.MasterProductionScheduleDraftService" level="${MPS_SEMANAL_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="MPS_SEMANAL_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService" level="${MPS_SEMANAL_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="MPS_SEMANAL_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.produccion.MpsSemanalObservacionService" level="${MPS_SEMANAL_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="MPS_SEMANAL_FILE"/>
+    </logger>
+    <logger name="exotic.app.planta.service.produccion.SemanaMPSService" level="${MPS_SEMANAL_LOG_LEVEL}" additivity="true">
+        <appender-ref ref="MPS_SEMANAL_FILE"/>
+    </logger>
 
     <!-- Logger especifico para carga masiva -->
     <logger name="exotic.app.planta.resource.commons.CargaMasivaResource" level="DEBUG" additivity="true">
