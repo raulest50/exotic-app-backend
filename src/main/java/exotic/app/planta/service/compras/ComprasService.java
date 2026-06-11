@@ -16,6 +16,7 @@ import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.service.commons.EmailService;
+import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.model.users.User;
@@ -57,6 +58,8 @@ public class ComprasService {
 
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
 
+    private final EmpresaIdentidadLegalService empresaIdentidadLegalService;
+
     /**
      *
      * Compras
@@ -97,6 +100,7 @@ public class ComprasService {
             throw new RuntimeException("Proveedor not found with ID: " + ordenCompraMateriales.getProveedor().getId());
         }
         ordenCompraMateriales.setProveedor(optProveedor.get());
+        ordenCompraMateriales.setEmpresaIdentidadLegalVersion(null);
 
         // For each ItemOrdenCompra, set the back‑reference and initialize check fields to 0
         for (ItemOrdenCompra item : ordenCompraMateriales.getItemsOrdenCompra()) {
@@ -317,8 +321,10 @@ public class ComprasService {
         log.info("Orden encontrada. Estado actual: {}, Proveedor ID: {}, Nombre: {}", 
                  orden.getEstado(), orden.getProveedor().getId(), orden.getProveedor().getNombre());
 
+        boolean transicionEnvioProveedor = ue.getNewEstado() == 2 && orden.getEstado() == 1;
+
         // Si el nuevo estado es 2 y estamos cambiando desde estado 1, manejar según el tipo de envío
-        if (ue.getNewEstado() == 2 && orden.getEstado() == 1) {
+        if (transicionEnvioProveedor) {
             log.info("Cambiando estado de 1 a 2 para orden ID: {}", ordenCompraId);
 
             // Verificar el tipo de envío seleccionado
@@ -383,7 +389,13 @@ public class ComprasService {
             }
         }
 
-        if (ue.getNewEstado() == 2 && orden.getEstado() == 1 && orden.getFechaEnvioProveedor() == null) {
+        if (transicionEnvioProveedor && orden.getEmpresaIdentidadLegalVersion() == null) {
+            orden.setEmpresaIdentidadLegalVersion(
+                    empresaIdentidadLegalService.resolveVersionForOcm(ue.getEmpresaIdentidadLegalVersionId())
+            );
+        }
+
+        if (transicionEnvioProveedor && orden.getFechaEnvioProveedor() == null) {
             orden.setFechaEnvioProveedor(AppTime.now());
         }
 

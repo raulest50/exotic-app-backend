@@ -22,6 +22,12 @@ public class UpdateEstadoOrdenCompraRequest {
     private TipoEnvio tipoEnvio;
 
     /**
+     * Version de identidad legal usada para generar y fijar el cabezote del PDF OCM.
+     * Si no se informa durante la transicion 1 -> 2, backend usa la version vigente.
+     */
+    private Long empresaIdentidadLegalVersionId;
+
+    /**
      * solo se usa si se la orden esta en estado 1. de lo contrario
      * este atributo nunca se usa, al igaul que sucede con el atributo anterior.
      */

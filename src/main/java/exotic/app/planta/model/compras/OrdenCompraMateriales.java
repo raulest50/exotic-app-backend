@@ -1,6 +1,7 @@
 package exotic.app.planta.model.compras;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.persistence.*;
@@ -40,6 +41,10 @@ public class OrdenCompraMateriales {
      */
     @Column(name = "fecha_envio_proveedor")
     private LocalDateTime fechaEnvioProveedor;
+
+    @ManyToOne
+    @JoinColumn(name = "empresa_identidad_legal_version_id")
+    private EmpresaIdentidadLegalVersion empresaIdentidadLegalVersion;
 
     private LocalDateTime fechaVencimiento;
 
