@@ -17,6 +17,7 @@ import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.service.commons.EmailService;
 import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
+import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.model.users.User;
@@ -60,6 +61,8 @@ public class ComprasService {
 
     private final EmpresaIdentidadLegalService empresaIdentidadLegalService;
 
+    private final EmpresaLogoDocumentalService empresaLogoDocumentalService;
+
     /**
      *
      * Compras
@@ -101,6 +104,7 @@ public class ComprasService {
         }
         ordenCompraMateriales.setProveedor(optProveedor.get());
         ordenCompraMateriales.setEmpresaIdentidadLegalVersion(null);
+        ordenCompraMateriales.setEmpresaLogoDocumentalVersion(null);
 
         // For each ItemOrdenCompra, set the back‑reference and initialize check fields to 0
         for (ItemOrdenCompra item : ordenCompraMateriales.getItemsOrdenCompra()) {
@@ -392,6 +396,12 @@ public class ComprasService {
         if (transicionEnvioProveedor && orden.getEmpresaIdentidadLegalVersion() == null) {
             orden.setEmpresaIdentidadLegalVersion(
                     empresaIdentidadLegalService.resolveVersionForOcm(ue.getEmpresaIdentidadLegalVersionId())
+            );
+        }
+
+        if (transicionEnvioProveedor && orden.getEmpresaLogoDocumentalVersion() == null) {
+            orden.setEmpresaLogoDocumentalVersion(
+                    empresaLogoDocumentalService.resolveVersionForOcm(ue.getEmpresaLogoDocumentalVersionId())
             );
         }
 
