@@ -24,13 +24,13 @@ class TransaccionesAlmacenBootstrapIntegrationTest extends AbstractTransacciones
 
     @Test
     void getSuperMasterConfig_requiresAuthentication() throws Exception {
-        mockMvc.perform(get("/api/super-master-ops/config"))
+        mockMvc.perform(get("/api/super-master-directives/config"))
                 .andExpect(status().is4xxClientError());
     }
 
     @Test
     void getSuperMasterConfig_returnsFlagsForAuthenticatedUser() throws Exception {
-        mockMvc.perform(get("/api/super-master-ops/config")
+        mockMvc.perform(get("/api/super-master-directives/config")
                         .with(bearerToken())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -43,7 +43,7 @@ class TransaccionesAlmacenBootstrapIntegrationTest extends AbstractTransacciones
     void getMasterDirectives_returnsDefaultOcmReceptionLimitForAuthenticatedUser() throws Exception {
         setLimiteRecepcionesParcialesOcm("3");
 
-        mockMvc.perform(get("/api/master-directives")
+        mockMvc.perform(get("/api/super-master-directives/directives")
                         .with(bearerToken())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -60,7 +60,7 @@ class TransaccionesAlmacenBootstrapIntegrationTest extends AbstractTransacciones
 
         DTO_MasterD_Update update = new DTO_MasterD_Update(directive, invalidDirective);
 
-        mockMvc.perform(put("/api/master-directives/update")
+        mockMvc.perform(put("/api/super-master-directives/directives/update")
                         .with(bearerToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -76,7 +76,7 @@ class TransaccionesAlmacenBootstrapIntegrationTest extends AbstractTransacciones
 
         DTO_MasterD_Update update = new DTO_MasterD_Update(directive, updatedDirective);
 
-        mockMvc.perform(put("/api/master-directives/update")
+        mockMvc.perform(put("/api/super-master-directives/directives/update")
                         .with(bearerToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))

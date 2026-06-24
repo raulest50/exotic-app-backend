@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/super-master-ops")
+@RequestMapping("/api/super-master-directives")
 @RequiredArgsConstructor
 @Slf4j
 public class SuperMasterOpsResource {

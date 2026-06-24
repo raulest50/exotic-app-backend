@@ -42,6 +42,13 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isDispensacionNoBloqueaInicioProduccion() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION,
+                MasterDirectiveKeys.DEFAULT_DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION
+        );
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {
@@ -51,6 +58,22 @@ public class MasterDirectiveService {
 
         try {
             return parsePositiveInteger(directiveOpt.get().getValor(), nombre);
+        } catch (IllegalArgumentException e) {
+            log.warn("Valor invalido para directiva maestra {}. Usando fallback {}. Causa: {}",
+                    nombre, fallback, e.getMessage());
+            return fallback;
+        }
+    }
+
+    public boolean getBooleanDirectiveValue(String nombre, boolean fallback) {
+        Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
+        if (directiveOpt.isEmpty()) {
+            log.warn("Directiva maestra {} no encontrada. Usando fallback {}", nombre, fallback);
+            return fallback;
+        }
+
+        try {
+            return parseBoolean(directiveOpt.get().getValor(), nombre);
         } catch (IllegalArgumentException e) {
             log.warn("Valor invalido para directiva maestra {}. Usando fallback {}. Causa: {}",
                     nombre, fallback, e.getMessage());
@@ -88,7 +111,7 @@ public class MasterDirectiveService {
         validateValorByTipo(existingDirective, newDirective.getValor());
         
         // Actualizar solo los campos permitidos
-        existingDirective.setValor(newDirective.getValor() != null ? newDirective.getValor().trim() : null);
+        existingDirective.setValor(normalizeValorByTipo(existingDirective, newDirective.getValor()));
         existingDirective.setResumen(newDirective.getResumen());
         existingDirective.setAyuda(newDirective.getAyuda());
         
@@ -99,7 +122,16 @@ public class MasterDirectiveService {
     private void validateValorByTipo(MasterDirective directive, String valor) {
         if (directive.getTipoDato() == MasterDirective.TipoDato.NUMERO) {
             parsePositiveInteger(valor, directive.getNombre());
+        } else if (directive.getTipoDato() == MasterDirective.TipoDato.BOOLEANO) {
+            parseBoolean(valor, directive.getNombre());
         }
+    }
+
+    private String normalizeValorByTipo(MasterDirective directive, String valor) {
+        if (directive.getTipoDato() == MasterDirective.TipoDato.BOOLEANO) {
+            return String.valueOf(parseBoolean(valor, directive.getNombre()));
+        }
+        return valor != null ? valor.trim() : null;
     }
 
     private int parsePositiveInteger(String valor, String nombre) {
@@ -121,5 +153,18 @@ public class MasterDirectiveService {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("La directiva " + nombre + " excede el rango entero permitido", e);
         }
+    }
+
+    private boolean parseBoolean(String valor, String nombre) {
+        if (valor == null || valor.trim().isEmpty()) {
+            throw new IllegalArgumentException("La directiva " + nombre + " requiere un valor booleano");
+        }
+
+        String normalized = valor.trim();
+        if (!normalized.equalsIgnoreCase("true") && !normalized.equalsIgnoreCase("false")) {
+            throw new IllegalArgumentException("La directiva " + nombre + " solo acepta true o false");
+        }
+
+        return Boolean.parseBoolean(normalized);
     }
 }

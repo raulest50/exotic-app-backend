@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Controlador REST para operaciones con directivas maestras de configuración
  */
 @RestController
-@RequestMapping("/api/master-directives")
+@RequestMapping("/api/super-master-directives/directives")
 @RequiredArgsConstructor
 @Slf4j
 public class MasterDirectiveResource {

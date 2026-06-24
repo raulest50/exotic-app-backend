@@ -16,6 +16,7 @@ import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,12 +49,14 @@ public class SeguimientoOrdenAreaService {
 
     private static final String NOTA_INICIALIZACION = "Inicializacion de seguimiento";
     private static final String NOTA_DEPENDENCIAS_RESUELTAS = "Paso habilitado automaticamente por resolucion de dependencias previas";
+    private static final String NOTA_DISPENSACION_NO_BLOQUEANTE = "Dispensacion no bloqueante habilitada por directiva maestra";
 
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
     private final AreaProduccionRepo areaProduccionRepo;
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final UserRepository userRepository;
+    private final MasterDirectiveService masterDirectiveService;
     private final Clock applicationClock;
 
     /**
@@ -95,6 +98,7 @@ public class SeguimientoOrdenAreaService {
 
         int posicion = 0;
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        SeguimientoOrdenArea seguimientoAlmacenGeneral = null;
 
         for (RutaProcesoNode node : ruta.getNodes()) {
             if (node.getAreaOperativa() == null) {
@@ -127,9 +131,23 @@ public class SeguimientoOrdenAreaService {
                     NOTA_INICIALIZACION,
                     ahora
             );
+
+            if (seguimiento.getAreaOperativa().getAreaId() == ALMACEN_GENERAL_AREA_ID) {
+                seguimientoAlmacenGeneral = seguimiento;
+            }
         }
 
         log.info("Seguimiento inicializado para orden {} con {} nodos", orden.getOrdenId(), posicion);
+
+        if (seguimientoAlmacenGeneral != null && masterDirectiveService.isDispensacionNoBloqueaInicioProduccion()) {
+            completarSeguimiento(
+                    seguimientoAlmacenGeneral,
+                    ActorTipoEventoSeguimiento.SYSTEM,
+                    null,
+                    NOTA_DISPENSACION_NO_BLOQUEANTE
+            );
+            log.info("Almacen General completado automaticamente a nivel de seguimiento para orden {}", orden.getOrdenId());
+        }
     }
 
     public SeguimientoOrdenAreaDTO reportarEnProceso(int ordenId, int areaId, Long userId, String observaciones) {

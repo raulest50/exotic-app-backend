@@ -3,7 +3,7 @@ frontendRoot: exotic-app-frontend/src/pages/TransaccionesAlmacen
 tag: transacciones-almacen-local
 flows:
   bootstrap:
-    - GET /api/super-master-ops/config
+    - GET /api/super-master-directives/config
   ingreso_ocm:
     - GET /ingresos_almacen/ocms_pendientes_ingreso
     - GET /ingresos_almacen/consultar_transin_de_ocm
