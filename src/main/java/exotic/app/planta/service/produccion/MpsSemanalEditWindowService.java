@@ -4,6 +4,7 @@ import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarBlockDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarCellDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarRowDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,9 +20,9 @@ import java.util.Set;
 public class MpsSemanalEditWindowService {
 
     private static final double EPSILON = 0.000001;
-    private static final int LOCKED_DAYS_AHEAD = 2;
 
     private final Clock applicationClock;
+    private final MasterDirectiveService masterDirectiveService;
 
     private record LockedBlockKey(String productoId, int loteSize) {}
 
@@ -35,7 +36,7 @@ public class MpsSemanalEditWindowService {
     }
 
     public LocalDate getEditableFromDate() {
-        return LocalDate.now(applicationClock).plusDays(LOCKED_DAYS_AHEAD);
+        return LocalDate.now(applicationClock).plusDays(masterDirectiveService.getMpsSemanalDiasBloqueoEdicion());
     }
 
     public boolean isEditable(LocalDate date) {

@@ -49,6 +49,15 @@ public class MasterDirectiveService {
         );
     }
 
+    public int getMpsSemanalDiasBloqueoEdicion() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION,
+                MasterDirectiveKeys.DEFAULT_MPS_SEMANAL_DIAS_BLOQUEO_EDICION,
+                0,
+                7
+        );
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {
@@ -74,6 +83,22 @@ public class MasterDirectiveService {
 
         try {
             return parseBoolean(directiveOpt.get().getValor(), nombre);
+        } catch (IllegalArgumentException e) {
+            log.warn("Valor invalido para directiva maestra {}. Usando fallback {}. Causa: {}",
+                    nombre, fallback, e.getMessage());
+            return fallback;
+        }
+    }
+
+    public int getIntegerDirectiveValueInRange(String nombre, int fallback, int min, int max) {
+        Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
+        if (directiveOpt.isEmpty()) {
+            log.warn("Directiva maestra {} no encontrada. Usando fallback {}", nombre, fallback);
+            return fallback;
+        }
+
+        try {
+            return parseIntegerInRange(directiveOpt.get().getValor(), nombre, min, max);
         } catch (IllegalArgumentException e) {
             log.warn("Valor invalido para directiva maestra {}. Usando fallback {}. Causa: {}",
                     nombre, fallback, e.getMessage());
@@ -121,6 +146,10 @@ public class MasterDirectiveService {
 
     private void validateValorByTipo(MasterDirective directive, String valor) {
         if (directive.getTipoDato() == MasterDirective.TipoDato.NUMERO) {
+            if (MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())) {
+                parseIntegerInRange(valor, directive.getNombre(), 0, 7);
+                return;
+            }
             parsePositiveInteger(valor, directive.getNombre());
         } else if (directive.getTipoDato() == MasterDirective.TipoDato.BOOLEANO) {
             parseBoolean(valor, directive.getNombre());
@@ -148,6 +177,27 @@ public class MasterDirectiveService {
             int parsed = Integer.parseInt(normalized);
             if (parsed < 1) {
                 throw new IllegalArgumentException("La directiva " + nombre + " debe ser mayor o igual a 1");
+            }
+            return parsed;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("La directiva " + nombre + " excede el rango entero permitido", e);
+        }
+    }
+
+    private int parseIntegerInRange(String valor, String nombre, int min, int max) {
+        if (valor == null || valor.trim().isEmpty()) {
+            throw new IllegalArgumentException("La directiva " + nombre + " requiere un valor numerico entero");
+        }
+
+        String normalized = valor.trim();
+        if (!normalized.matches("\\d+")) {
+            throw new IllegalArgumentException("La directiva " + nombre + " solo acepta enteros");
+        }
+
+        try {
+            int parsed = Integer.parseInt(normalized);
+            if (parsed < min || parsed > max) {
+                throw new IllegalArgumentException("La directiva " + nombre + " debe estar entre " + min + " y " + max);
             }
             return parsed;
         } catch (NumberFormatException e) {

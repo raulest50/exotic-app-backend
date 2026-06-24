@@ -5,6 +5,8 @@ import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarCellDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsCalendarRowDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalCalendarDTO;
 import exotic.app.planta.model.produccion.dto.PropuestaMpsSemanalResponseDTO;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -15,16 +17,39 @@ import java.time.ZoneId;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class MpsSemanalEditWindowServiceTest {
 
+    private final MasterDirectiveService masterDirectiveService = mock(MasterDirectiveService.class);
     private final MpsSemanalEditWindowService service = new MpsSemanalEditWindowService(
-            Clock.fixed(Instant.parse("2026-06-01T12:00:00Z"), ZoneId.of("America/Bogota"))
+            Clock.fixed(Instant.parse("2026-06-01T12:00:00Z"), ZoneId.of("America/Bogota")),
+            masterDirectiveService
     );
 
+    @BeforeEach
+    void setUp() {
+        when(masterDirectiveService.getMpsSemanalDiasBloqueoEdicion()).thenReturn(2);
+    }
+
     @Test
-    void editableFromDateStartsTwoDaysAfterToday() {
+    void editableFromDateUsesDefaultTwoLockedDays() {
         assertEquals(LocalDate.of(2026, 6, 3), service.getEditableFromDate());
+    }
+
+    @Test
+    void editableFromDateAllowsCurrentDayWhenDirectiveIsZero() {
+        when(masterDirectiveService.getMpsSemanalDiasBloqueoEdicion()).thenReturn(0);
+
+        assertEquals(LocalDate.of(2026, 6, 1), service.getEditableFromDate());
+    }
+
+    @Test
+    void editableFromDateBlocksOnlyCurrentDayWhenDirectiveIsOne() {
+        when(masterDirectiveService.getMpsSemanalDiasBloqueoEdicion()).thenReturn(1);
+
+        assertEquals(LocalDate.of(2026, 6, 2), service.getEditableFromDate());
     }
 
     @Test

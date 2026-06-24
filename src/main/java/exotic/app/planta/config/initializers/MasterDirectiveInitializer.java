@@ -18,6 +18,8 @@ public class MasterDirectiveInitializer {
     private static final String DISPENSACION_NO_BLOQUEA_AYUDA = "Cuando esta activa, Almacen General se marca automaticamente como completado solo a nivel de seguimiento de proceso al crear la orden de produccion. No crea transacciones de almacen, no descuenta inventario y no acredita la dispensacion real.";
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_RESUMEN = "Permite que master vea y entre al modulo de Directivas Super Master";
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_AYUDA = "Cuando esta activa, el usuario master puede ver el acceso en Inicio y entrar a la ruta de Directivas Super Master. No agrega proteccion adicional sobre los endpoints API.";
+    private static final String MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN = "Cantidad de dias bloqueados para editar MPS semanal";
+    private static final String MPS_SEMANAL_DIAS_BLOQUEO_AYUDA = "Define cuantos dias desde la fecha actual quedan bloqueados para editar el MPS semanal. Acepta valores de 0 a 7: 0 permite editar desde hoy, 1 bloquea hoy, 2 bloquea hoy y manana, y asi sucesivamente.";
 
     private final MasterDirectiveRepo masterDirectiveRepo;
 
@@ -25,6 +27,7 @@ public class MasterDirectiveInitializer {
         ensureLimiteRecepcionesParcialesOcm();
         ensureDispensacionNoBloqueaInicioProduccion();
         ensureEnableMasterSupermasterDirectivesAccess();
+        ensureMpsSemanalDiasBloqueoEdicion();
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {
@@ -100,5 +103,30 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(MASTER_SUPERMASTER_DIRECTIVES_ACCESS_AYUDA);
+    }
+
+    private void ensureMpsSemanalDiasBloqueoEdicion() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION)
+                .map(this::actualizarMetadataMpsSemanalDiasBloqueoEdicion)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_MPS_SEMANAL_DIAS_BLOQUEO_EDICION));
+                    aplicarMetadataMpsSemanalDiasBloqueoEdicion(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataMpsSemanalDiasBloqueoEdicion(MasterDirective directive) {
+        aplicarMetadataMpsSemanalDiasBloqueoEdicion(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataMpsSemanalDiasBloqueoEdicion(MasterDirective directive) {
+        directive.setResumen(MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(MPS_SEMANAL_DIAS_BLOQUEO_AYUDA);
     }
 }
