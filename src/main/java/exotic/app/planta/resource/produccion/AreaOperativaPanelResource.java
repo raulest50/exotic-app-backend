@@ -4,12 +4,14 @@ import exotic.app.planta.config.AppTime;
 import exotic.app.planta.dto.ErrorResponse;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
+import exotic.app.planta.model.produccion.dto.MpsSemanalOrdenProduccionListItemDTO;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
+import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
 import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -36,6 +39,7 @@ public class AreaOperativaPanelResource {
 
     private final AreaOperativaPanelDetalleService areaOperativaPanelDetalleService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
+    private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
     private final UserRepository userRepository;
 
@@ -90,6 +94,40 @@ public class AreaOperativaPanelResource {
                     .body(new ErrorResponse("MPS no encontrado", e.getMessage()));
         } catch (IllegalArgumentException e) {
             log.warn("Solicitud invalida de MPS operativo actual para semana {}: {}", weekStartDate, e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/mps-semanal/actual/odps")
+    public ResponseEntity<?> getOdpsMpsSemanalActual(Authentication authentication) {
+        User user = getCurrentUser(authentication);
+        LocalDate weekStartDate = getCurrentIsoWeekStartDate();
+
+        try {
+            assertAreaResponsable(user);
+            MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
+            if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ErrorResponse(
+                                "MPS no disponible",
+                                "El MPS de la semana actual aun no esta aprobado para consulta operativa."
+                        ));
+            }
+
+            List<MpsSemanalOrdenProduccionListItemDTO> ordenes =
+                    masterProductionScheduleOrderGenerationService.getOrdenesGeneradasPorSemana(weekStartDate);
+            return ResponseEntity.ok(ordenes);
+        } catch (AccessDeniedException e) {
+            log.warn("Acceso denegado a ODPs del MPS operativo actual para user {}: {}", user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Acceso denegado", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            log.warn("ODPs del MPS operativo actual no encontradas para semana {}: {}", weekStartDate, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse("MPS no encontrado", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            log.warn("Solicitud invalida de ODPs del MPS operativo actual para semana {}: {}", weekStartDate, e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
         }
