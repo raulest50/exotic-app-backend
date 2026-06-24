@@ -3,13 +3,8 @@ package exotic.app.planta.repo.producto;
 import exotic.app.planta.model.producto.Categoria;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
-
-import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface CategoriaRepo extends JpaRepository<Categoria, Integer> {
@@ -34,19 +29,5 @@ public interface CategoriaRepo extends JpaRepository<Categoria, Integer> {
      * @param pageable pagination and sort parameters
      * @return page of categories matching the search
      */
-    @EntityGraph(attributePaths = "poolCapacidad")
     Page<Categoria> findByCategoriaNombreContainingIgnoreCase(String nombre, Pageable pageable);
-
-    @EntityGraph(attributePaths = "poolCapacidad")
-    @Query("select c from Categoria c")
-    List<Categoria> findAllWithPoolCapacidad();
-
-    @EntityGraph(attributePaths = "poolCapacidad")
-    @Query("select c from Categoria c")
-    Page<Categoria> findAllWithPoolCapacidad(Pageable pageable);
-
-    @EntityGraph(attributePaths = "poolCapacidad")
-    Optional<Categoria> findWithPoolCapacidadByCategoriaId(Integer categoriaId);
-
-    long countByPoolCapacidad_Id(Integer poolCapacidadId);
 }

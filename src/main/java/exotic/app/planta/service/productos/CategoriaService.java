@@ -1,11 +1,9 @@
 package exotic.app.planta.service.productos;
 
 import exotic.app.planta.model.producto.Categoria;
-import exotic.app.planta.model.producto.PoolCapacidad;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.dto.CategoriaResponseDTO;
 import exotic.app.planta.repo.producto.CategoriaRepo;
-import exotic.app.planta.repo.producto.PoolCapacidadRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateIdException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateNameException;
@@ -30,12 +28,11 @@ public class CategoriaService {
 
     private final CategoriaRepo categoriaRepo;
     private final TerminadoRepo terminadoRepo;
-    private final PoolCapacidadRepo poolCapacidadRepo;
 
     /**
      * Guarda una nueva categoria o actualiza una existente, verificando que el ID y nombre sean unicos.
      * Cuando la categoria ya existe, solo actualiza nombre y descripcion; los parametros de planeacion
-     * y el pool de capacidad se administran por endpoints dedicados.
+     * se administran por endpoints dedicados.
      */
     @Transactional
     public CategoriaResponseDTO saveCategoria(Categoria categoria) {
@@ -78,7 +75,7 @@ public class CategoriaService {
     @Transactional(readOnly = true)
     public List<CategoriaResponseDTO> getAllCategorias() {
         log.info("Obteniendo todas las categorias");
-        return categoriaRepo.findAllWithPoolCapacidad().stream()
+        return categoriaRepo.findAll().stream()
                 .map(CategoriaResponseDTO::fromEntity)
                 .toList();
     }
@@ -110,7 +107,7 @@ public class CategoriaService {
 
     @Transactional(readOnly = true)
     public Optional<CategoriaResponseDTO> getCategoriaById(int categoriaId) {
-        return categoriaRepo.findWithPoolCapacidadByCategoriaId(categoriaId)
+        return categoriaRepo.findById(categoriaId)
                 .map(CategoriaResponseDTO::fromEntity);
     }
 
@@ -118,7 +115,7 @@ public class CategoriaService {
     public Page<CategoriaResponseDTO> searchCategorias(String nombre, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         if (nombre == null || nombre.isBlank()) {
-            return categoriaRepo.findAllWithPoolCapacidad(pageable)
+            return categoriaRepo.findAll(pageable)
                     .map(CategoriaResponseDTO::fromEntity);
         }
         return categoriaRepo.findByCategoriaNombreContainingIgnoreCase(nombre.trim(), pageable)
@@ -155,23 +152,6 @@ public class CategoriaService {
         Categoria categoria = categoriaRepo.findById(categoriaId)
                 .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
         categoria.setCapacidadProductivaDiaria(capacidadProductivaDiaria);
-        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
-    }
-
-    @Transactional
-    public CategoriaResponseDTO updatePoolCapacidad(int categoriaId, Integer poolCapacidadId) {
-        Categoria categoria = categoriaRepo.findById(categoriaId)
-                .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
-
-        if (poolCapacidadId == null) {
-            categoria.setPoolCapacidad(null);
-            return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
-        }
-
-        PoolCapacidad poolCapacidad = poolCapacidadRepo.findById(poolCapacidadId)
-                .orElseThrow(() -> new ValidationException("No se encontro pool de capacidad con ID: " + poolCapacidadId));
-
-        categoria.setPoolCapacidad(poolCapacidad);
         return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
 }

@@ -1067,8 +1067,9 @@ public class SalidaAlmacenService {
     }
 
     /**
-     * Busca dispensaciones (transacciones tipo OP) con filtros flexibles.
-     * Permite filtrar por ID de transacción, ID de orden de producción, y fechas (rango o específica).
+     * Busca dispensaciones (transacciones tipo OD) con filtros flexibles.
+     * Permite filtrar por ID de transacción, ID de orden de producción, lote de producción,
+     * y fechas (rango o específica).
      *
      * @param filtro DTO con los criterios de búsqueda
      * @return Página de transacciones que cumplen con los filtros
@@ -1155,6 +1156,20 @@ public class SalidaAlmacenService {
                         ordenProduccionId,
                         pageable
                 );
+            } else if (filtro.getTipoFiltroId() == 3) {
+                String loteAsignado = filtro.getLoteAsignado();
+                // Si el lote está vacío, usar método simple
+                if (loteAsignado == null || loteAsignado.isBlank()) {
+                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
+                            TransaccionAlmacen.TipoEntidadCausante.OD,
+                            pageable
+                    );
+                }
+                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndLoteAsignadoContaining(
+                        TransaccionAlmacen.TipoEntidadCausante.OD,
+                        loteAsignado.trim(),
+                        pageable
+                );
             }
         }
 
@@ -1206,6 +1221,24 @@ public class SalidaAlmacenService {
                         fechaFin,
                         pageable
                 );
+            } else if (filtro.getTipoFiltroId() == 3) {
+                String loteAsignado = filtro.getLoteAsignado();
+                // Si el lote está vacío, usar solo filtro de fecha
+                if (loteAsignado == null || loteAsignado.isBlank()) {
+                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
+                            TransaccionAlmacen.TipoEntidadCausante.OD,
+                            fechaInicio,
+                            fechaFin,
+                            pageable
+                    );
+                }
+                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndLoteAsignadoContainingAndFechaBetween(
+                        TransaccionAlmacen.TipoEntidadCausante.OD,
+                        loteAsignado.trim(),
+                        fechaInicio,
+                        fechaFin,
+                        pageable
+                );
             }
         }
 
@@ -1243,6 +1276,11 @@ public class SalidaAlmacenService {
             usuarioDTO.setUserId(transaccion.getUsuarioAprobador().getId());
             usuarioDTO.setNombre(transaccion.getUsuarioAprobador().getNombreCompleto());
             dto.setUsuarioAprobador(usuarioDTO);
+        }
+
+        if (transaccion.getTipoEntidadCausante() == TransaccionAlmacen.TipoEntidadCausante.OD) {
+            ordenProduccionRepo.findById(transaccion.getIdEntidadCausante())
+                    .ifPresent(op -> dto.setLoteAsignado(op.getLoteAsignado()));
         }
 
         return dto;

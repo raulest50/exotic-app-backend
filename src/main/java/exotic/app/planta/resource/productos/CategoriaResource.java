@@ -91,31 +91,6 @@ public class CategoriaResource {
         return ResponseEntity.ok(updated);
     }
 
-    @PatchMapping("/{categoriaId}/pool-capacidad")
-    public ResponseEntity<?> updatePoolCapacidad(
-            @PathVariable int categoriaId,
-            @RequestBody Map<String, Object> body
-    ) {
-        if (body == null || !body.containsKey("poolCapacidadId")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "El campo poolCapacidadId es obligatorio."));
-        }
-
-        Object rawValue = body.get("poolCapacidadId");
-        Integer poolCapacidadId = null;
-        if (rawValue != null) {
-            if (!(rawValue instanceof Number number)
-                    || number.doubleValue() != Math.rint(number.doubleValue())
-                    || number.doubleValue() < Integer.MIN_VALUE
-                    || number.doubleValue() > Integer.MAX_VALUE) {
-                return ResponseEntity.badRequest().body(Map.of("error", "poolCapacidadId debe ser un entero o null."));
-            }
-            poolCapacidadId = number.intValue();
-        }
-
-        CategoriaResponseDTO updated = categoriaService.updatePoolCapacidad(categoriaId, poolCapacidadId);
-        return ResponseEntity.ok(updated);
-    }
-
     @DeleteMapping("/{categoriaId}")
     public ResponseEntity<Map<String, Object>> deleteCategoria(@PathVariable int categoriaId) {
         boolean deleted = categoriaService.deleteCategoriaById(categoriaId);

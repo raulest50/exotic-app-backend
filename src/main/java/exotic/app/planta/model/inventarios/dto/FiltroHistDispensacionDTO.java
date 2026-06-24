@@ -8,8 +8,8 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 /**
- * DTO para filtrar dispensaciones (transacciones de almacén tipo OP).
- * Permite buscar por ID de transacción, ID de orden de producción, y fechas.
+ * DTO para filtrar dispensaciones (transacciones de almacén tipo OD).
+ * Permite buscar por ID de transacción, ID de orden de producción, lote de producción, y fechas.
  */
 @Getter
 @Setter
@@ -27,6 +27,12 @@ public class FiltroHistDispensacionDTO {
      * Se usa cuando tipoFiltroId = 2.
      */
     private Integer ordenProduccionId;
+
+    /**
+     * Lote asignado a la orden de producción (opcional).
+     * Se usa cuando tipoFiltroId = 3.
+     */
+    private String loteAsignado;
 
     /**
      * Fecha inicial para búsqueda por rango (opcional).
@@ -59,6 +65,7 @@ public class FiltroHistDispensacionDTO {
      * 0 = sin filtro de ID
      * 1 = filtrar por transaccionId
      * 2 = filtrar por ordenProduccionId
+     * 3 = filtrar por loteAsignado de OrdenProduccion
      */
     private Integer tipoFiltroId;
 
@@ -74,5 +81,3 @@ public class FiltroHistDispensacionDTO {
      */
     private int size = 10;
 }
-
-

@@ -271,6 +271,43 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         Pageable pageable
     );
 
+    /**
+     * Busca dispensaciones filtradas por lote de producción con coincidencia parcial.
+     * Usa cross-entity join: TransaccionAlmacen.idEntidadCausante = OrdenProduccion.ordenId.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipoEntidadCausante AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante " +
+           "AND op.loteAsignado IS NOT NULL " +
+           "AND LOWER(op.loteAsignado) LIKE LOWER(CONCAT('%', :loteAsignado, '%'))) " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findByTipoEntidadCausanteAndLoteAsignadoContaining(
+        @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+        @Param("loteAsignado") String loteAsignado,
+        Pageable pageable
+    );
+
+    /**
+     * Busca dispensaciones filtradas por lote de producción parcial y rango de fechas.
+     */
+    @Query("SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipoEntidadCausante AND " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante " +
+           "AND op.loteAsignado IS NOT NULL " +
+           "AND LOWER(op.loteAsignado) LIKE LOWER(CONCAT('%', :loteAsignado, '%'))) AND " +
+           "t.fechaTransaccion >= :fechaInicio AND " +
+           "t.fechaTransaccion <= :fechaFin " +
+           "ORDER BY t.fechaTransaccion DESC")
+    Page<TransaccionAlmacen> findByTipoEntidadCausanteAndLoteAsignadoContainingAndFechaBetween(
+        @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+        @Param("loteAsignado") String loteAsignado,
+        @Param("fechaInicio") LocalDateTime fechaInicio,
+        @Param("fechaFin") LocalDateTime fechaFin,
+        Pageable pageable
+    );
+
     // ==================== OD Queries ====================
 
     /**

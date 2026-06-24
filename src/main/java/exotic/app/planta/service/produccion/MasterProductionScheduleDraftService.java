@@ -11,7 +11,6 @@ import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SemanaMPS;
 import exotic.app.planta.model.produccion.dto.AprobarMpsSemanalRequestDTO;
-import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDiaDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalItemDTO;
@@ -47,11 +46,6 @@ public class MasterProductionScheduleDraftService {
     private final MpsSemanalObservacionRepo mpsSemanalObservacionRepo;
     private final MpsSemanalEditWindowService mpsSemanalEditWindowService;
     private final MpsSemanalOrdenInicioPolicyService ordenInicioPolicyService;
-
-    public MpsSemanalDraftDTO saveDraft(GuardarMpsSemanalDraftRequestDTO ignoredRequest) {
-        log.warn("[MPS_SEMANAL] service saveDraft rejected reason=deprecated_json_snapshot_flow");
-        throw new IllegalStateException("El MPS semanal ya no se persiste desde snapshot JSON. Use la programacion semanal diaria.");
-    }
 
     @Transactional(readOnly = true)
     public MpsSemanalDraftDTO getDraftByWeekStartDate(LocalDate weekStartDate) {

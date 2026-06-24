@@ -147,7 +147,26 @@ class TransaccionesAlmacenDispensacionIntegrationTest extends AbstractTransaccio
                         .contentType("application/json")
                         .content(filterJson))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].idEntidadCausante").value(fixture.ordenAbierta().getOrdenId()));
+                .andExpect(jsonPath("$.content[0].idEntidadCausante").value(fixture.ordenAbierta().getOrdenId()))
+                .andExpect(jsonPath("$.content[0].loteAsignado").value(fixture.ordenAbierta().getLoteAsignado()));
+
+        String loteFilterJson = """
+                {
+                  "tipoFiltroFecha": 0,
+                  "tipoFiltroId": 3,
+                  "loteAsignado": "PT-001",
+                  "page": 0,
+                  "size": 10
+                }
+                """;
+
+        mockMvc.perform(post("/salidas_almacen/historial_dispensacion_filter")
+                        .with(bearerToken())
+                        .contentType("application/json")
+                        .content(loteFilterJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].idEntidadCausante").value(fixture.ordenAbierta().getOrdenId()))
+                .andExpect(jsonPath("$.content[0].loteAsignado").value(fixture.ordenAbierta().getLoteAsignado()));
 
         mockMvc.perform(get("/api/seguimiento-orden-area/orden/{ordenId}/progreso", fixture.ordenAbierta().getOrdenId())
                         .with(bearerToken()))
