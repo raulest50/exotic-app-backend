@@ -224,6 +224,9 @@ public class SeguimientoOrdenAreaService {
         }
 
         SeguimientoOrdenArea seguimiento = seguimientoOpt.get();
+        if (seguimiento.getOrdenProduccion().getFechaInicio() == null) {
+            seguimiento.getOrdenProduccion().setFechaInicio(LocalDateTime.now(applicationClock));
+        }
         User actor = userId != null ? userRepository.findById(userId).orElse(null) : null;
         completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.SYSTEM, actor, observaciones);
         return toDTO(seguimiento);
@@ -392,6 +395,12 @@ public class SeguimientoOrdenAreaService {
 
         seguimiento.setEstadoEnum(estadoDestino);
         seguimiento.setFechaEstadoActual(ahora);
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO
+                && actorTipo == ActorTipoEventoSeguimiento.USER
+                && seguimiento.getOrdenProduccion().getFechaInicio() == null) {
+            seguimiento.getOrdenProduccion().setFechaInicio(ahora);
+        }
 
         if (estadoDestino == EstadoSeguimientoOrdenArea.ESPERA && seguimiento.getFechaVisible() == null) {
             seguimiento.setFechaVisible(ahora);

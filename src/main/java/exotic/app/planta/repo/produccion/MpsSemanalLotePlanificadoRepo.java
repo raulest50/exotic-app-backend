@@ -13,6 +13,8 @@ public interface MpsSemanalLotePlanificadoRepo extends JpaRepository<MpsSemanalL
 
     long countByMpsItem_MpsSemanal_MpsId(Integer mpsId);
 
+    long countByMpsItem_MpsSemanal_MpsIdAndEstadoNot(Integer mpsId, EstadoMpsSemanalLotePlanificado estado);
+
     long countByMpsItem_MpsSemanal_MpsIdAndEstado(Integer mpsId, EstadoMpsSemanalLotePlanificado estado);
 
     @EntityGraph(attributePaths = {"mpsItem", "mpsItem.mpsDia", "mpsItem.terminado"})

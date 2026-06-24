@@ -5,6 +5,8 @@ import exotic.app.planta.model.producto.Terminado;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
@@ -84,6 +86,10 @@ public class MpsSemanalItem {
 
     @Column(name = "numero_lotes", nullable = false)
     private int numeroLotes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado", nullable = false, length = 20)
+    private EstadoMpsSemanalItem estado = EstadoMpsSemanalItem.ACTIVO;
 
     @Column(name = "cantidad_total", nullable = false)
     private double cantidadTotal;

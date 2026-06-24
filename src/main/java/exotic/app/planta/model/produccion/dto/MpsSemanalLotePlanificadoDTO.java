@@ -13,4 +13,6 @@ public class MpsSemanalLotePlanificadoDTO {
     private EstadoMpsSemanalLotePlanificado estado;
     private Integer ordenProduccionId;
     private String loteAsignado;
+    private boolean ordenIniciada;
+    private boolean ordenCancelable;
 }

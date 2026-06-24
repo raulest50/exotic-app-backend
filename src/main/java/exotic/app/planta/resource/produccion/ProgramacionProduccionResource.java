@@ -7,6 +7,7 @@ import exotic.app.planta.model.produccion.dto.CrearMpsSemanalObservacionRequestD
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsResponseDTO;
 import exotic.app.planta.model.produccion.dto.GuardarProgramacionProduccionSemanalRequestDTO;
+import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemEditRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalListItemDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalObservacionDTO;
@@ -20,6 +21,7 @@ import exotic.app.planta.resource.produccion.exceptions.MpsSemanalDraftNotFoundE
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
+import exotic.app.planta.service.produccion.MpsSemanalAprobadoEditService;
 import exotic.app.planta.service.produccion.MpsSemanalObservacionService;
 import exotic.app.planta.service.produccion.ProgramacionProduccionSemanalService;
 import exotic.app.planta.service.produccion.SemanaMPSService;
@@ -29,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -51,6 +54,7 @@ public class ProgramacionProduccionResource {
     private final ProgramacionProduccionSemanalService programacionProduccionSemanalService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
+    private final MpsSemanalAprobadoEditService mpsSemanalAprobadoEditService;
     private final MpsSemanalObservacionService mpsSemanalObservacionService;
     private final SemanaMPSService semanaMPSService;
     private final UserRepository userRepository;
@@ -443,6 +447,39 @@ public class ProgramacionProduccionResource {
             return controlledFailure(action, user, context, HttpStatus.BAD_REQUEST, e);
         } catch (MpsSemanalNotFoundException e) {
             return controlledFailure(action, user, context, HttpStatus.NOT_FOUND, e);
+        } catch (ResponseStatusException e) {
+            accessFailure(action, user, context, e);
+            throw e;
+        } catch (RuntimeException e) {
+            unexpectedFailure(action, user, context, e);
+            throw e;
+        }
+    }
+
+    @PatchMapping("/mps-semanal/items/{itemId}/edicion-aprobada")
+    public ResponseEntity<?> editarItemMpsSemanalAprobado(
+            @PathVariable Long itemId,
+            @RequestBody MpsSemanalAprobadoItemEditRequestDTO request,
+            Authentication authentication
+    ) {
+        String action = "editarItemMpsSemanalAprobado";
+        String user = authenticationName(authentication);
+        String context = "itemId=" + itemId
+                + " dayIndex=" + (request != null ? request.getDayIndex() : null)
+                + " numeroLotes=" + (request != null ? request.getNumeroLotes() : null);
+        try {
+            log.info("[MPS_SEMANAL] {} start user={} {}", action, user, context);
+            String username = requireAuthorizedUsername(authentication, "PROGRAMACION_PRODUCCION");
+            MpsSemanalDraftDTO response = mpsSemanalAprobadoEditService.editarItemAprobado(itemId, request, username);
+            log.info("[MPS_SEMANAL] {} success user={} mpsId={} weekStartDate={} estado={} revision={}",
+                    action, user, response.getMpsId(), response.getWeekStartDate(), response.getEstado(), response.getRevisionNumero());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return controlledFailure(action, user, context, HttpStatus.BAD_REQUEST, e);
+        } catch (MpsSemanalNotFoundException e) {
+            return controlledFailure(action, user, context, HttpStatus.NOT_FOUND, e);
+        } catch (IllegalStateException e) {
+            return controlledFailure(action, user, context, HttpStatus.CONFLICT, e);
         } catch (ResponseStatusException e) {
             accessFailure(action, user, context, e);
             throw e;

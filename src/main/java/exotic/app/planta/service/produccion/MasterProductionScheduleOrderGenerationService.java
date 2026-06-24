@@ -77,30 +77,7 @@ public class MasterProductionScheduleOrderGenerationService {
         }
         log.info("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada pendingLotes mpsId={} count={}", mps.getMpsId(), lotesPendientes.size());
 
-        Map<String, LoteSequenceState> lotesPorProducto = new HashMap<>();
-        List<Integer> ordenesIds = new ArrayList<>();
-        for (MpsSemanalLotePlanificado lotePlanificado : lotesPendientes) {
-            MpsSemanalItem item = lotePlanificado.getMpsItem();
-            validateLotePlanificado(lotePlanificado, item);
-
-            String productoId = item.getTerminado().getProductoId();
-            String loteBatchNumber = nextLotForProduct(productoId, lotesPorProducto);
-            OrdenProduccionDTO_save dto = buildOrdenDto(item, lotePlanificado, loteBatchNumber);
-            OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(dto, mps, lotePlanificado);
-
-            lotePlanificado.setEstado(EstadoMpsSemanalLotePlanificado.ODP_GENERADA);
-            lotePlanificado.setOrdenProduccion(orden);
-            mpsSemanalLotePlanificadoRepo.save(lotePlanificado);
-            ordenesIds.add(orden.getOrdenId());
-            log.debug(
-                    "[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada odpCreated mpsId={} lotePlanificadoId={} productoId={} loteBatchNumber={} ordenId={}",
-                    mps.getMpsId(),
-                    lotePlanificado.getId(),
-                    productoId,
-                    loteBatchNumber,
-                    orden.getOrdenId()
-            );
-        }
+        List<Integer> ordenesIds = generarOrdenesParaLotes(mps, lotesPendientes);
 
         mps.setFechaGeneracionOdps(LocalDateTime.now());
         mps.setGeneradoPorUsername(generatedByUsername);
@@ -129,6 +106,44 @@ public class MasterProductionScheduleOrderGenerationService {
         return response;
     }
 
+    public List<Integer> generarOrdenesParaLotes(
+            MasterProductionScheduleSemanal mps,
+            List<MpsSemanalLotePlanificado> lotesPendientes
+    ) {
+        if (mps == null) {
+            throw new IllegalArgumentException("MPS semanal es obligatorio para generar ODPs.");
+        }
+        if (lotesPendientes == null || lotesPendientes.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, LoteSequenceState> lotesPorProducto = new HashMap<>();
+        List<Integer> ordenesIds = new ArrayList<>();
+        for (MpsSemanalLotePlanificado lotePlanificado : lotesPendientes) {
+            MpsSemanalItem item = lotePlanificado.getMpsItem();
+            validateLotePlanificado(lotePlanificado, item);
+
+            String productoId = item.getTerminado().getProductoId();
+            String loteBatchNumber = nextLotForProduct(productoId, lotesPorProducto);
+            OrdenProduccionDTO_save dto = buildOrdenDto(item, lotePlanificado, loteBatchNumber);
+            OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(dto, mps, lotePlanificado);
+
+            lotePlanificado.setEstado(EstadoMpsSemanalLotePlanificado.ODP_GENERADA);
+            lotePlanificado.setOrdenProduccion(orden);
+            mpsSemanalLotePlanificadoRepo.save(lotePlanificado);
+            ordenesIds.add(orden.getOrdenId());
+            log.debug(
+                    "[MPS_SEMANAL] service generarOrdenesParaLotes odpCreated mpsId={} lotePlanificadoId={} productoId={} loteBatchNumber={} ordenId={}",
+                    mps.getMpsId(),
+                    lotePlanificado.getId(),
+                    productoId,
+                    loteBatchNumber,
+                    orden.getOrdenId()
+            );
+        }
+        return ordenesIds;
+    }
+
     @Transactional(readOnly = true)
     public List<MpsSemanalOrdenProduccionListItemDTO> getOrdenesGeneradasPorSemana(LocalDate weekStartDate) {
         log.debug("[MPS_SEMANAL] service getOrdenesGeneradasPorSemana begin weekStartDate={}", weekStartDate);
@@ -151,6 +166,9 @@ public class MasterProductionScheduleOrderGenerationService {
     private void validateLotePlanificado(MpsSemanalLotePlanificado lotePlanificado, MpsSemanalItem item) {
         if (item == null || item.getTerminado() == null) {
             throw new IllegalStateException("Se encontro un lote planificado sin item o terminado asociado.");
+        }
+        if (lotePlanificado.getEstado() != EstadoMpsSemanalLotePlanificado.PENDIENTE_ODP) {
+            throw new IllegalStateException("El lote planificado " + lotePlanificado.getId() + " no esta pendiente de ODP.");
         }
         if (item.getLoteSize() <= 0) {
             throw new IllegalStateException("El producto " + item.getTerminado().getProductoId() + " no tiene lote size valido para generar ODPs.");

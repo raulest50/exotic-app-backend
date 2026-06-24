@@ -1,12 +1,14 @@
 package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
 import exotic.app.planta.model.produccion.EstadoMpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.EstadoMpsSemanalObservacion;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
 import exotic.app.planta.model.produccion.MpsSemanalDia;
 import exotic.app.planta.model.produccion.MpsSemanalItem;
 import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
+import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SemanaMPS;
 import exotic.app.planta.model.produccion.dto.AprobarMpsSemanalRequestDTO;
 import exotic.app.planta.model.produccion.dto.GuardarMpsSemanalDraftRequestDTO;
@@ -43,6 +45,8 @@ public class MasterProductionScheduleDraftService {
     private final MpsSemanalItemRepo mpsSemanalItemRepo;
     private final MpsSemanalLotePlanificadoRepo mpsSemanalLotePlanificadoRepo;
     private final MpsSemanalObservacionRepo mpsSemanalObservacionRepo;
+    private final MpsSemanalEditWindowService mpsSemanalEditWindowService;
+    private final MpsSemanalOrdenInicioPolicyService ordenInicioPolicyService;
 
     public MpsSemanalDraftDTO saveDraft(GuardarMpsSemanalDraftRequestDTO ignoredRequest) {
         log.warn("[MPS_SEMANAL] service saveDraft rejected reason=deprecated_json_snapshot_flow");
@@ -140,7 +144,7 @@ public class MasterProductionScheduleDraftService {
             throw new IllegalStateException("No se puede aprobar un MPS con observaciones abiertas o pendientes de aceptacion.");
         }
 
-        long totalLotesPlanificados = mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsId(entity.getMpsId());
+        long totalLotesPlanificados = countActiveLotes(entity.getMpsId());
         if (totalLotesPlanificados <= 0) {
             log.warn("[MPS_SEMANAL] service approveWeek rejected reason=no_lotes mpsId={}", entity.getMpsId());
             throw new IllegalStateException("No se puede aprobar una semana sin ODPs esperadas.");
@@ -169,8 +173,8 @@ public class MasterProductionScheduleDraftService {
         dto.setDias(mpsSemanalDiaRepo.findAllByMpsSemanal_MpsIdOrderByDayIndexAsc(entity.getMpsId()).stream()
                 .map(this::toDiaDTO)
                 .toList());
-        dto.setTotalItems(mpsSemanalItemRepo.countByMpsSemanal_MpsId(entity.getMpsId()));
-        dto.setTotalLotesPlanificados(mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsId(entity.getMpsId()));
+        dto.setTotalItems(countActiveItems(entity.getMpsId()));
+        dto.setTotalLotesPlanificados(countActiveLotes(entity.getMpsId()));
         dto.setTotalOdpsGeneradas(mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsIdAndEstado(
                 entity.getMpsId(),
                 EstadoMpsSemanalLotePlanificado.ODP_GENERADA
@@ -192,13 +196,24 @@ public class MasterProductionScheduleDraftService {
         fillSemanaFields(dto, entity);
         dto.setWeekStartDate(entity.getWeekStartDate());
         dto.setWeekEndDate(entity.getWeekEndDate());
-        dto.setTotalItems(mpsSemanalItemRepo.countByMpsSemanal_MpsId(entity.getMpsId()));
-        dto.setTotalLotesPlanificados(mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsId(entity.getMpsId()));
+        dto.setTotalItems(countActiveItems(entity.getMpsId()));
+        dto.setTotalLotesPlanificados(countActiveLotes(entity.getMpsId()));
         dto.setTotalOdpsGeneradas(mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsIdAndEstado(
                 entity.getMpsId(),
                 EstadoMpsSemanalLotePlanificado.ODP_GENERADA
         ));
         return dto;
+    }
+
+    private long countActiveItems(Integer mpsId) {
+        return mpsSemanalItemRepo.countByMpsSemanal_MpsIdAndEstadoNot(mpsId, EstadoMpsSemanalItem.CANCELADO);
+    }
+
+    private long countActiveLotes(Integer mpsId) {
+        return mpsSemanalLotePlanificadoRepo.countByMpsItem_MpsSemanal_MpsIdAndEstadoNot(
+                mpsId,
+                EstadoMpsSemanalLotePlanificado.CANCELADO
+        );
     }
 
     private MpsSemanalDiaDTO toDiaDTO(MpsSemanalDia dia) {
@@ -223,6 +238,7 @@ public class MasterProductionScheduleDraftService {
         dto.setLoteSize(item.getLoteSize());
         dto.setTiempoDiasFabricacion(item.getTiempoDiasFabricacion());
         dto.setNumeroLotes(item.getNumeroLotes());
+        dto.setEstadoItem(resolveItemEstado(item));
         dto.setCantidadTotal(item.getCantidadTotal());
         dto.setFechaLanzamiento(item.getFechaLanzamiento());
         dto.setFechaFinalPlanificada(item.getFechaFinalPlanificada());
@@ -232,6 +248,7 @@ public class MasterProductionScheduleDraftService {
         dto.setLotesPlanificados(item.getLotesPlanificados().stream()
                 .map(this::toLotePlanificadoDTO)
                 .toList());
+        fillItemEditMetadata(dto, item);
         return dto;
     }
 
@@ -244,8 +261,53 @@ public class MasterProductionScheduleDraftService {
         if (lote.getOrdenProduccion() != null) {
             dto.setOrdenProduccionId(lote.getOrdenProduccion().getOrdenId());
             dto.setLoteAsignado(lote.getOrdenProduccion().getLoteAsignado());
+            dto.setOrdenIniciada(ordenInicioPolicyService.isOrdenIniciada(lote.getOrdenProduccion()));
+            dto.setOrdenCancelable(ordenInicioPolicyService.isOrdenCancelable(lote.getOrdenProduccion()));
         }
         return dto;
+    }
+
+    private void fillItemEditMetadata(MpsSemanalItemDTO dto, MpsSemanalItem item) {
+        long lotesCancelados = item.getLotesPlanificados().stream()
+                .filter(lote -> lote.getEstado() == EstadoMpsSemanalLotePlanificado.CANCELADO)
+                .count();
+        List<OrdenProduccion> activeOrdenes = item.getLotesPlanificados().stream()
+                .filter(lote -> lote.getEstado() != EstadoMpsSemanalLotePlanificado.CANCELADO)
+                .map(MpsSemanalLotePlanificado::getOrdenProduccion)
+                .filter(java.util.Objects::nonNull)
+                .filter(orden -> orden.getEstadoOrden() != -1)
+                .toList();
+        int ordenesIniciadas = (int) activeOrdenes.stream()
+                .filter(ordenInicioPolicyService::isOrdenIniciada)
+                .count();
+        int ordenesCancelables = (int) activeOrdenes.stream()
+                .filter(ordenInicioPolicyService::isOrdenCancelable)
+                .count();
+
+        dto.setLotesCancelados((int) lotesCancelados);
+        dto.setLotesActivos(item.getLotesPlanificados().size() - dto.getLotesCancelados());
+        dto.setOrdenesIniciadas(ordenesIniciadas);
+        dto.setOrdenesCancelables(ordenesCancelables);
+
+        String blockedReason = resolveItemBlockedReason(item, ordenesIniciadas);
+        dto.setBlockedReason(blockedReason);
+        dto.setEditable(blockedReason == null);
+    }
+
+    private String resolveItemBlockedReason(MpsSemanalItem item, int ordenesIniciadas) {
+        if (resolveItemEstado(item) == EstadoMpsSemanalItem.CANCELADO) {
+            return "Tarjeta MPS cancelada.";
+        }
+        if (item.getMpsDia() == null || item.getMpsDia().getFecha() == null) {
+            return "La tarjeta no tiene fecha MPS valida.";
+        }
+        if (!mpsSemanalEditWindowService.isEditable(item.getMpsDia().getFecha())) {
+            return "Dia bloqueado. La primera fecha editable es " + mpsSemanalEditWindowService.getEditableFromDate() + ".";
+        }
+        if (ordenesIniciadas > 0) {
+            return "Tiene " + ordenesIniciadas + " OP iniciada(s).";
+        }
+        return null;
     }
 
     private void fillHeader(MpsSemanalDraftDTO dto, MasterProductionScheduleSemanal entity) {
@@ -261,6 +323,10 @@ public class MasterProductionScheduleDraftService {
         fillSemanaFields(dto, entity);
         dto.setWeekStartDate(entity.getWeekStartDate());
         dto.setWeekEndDate(entity.getWeekEndDate());
+    }
+
+    private EstadoMpsSemanalItem resolveItemEstado(MpsSemanalItem item) {
+        return item.getEstado() != null ? item.getEstado() : EstadoMpsSemanalItem.ACTIVO;
     }
 
     private void fillSemanaFields(MpsSemanalDraftDTO dto, MasterProductionScheduleSemanal entity) {
