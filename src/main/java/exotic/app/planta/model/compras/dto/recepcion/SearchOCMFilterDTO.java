@@ -13,6 +13,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class SearchOCMFilterDTO {
 
+    private Integer ordenCompraId;
+
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime fechaInicio;
 

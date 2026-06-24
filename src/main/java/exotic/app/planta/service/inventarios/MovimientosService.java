@@ -569,24 +569,25 @@ public class MovimientosService {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
             }
 
-            // Create folder based on current date (yyyyMMdd)
             LocalDate fechaIngreso = LocalDate.now(applicationClock);
-            String currentDateFolder = fechaIngreso.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            Path folderPath = Paths.get("data", currentDateFolder);
-            Files.createDirectories(folderPath);
-
-            // Generate a unique filename using a UUID and the original file name.
-            String originalFilename = file.getOriginalFilename();
-            String newFilename = UUID.randomUUID().toString() + "_" + originalFilename;
-            Path filePath = folderPath.resolve(newFilename);
-
-            // Save the file to disk.
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
             // Create the DocIngresoAlmacenOC entity using the DTO constructor.
             TransaccionAlmacen ingresoOCM = new TransaccionAlmacen(ingresoOCM_dta);
-            // Set the URL (or path) of the saved file.
-            ingresoOCM.setUrlDocSoporte(filePath.toString());
+            ingresoOCM.setUrlDocSoporte("");
+
+            if (file != null && !file.isEmpty()) {
+                // Guardar soporte solo cuando el usuario adjunte uno.
+                String currentDateFolder = fechaIngreso.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+                Path folderPath = Paths.get("data", currentDateFolder);
+                Files.createDirectories(folderPath);
+
+                String originalFilename = file.getOriginalFilename();
+                String newFilename = UUID.randomUUID().toString() + "_" + originalFilename;
+                Path filePath = folderPath.resolve(newFilename);
+
+                Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+                ingresoOCM.setUrlDocSoporte(filePath.toString());
+            }
 
             // Set the usuarioAprobador if userId is provided
             if (ingresoOCM_dta.getUserId() != null && !ingresoOCM_dta.getUserId().isEmpty()) {

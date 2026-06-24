@@ -65,6 +65,24 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
             Pageable pageable
     );
 
+    @Query("""
+            SELECT orden
+            FROM OrdenCompraMateriales orden
+            WHERE orden.estado = :estado
+            AND (:ordenCompraId IS NULL OR orden.ordenCompraId = :ordenCompraId)
+            AND (:proveedorId IS NULL OR orden.proveedor.id = :proveedorId)
+            AND (:fechaInicio IS NULL OR orden.fechaEmision >= :fechaInicio)
+            AND (:fechaFin IS NULL OR orden.fechaEmision <= :fechaFin)
+            """)
+    Page<OrdenCompraMateriales> findOcmsPendientesRecepcionFiltradas(
+            @Param("estado") int estado,
+            @Param("ordenCompraId") Integer ordenCompraId,
+            @Param("proveedorId") String proveedorId,
+            @Param("fechaInicio") LocalDateTime fechaInicio,
+            @Param("fechaFin") LocalDateTime fechaFin,
+            Pageable pageable
+    );
+
     Optional<OrdenCompraMateriales> findByOrdenCompraIdAndEstado(Integer ordenCompraId, int estado);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

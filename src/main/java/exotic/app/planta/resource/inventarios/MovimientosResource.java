@@ -136,11 +136,11 @@ public class MovimientosResource {
     @PostMapping(value = "/save_doc_ingreso_oc", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> createDocIngreso(
             @RequestPart("docIngresoDTA") IngresoOCM_DTA docIngresoDTO,
-            @RequestPart("file") MultipartFile file) {
+            @RequestPart(value = "file", required = false) MultipartFile file) {
         log.info("Recibiendo solicitud de ingreso OCM. userId: {}, ordenCompraId: {}, file: {}", 
                 docIngresoDTO.getUserId(), 
                 docIngresoDTO.getOrdenCompraMateriales() != null ? docIngresoDTO.getOrdenCompraMateriales().getOrdenCompraId() : "null",
-                file.getOriginalFilename());
+                file != null ? file.getOriginalFilename() : "sin soporte");
         log.debug("Payload completo - IngresoOCM_DTA: userId={}, observaciones={}, transaccionAlmacen presente={}", 
                 docIngresoDTO.getUserId(),
                 docIngresoDTO.getObservaciones(),

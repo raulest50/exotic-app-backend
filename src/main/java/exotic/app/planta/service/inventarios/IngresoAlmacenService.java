@@ -1,7 +1,6 @@
 package exotic.app.planta.service.inventarios;
 
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
-import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.compras.dto.recepcion.SearchOCMFilterDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
@@ -10,7 +9,6 @@ import exotic.app.planta.model.inventarios.dto.LoteConsolidadoDTO;
 import exotic.app.planta.model.inventarios.dto.MaterialConsolidadoDTO;
 import exotic.app.planta.model.inventarios.dto.MovimientoDetalleDTO;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
-import exotic.app.planta.repo.compras.ProveedorRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +29,6 @@ import java.util.stream.Collectors;
 public class IngresoAlmacenService {
 
     private final OrdenCompraRepo ordenCompraRepo;
-    private final ProveedorRepo proveedorRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final RecepcionOcmPolicyService recepcionOcmPolicyService;
 
@@ -48,7 +45,7 @@ public class IngresoAlmacenService {
      * de cada OrdenCompraMateriales, y estará disponible en la respuesta JSON
      * del endpoint /ingresos_almacen/ocms_pendientes_ingreso
      * 
-     * @param filterDTO Filtros de búsqueda (fechas, proveedor)
+     * @param filterDTO Filtros de búsqueda (ID OCM, fechas, proveedor)
      * @param page Número de página (0-indexed)
      * @param size Tamaño de la página
      * @return Página de órdenes de compra con el campo porcentajeRecibido calculado
@@ -62,50 +59,19 @@ public class IngresoAlmacenService {
     ) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("fechaEmision").descending());
 
+        Integer ordenCompraId = filterDTO.getOrdenCompraId();
         LocalDateTime fechaInicio = filterDTO.getFechaInicio();
         LocalDateTime fechaFin = filterDTO.getFechaFin();
-        String proveedorId = filterDTO.getProveedorId();
+        String proveedorId = normalizeBlankToNull(filterDTO.getProveedorId());
 
-        Page<OrdenCompraMateriales> pageResult;
-
-        // If both dates and proveedor are provided
-        if (fechaInicio != null && fechaFin != null && proveedorId != null && !proveedorId.trim().isEmpty()) {
-            // Load Proveedor entity by business id (String)
-            Proveedor proveedor = proveedorRepo.findById(proveedorId)
-                    .orElseThrow(() -> new IllegalArgumentException("Proveedor no encontrado con id: " + proveedorId));
-            
-            pageResult = ordenCompraRepo.findByEstadoAndProveedorAndFechaEmisionBetween(
-                    ESTADO_PENDIENTE_INGRESO_ALMACEN,
-                    proveedor,
-                    fechaInicio,
-                    fechaFin,
-                    pageable
-            );
-        }
-        // If only dates are provided
-        else if (fechaInicio != null && fechaFin != null) {
-            pageResult = ordenCompraRepo.findByFechaEmisionBetweenAndEstadoIn(
-                    fechaInicio,
-                    fechaFin,
-                    Collections.singletonList(ESTADO_PENDIENTE_INGRESO_ALMACEN),
-                    pageable
-            );
-        }
-        // If only proveedor is provided
-        else if (proveedorId != null && !proveedorId.trim().isEmpty()) {
-            pageResult = ordenCompraRepo.findByProveedorIdAndEstado(
-                    proveedorId,
-                    ESTADO_PENDIENTE_INGRESO_ALMACEN,
-                    pageable
-            );
-        }
-        // If neither is provided (or dates are null)
-        else {
-            pageResult = ordenCompraRepo.findByEstado(
-                    ESTADO_PENDIENTE_INGRESO_ALMACEN,
-                    pageable
-            );
-        }
+        Page<OrdenCompraMateriales> pageResult = ordenCompraRepo.findOcmsPendientesRecepcionFiltradas(
+                ESTADO_PENDIENTE_INGRESO_ALMACEN,
+                ordenCompraId,
+                proveedorId,
+                fechaInicio,
+                fechaFin,
+                pageable
+        );
 
         // Calcular y asignar porcentajes de recepción en batch para optimizar performance
         // En lugar de hacer N queries (una por orden), hacemos una sola query para todas
@@ -148,9 +114,10 @@ public class IngresoAlmacenService {
 
         int anomaliasProveedor = logProveedorAnomalies(ordenes, proveedorDiagnosticoMap);
         log.info(
-                "Consulta OCM pendientes recepcion. page={}, size={}, fechaInicio={}, fechaFin={}, proveedorId={}, ordenesEnPagina={}, totalElementos={}, totalPaginas={}, anomaliasProveedor={}",
+                "Consulta OCM pendientes recepcion. page={}, size={}, ordenCompraId={}, fechaInicio={}, fechaFin={}, proveedorId={}, ordenesEnPagina={}, totalElementos={}, totalPaginas={}, anomaliasProveedor={}",
                 page,
                 size,
+                ordenCompraId,
                 fechaInicio,
                 fechaFin,
                 proveedorId,
@@ -161,6 +128,10 @@ public class IngresoAlmacenService {
         );
 
         return pageResult;
+    }
+
+    private String normalizeBlankToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
     private int logProveedorAnomalies(
