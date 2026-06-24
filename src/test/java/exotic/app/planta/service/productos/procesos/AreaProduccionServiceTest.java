@@ -7,7 +7,9 @@ import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.producto.CategoriaRepo;
+import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.producto.procesos.UnidadMedidaAreaOperativaRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import org.junit.jupiter.api.Test;
@@ -34,19 +36,29 @@ class AreaProduccionServiceTest {
     void createAreaProduccionFromDto_withoutCategorias_returnsEmptyList() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         CategoriaRepo categoriaRepo = mock(CategoriaRepo.class);
+        UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         UserOperationalCompatibilityService compatibilityService = mock(UserOperationalCompatibilityService.class);
-        AreaProduccionService service = new AreaProduccionService(areaRepo, categoriaRepo, userRepository, compatibilityService);
+        AreaProduccionService service = new AreaProduccionService(
+                areaRepo,
+                categoriaRepo,
+                unidadRepo,
+                areaCategoriaUnidadRepo,
+                userRepository,
+                compatibilityService
+        );
 
         User responsable = buildUser(10L, 12345L, "lider@exotic.com", "Lider Operativo");
         when(areaRepo.findByNombre("Pesaje")).thenReturn(Optional.empty());
         when(userRepository.findById(10L)).thenReturn(Optional.of(responsable));
         doNothing().when(compatibilityService).assertCanBeAreaResponsable(10L, null);
-        when(areaRepo.save(any(AreaOperativa.class))).thenAnswer(invocation -> {
+        when(areaRepo.saveAndFlush(any(AreaOperativa.class))).thenAnswer(invocation -> {
             AreaOperativa area = invocation.getArgument(0);
             area.setAreaId(101);
             return area;
         });
+        when(areaCategoriaUnidadRepo.findAllByAreaOperativa_AreaId(any())).thenReturn(List.of());
 
         AreaProduccionDTO dto = new AreaProduccionDTO();
         dto.setNombre("Pesaje");
@@ -64,9 +76,18 @@ class AreaProduccionServiceTest {
     void createAreaProduccionFromDto_withInvalidCategoria_throwsError() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         CategoriaRepo categoriaRepo = mock(CategoriaRepo.class);
+        UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         UserOperationalCompatibilityService compatibilityService = mock(UserOperationalCompatibilityService.class);
-        AreaProduccionService service = new AreaProduccionService(areaRepo, categoriaRepo, userRepository, compatibilityService);
+        AreaProduccionService service = new AreaProduccionService(
+                areaRepo,
+                categoriaRepo,
+                unidadRepo,
+                areaCategoriaUnidadRepo,
+                userRepository,
+                compatibilityService
+        );
 
         User responsable = buildUser(10L, 12345L, "lider@exotic.com", "Lider Operativo");
         when(areaRepo.findByNombre("Pesaje")).thenReturn(Optional.empty());
@@ -89,9 +110,18 @@ class AreaProduccionServiceTest {
     void updateAreaProduccion_replacesCategorias() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         CategoriaRepo categoriaRepo = mock(CategoriaRepo.class);
+        UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         UserOperationalCompatibilityService compatibilityService = mock(UserOperationalCompatibilityService.class);
-        AreaProduccionService service = new AreaProduccionService(areaRepo, categoriaRepo, userRepository, compatibilityService);
+        AreaProduccionService service = new AreaProduccionService(
+                areaRepo,
+                categoriaRepo,
+                unidadRepo,
+                areaCategoriaUnidadRepo,
+                userRepository,
+                compatibilityService
+        );
 
         User oldResponsable = buildUser(10L, 12345L, "old@exotic.com", "Lider Antiguo");
         User newResponsable = buildUser(20L, 67890L, "new@exotic.com", "Lider Nuevo");
@@ -109,7 +139,8 @@ class AreaProduccionServiceTest {
                 buildCategoria(2, "Liquidos"),
                 buildCategoria(3, "Tabletas")
         ));
-        when(areaRepo.save(any(AreaOperativa.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(areaRepo.saveAndFlush(any(AreaOperativa.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(areaCategoriaUnidadRepo.findAllByAreaOperativa_AreaId(any())).thenReturn(List.of());
 
         AreaProduccionDTO dto = new AreaProduccionDTO();
         dto.setNombre("Pesaje");
@@ -131,9 +162,18 @@ class AreaProduccionServiceTest {
     void searchAreas_mapsCategoriasIntoResponse() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         CategoriaRepo categoriaRepo = mock(CategoriaRepo.class);
+        UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
         UserRepository userRepository = mock(UserRepository.class);
         UserOperationalCompatibilityService compatibilityService = mock(UserOperationalCompatibilityService.class);
-        AreaProduccionService service = new AreaProduccionService(areaRepo, categoriaRepo, userRepository, compatibilityService);
+        AreaProduccionService service = new AreaProduccionService(
+                areaRepo,
+                categoriaRepo,
+                unidadRepo,
+                areaCategoriaUnidadRepo,
+                userRepository,
+                compatibilityService
+        );
 
         AreaOperativa area = new AreaOperativa();
         area.setAreaId(7);
@@ -146,6 +186,7 @@ class AreaProduccionServiceTest {
         )));
 
         when(areaRepo.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(area), PageRequest.of(0, 10), 1));
+        when(areaCategoriaUnidadRepo.findAllByAreaOperativa_AreaId(any())).thenReturn(List.of());
 
         SearchAreaOperativaDTO dto = new SearchAreaOperativaDTO();
         Page<AreaOperativaResponseDTO> page = service.searchAreas(dto, PageRequest.of(0, 10));

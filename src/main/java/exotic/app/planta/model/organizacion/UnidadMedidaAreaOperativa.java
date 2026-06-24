@@ -57,11 +57,11 @@ public class UnidadMedidaAreaOperativa {
     @Column(name = "dimension", nullable = false, length = 32)
     private DimensionUnidadAreaOperativa dimension;
 
-    @Column(name = "unidad_referencia", nullable = false, length = 16)
-    private String unidadReferencia;
+    @Column(name = "unidad_estandar", nullable = false, length = 16)
+    private String unidadEstandar;
 
-    @Column(name = "factor_a_referencia", nullable = false, precision = 19, scale = 6)
-    private BigDecimal factorAReferencia;
+    @Column(name = "cantidad_unidad_estandar", nullable = false, precision = 19, scale = 6)
+    private BigDecimal cantidadUnidadEstandar;
 
     @Column(name = "principal", nullable = false)
     private boolean principal;

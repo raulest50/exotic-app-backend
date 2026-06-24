@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,4 +28,16 @@ public class AreaProduccionDTO {
     private Long responsableId;
 
     private List<Integer> categoriaIds;
+
+    private List<CategoriaHabilitadaRequestDTO> categoriasHabilitadas;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CategoriaHabilitadaRequestDTO {
+        @NotNull(message = "La categoria es obligatoria")
+        private Integer categoriaId;
+
+        private List<Long> unidadMedidaIds = new ArrayList<>();
+    }
 }

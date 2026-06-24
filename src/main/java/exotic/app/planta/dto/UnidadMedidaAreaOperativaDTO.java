@@ -20,8 +20,8 @@ public class UnidadMedidaAreaOperativaDTO {
     private String nombre;
     private String descripcion;
     private DimensionUnidadAreaOperativa dimension;
-    private String unidadReferencia;
-    private BigDecimal factorAReferencia;
+    private String unidadEstandar;
+    private BigDecimal cantidadUnidadEstandar;
     private boolean principal;
     private boolean discreta;
     private boolean activo;
@@ -34,8 +34,8 @@ public class UnidadMedidaAreaOperativaDTO {
                 .nombre(entity.getNombre())
                 .descripcion(entity.getDescripcion())
                 .dimension(entity.getDimension())
-                .unidadReferencia(entity.getUnidadReferencia())
-                .factorAReferencia(entity.getFactorAReferencia())
+                .unidadEstandar(entity.getUnidadEstandar())
+                .cantidadUnidadEstandar(entity.getCantidadUnidadEstandar())
                 .principal(entity.isPrincipal())
                 .discreta(entity.isDiscreta())
                 .activo(entity.isActivo())

@@ -21,7 +21,7 @@ public class CapacidadAreaOperativaDTO {
     private Long unidadMedidaId;
     private String unidadCodigo;
     private String unidadNombre;
-    private String unidadReferencia;
+    private String unidadEstandar;
     private TipoCapacidadAreaOperativa tipoCapacidad;
     private BigDecimal cantidad;
     private PeriodoCapacidadAreaOperativa periodo;
@@ -38,7 +38,7 @@ public class CapacidadAreaOperativaDTO {
                 .unidadMedidaId(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getId() : null)
                 .unidadCodigo(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getCodigo() : null)
                 .unidadNombre(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getNombre() : null)
-                .unidadReferencia(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getUnidadReferencia() : null)
+                .unidadEstandar(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getUnidadEstandar() : null)
                 .tipoCapacidad(entity.getTipoCapacidad())
                 .cantidad(entity.getCantidad())
                 .periodo(entity.getPeriodo())

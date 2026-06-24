@@ -5,10 +5,14 @@ import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.organizacion.AreaOperativaCategoriaUnidadMedida;
+import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.producto.CategoriaRepo;
+import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.producto.procesos.UnidadMedidaAreaOperativaRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +24,10 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +43,8 @@ public class AreaProduccionService {
 
     private final AreaProduccionRepo areaProduccionRepo;
     private final CategoriaRepo categoriaRepo;
+    private final UnidadMedidaAreaOperativaRepo unidadMedidaAreaOperativaRepo;
+    private final AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo;
     private final UserRepository userRepository;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
 
@@ -73,9 +82,11 @@ public class AreaProduccionService {
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
         area.setResponsableArea(responsable);
-        area.setCategoriasHabilitadas(resolveCategorias(dto.getCategoriaIds()));
+        area.setCategoriasHabilitadas(resolveCategorias(resolveCategoriaIds(dto)));
 
-        return toResponseDto(areaProduccionRepo.save(area));
+        AreaOperativa savedArea = areaProduccionRepo.saveAndFlush(area);
+        syncCategoriaUnidadAssociations(savedArea, dto);
+        return toResponseDto(savedArea);
     }
 
     @Transactional(readOnly = true)
@@ -114,9 +125,11 @@ public class AreaProduccionService {
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
         area.setResponsableArea(responsable);
-        area.setCategoriasHabilitadas(resolveCategorias(dto.getCategoriaIds()));
+        area.setCategoriasHabilitadas(resolveCategorias(resolveCategoriaIds(dto)));
 
-        return toResponseDto(areaProduccionRepo.save(area));
+        AreaOperativa savedArea = areaProduccionRepo.saveAndFlush(area);
+        syncCategoriaUnidadAssociations(savedArea, dto);
+        return toResponseDto(savedArea);
     }
 
     @Transactional(readOnly = true)
@@ -197,6 +210,111 @@ public class AreaProduccionService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    private List<Integer> resolveCategoriaIds(AreaProduccionDTO dto) {
+        if (dto.getCategoriasHabilitadas() != null) {
+            List<Integer> ids = new ArrayList<>();
+            for (AreaProduccionDTO.CategoriaHabilitadaRequestDTO categoriaRequest : dto.getCategoriasHabilitadas()) {
+                if (categoriaRequest == null || categoriaRequest.getCategoriaId() == null) {
+                    throw new IllegalArgumentException("La categoria habilitada es obligatoria");
+                }
+                ids.add(categoriaRequest.getCategoriaId());
+            }
+            return ids;
+        }
+        return dto.getCategoriaIds();
+    }
+
+    private void syncCategoriaUnidadAssociations(AreaOperativa area, AreaProduccionDTO dto) {
+        if (dto.getCategoriasHabilitadas() == null) {
+            removeAssociationsForDisabledCategorias(area);
+            return;
+        }
+
+        areaCategoriaUnidadRepo.deleteAllByAreaOperativa_AreaId(area.getAreaId());
+        areaCategoriaUnidadRepo.flush();
+
+        Map<Integer, Categoria> categoriasById = area.getCategoriasHabilitadas().stream()
+                .collect(Collectors.toMap(Categoria::getCategoriaId, Function.identity()));
+
+        LinkedHashSet<Long> unidadIds = dto.getCategoriasHabilitadas().stream()
+                .flatMap(categoria -> safeUnidadIds(categoria).stream())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Map<Long, UnidadMedidaAreaOperativa> unidadesById = unidadMedidaAreaOperativaRepo.findAllById(unidadIds).stream()
+                .collect(Collectors.toMap(UnidadMedidaAreaOperativa::getId, Function.identity()));
+
+        List<Long> missingUnidadIds = unidadIds.stream()
+                .filter(id -> !unidadesById.containsKey(id))
+                .toList();
+        if (!missingUnidadIds.isEmpty()) {
+            throw new IllegalArgumentException("No se encontraron unidades de medida con ID: " + missingUnidadIds);
+        }
+
+        List<AreaOperativaCategoriaUnidadMedida> nextAssociations = new ArrayList<>();
+        Set<String> seenPairs = new HashSet<>();
+
+        for (AreaProduccionDTO.CategoriaHabilitadaRequestDTO categoriaRequest : dto.getCategoriasHabilitadas()) {
+            Categoria categoria = categoriasById.get(categoriaRequest.getCategoriaId());
+            if (categoria == null) {
+                throw new IllegalArgumentException(
+                        "La categoria " + categoriaRequest.getCategoriaId() + " no esta habilitada para esta area"
+                );
+            }
+
+            for (Long unidadId : safeUnidadIds(categoriaRequest)) {
+                UnidadMedidaAreaOperativa unidad = unidadesById.get(unidadId);
+                if (unidad.getAreaOperativa().getAreaId() != area.getAreaId()) {
+                    throw new IllegalArgumentException(
+                            "La unidad " + unidadId + " no pertenece al area operativa " + area.getAreaId()
+                    );
+                }
+                if (!unidad.isActivo()) {
+                    throw new IllegalArgumentException("La unidad " + unidad.getCodigo() + " no esta activa");
+                }
+
+                String pairKey = categoria.getCategoriaId() + ":" + unidad.getId();
+                if (!seenPairs.add(pairKey)) {
+                    continue;
+                }
+
+                AreaOperativaCategoriaUnidadMedida association = new AreaOperativaCategoriaUnidadMedida();
+                association.setAreaOperativa(area);
+                association.setCategoria(categoria);
+                association.setUnidadMedida(unidad);
+                nextAssociations.add(association);
+            }
+        }
+
+        if (!nextAssociations.isEmpty()) {
+            areaCategoriaUnidadRepo.saveAll(nextAssociations);
+        }
+    }
+
+    private List<Long> safeUnidadIds(AreaProduccionDTO.CategoriaHabilitadaRequestDTO categoriaRequest) {
+        if (categoriaRequest.getUnidadMedidaIds() == null || categoriaRequest.getUnidadMedidaIds().isEmpty()) {
+            return List.of();
+        }
+        return categoriaRequest.getUnidadMedidaIds().stream()
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    private void removeAssociationsForDisabledCategorias(AreaOperativa area) {
+        Set<Integer> enabledCategoriaIds = area.getCategoriasHabilitadas().stream()
+                .map(Categoria::getCategoriaId)
+                .collect(Collectors.toSet());
+
+        List<AreaOperativaCategoriaUnidadMedida> toRemove = areaCategoriaUnidadRepo
+                .findAllByAreaOperativa_AreaId(area.getAreaId())
+                .stream()
+                .filter(association -> !enabledCategoriaIds.contains(association.getCategoria().getCategoriaId()))
+                .toList();
+
+        if (!toRemove.isEmpty()) {
+            areaCategoriaUnidadRepo.deleteAll(toRemove);
+        }
+    }
+
     private AreaOperativaResponseDTO toResponseDto(AreaOperativa area) {
         AreaOperativaResponseDTO.ResponsableAreaDTO responsableDto = null;
         if (area.getResponsableArea() != null) {
@@ -209,11 +327,14 @@ public class AreaProduccionService {
                     .build();
         }
 
+        Map<Integer, List<Long>> unidadIdsByCategoria = buildUnidadIdsByCategoria(area.getAreaId());
+
         List<AreaOperativaResponseDTO.CategoriaHabilitadaDTO> categoriasDto = area.getCategoriasHabilitadas().stream()
                 .sorted(Comparator.comparing(Categoria::getCategoriaNombre, String.CASE_INSENSITIVE_ORDER))
                 .map(categoria -> AreaOperativaResponseDTO.CategoriaHabilitadaDTO.builder()
                         .categoriaId(categoria.getCategoriaId())
                         .categoriaNombre(categoria.getCategoriaNombre())
+                        .unidadMedidaIds(unidadIdsByCategoria.getOrDefault(categoria.getCategoriaId(), List.of()))
                         .build())
                 .toList();
 
@@ -224,5 +345,21 @@ public class AreaProduccionService {
                 .responsableArea(responsableDto)
                 .categoriasHabilitadas(categoriasDto)
                 .build();
+    }
+
+    private Map<Integer, List<Long>> buildUnidadIdsByCategoria(Integer areaId) {
+        Map<Integer, List<Long>> unidadIdsByCategoria = new HashMap<>();
+        if (areaId == null) {
+            return unidadIdsByCategoria;
+        }
+
+        for (AreaOperativaCategoriaUnidadMedida association : areaCategoriaUnidadRepo.findAllByAreaOperativa_AreaId(areaId)) {
+            Integer categoriaId = association.getCategoria().getCategoriaId();
+            Long unidadId = association.getUnidadMedida().getId();
+            unidadIdsByCategoria.computeIfAbsent(categoriaId, ignored -> new ArrayList<>()).add(unidadId);
+        }
+
+        unidadIdsByCategoria.values().forEach(ids -> ids.sort(Long::compareTo));
+        return unidadIdsByCategoria;
     }
 }

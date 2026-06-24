@@ -10,6 +10,7 @@ import exotic.app.planta.model.organizacion.DimensionUnidadAreaOperativa;
 import exotic.app.planta.model.organizacion.PeriodoCapacidadAreaOperativa;
 import exotic.app.planta.model.organizacion.TipoCapacidadAreaOperativa;
 import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
+import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.CapacidadAreaOperativaRepo;
 import exotic.app.planta.repo.producto.procesos.UnidadMedidaAreaOperativaRepo;
@@ -32,7 +33,13 @@ class AreaOperativaCapacidadServiceTest {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
         CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(areaRepo, unidadRepo, capacidadRepo);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
+        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+                areaRepo,
+                unidadRepo,
+                capacidadRepo,
+                areaCategoriaUnidadRepo
+        );
 
         AreaOperativa area = buildArea(10, "Fabricacion 1");
         when(areaRepo.findById(10)).thenReturn(Optional.of(area));
@@ -58,8 +65,8 @@ class AreaOperativaCapacidadServiceTest {
 
         assertEquals(5L, result.getId());
         assertEquals("MARMITA", result.getCodigo());
-        assertEquals("L", result.getUnidadReferencia());
-        assertEquals(new BigDecimal("1000"), result.getFactorAReferencia());
+        assertEquals("L", result.getUnidadEstandar());
+        assertEquals(new BigDecimal("1000"), result.getCantidadUnidadEstandar());
     }
 
     @Test
@@ -67,7 +74,13 @@ class AreaOperativaCapacidadServiceTest {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
         CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(areaRepo, unidadRepo, capacidadRepo);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
+        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+                areaRepo,
+                unidadRepo,
+                capacidadRepo,
+                areaCategoriaUnidadRepo
+        );
 
         when(areaRepo.findById(10)).thenReturn(Optional.of(buildArea(10, "Fabricacion 1")));
         when(unidadRepo.existsByAreaOperativa_AreaIdAndCodigoIgnoreCase(10, "MARMITA")).thenReturn(true);
@@ -95,7 +108,13 @@ class AreaOperativaCapacidadServiceTest {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
         CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(areaRepo, unidadRepo, capacidadRepo);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
+        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+                areaRepo,
+                unidadRepo,
+                capacidadRepo,
+                areaCategoriaUnidadRepo
+        );
 
         AreaOperativa area = buildArea(10, "Fabricacion 1");
         UnidadMedidaAreaOperativa unidad = buildUnidad(3L, area, "MARMITA", "L", "1000");
@@ -127,7 +146,13 @@ class AreaOperativaCapacidadServiceTest {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
         CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(areaRepo, unidadRepo, capacidadRepo);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
+        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+                areaRepo,
+                unidadRepo,
+                capacidadRepo,
+                areaCategoriaUnidadRepo
+        );
 
         AreaOperativa fabricacion1 = buildArea(10, "Fabricacion 1");
         AreaOperativa fabricacion2 = buildArea(11, "Fabricacion 2");
@@ -141,7 +166,7 @@ class AreaOperativaCapacidadServiceTest {
                 new ConversionUnidadAreaOperativaRequestDTO(1L, BigDecimal.ONE, 2L)
         );
 
-        assertEquals(new BigDecimal("1000"), result.getCantidadReferencia());
+        assertEquals(new BigDecimal("1000"), result.getCantidadEstandar());
         assertEquals(new BigDecimal("5.000000"), result.getCantidadDestino());
     }
 
@@ -150,7 +175,13 @@ class AreaOperativaCapacidadServiceTest {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
         CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(areaRepo, unidadRepo, capacidadRepo);
+        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
+        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+                areaRepo,
+                unidadRepo,
+                capacidadRepo,
+                areaCategoriaUnidadRepo
+        );
 
         UnidadMedidaAreaOperativa litros = buildUnidad(1L, buildArea(10, "Fabricacion"), "LITROS", "L", "1");
         UnidadMedidaAreaOperativa kilos = buildUnidad(2L, buildArea(11, "Pesaje"), "KILOS", "KG", "1");
@@ -187,8 +218,8 @@ class AreaOperativaCapacidadServiceTest {
         unidad.setCodigo(codigo);
         unidad.setNombre(codigo);
         unidad.setDimension(DimensionUnidadAreaOperativa.VOLUMEN);
-        unidad.setUnidadReferencia(referencia);
-        unidad.setFactorAReferencia(new BigDecimal(factor));
+        unidad.setUnidadEstandar(referencia);
+        unidad.setCantidadUnidadEstandar(new BigDecimal(factor));
         unidad.setActivo(true);
         return unidad;
     }

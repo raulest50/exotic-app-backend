@@ -25,12 +25,12 @@ public class UnidadMedidaAreaOperativaRequestDTO {
     @NotNull(message = "La dimension de la unidad es obligatoria")
     private DimensionUnidadAreaOperativa dimension;
 
-    @NotBlank(message = "La unidad de referencia es obligatoria")
-    private String unidadReferencia;
+    @NotBlank(message = "La unidad estandar es obligatoria")
+    private String unidadEstandar;
 
-    @NotNull(message = "El factor a referencia es obligatorio")
-    @DecimalMin(value = "0.000001", message = "El factor a referencia debe ser mayor que 0")
-    private BigDecimal factorAReferencia;
+    @NotNull(message = "La cantidad en unidad estandar es obligatoria")
+    @DecimalMin(value = "0.000001", message = "La cantidad en unidad estandar debe ser mayor que 0")
+    private BigDecimal cantidadUnidadEstandar;
 
     private Boolean principal;
     private Boolean discreta;

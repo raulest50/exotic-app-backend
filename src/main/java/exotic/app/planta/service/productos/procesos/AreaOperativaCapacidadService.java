@@ -10,6 +10,7 @@ import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.organizacion.CapacidadAreaOperativa;
 import exotic.app.planta.model.organizacion.DimensionUnidadAreaOperativa;
 import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
+import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.CapacidadAreaOperativaRepo;
 import exotic.app.planta.repo.producto.procesos.UnidadMedidaAreaOperativaRepo;
@@ -29,7 +30,7 @@ import java.util.Set;
 public class AreaOperativaCapacidadService {
 
     private static final int CONVERSION_SCALE = 6;
-    private static final Map<DimensionUnidadAreaOperativa, Set<String>> REFERENCIAS_VALIDAS = Map.of(
+    private static final Map<DimensionUnidadAreaOperativa, Set<String>> UNIDADES_ESTANDAR_VALIDAS = Map.of(
             DimensionUnidadAreaOperativa.VOLUMEN, Set.of("L"),
             DimensionUnidadAreaOperativa.MASA, Set.of("KG"),
             DimensionUnidadAreaOperativa.CONTEO, Set.of("U"),
@@ -39,6 +40,7 @@ public class AreaOperativaCapacidadService {
     private final AreaProduccionRepo areaProduccionRepo;
     private final UnidadMedidaAreaOperativaRepo unidadRepo;
     private final CapacidadAreaOperativaRepo capacidadRepo;
+    private final AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo;
 
     @Transactional(readOnly = true)
     public List<UnidadMedidaAreaOperativaDTO> listarUnidades(Integer areaId) {
@@ -72,6 +74,7 @@ public class AreaOperativaCapacidadService {
         UnidadMedidaAreaOperativa unidad = requireUnidad(areaId, unidadId);
         unidad.setActivo(false);
         unidad.setPrincipal(false);
+        areaCategoriaUnidadRepo.deleteAllByUnidadMedida_Id(unidadId);
         unidadRepo.save(unidad);
     }
 
@@ -124,13 +127,13 @@ public class AreaOperativaCapacidadService {
             throw new IllegalArgumentException("Solo se pueden convertir unidades activas");
         }
         if (origen.getDimension() != destino.getDimension()
-                || !origen.getUnidadReferencia().equalsIgnoreCase(destino.getUnidadReferencia())) {
+                || !origen.getUnidadEstandar().equalsIgnoreCase(destino.getUnidadEstandar())) {
             throw new IllegalArgumentException("Las unidades no son compatibles para conversion");
         }
 
-        BigDecimal cantidadReferencia = cantidadOrigen.multiply(origen.getFactorAReferencia());
-        BigDecimal cantidadDestino = cantidadReferencia.divide(
-                destino.getFactorAReferencia(),
+        BigDecimal cantidadEstandar = cantidadOrigen.multiply(origen.getCantidadUnidadEstandar());
+        BigDecimal cantidadDestino = cantidadEstandar.divide(
+                destino.getCantidadUnidadEstandar(),
                 CONVERSION_SCALE,
                 RoundingMode.HALF_UP
         );
@@ -139,8 +142,8 @@ public class AreaOperativaCapacidadService {
                 .unidadOrigen(UnidadMedidaAreaOperativaDTO.fromEntity(origen))
                 .unidadDestino(UnidadMedidaAreaOperativaDTO.fromEntity(destino))
                 .cantidadOrigen(cantidadOrigen)
-                .cantidadReferencia(cantidadReferencia)
-                .unidadReferencia(origen.getUnidadReferencia())
+                .cantidadEstandar(cantidadEstandar)
+                .unidadEstandar(origen.getUnidadEstandar())
                 .cantidadDestino(cantidadDestino)
                 .build();
     }
@@ -161,9 +164,12 @@ public class AreaOperativaCapacidadService {
         if (dimension == null) {
             throw new IllegalArgumentException("La dimension de la unidad es obligatoria");
         }
-        String unidadReferencia = normalizeCodigo(request.getUnidadReferencia());
-        validateReferencia(dimension, unidadReferencia);
-        BigDecimal factor = requirePositive(request.getFactorAReferencia(), "El factor a referencia debe ser mayor que 0");
+        String unidadEstandar = normalizeCodigo(request.getUnidadEstandar());
+        validateUnidadEstandar(dimension, unidadEstandar);
+        BigDecimal cantidadUnidadEstandar = requirePositive(
+                request.getCantidadUnidadEstandar(),
+                "La cantidad en unidad estandar debe ser mayor que 0"
+        );
 
         boolean duplicateCode = isCreate
                 ? unidadRepo.existsByAreaOperativa_AreaIdAndCodigoIgnoreCase(areaId, codigo)
@@ -185,8 +191,8 @@ public class AreaOperativaCapacidadService {
         unidad.setNombre(nombre);
         unidad.setDescripcion(trimToNull(request.getDescripcion()));
         unidad.setDimension(dimension);
-        unidad.setUnidadReferencia(unidadReferencia);
-        unidad.setFactorAReferencia(factor);
+        unidad.setUnidadEstandar(unidadEstandar);
+        unidad.setCantidadUnidadEstandar(cantidadUnidadEstandar);
         unidad.setPrincipal(principal);
         unidad.setDiscreta(request.getDiscreta() != null ? request.getDiscreta() : unidad.isDiscreta());
         unidad.setActivo(activo);
@@ -266,11 +272,11 @@ public class AreaOperativaCapacidadService {
         });
     }
 
-    private void validateReferencia(DimensionUnidadAreaOperativa dimension, String unidadReferencia) {
-        Set<String> referencias = REFERENCIAS_VALIDAS.get(dimension);
-        if (referencias == null || !referencias.contains(unidadReferencia)) {
+    private void validateUnidadEstandar(DimensionUnidadAreaOperativa dimension, String unidadEstandar) {
+        Set<String> unidadesEstandar = UNIDADES_ESTANDAR_VALIDAS.get(dimension);
+        if (unidadesEstandar == null || !unidadesEstandar.contains(unidadEstandar)) {
             throw new IllegalArgumentException(
-                    "La unidad de referencia " + unidadReferencia + " no es valida para la dimension " + dimension
+                    "La unidad estandar " + unidadEstandar + " no es valida para la dimension " + dimension
             );
         }
     }

@@ -1,10 +1,16 @@
 package exotic.app.planta.resource.produccion;
 
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.dto.ErrorResponse;
+import exotic.app.planta.model.produccion.EstadoMpsSemanal;
+import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO;
+import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
+import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
+import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -17,6 +23,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -26,6 +35,8 @@ import java.util.NoSuchElementException;
 public class AreaOperativaPanelResource {
 
     private final AreaOperativaPanelDetalleService areaOperativaPanelDetalleService;
+    private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
+    private final UserOperationalCompatibilityService userOperationalCompatibilityService;
     private final UserRepository userRepository;
 
     @GetMapping("/ordenes/{ordenId}/detalle-operativo")
@@ -50,6 +61,48 @@ public class AreaOperativaPanelResource {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ErrorResponse("Detalle no encontrado", e.getMessage()));
         }
+    }
+
+    @GetMapping("/mps-semanal/actual")
+    public ResponseEntity<?> getMpsSemanalActual(Authentication authentication) {
+        User user = getCurrentUser(authentication);
+        LocalDate weekStartDate = getCurrentIsoWeekStartDate();
+
+        try {
+            assertAreaResponsable(user);
+            MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
+            if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ErrorResponse(
+                                "MPS no disponible",
+                                "El MPS de la semana actual aun no esta aprobado para consulta operativa."
+                        ));
+            }
+
+            return ResponseEntity.ok(mps);
+        } catch (AccessDeniedException e) {
+            log.warn("Acceso denegado al MPS operativo actual para user {}: {}", user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Acceso denegado", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            log.warn("MPS operativo actual no encontrado para semana {}: {}", weekStartDate, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse("MPS no encontrado", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            log.warn("Solicitud invalida de MPS operativo actual para semana {}: {}", weekStartDate, e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
+        }
+    }
+
+    private void assertAreaResponsable(User user) {
+        if (!userOperationalCompatibilityService.isAreaResponsable(user.getId())) {
+            throw new AccessDeniedException("Solo usuarios responsables de area pueden consultar el MPS operativo.");
+        }
+    }
+
+    private LocalDate getCurrentIsoWeekStartDate() {
+        return AppTime.today().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
     private User getCurrentUser(Authentication authentication) {

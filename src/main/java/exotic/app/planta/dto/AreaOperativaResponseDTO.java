@@ -39,5 +39,8 @@ public class AreaOperativaResponseDTO {
     public static class CategoriaHabilitadaDTO {
         private Integer categoriaId;
         private String categoriaNombre;
+
+        @Builder.Default
+        private List<Long> unidadMedidaIds = new ArrayList<>();
     }
 }
