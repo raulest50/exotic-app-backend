@@ -17,6 +17,7 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormat;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -45,6 +46,7 @@ public class CargaMasivaTerminadoService {
             "cantidad_unidad", "stock_minimo", "status", "categoria_id", "foto_url", "prefijo_lote"
     };
     private static final Pattern PRODUCTO_ID_ALPHANUMERIC_PATTERN = Pattern.compile("^[A-Za-z0-9]+$");
+    private static final double MAX_SAFE_EXCEL_INTEGER = 9_007_199_254_740_991D;
 
     private final ProductoRepo productoRepo;
     private final TerminadoRepo terminadoRepo;
@@ -79,7 +81,7 @@ public class CargaMasivaTerminadoService {
 
             int rowIdx = 1;
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("producto_id");
-            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto unico, obligatorio, en mayusculas y sin espacios ni caracteres especiales");
+            valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto unico en mayusculas o numero entero, obligatorio, sin espacios ni caracteres especiales");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("nombre");
             valoresSheet.getRow(rowIdx - 1).createCell(1).setCellValue("Texto obligatorio");
             valoresSheet.createRow(rowIdx++).createCell(0).setCellValue("observaciones");
@@ -122,11 +124,11 @@ public class CargaMasivaTerminadoService {
                 ejemplosHeader.createCell(i).setCellValue(SIN_INSUMOS_HEADERS[i]);
             }
             Object[][] ejemplos = {
-                    {"TER_EJ01", "Terminado ejemplo 1", "", 150, 19, "U", 1, 0, 0, primeraCategoriaId > 0 ? primeraCategoriaId : "", "", "TRA"},
-                    {"TER_EJ02", "Terminado ejemplo 2", "", 80, 5, "KG", 1, 0, 0, primeraCategoriaId > 0 ? primeraCategoriaId : "", "", ""},
-                    {"TER_EJ03", "Terminado ejemplo 3 obsoleto", "", 50, 0, "L", 1, 0, 1, "", "", ""},
-                    {"TER_EJ04", "Terminado con prefijo", "Observaciones ejemplo", 120, 19, "U", 1, 5, 0, "", "", "TRP"},
-                    {"TER_EJ05", "Terminado sin categoria", "", 200, 19, "KG", 1, 0, 0, "", "", ""},
+                    {"TEREJ01", "Terminado ejemplo 1", "", 150, 19, "U", 1, 0, 0, primeraCategoriaId > 0 ? primeraCategoriaId : "", "", "TRA"},
+                    {"TEREJ02", "Terminado ejemplo 2", "", 80, 5, "KG", 1, 0, 0, primeraCategoriaId > 0 ? primeraCategoriaId : "", "", ""},
+                    {"TEREJ03", "Terminado ejemplo 3 obsoleto", "", 50, 0, "L", 1, 0, 1, "", "", ""},
+                    {"TEREJ04", "Terminado con prefijo", "Observaciones ejemplo", 120, 19, "U", 1, 5, 0, "", "", "TRP"},
+                    {"TEREJ05", "Terminado sin categoria", "", 200, 19, "KG", 1, 0, 0, "", "", ""},
             };
             for (Object[] fila : ejemplos) {
                 Row r = valoresSheet.createRow(rowIdx++);
@@ -594,10 +596,30 @@ public class CargaMasivaTerminadoService {
         if (cell == null || cell.getCellType() == CellType.BLANK) {
             return new ProductoIdReadResult("", fieldName + " es obligatorio");
         }
+        if (cell.getCellType() == CellType.NUMERIC) {
+            if (DateUtil.isCellDateFormatted(cell)) {
+                return new ProductoIdReadResult(cell.toString(),
+                        fieldName + " no acepta fechas. Use texto alfanumerico o numero entero.");
+            }
+            double numericValue = cell.getNumericCellValue();
+            if (!Double.isFinite(numericValue)
+                    || numericValue < 0
+                    || numericValue > MAX_SAFE_EXCEL_INTEGER
+                    || Math.rint(numericValue) != numericValue) {
+                return new ProductoIdReadResult(cell.toString(),
+                        fieldName + " numerico debe ser un entero no negativo sin decimales.");
+            }
+            String productoId = Long.toString((long) numericValue);
+            return new ProductoIdReadResult(productoId, validateProductoId(productoId, fieldName));
+        }
+        if (cell.getCellType() == CellType.FORMULA) {
+            return new ProductoIdReadResult(cell.toString(),
+                    fieldName + " no acepta formulas. Use texto alfanumerico o numero entero.");
+        }
         if (cell.getCellType() != CellType.STRING) {
             String renderedValue = cell.toString();
             return new ProductoIdReadResult(renderedValue != null ? renderedValue : "",
-                    fieldName + " debe escribirse como texto en Excel. No se aceptan celdas numericas ni formulas.");
+                    fieldName + " debe ser texto alfanumerico o numero entero.");
         }
         String rawValue = cell.getStringCellValue();
         String productoId = rawValue != null ? rawValue : "";

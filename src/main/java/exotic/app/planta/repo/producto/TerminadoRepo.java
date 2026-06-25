@@ -23,6 +23,10 @@ public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpec
     @EntityGraph(attributePaths = {"categoria", "insumos", "insumos.producto"})
     List<Terminado> findAllByOrderByProductoIdAsc();
 
+    @EntityGraph(attributePaths = {"categoria"})
+    @Query("SELECT t FROM Terminado t ORDER BY t.productoId ASC")
+    List<Terminado> findAllConCategoriaOrderByProductoIdAsc();
+
     @EntityGraph(attributePaths = {"insumos", "insumos.producto"})
     List<Terminado> findByInsumos_Producto(Producto producto);
 

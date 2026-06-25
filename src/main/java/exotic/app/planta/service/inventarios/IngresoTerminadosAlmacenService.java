@@ -14,6 +14,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
+import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ import java.util.Optional;
 public class IngresoTerminadosAlmacenService {
 
     private final OrdenProduccionRepo ordenProduccionRepo;
+    private final TerminadoRepo terminadoRepo;
     private final LoteRepo loteRepo;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final UserRepository userRepository;
@@ -48,6 +50,10 @@ public class IngresoTerminadosAlmacenService {
     /**
      * Busca una OrdenProduccion activa (no TERMINADA ni CANCELADA) por su loteAsignado exacto.
      * Retorna un DTO con la OP, el Terminado asociado y el loteSize esperado según la Categoria.
+     *
+     * Temporalmente en desuso: el flujo activo de ingreso de terminados se está usando para
+     * reporte diario consolidado por terminado, sin cierre de OP. Se conserva por posible
+     * reintegración del workflow por lote/orden de producción.
      *
      * @param loteAsignado Número de lote exacto a buscar
      * @return DTO de consulta con datos de la OP y del producto terminado
@@ -132,6 +138,9 @@ public class IngresoTerminadosAlmacenService {
      * Registra el ingreso de producto terminado al almacén general y cierra la OrdenProduccion.
      * Crea una TransaccionAlmacen de tipo OP con un Movimiento BACKFLUSH en almacén GENERAL.
      * Actualiza el estadoOrden de la OP a 2 (TERMINADA).
+     *
+     * Temporalmente en desuso: el flujo activo solo genera reporte diario consolidado por
+     * terminado. Este método se conserva para una posible reintegración del cierre por lote/OP.
      *
      * @param dto           Datos del ingreso: ordenProduccionId, cantidadIngresada, fechaVencimiento
      * @return La TransaccionAlmacen persistida
@@ -224,19 +233,18 @@ public class IngresoTerminadosAlmacenService {
     }
 
     /**
-     * Genera una plantilla Excel con las OPs abiertas de productos terminados.
-     * Se consideran abiertas las ordenes no TERMINADAS (2) ni CANCELADAS (-1).
-     * Las columnas de datos de la OP están pre-llenadas y las columnas editables
-     * (cantidad_ingresada, fecha_vencimiento) se resaltan con fondo verde claro.
+     * Genera una plantilla Excel consolidada con todos los productos terminados.
+     * El flujo por lote/OP queda temporalmente en desuso y se conserva en los métodos
+     * de registro por posible reintegración futura.
      *
      * @return byte[] con el contenido del archivo Excel
      */
     @Transactional(readOnly = true)
     public byte[] generarPlantillaExcel() {
-        List<OrdenProduccion> ordenesPendientes = ordenProduccionRepo.findOrdenesPendientesConTerminado();
+        List<Terminado> terminados = terminadoRepo.findAllConCategoriaOrderByProductoIdAsc();
 
         try (Workbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Ingreso Producto Terminado");
+            Sheet sheet = workbook.createSheet("Produccion Diaria PT");
 
             // Estilo para headers
             CellStyle headerStyle = workbook.createCellStyle();
@@ -276,8 +284,8 @@ public class IngresoTerminadosAlmacenService {
 
             // Headers (fila 0)
             String[] headers = {
-                "lote_asignado", "orden_id", "producto_id", "producto_nombre",
-                "categoria_nombre", "cantidad_esperada", "cantidad_ingresada", "fecha_vencimiento"
+                "producto_id", "producto_nombre", "categoria_nombre", "tipo_unidades",
+                "capacidad_productiva_diaria", "cantidad_producida", "fecha_produccion", "observaciones"
             };
 
             Row headerRow = sheet.createRow(0);
@@ -287,60 +295,56 @@ public class IngresoTerminadosAlmacenService {
                 cell.setCellStyle(headerStyle);
             }
 
-            // Fecha por defecto: hoy + 2 años
-            LocalDate fechaVencimientoDefault = LocalDate.now(applicationClock).plusYears(2);
+            LocalDate fechaProduccionDefault = LocalDate.now(applicationClock);
 
             // Filas de datos
             int rowIdx = 1;
-            for (OrdenProduccion op : ordenesPendientes) {
-                if (!(op.getProducto() instanceof Terminado)) {
-                    continue;
-                }
-
-                Terminado terminado = (Terminado) op.getProducto();
+            for (Terminado terminado : terminados) {
                 Row row = sheet.createRow(rowIdx++);
 
-                // Columna A: lote_asignado (solo lectura)
-                Cell cellLote = row.createCell(0);
-                cellLote.setCellValue(op.getLoteAsignado() != null ? op.getLoteAsignado() : "");
-                cellLote.setCellStyle(readOnlyStyle);
-
-                // Columna B: orden_id (solo lectura)
-                Cell cellOrdenId = row.createCell(1);
-                cellOrdenId.setCellValue(op.getOrdenId());
-                cellOrdenId.setCellStyle(readOnlyStyle);
-
-                // Columna C: producto_id (solo lectura)
-                Cell cellProductoId = row.createCell(2);
+                // Columna A: producto_id (solo lectura)
+                Cell cellProductoId = row.createCell(0);
                 cellProductoId.setCellValue(terminado.getProductoId() != null ? terminado.getProductoId() : "");
                 cellProductoId.setCellStyle(readOnlyStyle);
 
-                // Columna D: producto_nombre (solo lectura)
-                Cell cellProductoNombre = row.createCell(3);
+                // Columna B: producto_nombre (solo lectura)
+                Cell cellProductoNombre = row.createCell(1);
                 cellProductoNombre.setCellValue(terminado.getNombre() != null ? terminado.getNombre() : "");
                 cellProductoNombre.setCellStyle(readOnlyStyle);
 
-                // Columna E: categoria_nombre (solo lectura)
-                Cell cellCategoria = row.createCell(4);
+                // Columna C: categoria_nombre (solo lectura)
+                Cell cellCategoria = row.createCell(2);
                 String categoriaNombre = (terminado.getCategoria() != null && terminado.getCategoria().getCategoriaNombre() != null)
                         ? terminado.getCategoria().getCategoriaNombre()
                         : "";
                 cellCategoria.setCellValue(categoriaNombre);
                 cellCategoria.setCellStyle(readOnlyStyle);
 
-                // Columna F: cantidad_esperada (solo lectura)
-                Cell cellCantidadEsperada = row.createCell(5);
-                cellCantidadEsperada.setCellValue(op.getCantidadProducir());
-                cellCantidadEsperada.setCellStyle(readOnlyStyle);
+                // Columna D: tipo_unidades (solo lectura)
+                Cell cellTipoUnidades = row.createCell(3);
+                cellTipoUnidades.setCellValue(terminado.getTipoUnidades() != null ? terminado.getTipoUnidades() : "");
+                cellTipoUnidades.setCellStyle(readOnlyStyle);
 
-                // Columna G: cantidad_ingresada (EDITABLE - vacía)
-                Cell cellCantidadIngresada = row.createCell(6);
-                cellCantidadIngresada.setCellStyle(editableStyle);
+                // Columna E: capacidad_productiva_diaria (solo lectura)
+                Cell cellCapacidad = row.createCell(4);
+                int capacidadProductivaDiaria = terminado.getCategoria() != null
+                        ? terminado.getCategoria().getCapacidadProductivaDiaria()
+                        : 0;
+                cellCapacidad.setCellValue(capacidadProductivaDiaria);
+                cellCapacidad.setCellStyle(readOnlyStyle);
 
-                // Columna H: fecha_vencimiento (EDITABLE - pre-llenada con hoy + 2 años)
-                Cell cellFechaVencimiento = row.createCell(7);
-                cellFechaVencimiento.setCellValue(java.sql.Date.valueOf(fechaVencimientoDefault));
-                cellFechaVencimiento.setCellStyle(dateEditableStyle);
+                // Columna F: cantidad_producida (EDITABLE - vacía; dejar vacía si no hubo producción)
+                Cell cellCantidadProducida = row.createCell(5);
+                cellCantidadProducida.setCellStyle(editableStyle);
+
+                // Columna G: fecha_produccion (EDITABLE - pre-llenada con hoy)
+                Cell cellFechaProduccion = row.createCell(6);
+                cellFechaProduccion.setCellValue(java.sql.Date.valueOf(fechaProduccionDefault));
+                cellFechaProduccion.setCellStyle(dateEditableStyle);
+
+                // Columna H: observaciones (EDITABLE)
+                Cell cellObservaciones = row.createCell(7);
+                cellObservaciones.setCellStyle(editableStyle);
             }
 
             // Ajustar ancho de columnas
@@ -355,7 +359,7 @@ public class IngresoTerminadosAlmacenService {
             }
 
         } catch (IOException e) {
-            log.error("Error generando plantilla Excel de ingreso masivo", e);
+            log.error("Error generando plantilla Excel de reporte consolidado de terminados", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error generando plantilla Excel: " + e.getMessage());
         }
@@ -364,6 +368,10 @@ public class IngresoTerminadosAlmacenService {
     /**
      * Registra múltiples ingresos de producto terminado procesando cada uno de forma independiente.
      * Si un ingreso falla, continúa con los demás y reporta el error en el resultado.
+     *
+     * Temporalmente en desuso: actualmente el asistente frontend no llama este endpoint porque el
+     * objetivo es generar el reporte diario consolidado sin cerrar OPs. Se conserva por posible
+     * reintegración del workflow por lote/orden.
      *
      * @param request DTO con el username y la lista de ingresos a procesar
      * @return DTO con el resumen del proceso y los resultados individuales
