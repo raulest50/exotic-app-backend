@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface MpsSemanalDiaRepo extends JpaRepository<MpsSemanalDia, Long> {
 
@@ -21,4 +23,19 @@ public interface MpsSemanalDiaRepo extends JpaRepository<MpsSemanalDia, Long> {
             ORDER BY dia.dayIndex ASC
             """)
     List<MpsSemanalDia> findAllByMpsSemanal_MpsIdOrderByDayIndexAsc(@Param("mpsId") Integer mpsId);
+
+    @EntityGraph(attributePaths = {
+            "items",
+            "items.terminado",
+            "items.terminado.categoria"
+    })
+    @Query("""
+            SELECT DISTINCT dia
+            FROM MpsSemanalDia dia
+            WHERE dia.mpsSemanal.mpsId = :mpsId
+              AND dia.fecha = :fecha
+            """)
+    Optional<MpsSemanalDia> findByMpsIdAndFecha(
+            @Param("mpsId") Integer mpsId,
+            @Param("fecha") LocalDate fecha);
 }

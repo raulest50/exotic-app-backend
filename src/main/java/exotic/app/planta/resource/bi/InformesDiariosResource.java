@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.bi;
 
+import exotic.app.planta.model.bi.dto.InformeDiarioIngresoTerminadosReporteDTO;
 import exotic.app.planta.service.bi.InformesDiariosService;
 import exotic.app.planta.service.bi.SentidoAjusteInforme;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,24 @@ public class InformesDiariosResource {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
         byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(fecha);
         String filename = "informe_ingreso_terminados_" + fecha + ".xlsx";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
+
+    @GetMapping("/almacen/ingreso-terminados/reporte")
+    public ResponseEntity<InformeDiarioIngresoTerminadosReporteDTO> obtenerReporteIngresoTerminados(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        return ResponseEntity.ok(informesDiariosService.obtenerReporteIngresoTerminados(fecha));
+    }
+
+    @GetMapping("/almacen/ingreso-terminados/reporte-excel")
+    public ResponseEntity<byte[]> exportarReporteIngresoTerminadosExcel(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        byte[] excel = informesDiariosService.exportarReporteIngresoTerminadosExcel(fecha);
+        String filename = "reporte_produccion_terminados_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(MediaType.parseMediaType(

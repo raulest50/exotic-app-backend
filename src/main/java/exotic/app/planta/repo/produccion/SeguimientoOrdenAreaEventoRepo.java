@@ -7,13 +7,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface SeguimientoOrdenAreaEventoRepo extends JpaRepository<SeguimientoOrdenAreaEvento, Long> {
     List<SeguimientoOrdenAreaEvento> findBySeguimientoOrdenArea_IdOrderByFechaEventoAscIdAsc(Long seguimientoOrdenAreaId);
     List<SeguimientoOrdenAreaEvento> findBySeguimientoOrdenArea_IdInOrderByFechaEventoAscIdAsc(Collection<Long> seguimientoOrdenAreaIds);
+    Optional<SeguimientoOrdenAreaEvento> findFirstBySeguimientoOrdenArea_AreaOperativa_AreaIdAndActorTipoAndUsuario_IdAndFechaEventoLessThanEqualOrderByFechaEventoDescIdDesc(
+            int areaId,
+            ActorTipoEventoSeguimiento actorTipo,
+            Long userId,
+            LocalDateTime instanteFoto
+    );
 
     @Query("""
             SELECT CASE WHEN COUNT(e) > 0 THEN true ELSE false END

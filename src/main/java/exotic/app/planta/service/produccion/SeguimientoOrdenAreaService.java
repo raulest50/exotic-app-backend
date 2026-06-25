@@ -325,6 +325,15 @@ public class SeguimientoOrdenAreaService {
         dto.setAreaDescripcion(area.getDescripcion());
         if (area.getResponsableArea() != null) {
             dto.setResponsableArea(toResponsableResumen(area.getResponsableArea()));
+            resolveUltimoReporteResponsable(area, instanteFoto).ifPresent(evento -> {
+                dto.setUltimaFechaReporteResponsable(evento.getFechaEvento());
+                if (evento.getSeguimientoOrdenArea() != null
+                        && evento.getSeguimientoOrdenArea().getOrdenProduccion() != null) {
+                    OrdenProduccion orden = evento.getSeguimientoOrdenArea().getOrdenProduccion();
+                    dto.setUltimaOrdenReporteResponsableId(orden.getOrdenId());
+                    dto.setUltimaOrdenReporteResponsableLote(orden.getLoteAsignado());
+                }
+            });
         }
         dto.setFechaConsulta(fechaConsulta);
         dto.setInstanteFoto(instanteFoto);
@@ -707,6 +716,22 @@ public class SeguimientoOrdenAreaService {
         return dto;
     }
 
+    private Optional<SeguimientoOrdenAreaEvento> resolveUltimoReporteResponsable(
+            AreaOperativa area,
+            LocalDateTime instanteFoto
+    ) {
+        if (area == null || area.getResponsableArea() == null || instanteFoto == null) {
+            return Optional.empty();
+        }
+        return seguimientoEventoRepo
+                .findFirstBySeguimientoOrdenArea_AreaOperativa_AreaIdAndActorTipoAndUsuario_IdAndFechaEventoLessThanEqualOrderByFechaEventoDescIdDesc(
+                        area.getAreaId(),
+                        ActorTipoEventoSeguimiento.USER,
+                        area.getResponsableArea().getId(),
+                        instanteFoto
+                );
+    }
+
     private Long calculateMinutesBetween(LocalDateTime start, LocalDateTime end) {
         if (start == null || end == null) {
             return null;
@@ -824,6 +849,9 @@ public class SeguimientoOrdenAreaService {
         private ResponsableAreaResumenDTO responsableArea;
         private LocalDate fechaConsulta;
         private LocalDateTime instanteFoto;
+        private LocalDateTime ultimaFechaReporteResponsable;
+        private Integer ultimaOrdenReporteResponsableId;
+        private String ultimaOrdenReporteResponsableLote;
         private EstadoResumenDTO resumen;
         private Double promedioMinutosEspera;
         private Double promedioMinutosEnProceso;
