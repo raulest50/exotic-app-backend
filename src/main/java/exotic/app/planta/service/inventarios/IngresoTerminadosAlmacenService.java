@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -241,7 +242,13 @@ public class IngresoTerminadosAlmacenService {
      */
     @Transactional(readOnly = true)
     public byte[] generarPlantillaExcel() {
-        List<Terminado> terminados = terminadoRepo.findAllConCategoriaOrderByProductoIdAsc();
+        List<Terminado> terminados = terminadoRepo.findAllConCategoriaOrderByProductoIdAsc()
+                .stream()
+                .sorted(Comparator
+                        .comparing((Terminado terminado) -> categoriaNombrePlantilla(terminado).toLowerCase())
+                        .thenComparing((Terminado terminado) ->
+                                terminado.getProductoId() != null ? terminado.getProductoId().toLowerCase() : ""))
+                .toList();
 
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Produccion Diaria PT");
@@ -276,16 +283,9 @@ public class IngresoTerminadosAlmacenService {
             readOnlyStyle.setBorderLeft(BorderStyle.THIN);
             readOnlyStyle.setBorderRight(BorderStyle.THIN);
 
-            // Estilo para fechas editables
-            CellStyle dateEditableStyle = workbook.createCellStyle();
-            dateEditableStyle.cloneStyleFrom(editableStyle);
-            CreationHelper createHelper = workbook.getCreationHelper();
-            dateEditableStyle.setDataFormat(createHelper.createDataFormat().getFormat("yyyy-mm-dd"));
-
             // Headers (fila 0)
             String[] headers = {
-                "producto_id", "producto_nombre", "categoria_nombre", "tipo_unidades",
-                "capacidad_productiva_diaria", "cantidad_producida", "fecha_produccion", "observaciones"
+                "producto_id", "producto_nombre", "categoria_nombre", "cantidad_producida"
             };
 
             Row headerRow = sheet.createRow(0);
@@ -295,7 +295,7 @@ public class IngresoTerminadosAlmacenService {
                 cell.setCellStyle(headerStyle);
             }
 
-            LocalDate fechaProduccionDefault = LocalDate.now(applicationClock);
+            sheet.createFreezePane(0, 1);
 
             // Filas de datos
             int rowIdx = 1;
@@ -314,37 +314,12 @@ public class IngresoTerminadosAlmacenService {
 
                 // Columna C: categoria_nombre (solo lectura)
                 Cell cellCategoria = row.createCell(2);
-                String categoriaNombre = (terminado.getCategoria() != null && terminado.getCategoria().getCategoriaNombre() != null)
-                        ? terminado.getCategoria().getCategoriaNombre()
-                        : "";
-                cellCategoria.setCellValue(categoriaNombre);
+                cellCategoria.setCellValue(categoriaNombrePlantilla(terminado));
                 cellCategoria.setCellStyle(readOnlyStyle);
 
-                // Columna D: tipo_unidades (solo lectura)
-                Cell cellTipoUnidades = row.createCell(3);
-                cellTipoUnidades.setCellValue(terminado.getTipoUnidades() != null ? terminado.getTipoUnidades() : "");
-                cellTipoUnidades.setCellStyle(readOnlyStyle);
-
-                // Columna E: capacidad_productiva_diaria (solo lectura)
-                Cell cellCapacidad = row.createCell(4);
-                int capacidadProductivaDiaria = terminado.getCategoria() != null
-                        ? terminado.getCategoria().getCapacidadProductivaDiaria()
-                        : 0;
-                cellCapacidad.setCellValue(capacidadProductivaDiaria);
-                cellCapacidad.setCellStyle(readOnlyStyle);
-
-                // Columna F: cantidad_producida (EDITABLE - vacía; dejar vacía si no hubo producción)
-                Cell cellCantidadProducida = row.createCell(5);
+                // Columna D: cantidad_producida (EDITABLE - vacía equivale a cero)
+                Cell cellCantidadProducida = row.createCell(3);
                 cellCantidadProducida.setCellStyle(editableStyle);
-
-                // Columna G: fecha_produccion (EDITABLE - pre-llenada con hoy)
-                Cell cellFechaProduccion = row.createCell(6);
-                cellFechaProduccion.setCellValue(java.sql.Date.valueOf(fechaProduccionDefault));
-                cellFechaProduccion.setCellStyle(dateEditableStyle);
-
-                // Columna H: observaciones (EDITABLE)
-                Cell cellObservaciones = row.createCell(7);
-                cellObservaciones.setCellStyle(editableStyle);
             }
 
             // Ajustar ancho de columnas
@@ -363,6 +338,16 @@ public class IngresoTerminadosAlmacenService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error generando plantilla Excel: " + e.getMessage());
         }
+    }
+
+    private static String categoriaNombrePlantilla(Terminado terminado) {
+        if (terminado == null
+                || terminado.getCategoria() == null
+                || terminado.getCategoria().getCategoriaNombre() == null
+                || terminado.getCategoria().getCategoriaNombre().isBlank()) {
+            return "Sin categoria";
+        }
+        return terminado.getCategoria().getCategoriaNombre();
     }
 
     /**

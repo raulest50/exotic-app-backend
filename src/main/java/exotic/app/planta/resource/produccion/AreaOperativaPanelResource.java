@@ -22,6 +22,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -71,39 +72,60 @@ public class AreaOperativaPanelResource {
     public ResponseEntity<?> getMpsSemanalActual(Authentication authentication) {
         User user = getCurrentUser(authentication);
         LocalDate weekStartDate = getCurrentIsoWeekStartDate();
+        return getMpsSemanalOperativo(
+                user,
+                weekStartDate,
+                "MPS operativo actual",
+                "El MPS de la semana actual aun no esta aprobado para consulta operativa."
+        );
+    }
 
-        try {
-            assertAreaResponsable(user);
-            MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
-            if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(new ErrorResponse(
-                                "MPS no disponible",
-                                "El MPS de la semana actual aun no esta aprobado para consulta operativa."
-                        ));
-            }
-
-            return ResponseEntity.ok(mps);
-        } catch (AccessDeniedException e) {
-            log.warn("Acceso denegado al MPS operativo actual para user {}: {}", user.getId(), e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(new ErrorResponse("Acceso denegado", e.getMessage()));
-        } catch (MpsSemanalNotFoundException e) {
-            log.warn("MPS operativo actual no encontrado para semana {}: {}", weekStartDate, e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ErrorResponse("MPS no encontrado", e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            log.warn("Solicitud invalida de MPS operativo actual para semana {}: {}", weekStartDate, e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
-        }
+    @GetMapping("/mps-semanal")
+    public ResponseEntity<?> getMpsSemanalPorSemana(
+            Authentication authentication,
+            @RequestParam LocalDate weekStartDate
+    ) {
+        User user = getCurrentUser(authentication);
+        return getMpsSemanalOperativo(
+                user,
+                weekStartDate,
+                "MPS operativo solicitado",
+                "El MPS de la semana solicitada aun no esta aprobado para consulta operativa."
+        );
     }
 
     @GetMapping("/mps-semanal/actual/odps")
     public ResponseEntity<?> getOdpsMpsSemanalActual(Authentication authentication) {
         User user = getCurrentUser(authentication);
         LocalDate weekStartDate = getCurrentIsoWeekStartDate();
+        return getOdpsMpsSemanalOperativo(
+                user,
+                weekStartDate,
+                "ODPs del MPS operativo actual",
+                "El MPS de la semana actual aun no esta aprobado para consulta operativa."
+        );
+    }
 
+    @GetMapping("/mps-semanal/odps")
+    public ResponseEntity<?> getOdpsMpsSemanalPorSemana(
+            Authentication authentication,
+            @RequestParam LocalDate weekStartDate
+    ) {
+        User user = getCurrentUser(authentication);
+        return getOdpsMpsSemanalOperativo(
+                user,
+                weekStartDate,
+                "ODPs del MPS operativo solicitado",
+                "El MPS de la semana solicitada aun no esta aprobado para consulta operativa."
+        );
+    }
+
+    private ResponseEntity<?> getMpsSemanalOperativo(
+            User user,
+            LocalDate weekStartDate,
+            String logLabel,
+            String unavailableMessage
+    ) {
         try {
             assertAreaResponsable(user);
             MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
@@ -111,7 +133,40 @@ public class AreaOperativaPanelResource {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                         .body(new ErrorResponse(
                                 "MPS no disponible",
-                                "El MPS de la semana actual aun no esta aprobado para consulta operativa."
+                                unavailableMessage
+                        ));
+            }
+
+            return ResponseEntity.ok(mps);
+        } catch (AccessDeniedException e) {
+            log.warn("Acceso denegado a {} para user {}: {}", logLabel, user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Acceso denegado", e.getMessage()));
+        } catch (MpsSemanalNotFoundException e) {
+            log.warn("{} no encontrado para semana {}: {}", logLabel, weekStartDate, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse("MPS no encontrado", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            log.warn("Solicitud invalida de {} para semana {}: {}", logLabel, weekStartDate, e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
+        }
+    }
+
+    private ResponseEntity<?> getOdpsMpsSemanalOperativo(
+            User user,
+            LocalDate weekStartDate,
+            String logLabel,
+            String unavailableMessage
+    ) {
+        try {
+            assertAreaResponsable(user);
+            MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
+            if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ErrorResponse(
+                                "MPS no disponible",
+                                unavailableMessage
                         ));
             }
 
@@ -119,15 +174,15 @@ public class AreaOperativaPanelResource {
                     masterProductionScheduleOrderGenerationService.getOrdenesGeneradasPorSemana(weekStartDate);
             return ResponseEntity.ok(ordenes);
         } catch (AccessDeniedException e) {
-            log.warn("Acceso denegado a ODPs del MPS operativo actual para user {}: {}", user.getId(), e.getMessage());
+            log.warn("Acceso denegado a {} para user {}: {}", logLabel, user.getId(), e.getMessage());
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ErrorResponse("Acceso denegado", e.getMessage()));
         } catch (MpsSemanalNotFoundException e) {
-            log.warn("ODPs del MPS operativo actual no encontradas para semana {}: {}", weekStartDate, e.getMessage());
+            log.warn("{} no encontradas para semana {}: {}", logLabel, weekStartDate, e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ErrorResponse("MPS no encontrado", e.getMessage()));
         } catch (IllegalArgumentException e) {
-            log.warn("Solicitud invalida de ODPs del MPS operativo actual para semana {}: {}", weekStartDate, e.getMessage());
+            log.warn("Solicitud invalida de {} para semana {}: {}", logLabel, weekStartDate, e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
         }
