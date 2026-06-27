@@ -21,7 +21,7 @@ public class MasterDirectiveInitializer {
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN = "Cantidad de dias bloqueados para editar MPS semanal";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_AYUDA = "Define cuantos dias desde la fecha actual quedan bloqueados para editar el MPS semanal. Acepta valores de 0 a 7: 0 permite editar desde hoy, 1 bloquea hoy, 2 bloquea hoy y manana, y asi sucesivamente.";
     private static final String MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_RESUMEN = "Permite agregar terminados nuevos en MPS semanal aprobada";
-    private static final String MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_AYUDA = "false: mantiene el comportamiento actual; despues de aprobar una MPS solo se pueden mover, aumentar, reducir o cancelar tarjetas existentes. true: permite agregar nuevos cards de terminados en MPS APROBADO o CERRADO. Si la MPS ya esta CERRADO o ya tiene ODPs generadas, las ODPs de los nuevos lotes se generan inmediatamente.";
+    private static final String MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_AYUDA = "Controla si una MPS aprobada o cerrada permite agregar terminados nuevos.";
     private static final String AREA_OPERATIVA_NOISE_ENABLED_RESUMEN = "Habilita la medicion de ruido en tablets del Area Operativa";
     private static final String AREA_OPERATIVA_NOISE_ENABLED_AYUDA = "Cuando esta activa, el panel de Area Operativa puede tomar muestras cortas de audio desde el navegador de la tablet, convertirlas a dB relativo y enviarlas al backend. No almacena audio crudo.";
     private static final String AREA_OPERATIVA_NOISE_INTERVAL_RESUMEN = "Intervalo de muestreo de ruido en minutos";

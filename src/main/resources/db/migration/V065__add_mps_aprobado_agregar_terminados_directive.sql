@@ -5,7 +5,7 @@ VALUES (
     'false',
     'BOOLEANO',
     'FLEXIBILIDAD_CONTROL',
-    'false: mantiene el comportamiento actual; despues de aprobar una MPS solo se pueden mover, aumentar, reducir o cancelar tarjetas existentes. true: permite agregar nuevos cards de terminados en MPS APROBADO o CERRADO. Si la MPS ya esta CERRADO o ya tiene ODPs generadas, las ODPs de los nuevos lotes se generan inmediatamente.'
+    'Controla si una MPS aprobada o cerrada permite agregar terminados nuevos.'
 )
 ON CONFLICT (nombre) DO UPDATE
 SET resumen = EXCLUDED.resumen,

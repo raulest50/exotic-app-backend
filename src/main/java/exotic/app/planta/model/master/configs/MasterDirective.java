@@ -48,6 +48,7 @@ public class MasterDirective {
     /**
      * descripcion mas detallada de que hace esta configuracion.
      */
+    @Column(name = "ayuda", columnDefinition = "TEXT")
     private String ayuda;
 
     public enum GRUPO {

@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS master_directive
+ALTER COLUMN ayuda TYPE TEXT USING ayuda::TEXT;
