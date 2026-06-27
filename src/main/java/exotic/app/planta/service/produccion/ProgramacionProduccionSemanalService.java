@@ -286,6 +286,8 @@ public class ProgramacionProduccionSemanalService {
         int loteSize = resolveLoteSize(terminado);
         int tiempoDiasFabricacion = resolveTiempoDiasFabricacion(terminado);
         Categoria categoria = terminado.getCategoria();
+        MpsSemanalFechaPlanificadaCalculator.FechasPlanificadas fechas =
+                MpsSemanalFechaPlanificadaCalculator.desdeFechaEntrega(entry.fecha, tiempoDiasFabricacion);
 
         MpsSemanalItem item = new MpsSemanalItem();
         item.setMpsSemanal(mps);
@@ -298,10 +300,10 @@ public class ProgramacionProduccionSemanalService {
         item.setTiempoDiasFabricacion(tiempoDiasFabricacion);
         item.setNumeroLotes(entry.numeroLotes);
         item.setCantidadTotal(entry.numeroLotes * (double) loteSize);
-        item.setFechaLanzamiento(entry.fecha);
-        item.setFechaFinalPlanificada(entry.fecha.plusDays(Math.max(tiempoDiasFabricacion, 0)));
+        item.setFechaLanzamiento(fechas.fechaLanzamiento());
+        item.setFechaFinalPlanificada(fechas.fechaFinalPlanificada());
         item.setObservacion(entry.observacion);
-        item.setWarning(resolveWarning(item, mps.getWeekEndDate()));
+        item.setWarning(resolveWarning(item, mps.getWeekStartDate()));
         item.setDisplayOrder(displayOrder);
 
         for (int ordinal = 1; ordinal <= entry.numeroLotes; ordinal++) {
@@ -316,9 +318,9 @@ public class ProgramacionProduccionSemanalService {
         return item;
     }
 
-    private String resolveWarning(MpsSemanalItem item, LocalDate weekEndDate) {
-        if (item.getFechaFinalPlanificada() != null && weekEndDate != null && item.getFechaFinalPlanificada().isAfter(weekEndDate)) {
-            return "La fecha final planificada desborda la semana lunes-sabado.";
+    private String resolveWarning(MpsSemanalItem item, LocalDate weekStartDate) {
+        if (item.getFechaLanzamiento() != null && weekStartDate != null && item.getFechaLanzamiento().isBefore(weekStartDate)) {
+            return "El lanzamiento planificado inicia antes de la semana MPS.";
         }
         return null;
     }

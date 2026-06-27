@@ -58,6 +58,13 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isMpsSemanalPermitirAgregarTerminadosAprobado() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.MPS_SEMANAL_PERMITIR_AGREGAR_TERMINADOS_APROBADO,
+                MasterDirectiveKeys.DEFAULT_MPS_SEMANAL_PERMITIR_AGREGAR_TERMINADOS_APROBADO
+        );
+    }
+
     public boolean isAreaOperativaNoiseEnabled() {
         return getBooleanDirectiveValue(
                 MasterDirectiveKeys.AREA_OPERATIVA_NOISE_ENABLED,

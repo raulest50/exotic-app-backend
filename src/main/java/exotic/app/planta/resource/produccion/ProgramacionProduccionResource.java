@@ -7,6 +7,7 @@ import exotic.app.planta.model.produccion.dto.CrearMpsSemanalObservacionRequestD
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsRequestDTO;
 import exotic.app.planta.model.produccion.dto.GenerarOdpDesdeMpsResponseDTO;
 import exotic.app.planta.model.produccion.dto.GuardarProgramacionProduccionSemanalRequestDTO;
+import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemCreateRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemEditRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalListItemDTO;
@@ -471,6 +472,39 @@ public class ProgramacionProduccionResource {
             log.info("[MPS_SEMANAL] {} start user={} {}", action, user, context);
             String username = requireAuthorizedUsername(authentication, "PROGRAMACION_PRODUCCION");
             MpsSemanalDraftDTO response = mpsSemanalAprobadoEditService.editarItemAprobado(itemId, request, username);
+            log.info("[MPS_SEMANAL] {} success user={} mpsId={} weekStartDate={} estado={} revision={}",
+                    action, user, response.getMpsId(), response.getWeekStartDate(), response.getEstado(), response.getRevisionNumero());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return controlledFailure(action, user, context, HttpStatus.BAD_REQUEST, e);
+        } catch (MpsSemanalNotFoundException e) {
+            return controlledFailure(action, user, context, HttpStatus.NOT_FOUND, e);
+        } catch (IllegalStateException e) {
+            return controlledFailure(action, user, context, HttpStatus.CONFLICT, e);
+        } catch (ResponseStatusException e) {
+            accessFailure(action, user, context, e);
+            throw e;
+        } catch (RuntimeException e) {
+            unexpectedFailure(action, user, context, e);
+            throw e;
+        }
+    }
+
+    @PostMapping("/mps-semanal/items/edicion-aprobada")
+    public ResponseEntity<?> agregarItemMpsSemanalAprobado(
+            @RequestBody MpsSemanalAprobadoItemCreateRequestDTO request,
+            Authentication authentication
+    ) {
+        String action = "agregarItemMpsSemanalAprobado";
+        String user = authenticationName(authentication);
+        String context = "weekStartDate=" + (request != null ? request.getWeekStartDate() : null)
+                + " dayIndex=" + (request != null ? request.getDayIndex() : null)
+                + " terminadoId=" + (request != null ? request.getTerminadoId() : null)
+                + " numeroLotes=" + (request != null ? request.getNumeroLotes() : null);
+        try {
+            log.info("[MPS_SEMANAL] {} start user={} {}", action, user, context);
+            String username = requireAuthorizedUsername(authentication, "PROGRAMACION_PRODUCCION");
+            MpsSemanalDraftDTO response = mpsSemanalAprobadoEditService.agregarItemAprobado(request, username);
             log.info("[MPS_SEMANAL] {} success user={} mpsId={} weekStartDate={} estado={} revision={}",
                     action, user, response.getMpsId(), response.getWeekStartDate(), response.getEstado(), response.getRevisionNumero());
             return ResponseEntity.ok(response);

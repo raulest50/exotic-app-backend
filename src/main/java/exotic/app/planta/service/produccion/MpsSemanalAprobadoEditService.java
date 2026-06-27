@@ -1,5 +1,7 @@
 package exotic.app.planta.service.produccion;
 
+import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
 import exotic.app.planta.model.produccion.EstadoMpsSemanalLotePlanificado;
@@ -8,12 +10,17 @@ import exotic.app.planta.model.produccion.MpsSemanalDia;
 import exotic.app.planta.model.produccion.MpsSemanalItem;
 import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemCreateRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemEditRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
+import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalItemRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalLotePlanificadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,14 +40,16 @@ import java.util.Objects;
 @Transactional(rollbackFor = Exception.class)
 public class MpsSemanalAprobadoEditService {
 
+    private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
     private final MpsSemanalItemRepo mpsSemanalItemRepo;
     private final MpsSemanalDiaRepo mpsSemanalDiaRepo;
     private final MpsSemanalLotePlanificadoRepo mpsSemanalLotePlanificadoRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
+    private final TerminadoRepo terminadoRepo;
+    private final MasterDirectiveService masterDirectiveService;
     private final ProduccionService produccionService;
     private final MasterProductionScheduleOrderGenerationService orderGenerationService;
     private final MasterProductionScheduleDraftService draftService;
-    private final MpsSemanalEditWindowService editWindowService;
     private final MpsSemanalOrdenInicioPolicyService ordenInicioPolicyService;
     private final Clock applicationClock;
 
@@ -58,8 +67,6 @@ public class MpsSemanalAprobadoEditService {
 
         MpsSemanalDia sourceDia = item.getMpsDia();
         MpsSemanalDia targetDia = resolveTargetDia(mps, request.getDayIndex());
-        requireEditableDate(sourceDia.getFecha(), "origen");
-        requireEditableDate(targetDia.getFecha(), "destino");
         requireNoDuplicateTargetItem(item, targetDia);
 
         List<MpsSemanalLotePlanificado> activeLotes = getActiveLotes(item);
@@ -69,10 +76,15 @@ public class MpsSemanalAprobadoEditService {
 
         boolean moved = !Objects.equals(sourceDia.getId(), targetDia.getId());
         if (moved) {
+            MpsSemanalFechaPlanificadaCalculator.FechasPlanificadas fechas =
+                    MpsSemanalFechaPlanificadaCalculator.desdeFechaEntrega(
+                            targetDia.getFecha(),
+                            item.getTiempoDiasFabricacion()
+                    );
             item.setMpsDia(targetDia);
-            item.setFechaLanzamiento(targetDia.getFecha());
-            item.setFechaFinalPlanificada(targetDia.getFecha().plusDays(Math.max(item.getTiempoDiasFabricacion(), 0)));
-            item.setWarning(resolveWarning(item, mps.getWeekEndDate()));
+            item.setFechaLanzamiento(fechas.fechaLanzamiento());
+            item.setFechaFinalPlanificada(fechas.fechaFinalPlanificada());
+            item.setWarning(resolveWarning(item, mps.getWeekStartDate()));
             item.setDisplayOrder(nextDisplayOrder(targetDia, item.getId()));
         }
 
@@ -108,6 +120,63 @@ public class MpsSemanalAprobadoEditService {
         return draftService.getByWeekStartDate(mps.getWeekStartDate());
     }
 
+    public MpsSemanalDraftDTO agregarItemAprobado(
+            MpsSemanalAprobadoItemCreateRequestDTO request,
+            String editedByUsername
+    ) {
+        validateCreateRequest(request, editedByUsername);
+        if (!masterDirectiveService.isMpsSemanalPermitirAgregarTerminadosAprobado()) {
+            throw new IllegalStateException("La directiva para agregar terminados en MPS aprobada esta inhabilitada.");
+        }
+
+        String terminadoId = normalizeRequiredText(request.getTerminadoId(), "terminadoId es obligatorio.");
+        MasterProductionScheduleSemanal mps = masterProductionScheduleSemanalRepo.findByWeekStartDate(request.getWeekStartDate())
+                .orElseThrow(() -> new MpsSemanalNotFoundException(
+                        "No existe MPS semanal para la semana iniciando en " + request.getWeekStartDate() + "."
+                ));
+        requireEditableMpsState(mps);
+
+        MpsSemanalDia targetDia = resolveTargetDia(mps, request.getDayIndex());
+        requireNoDuplicateTerminadoOnDia(targetDia, terminadoId);
+
+        Terminado terminado = terminadoRepo.findById(terminadoId)
+                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado o no es un terminado: " + terminadoId));
+        validateTerminado(terminadoId, terminado);
+
+        MpsSemanalItem item = buildNewApprovedItem(
+                mps,
+                targetDia,
+                terminado,
+                request.getNumeroLotes(),
+                normalizeOptionalText(request.getObservacion())
+        );
+        targetDia.getItems().add(item);
+        MpsSemanalItem savedItem = mpsSemanalItemRepo.saveAndFlush(item);
+        List<MpsSemanalLotePlanificado> newLotes = getActiveLotes(savedItem);
+
+        if (mps.getEstado() == EstadoMpsSemanal.CERRADO || mps.getFechaGeneracionOdps() != null) {
+            orderGenerationService.generarOrdenesParaLotes(mps, newLotes);
+            mps.setFechaGeneracionOdps(mps.getFechaGeneracionOdps() != null
+                    ? mps.getFechaGeneracionOdps()
+                    : LocalDateTime.now(applicationClock));
+        }
+
+        mps.setRevisionNumero(resolveNextRevision(mps));
+        masterProductionScheduleSemanalRepo.save(mps);
+
+        log.info(
+                "[MPS_SEMANAL] aprobadoCreate success itemId={} mpsId={} weekStartDate={} editedByUsername={} dayIndex={} terminadoId={} numeroLotes={}",
+                savedItem.getId(),
+                mps.getMpsId(),
+                mps.getWeekStartDate(),
+                editedByUsername,
+                request.getDayIndex(),
+                terminadoId,
+                request.getNumeroLotes()
+        );
+        return draftService.getByWeekStartDate(mps.getWeekStartDate());
+    }
+
     private void validateRequest(Long itemId, MpsSemanalAprobadoItemEditRequestDTO request, String editedByUsername) {
         if (itemId == null) {
             throw new IllegalArgumentException("itemId es obligatorio.");
@@ -123,6 +192,27 @@ public class MpsSemanalAprobadoEditService {
         }
         if (request.getNumeroLotes() < 0) {
             throw new IllegalArgumentException("numeroLotes debe ser mayor o igual a cero.");
+        }
+    }
+
+    private void validateCreateRequest(MpsSemanalAprobadoItemCreateRequestDTO request, String editedByUsername) {
+        if (request == null) {
+            throw new IllegalArgumentException("La solicitud de creacion MPS no puede ser nula.");
+        }
+        if (editedByUsername == null || editedByUsername.isBlank()) {
+            throw new IllegalArgumentException("No se pudo determinar el usuario editor.");
+        }
+        if (request.getWeekStartDate() == null) {
+            throw new IllegalArgumentException("weekStartDate es obligatorio.");
+        }
+        if (request.getDayIndex() < 0 || request.getDayIndex() > 5) {
+            throw new IllegalArgumentException("dayIndex debe estar entre 0 y 5.");
+        }
+        if (request.getTerminadoId() == null || request.getTerminadoId().isBlank()) {
+            throw new IllegalArgumentException("terminadoId es obligatorio.");
+        }
+        if (request.getNumeroLotes() <= 0) {
+            throw new IllegalArgumentException("numeroLotes debe ser mayor que cero.");
         }
     }
 
@@ -145,22 +235,85 @@ public class MpsSemanalAprobadoEditService {
                 .orElseThrow(() -> new IllegalArgumentException("No existe dia MPS para dayIndex " + dayIndex + "."));
     }
 
-    private void requireEditableDate(LocalDate date, String role) {
-        if (!editWindowService.isEditable(date)) {
-            throw new IllegalStateException("El dia de " + role + " esta bloqueado. "
-                    + "La primera fecha editable es " + editWindowService.getEditableFromDate() + ".");
-        }
-    }
-
     private void requireNoDuplicateTargetItem(MpsSemanalItem item, MpsSemanalDia targetDia) {
         String productoId = item.getTerminado() != null ? item.getTerminado().getProductoId() : null;
         boolean duplicate = targetDia.getItems().stream()
                 .anyMatch(existing -> !Objects.equals(existing.getId(), item.getId())
-                        && existing.getTerminado() != null
-                        && Objects.equals(existing.getTerminado().getProductoId(), productoId));
+                        && isSameTerminado(existing, productoId));
         if (duplicate) {
             throw new IllegalStateException("El producto ya existe en el dia destino del MPS.");
         }
+    }
+
+    private void requireNoDuplicateTerminadoOnDia(MpsSemanalDia targetDia, String productoId) {
+        boolean duplicate = targetDia.getItems().stream()
+                .anyMatch(existing -> isSameTerminado(existing, productoId));
+        if (duplicate) {
+            throw new IllegalStateException("El producto ya existe en el dia destino del MPS.");
+        }
+    }
+
+    private boolean isSameTerminado(MpsSemanalItem item, String productoId) {
+        return item.getTerminado() != null
+                && Objects.equals(item.getTerminado().getProductoId(), productoId);
+    }
+
+    private void validateTerminado(String terminadoId, Terminado terminado) {
+        if (terminado == null) {
+            throw new IllegalArgumentException("Producto no encontrado o no es un terminado: " + terminadoId);
+        }
+        if (resolveLoteSize(terminado) <= 0) {
+            throw new IllegalArgumentException("El producto terminado no tiene lote size configurado: " + terminadoId);
+        }
+        if (terminado.getPrefijoLote() == null || terminado.getPrefijoLote().isBlank()) {
+            throw new IllegalArgumentException("El producto terminado no tiene prefijo de lote definido: " + terminadoId);
+        }
+    }
+
+    private MpsSemanalItem buildNewApprovedItem(
+            MasterProductionScheduleSemanal mps,
+            MpsSemanalDia targetDia,
+            Terminado terminado,
+            int numeroLotes,
+            String observacion
+    ) {
+        int loteSize = resolveLoteSize(terminado);
+        int tiempoDiasFabricacion = resolveTiempoDiasFabricacion(terminado);
+        Categoria categoria = terminado.getCategoria();
+        MpsSemanalFechaPlanificadaCalculator.FechasPlanificadas fechas =
+                MpsSemanalFechaPlanificadaCalculator.desdeFechaEntrega(
+                        targetDia.getFecha(),
+                        tiempoDiasFabricacion
+                );
+
+        MpsSemanalItem item = new MpsSemanalItem();
+        item.setMpsSemanal(mps);
+        item.setMpsDia(targetDia);
+        item.setTerminado(terminado);
+        item.setTerminadoNombre(terminado.getNombre() != null ? terminado.getNombre() : terminado.getProductoId());
+        item.setCategoriaId(categoria != null ? categoria.getCategoriaId() : null);
+        item.setCategoriaNombre(categoria != null ? categoria.getCategoriaNombre() : null);
+        item.setLoteSize(loteSize);
+        item.setTiempoDiasFabricacion(tiempoDiasFabricacion);
+        item.setNumeroLotes(numeroLotes);
+        item.setEstado(EstadoMpsSemanalItem.ACTIVO);
+        item.setCantidadTotal(numeroLotes * (double) loteSize);
+        item.setFechaLanzamiento(fechas.fechaLanzamiento());
+        item.setFechaFinalPlanificada(fechas.fechaFinalPlanificada());
+        item.setObservacion(observacion);
+        item.setWarning(resolveWarning(item, mps.getWeekStartDate()));
+        item.setDisplayOrder(nextDisplayOrder(targetDia, null));
+
+        for (int ordinal = 1; ordinal <= numeroLotes; ordinal++) {
+            MpsSemanalLotePlanificado lotePlanificado = new MpsSemanalLotePlanificado();
+            lotePlanificado.setMpsItem(item);
+            lotePlanificado.setLoteOrdinal(ordinal);
+            lotePlanificado.setCantidadPlanificada(loteSize);
+            lotePlanificado.setEstado(EstadoMpsSemanalLotePlanificado.PENDIENTE_ODP);
+            item.getLotesPlanificados().add(lotePlanificado);
+        }
+
+        return item;
     }
 
     private List<MpsSemanalLotePlanificado> getActiveLotes(MpsSemanalItem item) {
@@ -247,14 +400,31 @@ public class MpsSemanalAprobadoEditService {
                 : 2;
     }
 
-    private String resolveWarning(MpsSemanalItem item, LocalDate weekEndDate) {
-        if (item.getFechaFinalPlanificada() != null && weekEndDate != null && item.getFechaFinalPlanificada().isAfter(weekEndDate)) {
-            return "La fecha final planificada desborda la semana lunes-sabado.";
+    private String resolveWarning(MpsSemanalItem item, LocalDate weekStartDate) {
+        if (item.getFechaLanzamiento() != null && weekStartDate != null && item.getFechaLanzamiento().isBefore(weekStartDate)) {
+            return "El lanzamiento planificado inicia antes de la semana MPS.";
         }
         return null;
     }
 
     private static String normalizeOptionalText(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static String normalizeRequiredText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
+    }
+
+    private static int resolveLoteSize(Terminado terminado) {
+        Categoria categoria = terminado != null ? terminado.getCategoria() : null;
+        return categoria != null ? categoria.getLoteSize() : 0;
+    }
+
+    private static int resolveTiempoDiasFabricacion(Terminado terminado) {
+        Categoria categoria = terminado != null ? terminado.getCategoria() : null;
+        return categoria != null ? categoria.getTiempoDiasFabricacion() : 0;
     }
 }

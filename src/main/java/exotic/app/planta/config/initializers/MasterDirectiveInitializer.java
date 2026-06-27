@@ -20,6 +20,8 @@ public class MasterDirectiveInitializer {
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_AYUDA = "Cuando esta activa, el usuario master puede ver el acceso en Inicio y entrar a la ruta de Directivas Super Master. No agrega proteccion adicional sobre los endpoints API.";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN = "Cantidad de dias bloqueados para editar MPS semanal";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_AYUDA = "Define cuantos dias desde la fecha actual quedan bloqueados para editar el MPS semanal. Acepta valores de 0 a 7: 0 permite editar desde hoy, 1 bloquea hoy, 2 bloquea hoy y manana, y asi sucesivamente.";
+    private static final String MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_RESUMEN = "Permite agregar terminados nuevos en MPS semanal aprobada";
+    private static final String MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_AYUDA = "false: mantiene el comportamiento actual; despues de aprobar una MPS solo se pueden mover, aumentar, reducir o cancelar tarjetas existentes. true: permite agregar nuevos cards de terminados en MPS APROBADO o CERRADO. Si la MPS ya esta CERRADO o ya tiene ODPs generadas, las ODPs de los nuevos lotes se generan inmediatamente.";
     private static final String AREA_OPERATIVA_NOISE_ENABLED_RESUMEN = "Habilita la medicion de ruido en tablets del Area Operativa";
     private static final String AREA_OPERATIVA_NOISE_ENABLED_AYUDA = "Cuando esta activa, el panel de Area Operativa puede tomar muestras cortas de audio desde el navegador de la tablet, convertirlas a dB relativo y enviarlas al backend. No almacena audio crudo.";
     private static final String AREA_OPERATIVA_NOISE_INTERVAL_RESUMEN = "Intervalo de muestreo de ruido en minutos";
@@ -34,6 +36,7 @@ public class MasterDirectiveInitializer {
         ensureDispensacionNoBloqueaInicioProduccion();
         ensureEnableMasterSupermasterDirectivesAccess();
         ensureMpsSemanalDiasBloqueoEdicion();
+        ensureMpsSemanalPermitirAgregarTerminadosAprobado();
         ensureAreaOperativaNoiseEnabled();
         ensureAreaOperativaNoiseIntervalMinutes();
         ensureAreaOperativaNoiseSampleSeconds();
@@ -137,6 +140,31 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(MPS_SEMANAL_DIAS_BLOQUEO_AYUDA);
+    }
+
+    private void ensureMpsSemanalPermitirAgregarTerminadosAprobado() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.MPS_SEMANAL_PERMITIR_AGREGAR_TERMINADOS_APROBADO)
+                .map(this::actualizarMetadataMpsSemanalPermitirAgregarTerminadosAprobado)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.MPS_SEMANAL_PERMITIR_AGREGAR_TERMINADOS_APROBADO);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_MPS_SEMANAL_PERMITIR_AGREGAR_TERMINADOS_APROBADO));
+                    aplicarMetadataMpsSemanalPermitirAgregarTerminadosAprobado(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataMpsSemanalPermitirAgregarTerminadosAprobado(MasterDirective directive) {
+        aplicarMetadataMpsSemanalPermitirAgregarTerminadosAprobado(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataMpsSemanalPermitirAgregarTerminadosAprobado(MasterDirective directive) {
+        directive.setResumen(MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_AYUDA);
     }
 
     private void ensureAreaOperativaNoiseEnabled() {

@@ -295,7 +295,9 @@ public class MasterProductionScheduleDraftService {
         if (item.getMpsDia() == null || item.getMpsDia().getFecha() == null) {
             return "La tarjeta no tiene fecha MPS valida.";
         }
-        if (!mpsSemanalEditWindowService.isEditable(item.getMpsDia().getFecha())) {
+        EstadoMpsSemanal estadoMps = item.getMpsSemanal() != null ? item.getMpsSemanal().getEstado() : null;
+        if (estadoMps == EstadoMpsSemanal.BORRADOR
+                && !mpsSemanalEditWindowService.isEditable(item.getMpsDia().getFecha())) {
             return "Dia bloqueado. La primera fecha editable es " + mpsSemanalEditWindowService.getEditableFromDate() + ".";
         }
         if (ordenesIniciadas > 0) {
