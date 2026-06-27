@@ -9,7 +9,8 @@ import java.time.LocalDate;
 
 /**
  * DTO para filtrar dispensaciones (transacciones de almacén tipo OD).
- * Permite buscar por ID de transacción, ID de orden de producción, lote de producción, y fechas.
+ * Permite buscar por ID de transacción, ID de orden de producción, lote de producción,
+ * producto terminado, y fechas.
  */
 @Getter
 @Setter
@@ -33,6 +34,11 @@ public class FiltroHistDispensacionDTO {
      * Se usa cuando tipoFiltroId = 3.
      */
     private String loteAsignado;
+
+    /**
+     * ID del producto terminado asociado a la orden de producción (opcional).
+     */
+    private String productoTerminadoId;
 
     /**
      * Fecha inicial para búsqueda por rango (opcional).

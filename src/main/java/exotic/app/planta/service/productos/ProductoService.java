@@ -499,7 +499,8 @@ public class ProductoService {
             return Page.empty(pageable);
         }
 
-        if ("ID".equals(resolvedSearchType) && trimmedSearch.isEmpty()) {
+        if (("ID".equals(resolvedSearchType) || "ID_PARCIAL".equals(resolvedSearchType))
+                && trimmedSearch.isEmpty()) {
             return Page.empty(pageable);
         }
 
@@ -545,6 +546,14 @@ public class ProductoService {
                         trimmedSearch.toUpperCase(Locale.ROOT)
                 );
                 return cb.and(categoryPredicate, idPredicate);
+            }
+
+            if ("ID_PARCIAL".equals(resolvedSearchType)) {
+                Predicate partialIdPredicate = cb.like(
+                        cb.upper(root.get("productoId")),
+                        "%" + trimmedSearch.toUpperCase(Locale.ROOT) + "%"
+                );
+                return cb.and(categoryPredicate, partialIdPredicate);
             }
 
             if (!trimmedSearch.isEmpty()) {

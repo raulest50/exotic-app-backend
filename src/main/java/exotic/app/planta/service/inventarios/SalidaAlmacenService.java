@@ -1069,182 +1069,73 @@ public class SalidaAlmacenService {
     /**
      * Busca dispensaciones (transacciones tipo OD) con filtros flexibles.
      * Permite filtrar por ID de transacción, ID de orden de producción, lote de producción,
-     * y fechas (rango o específica).
+     * producto terminado, y fechas (rango o específica).
      *
      * @param filtro DTO con los criterios de búsqueda
      * @return Página de transacciones que cumplen con los filtros
-     * @throws RuntimeException si no se proporciona ningún filtro activo
      */
     public Page<TransaccionAlmacen> buscarDispensacionesFiltradas(FiltroHistDispensacionDTO filtro) {
-        // Construir Pageable con ordenamiento por fechaTransaccion DESC
         Pageable pageable = PageRequest.of(
                 filtro.getPage(),
                 filtro.getSize(),
                 Sort.by("fechaTransaccion").descending()
         );
 
-        // Determinar qué filtros están activos (tipo > 0)
-        boolean tieneFiltroId = (filtro.getTipoFiltroId() != null && filtro.getTipoFiltroId() > 0);
-        boolean tieneFiltroFecha = (filtro.getTipoFiltroFecha() != null && filtro.getTipoFiltroFecha() > 0);
-
-        // Si ambos filtros están en "Ninguno" (0), usar método simple que trae todos los registros
-        if (!tieneFiltroId && !tieneFiltroFecha) {
-            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
-                    TransaccionAlmacen.TipoEntidadCausante.OD,
-                    pageable
-            );
-        }
-
-        // Validar y preparar parámetros de fecha (si hay filtro de fecha activo)
+        Integer transaccionId = null;
+        Integer ordenProduccionId = null;
+        String loteAsignado = null;
+        String productoTerminadoId = null;
         LocalDateTime fechaInicio = null;
         LocalDateTime fechaFin = null;
-        
+
+        if (filtro.getTipoFiltroId() != null) {
+            if (filtro.getTipoFiltroId() == 1
+                    && filtro.getTransaccionId() != null
+                    && filtro.getTransaccionId() > 0) {
+                transaccionId = filtro.getTransaccionId();
+            } else if (filtro.getTipoFiltroId() == 2
+                    && filtro.getOrdenProduccionId() != null
+                    && filtro.getOrdenProduccionId() > 0) {
+                ordenProduccionId = filtro.getOrdenProduccionId();
+            } else if (filtro.getTipoFiltroId() == 3
+                    && filtro.getLoteAsignado() != null
+                    && !filtro.getLoteAsignado().isBlank()) {
+                loteAsignado = filtro.getLoteAsignado().trim();
+            }
+        }
+
+        if (filtro.getProductoTerminadoId() != null && !filtro.getProductoTerminadoId().isBlank()) {
+            productoTerminadoId = filtro.getProductoTerminadoId().trim();
+        }
+
+        boolean tieneFiltroFecha = (filtro.getTipoFiltroFecha() != null && filtro.getTipoFiltroFecha() > 0);
         if (tieneFiltroFecha) {
             if (filtro.getTipoFiltroFecha() == 1) {
-                // Rango de fechas - si faltan fechas, usar método simple
-                if (filtro.getFechaInicio() == null || filtro.getFechaFin() == null) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            pageable
-                    );
-                }
-                if (filtro.getFechaInicio().isAfter(filtro.getFechaFin())) {
+                if (filtro.getFechaInicio() != null
+                        && filtro.getFechaFin() != null
+                        && filtro.getFechaInicio().isAfter(filtro.getFechaFin())) {
                     throw new RuntimeException("La fecha de inicio no puede ser posterior a la fecha de fin");
                 }
-                fechaInicio = filtro.getFechaInicio().atStartOfDay();
-                fechaFin = filtro.getFechaFin().atTime(23, 59, 59, 999999999);
+                if (filtro.getFechaInicio() != null && filtro.getFechaFin() != null) {
+                    fechaInicio = filtro.getFechaInicio().atStartOfDay();
+                    fechaFin = filtro.getFechaFin().atTime(23, 59, 59, 999999999);
+                }
             } else if (filtro.getTipoFiltroFecha() == 2) {
-                // Fecha específica - si falta fecha, usar método simple
-                if (filtro.getFechaEspecifica() == null) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            pageable
-                    );
+                if (filtro.getFechaEspecifica() != null) {
+                    fechaInicio = filtro.getFechaEspecifica().atStartOfDay();
+                    fechaFin = filtro.getFechaEspecifica().atTime(23, 59, 59, 999999999);
                 }
-                fechaInicio = filtro.getFechaEspecifica().atStartOfDay();
-                fechaFin = filtro.getFechaEspecifica().atTime(23, 59, 59, 999999999);
             }
         }
 
-        // Caso 1: Solo filtro de ID (transaccionId)
-        if (tieneFiltroId && !tieneFiltroFecha) {
-            if (filtro.getTipoFiltroId() == 1) {
-                Integer transaccionId = filtro.getTransaccionId();
-                // Si el ID está vacío o inválido, usar método simple
-                if (transaccionId == null || transaccionId <= 0) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            pageable
-                    );
-                }
-                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndTransaccionId(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        transaccionId,
-                        pageable
-                );
-            } else if (filtro.getTipoFiltroId() == 2) {
-                Integer ordenProduccionId = filtro.getOrdenProduccionId();
-                // Si el ID está vacío o inválido, usar método simple
-                if (ordenProduccionId == null || ordenProduccionId <= 0) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            pageable
-                    );
-                }
-                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndOrdenProduccionId(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        ordenProduccionId,
-                        pageable
-                );
-            } else if (filtro.getTipoFiltroId() == 3) {
-                String loteAsignado = filtro.getLoteAsignado();
-                // Si el lote está vacío, usar método simple
-                if (loteAsignado == null || loteAsignado.isBlank()) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            pageable
-                    );
-                }
-                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndLoteAsignadoContaining(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        loteAsignado.trim(),
-                        pageable
-                );
-            }
-        }
-
-        // Caso 2: Solo filtro de fecha (ya validado arriba)
-        if (!tieneFiltroId && tieneFiltroFecha) {
-            return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
-                    TransaccionAlmacen.TipoEntidadCausante.OD,
-                    fechaInicio,
-                    fechaFin,
-                    pageable
-            );
-        }
-
-        // Caso 3: Ambos filtros activos
-        if (tieneFiltroId && tieneFiltroFecha) {
-            if (filtro.getTipoFiltroId() == 1) {
-                Integer transaccionId = filtro.getTransaccionId();
-                // Si el ID está vacío o inválido, usar solo filtro de fecha
-                if (transaccionId == null || transaccionId <= 0) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            fechaInicio,
-                            fechaFin,
-                            pageable
-                    );
-                }
-                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndTransaccionIdAndFechaBetween(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        transaccionId,
-                        fechaInicio,
-                        fechaFin,
-                        pageable
-                );
-            } else if (filtro.getTipoFiltroId() == 2) {
-                Integer ordenProduccionId = filtro.getOrdenProduccionId();
-                // Si el ID está vacío o inválido, usar solo filtro de fecha
-                if (ordenProduccionId == null || ordenProduccionId <= 0) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            fechaInicio,
-                            fechaFin,
-                            pageable
-                    );
-                }
-                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndOrdenProduccionIdAndFechaBetween(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        ordenProduccionId,
-                        fechaInicio,
-                        fechaFin,
-                        pageable
-                );
-            } else if (filtro.getTipoFiltroId() == 3) {
-                String loteAsignado = filtro.getLoteAsignado();
-                // Si el lote está vacío, usar solo filtro de fecha
-                if (loteAsignado == null || loteAsignado.isBlank()) {
-                    return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndFechaBetween(
-                            TransaccionAlmacen.TipoEntidadCausante.OD,
-                            fechaInicio,
-                            fechaFin,
-                            pageable
-                    );
-                }
-                return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteAndLoteAsignadoContainingAndFechaBetween(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        loteAsignado.trim(),
-                        fechaInicio,
-                        fechaFin,
-                        pageable
-                );
-            }
-        }
-
-        // Fallback: retornar todas las dispensaciones (método simple)
-        return transaccionAlmacenHeaderRepo.findByTipoEntidadCausanteOrderByFechaTransaccionDesc(
+        return transaccionAlmacenHeaderRepo.findDispensacionesByFiltros(
                 TransaccionAlmacen.TipoEntidadCausante.OD,
+                transaccionId,
+                ordenProduccionId,
+                loteAsignado,
+                productoTerminadoId,
+                fechaInicio,
+                fechaFin,
                 pageable
         );
     }

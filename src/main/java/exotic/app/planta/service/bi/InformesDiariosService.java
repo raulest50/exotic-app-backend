@@ -18,6 +18,8 @@ import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -144,33 +146,45 @@ public class InformesDiariosService {
      * Excel con movimientos de ingreso de materiales en el día indicado (zona horaria por defecto de la JVM).
      */
     public byte[] exportarIngresoMaterialesExcel(LocalDate fecha) {
+        return exportarIngresoMaterialesExcel(fecha, BiExcelExportOptions.standard());
+    }
+
+    public byte[] exportarIngresoMaterialesExcel(LocalDate fecha, BiExcelExportOptions options) {
         LocalDateTime start = fecha.atStartOfDay();
         LocalDateTime end = fecha.atTime(LocalTime.MAX);
         List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosMaterialPorDia(
                 start, end, TIPOS_INGRESO_MATERIAL);
-        return generarExcelMovimientosAlmacen(movimientos, "Ingreso materiales", "ingreso materiales");
+        return generarExcelMovimientosAlmacen(movimientos, "Ingreso materiales", "ingreso materiales", options);
     }
 
     /**
      * Excel con dispensaciones de materiales (OD / OD_RA) en el día indicado.
      */
     public byte[] exportarDispensacionMaterialesExcel(LocalDate fecha) {
+        return exportarDispensacionMaterialesExcel(fecha, BiExcelExportOptions.standard());
+    }
+
+    public byte[] exportarDispensacionMaterialesExcel(LocalDate fecha, BiExcelExportOptions options) {
         LocalDateTime start = fecha.atStartOfDay();
         LocalDateTime end = fecha.atTime(LocalTime.MAX);
         List<Movimiento> movimientos = transaccionAlmacenRepo.findDispensacionesMaterialPorDia(
                 start, end, Movimiento.TipoMovimiento.DISPENSACION);
-        return generarExcelMovimientosAlmacen(movimientos, "Dispensación materiales", "dispensación materiales");
+        return generarExcelMovimientosAlmacen(movimientos, "Dispensación materiales", "dispensación materiales", options);
     }
 
     /**
      * Excel con ingresos de producto terminado (BACKFLUSH, típicamente cierre de OP) en el día indicado.
      */
     public byte[] exportarIngresoTerminadosExcel(LocalDate fecha) {
+        return exportarIngresoTerminadosExcel(fecha, BiExcelExportOptions.standard());
+    }
+
+    public byte[] exportarIngresoTerminadosExcel(LocalDate fecha, BiExcelExportOptions options) {
         LocalDateTime start = fecha.atStartOfDay();
         LocalDateTime end = fecha.atTime(LocalTime.MAX);
         List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
                 start, end, Movimiento.TipoMovimiento.BACKFLUSH);
-        return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado");
+        return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado", options);
     }
 
     public InformeDiarioIngresoTerminadosReporteDTO obtenerReporteIngresoTerminados(LocalDate fecha) {
@@ -298,14 +312,22 @@ public class InformesDiariosService {
     }
 
     public byte[] exportarReporteIngresoTerminadosExcel(LocalDate fecha) {
+        return exportarReporteIngresoTerminadosExcel(fecha, BiExcelExportOptions.standard());
+    }
+
+    public byte[] exportarReporteIngresoTerminadosExcel(LocalDate fecha, BiExcelExportOptions options) {
         InformeDiarioIngresoTerminadosReporteDTO reporte = obtenerReporteIngresoTerminados(fecha);
-        return generarExcelReporteIngresoTerminados(reporte);
+        return generarExcelReporteIngresoTerminados(reporte, options);
     }
 
     /**
      * Excel con ingresos a almacÃ©n originados por OCM en el dÃ­a indicado.
      */
     public byte[] exportarComprasExcel(LocalDate fecha) {
+        return exportarComprasExcel(fecha, BiExcelExportOptions.standard());
+    }
+
+    public byte[] exportarComprasExcel(LocalDate fecha, BiExcelExportOptions options) {
         LocalDateTime start = fecha.atStartOfDay();
         LocalDateTime end = fecha.atTime(LocalTime.MAX);
         List<InformeDiarioComprasRowDTO> rows = transaccionAlmacenRepo.findInformeDiarioComprasPorDia(
@@ -313,7 +335,7 @@ public class InformesDiariosService {
                 end,
                 TransaccionAlmacen.TipoEntidadCausante.OCM,
                 Movimiento.TipoMovimiento.COMPRA);
-        return generarExcelCompras(rows, "Compras", "compras OCM");
+        return generarExcelCompras(rows, "Compras", "compras OCM", options);
     }
 
     /**
@@ -322,6 +344,14 @@ public class InformesDiariosService {
      */
     public byte[] exportarAjustesAlmacenExcel(
             LocalDate fechaDesde, LocalDate fechaHasta, SentidoAjusteInforme sentido) {
+        return exportarAjustesAlmacenExcel(fechaDesde, fechaHasta, sentido, BiExcelExportOptions.standard());
+    }
+
+    public byte[] exportarAjustesAlmacenExcel(
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            SentidoAjusteInforme sentido,
+            BiExcelExportOptions options) {
         if (fechaDesde == null || fechaHasta == null) {
             throw new IllegalArgumentException("fechaDesde y fechaHasta son obligatorias");
         }
@@ -340,12 +370,14 @@ public class InformesDiariosService {
                     transaccionAlmacenRepo.findAjustesAlmacenEntradasPorRango(
                             start, end, Movimiento.TipoMovimiento.AJUSTE_POSITIVO),
                     "Ajustes almacén entradas",
-                    "ajustes almacén entradas");
+                    "ajustes almacén entradas",
+                    options);
             case SALIDAS -> generarExcelMovimientosAlmacen(
                     transaccionAlmacenRepo.findAjustesAlmacenSalidasPorRango(
                             start, end, Movimiento.TipoMovimiento.AJUSTE_NEGATIVO),
                     "Ajustes almacén salidas",
-                    "ajustes almacén salidas");
+                    "ajustes almacén salidas",
+                    options);
             case MIXTA -> generarExcelMovimientosAlmacen(
                     transaccionAlmacenRepo.findAjustesAlmacenMixtaPorRango(
                             start,
@@ -353,7 +385,8 @@ public class InformesDiariosService {
                             Movimiento.TipoMovimiento.AJUSTE_POSITIVO,
                             Movimiento.TipoMovimiento.AJUSTE_NEGATIVO),
                     "Ajustes almacén mixto",
-                    "ajustes almacén mixto");
+                    "ajustes almacén mixto",
+                    options);
         };
     }
 
@@ -455,18 +488,22 @@ public class InformesDiariosService {
         return categorias.get(categoriaId).getCapacidadProductivaDiaria();
     }
 
-    private byte[] generarExcelReporteIngresoTerminados(InformeDiarioIngresoTerminadosReporteDTO reporte) {
+    private byte[] generarExcelReporteIngresoTerminados(
+            InformeDiarioIngresoTerminadosReporteDTO reporte,
+            BiExcelExportOptions options) {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ExcelStyles styles = createExcelStyles(workbook, options);
+
             Sheet resumenSheet = workbook.createSheet("Resumen");
-            escribirResumenReporteTerminados(reporte, resumenSheet);
+            escribirResumenReporteTerminados(reporte, resumenSheet, styles);
 
             Sheet consolidadoSheet = workbook.createSheet("Consolidado Categoria");
             escribirHeader(consolidadoSheet, HEADERS_REPORTE_TERMINADOS_CONSOLIDADO);
             int rowIdx = 1;
             for (InformeDiarioIngresoTerminadosReporteDTO.ConsolidadoCategoriaDTO row
                     : reporte.getConsolidadoCategorias()) {
-                escribirFilaConsolidadoTerminados(row, consolidadoSheet.createRow(rowIdx++));
+                escribirFilaConsolidadoTerminados(row, consolidadoSheet.createRow(rowIdx++), styles);
             }
             autosize(consolidadoSheet, HEADERS_REPORTE_TERMINADOS_CONSOLIDADO.length);
 
@@ -475,7 +512,7 @@ public class InformesDiariosService {
             rowIdx = 1;
             for (InformeDiarioIngresoTerminadosReporteDTO.DetalleReferenciaDTO row
                     : reporte.getDetalleReferencias()) {
-                escribirFilaDetalleTerminados(row, detalleSheet.createRow(rowIdx++));
+                escribirFilaDetalleTerminados(row, detalleSheet.createRow(rowIdx++), styles);
             }
             autosize(detalleSheet, HEADERS_REPORTE_TERMINADOS_DETALLE.length);
 
@@ -483,7 +520,7 @@ public class InformesDiariosService {
             escribirHeader(movimientosSheet, HEADERS_REPORTE_TERMINADOS_MOVIMIENTOS);
             rowIdx = 1;
             for (InformeDiarioIngresoTerminadosReporteDTO.MovimientoDTO row : reporte.getMovimientos()) {
-                escribirFilaMovimientoTerminados(row, movimientosSheet.createRow(rowIdx++));
+                escribirFilaMovimientoTerminados(row, movimientosSheet.createRow(rowIdx++), styles);
             }
             autosize(movimientosSheet, HEADERS_REPORTE_TERMINADOS_MOVIMIENTOS.length);
 
@@ -497,85 +534,89 @@ public class InformesDiariosService {
 
     private static void escribirResumenReporteTerminados(
             InformeDiarioIngresoTerminadosReporteDTO reporte,
-            Sheet sheet) {
+            Sheet sheet,
+            ExcelStyles styles) {
         int rowIdx = 0;
-        escribirResumenRow(sheet, rowIdx++, "Fecha", reporte.getFecha());
-        escribirResumenRow(sheet, rowIdx++, "MPS ID", reporte.getMpsId());
-        escribirResumenRow(sheet, rowIdx++, "Estado MPS", reporte.getMpsEstado());
-        escribirResumenRow(sheet, rowIdx++, "Semana inicio", reporte.getWeekStartDate());
-        escribirResumenRow(sheet, rowIdx++, "Semana fin", reporte.getWeekEndDate());
+        escribirResumenRow(sheet, rowIdx++, "Fecha", reporte.getFecha(), styles);
+        escribirResumenRow(sheet, rowIdx++, "MPS ID", reporte.getMpsId(), styles);
+        escribirResumenRow(sheet, rowIdx++, "Estado MPS", reporte.getMpsEstado(), styles);
+        escribirResumenRow(sheet, rowIdx++, "Semana inicio", reporte.getWeekStartDate(), styles);
+        escribirResumenRow(sheet, rowIdx++, "Semana fin", reporte.getWeekEndDate(), styles);
 
         InformeDiarioIngresoTerminadosReporteDTO.ResumenDTO resumen = reporte.getResumen();
         if (resumen != null) {
-            escribirResumenRow(sheet, rowIdx++, "Unidades planeadas", resumen.getUnidadesPlaneadas());
-            escribirResumenRow(sheet, rowIdx++, "Unidades producidas", resumen.getUnidadesProducidas());
-            escribirResumenRow(sheet, rowIdx++, "Unidades producidas dia anterior", resumen.getUnidadesProducidasDiaAnterior());
-            escribirResumenRow(sheet, rowIdx++, "Capacidad productiva dia", resumen.getCapacidadProductivaDia());
-            escribirResumenRow(sheet, rowIdx++, "Rendimiento planeacion (%)", resumen.getRendimientoPlaneacionPct());
-            escribirResumenRow(sheet, rowIdx++, "Cumplimiento referencias (%)", resumen.getCumplimientoReferenciasPct());
-            escribirResumenRow(sheet, rowIdx++, "Rendimiento operativo (%)", resumen.getRendimientoOperativoPct());
-            escribirResumenRow(sheet, rowIdx++, "Tendencia vs dia anterior (%)", resumen.getTendenciaVsDiaAnteriorPct());
-            escribirResumenRow(sheet, rowIdx++, "Referencias planeadas", resumen.getReferenciasPlaneadas());
-            escribirResumenRow(sheet, rowIdx++, "Referencias producidas", resumen.getReferenciasProducidas());
-            escribirResumenRow(sheet, rowIdx++, "Referencias planeadas producidas", resumen.getReferenciasPlaneadasProducidas());
-            escribirResumenRow(sheet, rowIdx++, "Referencias no planeadas", resumen.getReferenciasNoPlaneadas());
-            escribirResumenRow(sheet, rowIdx++, "Categorias con capacidad", resumen.getCategoriasConCapacidad());
-            escribirResumenRow(sheet, rowIdx, "Categorias sin capacidad", resumen.getCategoriasSinCapacidad());
+            escribirResumenRow(sheet, rowIdx++, "Unidades planeadas", resumen.getUnidadesPlaneadas(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Unidades producidas", resumen.getUnidadesProducidas(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Unidades producidas dia anterior", resumen.getUnidadesProducidasDiaAnterior(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Capacidad productiva dia", resumen.getCapacidadProductivaDia(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Rendimiento planeacion (%)", resumen.getRendimientoPlaneacionPct(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Cumplimiento referencias (%)", resumen.getCumplimientoReferenciasPct(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Rendimiento operativo (%)", resumen.getRendimientoOperativoPct(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Tendencia vs dia anterior (%)", resumen.getTendenciaVsDiaAnteriorPct(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Referencias planeadas", resumen.getReferenciasPlaneadas(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Referencias producidas", resumen.getReferenciasProducidas(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Referencias planeadas producidas", resumen.getReferenciasPlaneadasProducidas(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Referencias no planeadas", resumen.getReferenciasNoPlaneadas(), styles);
+            escribirResumenRow(sheet, rowIdx++, "Categorias con capacidad", resumen.getCategoriasConCapacidad(), styles);
+            escribirResumenRow(sheet, rowIdx, "Categorias sin capacidad", resumen.getCategoriasSinCapacidad(), styles);
         }
         autosize(sheet, 2);
     }
 
     private static void escribirFilaConsolidadoTerminados(
             InformeDiarioIngresoTerminadosReporteDTO.ConsolidadoCategoriaDTO dto,
-            Row row) {
+            Row row,
+            ExcelStyles styles) {
         int c = 0;
-        writeCell(row, c++, dto.getCategoriaId());
-        writeCell(row, c++, dto.getCategoriaNombre());
-        writeCell(row, c++, dto.getUnidadesPlaneadas());
-        writeCell(row, c++, dto.getUnidadesProducidas());
-        writeCell(row, c++, dto.getCapacidadProductivaDia());
-        writeCell(row, c++, dto.getRendimientoPlaneacionPct());
-        writeCell(row, c++, dto.getRendimientoOperativoPct());
-        writeCell(row, c++, dto.getReferenciasPlaneadas());
-        writeCell(row, c++, dto.getReferenciasProducidas());
-        writeCell(row, c, dto.getReferenciasPlaneadasProducidas());
+        writeCell(row, c++, dto.getCategoriaId(), styles);
+        writeCell(row, c++, dto.getCategoriaNombre(), styles);
+        writeCell(row, c++, dto.getUnidadesPlaneadas(), styles);
+        writeCell(row, c++, dto.getUnidadesProducidas(), styles);
+        writeCell(row, c++, dto.getCapacidadProductivaDia(), styles);
+        writeCell(row, c++, dto.getRendimientoPlaneacionPct(), styles);
+        writeCell(row, c++, dto.getRendimientoOperativoPct(), styles);
+        writeCell(row, c++, dto.getReferenciasPlaneadas(), styles);
+        writeCell(row, c++, dto.getReferenciasProducidas(), styles);
+        writeCell(row, c, dto.getReferenciasPlaneadasProducidas(), styles);
     }
 
     private static void escribirFilaDetalleTerminados(
             InformeDiarioIngresoTerminadosReporteDTO.DetalleReferenciaDTO dto,
-            Row row) {
+            Row row,
+            ExcelStyles styles) {
         int c = 0;
-        writeCell(row, c++, dto.getProductoId());
-        writeCell(row, c++, dto.getProductoNombre());
-        writeCell(row, c++, dto.getCategoriaId());
-        writeCell(row, c++, dto.getCategoriaNombre());
-        writeCell(row, c++, dto.getCantidadPlaneada());
-        writeCell(row, c++, dto.getCantidadProducida());
-        writeCell(row, c++, dto.getDiferencia());
-        writeCell(row, c++, dto.getRendimientoPlaneacionPct());
-        writeCell(row, c++, dto.isPlaneado());
-        writeCell(row, c++, dto.isProducido());
-        writeCell(row, c, dto.isNoPlaneado());
+        writeCell(row, c++, dto.getProductoId(), styles);
+        writeCell(row, c++, dto.getProductoNombre(), styles);
+        writeCell(row, c++, dto.getCategoriaId(), styles);
+        writeCell(row, c++, dto.getCategoriaNombre(), styles);
+        writeCell(row, c++, dto.getCantidadPlaneada(), styles);
+        writeCell(row, c++, dto.getCantidadProducida(), styles);
+        writeCell(row, c++, dto.getDiferencia(), styles);
+        writeCell(row, c++, dto.getRendimientoPlaneacionPct(), styles);
+        writeCell(row, c++, dto.isPlaneado(), styles);
+        writeCell(row, c++, dto.isProducido(), styles);
+        writeCell(row, c, dto.isNoPlaneado(), styles);
     }
 
     private static void escribirFilaMovimientoTerminados(
             InformeDiarioIngresoTerminadosReporteDTO.MovimientoDTO dto,
-            Row row) {
+            Row row,
+            ExcelStyles styles) {
         int c = 0;
-        writeCell(row, c++, dto.getMovimientoId());
-        writeCell(row, c++, dto.getFechaMovimiento());
-        writeCell(row, c++, dto.getTransaccionId());
-        writeCell(row, c++, dto.getOrdenProduccionId());
-        writeCell(row, c++, dto.getProductoId());
-        writeCell(row, c++, dto.getProductoNombre());
-        writeCell(row, c++, dto.getCategoriaId());
-        writeCell(row, c++, dto.getCategoriaNombre());
-        writeCell(row, c++, dto.getCantidad());
-        writeCell(row, c++, dto.getUnidad());
-        writeCell(row, c++, dto.getAlmacen());
-        writeCell(row, c++, dto.getLoteBatchNumber());
-        writeCell(row, c++, dto.getFechaVencimiento());
-        writeCell(row, c, dto.getObservaciones());
+        writeCell(row, c++, dto.getMovimientoId(), styles);
+        writeCell(row, c++, dto.getFechaMovimiento(), styles);
+        writeCell(row, c++, dto.getTransaccionId(), styles);
+        writeCell(row, c++, dto.getOrdenProduccionId(), styles);
+        writeCell(row, c++, dto.getProductoId(), styles);
+        writeCell(row, c++, dto.getProductoNombre(), styles);
+        writeCell(row, c++, dto.getCategoriaId(), styles);
+        writeCell(row, c++, dto.getCategoriaNombre(), styles);
+        writeCell(row, c++, dto.getCantidad(), styles);
+        writeCell(row, c++, dto.getUnidad(), styles);
+        writeCell(row, c++, dto.getAlmacen(), styles);
+        writeCell(row, c++, dto.getLoteBatchNumber(), styles);
+        writeCell(row, c++, dto.getFechaVencimiento(), styles);
+        writeCell(row, c, dto.getObservaciones(), styles);
     }
 
     private static void escribirHeader(Sheet sheet, String[] headers) {
@@ -585,13 +626,13 @@ public class InformesDiariosService {
         }
     }
 
-    private static void escribirResumenRow(Sheet sheet, int rowIdx, String label, Object value) {
+    private static void escribirResumenRow(Sheet sheet, int rowIdx, String label, Object value, ExcelStyles styles) {
         Row row = sheet.createRow(rowIdx);
-        writeCell(row, 0, label);
-        writeCell(row, 1, value);
+        writeCell(row, 0, label, styles);
+        writeCell(row, 1, value, styles);
     }
 
-    private static void writeCell(Row row, int index, Object value) {
+    private static void writeCell(Row row, int index, Object value, ExcelStyles styles) {
         Cell cell = row.createCell(index);
         if (value == null) {
             cell.setCellValue("");
@@ -599,6 +640,9 @@ public class InformesDiariosService {
         }
         if (value instanceof Number number) {
             cell.setCellValue(number.doubleValue());
+            if (isDecimalNumber(number)) {
+                styles.applyDecimalNumberStyle(cell);
+            }
             return;
         }
         if (value instanceof Boolean bool) {
@@ -606,6 +650,34 @@ public class InformesDiariosService {
             return;
         }
         cell.setCellValue(value.toString());
+    }
+
+    private static boolean isDecimalNumber(Number number) {
+        return number instanceof Double
+                || number instanceof Float
+                || number instanceof java.math.BigDecimal;
+    }
+
+    private static ExcelStyles createExcelStyles(XSSFWorkbook workbook, BiExcelExportOptions options) {
+        if (options == null || !options.hasDecimalSeparator()) {
+            return ExcelStyles.none();
+        }
+        CellStyle decimalNumberStyle = workbook.createCellStyle();
+        DataFormat dataFormat = workbook.createDataFormat();
+        decimalNumberStyle.setDataFormat(dataFormat.getFormat(options.decimalSeparator().excelNumberFormat()));
+        return new ExcelStyles(decimalNumberStyle);
+    }
+
+    private record ExcelStyles(CellStyle decimalNumberStyle) {
+        private static ExcelStyles none() {
+            return new ExcelStyles(null);
+        }
+
+        private void applyDecimalNumberStyle(Cell cell) {
+            if (decimalNumberStyle != null) {
+                cell.setCellStyle(decimalNumberStyle);
+            }
+        }
     }
 
     private static void autosize(Sheet sheet, int columns) {
@@ -744,9 +816,13 @@ public class InformesDiariosService {
     }
 
     private byte[] generarExcelMovimientosAlmacen(
-            List<Movimiento> movimientos, String nombreHoja, String contextoLog) {
+            List<Movimiento> movimientos,
+            String nombreHoja,
+            String contextoLog,
+            BiExcelExportOptions options) {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ExcelStyles styles = createExcelStyles(workbook, options);
             Sheet sheet = workbook.createSheet(nombreHoja);
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < HEADERS_MOVIMIENTO_ALMACEN.length; i++) {
@@ -755,7 +831,7 @@ public class InformesDiariosService {
 
             int rowIdx = 1;
             for (Movimiento mov : movimientos) {
-                escribirFilaMovimiento(mov, sheet.createRow(rowIdx++));
+                escribirFilaMovimiento(mov, sheet.createRow(rowIdx++), styles);
             }
 
             for (int i = 0; i < HEADERS_MOVIMIENTO_ALMACEN.length; i++) {
@@ -771,9 +847,13 @@ public class InformesDiariosService {
     }
 
     private byte[] generarExcelCompras(
-            List<InformeDiarioComprasRowDTO> rows, String nombreHoja, String contextoLog) {
+            List<InformeDiarioComprasRowDTO> rows,
+            String nombreHoja,
+            String contextoLog,
+            BiExcelExportOptions options) {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ExcelStyles styles = createExcelStyles(workbook, options);
             Sheet sheet = workbook.createSheet(nombreHoja);
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < HEADERS_INFORME_COMPRAS.length; i++) {
@@ -782,7 +862,7 @@ public class InformesDiariosService {
 
             int rowIdx = 1;
             for (InformeDiarioComprasRowDTO dto : rows) {
-                escribirFilaInformeCompras(dto, sheet.createRow(rowIdx++));
+                escribirFilaInformeCompras(dto, sheet.createRow(rowIdx++), styles);
             }
 
             for (int i = 0; i < HEADERS_INFORME_COMPRAS.length; i++) {
@@ -797,7 +877,7 @@ public class InformesDiariosService {
         }
     }
 
-    private static void escribirFilaMovimiento(Movimiento mov, Row row) {
+    private static void escribirFilaMovimiento(Movimiento mov, Row row, ExcelStyles styles) {
         int c = 0;
         row.createCell(c++).setCellValue(
                 mov.getFechaMovimiento() != null ? mov.getFechaMovimiento().toString() : "");
@@ -807,7 +887,7 @@ public class InformesDiariosService {
         row.createCell(c++).setCellValue(
                 mov.getProducto() != null && mov.getProducto().getNombre() != null
                         ? mov.getProducto().getNombre() : "");
-        row.createCell(c++).setCellValue(mov.getCantidad());
+        writeCell(row, c++, mov.getCantidad(), styles);
         row.createCell(c++).setCellValue(
                 mov.getProducto() != null && mov.getProducto().getTipoUnidades() != null
                         ? mov.getProducto().getTipoUnidades() : "");
@@ -838,7 +918,10 @@ public class InformesDiariosService {
         }
     }
 
-    private static void escribirFilaInformeCompras(InformeDiarioComprasRowDTO dto, Row row) {
+    private static void escribirFilaInformeCompras(
+            InformeDiarioComprasRowDTO dto,
+            Row row,
+            ExcelStyles styles) {
         int c = 0;
         row.createCell(c++).setCellValue(dto.getFechaIngreso() != null ? dto.getFechaIngreso().toString() : "");
         row.createCell(c++).setCellValue(dto.getTransaccionId() != null ? dto.getTransaccionId() : 0);
@@ -850,7 +933,7 @@ public class InformesDiariosService {
         row.createCell(c++).setCellValue(dto.getMaterialId() != null ? dto.getMaterialId() : "");
         row.createCell(c++).setCellValue(dto.getMaterialNombre() != null ? dto.getMaterialNombre() : "");
         row.createCell(c++).setCellValue(dto.getTipoMaterial() != null ? dto.getTipoMaterial() : "");
-        row.createCell(c++).setCellValue(dto.getCantidadIngresada() != null ? dto.getCantidadIngresada() : 0d);
+        writeCell(row, c++, dto.getCantidadIngresada() != null ? dto.getCantidadIngresada() : 0d, styles);
         row.createCell(c++).setCellValue(dto.getUnidad() != null ? dto.getUnidad() : "");
         row.createCell(c++).setCellValue(dto.getBatchNumber() != null ? dto.getBatchNumber() : "");
         row.createCell(c++).setCellValue(

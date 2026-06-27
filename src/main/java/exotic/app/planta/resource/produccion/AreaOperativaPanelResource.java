@@ -9,6 +9,7 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO;
+import exotic.app.planta.service.produccion.AreaOperativaRuidoMuestraService;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
@@ -21,7 +22,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -39,6 +42,7 @@ import java.util.NoSuchElementException;
 public class AreaOperativaPanelResource {
 
     private final AreaOperativaPanelDetalleService areaOperativaPanelDetalleService;
+    private final AreaOperativaRuidoMuestraService areaOperativaRuidoMuestraService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
@@ -65,6 +69,34 @@ public class AreaOperativaPanelResource {
             log.warn("Detalle operativo no encontrado para orden {}: {}", ordenId, e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ErrorResponse("Detalle no encontrado", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/ruido-muestras")
+    public ResponseEntity<?> registrarRuidoMuestra(
+            Authentication authentication,
+            @RequestBody AreaOperativaRuidoMuestraService.AreaOperativaRuidoMuestraRequest request
+    ) {
+        User user = getCurrentUser(authentication);
+
+        try {
+            return ResponseEntity.ok(areaOperativaRuidoMuestraService.registrarMuestra(user, request));
+        } catch (AccessDeniedException e) {
+            log.warn("Acceso denegado al registro de ruido para user {}: {}", user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Acceso denegado", e.getMessage()));
+        } catch (AreaOperativaRuidoMuestraService.AreaOperativaRuidoDeshabilitadaException e) {
+            log.warn("Muestra de ruido rechazada por directiva para user {}: {}", user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new ErrorResponse("Medicion de ruido deshabilitada", e.getMessage()));
+        } catch (IllegalStateException e) {
+            log.warn("Muestra de ruido omitida por frecuencia para user {}: {}", user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(new ErrorResponse("Muestra demasiado frecuente", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            log.warn("Solicitud invalida de muestra de ruido para user {}: {}", user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
         }
     }
 

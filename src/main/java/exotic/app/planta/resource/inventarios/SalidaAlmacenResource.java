@@ -152,7 +152,8 @@ public class SalidaAlmacenResource {
 
     /**
      * Endpoint para buscar dispensaciones con filtros flexibles.
-     * Permite filtrar por ID de transacción, ID de orden de producción, y fechas (rango o específica).
+     * Permite filtrar por ID de transacción, ID de orden de producción, lote de producción,
+     * producto terminado, y fechas (rango o específica).
      * Retorna DTOs para evitar problemas de serialización JSON con relaciones circulares.
      *
      * @param filtro DTO con los criterios de búsqueda

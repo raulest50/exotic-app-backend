@@ -308,6 +308,45 @@ public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionA
         Pageable pageable
     );
 
+    /**
+     * Busca dispensaciones OD con filtros opcionales combinables.
+     */
+    @Query(value = "SELECT t FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipoEntidadCausante AND " +
+           "(:transaccionId IS NULL OR t.transaccionId = :transaccionId) AND " +
+           "(:ordenProduccionId IS NULL OR t.idEntidadCausante = :ordenProduccionId) AND " +
+           "(:fechaInicio IS NULL OR t.fechaTransaccion >= :fechaInicio) AND " +
+           "(:fechaFin IS NULL OR t.fechaTransaccion <= :fechaFin) AND " +
+           "((:loteAsignado IS NULL AND :productoTerminadoId IS NULL) OR " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante " +
+           "AND (:loteAsignado IS NULL OR (op.loteAsignado IS NOT NULL " +
+           "AND LOWER(op.loteAsignado) LIKE LOWER(CONCAT('%', :loteAsignado, '%')))) " +
+           "AND (:productoTerminadoId IS NULL OR op.producto.productoId = :productoTerminadoId))) " +
+           "ORDER BY t.fechaTransaccion DESC",
+           countQuery = "SELECT COUNT(t) FROM TransaccionAlmacen t WHERE " +
+           "t.tipoEntidadCausante = :tipoEntidadCausante AND " +
+           "(:transaccionId IS NULL OR t.transaccionId = :transaccionId) AND " +
+           "(:ordenProduccionId IS NULL OR t.idEntidadCausante = :ordenProduccionId) AND " +
+           "(:fechaInicio IS NULL OR t.fechaTransaccion >= :fechaInicio) AND " +
+           "(:fechaFin IS NULL OR t.fechaTransaccion <= :fechaFin) AND " +
+           "((:loteAsignado IS NULL AND :productoTerminadoId IS NULL) OR " +
+           "EXISTS (SELECT op FROM OrdenProduccion op " +
+           "WHERE op.ordenId = t.idEntidadCausante " +
+           "AND (:loteAsignado IS NULL OR (op.loteAsignado IS NOT NULL " +
+           "AND LOWER(op.loteAsignado) LIKE LOWER(CONCAT('%', :loteAsignado, '%')))) " +
+           "AND (:productoTerminadoId IS NULL OR op.producto.productoId = :productoTerminadoId)))")
+    Page<TransaccionAlmacen> findDispensacionesByFiltros(
+        @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+        @Param("transaccionId") Integer transaccionId,
+        @Param("ordenProduccionId") Integer ordenProduccionId,
+        @Param("loteAsignado") String loteAsignado,
+        @Param("productoTerminadoId") String productoTerminadoId,
+        @Param("fechaInicio") LocalDateTime fechaInicio,
+        @Param("fechaFin") LocalDateTime fechaFin,
+        Pageable pageable
+    );
+
     // ==================== OD Queries ====================
 
     /**

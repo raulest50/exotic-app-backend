@@ -1,6 +1,8 @@
 package exotic.app.planta.resource.bi;
 
 import exotic.app.planta.model.bi.dto.InformeDiarioIngresoTerminadosReporteDTO;
+import exotic.app.planta.service.bi.BiExcelExportOptions;
+import exotic.app.planta.service.bi.ExcelDecimalSeparator;
 import exotic.app.planta.service.bi.InformesDiariosService;
 import exotic.app.planta.service.bi.SentidoAjusteInforme;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +32,11 @@ public class InformesDiariosResource {
 
     @GetMapping("/almacen/ingreso-materiales/excel")
     public ResponseEntity<byte[]> exportarIngresoMaterialesExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
-        byte[] excel = informesDiariosService.exportarIngresoMaterialesExcel(fecha);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
+        byte[] excel = informesDiariosService.exportarIngresoMaterialesExcel(
+                fecha,
+                BiExcelExportOptions.of(decimalSeparator));
         String filename = "informe_ingreso_materiales_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -42,8 +47,11 @@ public class InformesDiariosResource {
 
     @GetMapping("/almacen/dispensacion-materiales/excel")
     public ResponseEntity<byte[]> exportarDispensacionMaterialesExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
-        byte[] excel = informesDiariosService.exportarDispensacionMaterialesExcel(fecha);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
+        byte[] excel = informesDiariosService.exportarDispensacionMaterialesExcel(
+                fecha,
+                BiExcelExportOptions.of(decimalSeparator));
         String filename = "informe_dispensacion_materiales_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -54,8 +62,11 @@ public class InformesDiariosResource {
 
     @GetMapping("/almacen/ingreso-terminados/excel")
     public ResponseEntity<byte[]> exportarIngresoTerminadosExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
-        byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(fecha);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
+        byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(
+                fecha,
+                BiExcelExportOptions.of(decimalSeparator));
         String filename = "informe_ingreso_terminados_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -72,8 +83,11 @@ public class InformesDiariosResource {
 
     @GetMapping("/almacen/ingreso-terminados/reporte-excel")
     public ResponseEntity<byte[]> exportarReporteIngresoTerminadosExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
-        byte[] excel = informesDiariosService.exportarReporteIngresoTerminadosExcel(fecha);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
+        byte[] excel = informesDiariosService.exportarReporteIngresoTerminadosExcel(
+                fecha,
+                BiExcelExportOptions.of(decimalSeparator));
         String filename = "reporte_produccion_terminados_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -84,8 +98,11 @@ public class InformesDiariosResource {
 
     @GetMapping("/compras/excel")
     public ResponseEntity<byte[]> exportarComprasExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
-        byte[] excel = informesDiariosService.exportarComprasExcel(fecha);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
+        byte[] excel = informesDiariosService.exportarComprasExcel(
+                fecha,
+                BiExcelExportOptions.of(decimalSeparator));
         String filename = "informe_compras_ocm_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -98,9 +115,14 @@ public class InformesDiariosResource {
     public ResponseEntity<byte[]> exportarAjustesAlmacenExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
-            @RequestParam SentidoAjusteInforme sentido) {
+            @RequestParam SentidoAjusteInforme sentido,
+            @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         try {
-            byte[] excel = informesDiariosService.exportarAjustesAlmacenExcel(fechaDesde, fechaHasta, sentido);
+            byte[] excel = informesDiariosService.exportarAjustesAlmacenExcel(
+                    fechaDesde,
+                    fechaHasta,
+                    sentido,
+                    BiExcelExportOptions.of(decimalSeparator));
             String filename = String.format(
                     "informe_ajustes_almacen_%s_%s_%s.xlsx", sentido.name(), fechaDesde, fechaHasta);
             return ResponseEntity.ok()

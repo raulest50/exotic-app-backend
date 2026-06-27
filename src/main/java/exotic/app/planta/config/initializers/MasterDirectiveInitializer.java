@@ -20,6 +20,12 @@ public class MasterDirectiveInitializer {
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_AYUDA = "Cuando esta activa, el usuario master puede ver el acceso en Inicio y entrar a la ruta de Directivas Super Master. No agrega proteccion adicional sobre los endpoints API.";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN = "Cantidad de dias bloqueados para editar MPS semanal";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_AYUDA = "Define cuantos dias desde la fecha actual quedan bloqueados para editar el MPS semanal. Acepta valores de 0 a 7: 0 permite editar desde hoy, 1 bloquea hoy, 2 bloquea hoy y manana, y asi sucesivamente.";
+    private static final String AREA_OPERATIVA_NOISE_ENABLED_RESUMEN = "Habilita la medicion de ruido en tablets del Area Operativa";
+    private static final String AREA_OPERATIVA_NOISE_ENABLED_AYUDA = "Cuando esta activa, el panel de Area Operativa puede tomar muestras cortas de audio desde el navegador de la tablet, convertirlas a dB relativo y enviarlas al backend. No almacena audio crudo.";
+    private static final String AREA_OPERATIVA_NOISE_INTERVAL_RESUMEN = "Intervalo de muestreo de ruido en minutos";
+    private static final String AREA_OPERATIVA_NOISE_INTERVAL_AYUDA = "Define cada cuantos minutos la tablet intentara tomar una muestra de ruido mientras el panel de Area Operativa este activo. Acepta valores entre 10 y 60.";
+    private static final String AREA_OPERATIVA_NOISE_SAMPLE_RESUMEN = "Tamano de muestra de ruido en segundos";
+    private static final String AREA_OPERATIVA_NOISE_SAMPLE_AYUDA = "Define cuantos segundos de audio se procesan localmente para calcular un unico valor de ruido relativo en dB. Acepta valores entre 1 y 5.";
 
     private final MasterDirectiveRepo masterDirectiveRepo;
 
@@ -28,6 +34,9 @@ public class MasterDirectiveInitializer {
         ensureDispensacionNoBloqueaInicioProduccion();
         ensureEnableMasterSupermasterDirectivesAccess();
         ensureMpsSemanalDiasBloqueoEdicion();
+        ensureAreaOperativaNoiseEnabled();
+        ensureAreaOperativaNoiseIntervalMinutes();
+        ensureAreaOperativaNoiseSampleSeconds();
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {
@@ -128,5 +137,80 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(MPS_SEMANAL_DIAS_BLOQUEO_AYUDA);
+    }
+
+    private void ensureAreaOperativaNoiseEnabled() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_NOISE_ENABLED)
+                .map(this::actualizarMetadataAreaOperativaNoiseEnabled)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_NOISE_ENABLED);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_NOISE_ENABLED));
+                    aplicarMetadataAreaOperativaNoiseEnabled(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaNoiseEnabled(MasterDirective directive) {
+        aplicarMetadataAreaOperativaNoiseEnabled(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaNoiseEnabled(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_NOISE_ENABLED_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_NOISE_ENABLED_AYUDA);
+    }
+
+    private void ensureAreaOperativaNoiseIntervalMinutes() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_NOISE_INTERVAL_MINUTES)
+                .map(this::actualizarMetadataAreaOperativaNoiseIntervalMinutes)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_NOISE_INTERVAL_MINUTES);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_NOISE_INTERVAL_MINUTES));
+                    aplicarMetadataAreaOperativaNoiseIntervalMinutes(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaNoiseIntervalMinutes(MasterDirective directive) {
+        aplicarMetadataAreaOperativaNoiseIntervalMinutes(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaNoiseIntervalMinutes(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_NOISE_INTERVAL_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_NOISE_INTERVAL_AYUDA);
+    }
+
+    private void ensureAreaOperativaNoiseSampleSeconds() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_NOISE_SAMPLE_SECONDS)
+                .map(this::actualizarMetadataAreaOperativaNoiseSampleSeconds)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_NOISE_SAMPLE_SECONDS);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_NOISE_SAMPLE_SECONDS));
+                    aplicarMetadataAreaOperativaNoiseSampleSeconds(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaNoiseSampleSeconds(MasterDirective directive) {
+        aplicarMetadataAreaOperativaNoiseSampleSeconds(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaNoiseSampleSeconds(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_NOISE_SAMPLE_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_NOISE_SAMPLE_AYUDA);
     }
 }

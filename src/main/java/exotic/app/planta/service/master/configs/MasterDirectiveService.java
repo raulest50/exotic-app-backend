@@ -58,6 +58,31 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isAreaOperativaNoiseEnabled() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.AREA_OPERATIVA_NOISE_ENABLED,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_NOISE_ENABLED
+        );
+    }
+
+    public int getAreaOperativaNoiseIntervalMinutes() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.AREA_OPERATIVA_NOISE_INTERVAL_MINUTES,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_NOISE_INTERVAL_MINUTES,
+                10,
+                60
+        );
+    }
+
+    public int getAreaOperativaNoiseSampleSeconds() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.AREA_OPERATIVA_NOISE_SAMPLE_SECONDS,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_NOISE_SAMPLE_SECONDS,
+                1,
+                5
+        );
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {
@@ -148,6 +173,14 @@ public class MasterDirectiveService {
         if (directive.getTipoDato() == MasterDirective.TipoDato.NUMERO) {
             if (MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())) {
                 parseIntegerInRange(valor, directive.getNombre(), 0, 7);
+                return;
+            }
+            if (MasterDirectiveKeys.AREA_OPERATIVA_NOISE_INTERVAL_MINUTES.equals(directive.getNombre())) {
+                parseIntegerInRange(valor, directive.getNombre(), 10, 60);
+                return;
+            }
+            if (MasterDirectiveKeys.AREA_OPERATIVA_NOISE_SAMPLE_SECONDS.equals(directive.getNombre())) {
+                parseIntegerInRange(valor, directive.getNombre(), 1, 5);
                 return;
             }
             parsePositiveInteger(valor, directive.getNombre());
