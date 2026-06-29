@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -130,4 +131,23 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
      */
     Optional<SeguimientoOrdenArea> findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
             int ordenId, int areaId, int estado);
+
+    @Query("""
+        SELECT s.areaOperativa.areaId AS areaId,
+               COUNT(s.id) AS total
+        FROM SeguimientoOrdenArea s
+        WHERE s.areaOperativa.areaId IN :areaIds
+        AND s.estado IN :estados
+        AND s.ordenProduccion.estadoOrden NOT IN (-1, 2)
+        GROUP BY s.areaOperativa.areaId
+        """)
+    List<CargaActivaAreaProjection> countCargaActivaByAreaIds(
+            @Param("areaIds") Collection<Integer> areaIds,
+            @Param("estados") Collection<Integer> estados
+    );
+
+    interface CargaActivaAreaProjection {
+        Integer getAreaId();
+        Long getTotal();
+    }
 }

@@ -90,6 +90,31 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isAreaOperativaInactivityAlertEnabled() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_ALERT_ENABLED,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_INACTIVITY_ALERT_ENABLED
+        );
+    }
+
+    public int getAreaOperativaInactivityThresholdMinutes() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_THRESHOLD_MINUTES,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_INACTIVITY_THRESHOLD_MINUTES,
+                5,
+                480
+        );
+    }
+
+    public int getAreaOperativaInactivityCheckIntervalMinutes() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES,
+                5,
+                20
+        );
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {
@@ -188,6 +213,14 @@ public class MasterDirectiveService {
             }
             if (MasterDirectiveKeys.AREA_OPERATIVA_NOISE_SAMPLE_SECONDS.equals(directive.getNombre())) {
                 parseIntegerInRange(valor, directive.getNombre(), 1, 5);
+                return;
+            }
+            if (MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_THRESHOLD_MINUTES.equals(directive.getNombre())) {
+                parseIntegerInRange(valor, directive.getNombre(), 5, 480);
+                return;
+            }
+            if (MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES.equals(directive.getNombre())) {
+                parseIntegerInRange(valor, directive.getNombre(), 5, 20);
                 return;
             }
             parsePositiveInteger(valor, directive.getNombre());

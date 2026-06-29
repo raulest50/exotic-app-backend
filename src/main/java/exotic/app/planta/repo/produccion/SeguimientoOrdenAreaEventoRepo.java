@@ -35,4 +35,24 @@ public interface SeguimientoOrdenAreaEventoRepo extends JpaRepository<Seguimient
             @Param("actorTipo") ActorTipoEventoSeguimiento actorTipo,
             @Param("estadosInicio") Collection<Integer> estadosInicio
     );
+
+    @Query("""
+            SELECT e.seguimientoOrdenArea.areaOperativa.areaId AS areaId,
+                   MAX(e.fechaEvento) AS ultimaTerminacionAt
+            FROM SeguimientoOrdenAreaEvento e
+            WHERE e.seguimientoOrdenArea.areaOperativa.areaId IN :areaIds
+              AND e.actorTipo = :actorTipo
+              AND e.estadoDestino = :estadoDestino
+            GROUP BY e.seguimientoOrdenArea.areaOperativa.areaId
+            """)
+    List<UltimaTerminacionAreaProjection> findUltimasTerminacionesByAreaIds(
+            @Param("areaIds") Collection<Integer> areaIds,
+            @Param("actorTipo") ActorTipoEventoSeguimiento actorTipo,
+            @Param("estadoDestino") int estadoDestino
+    );
+
+    interface UltimaTerminacionAreaProjection {
+        Integer getAreaId();
+        LocalDateTime getUltimaTerminacionAt();
+    }
 }

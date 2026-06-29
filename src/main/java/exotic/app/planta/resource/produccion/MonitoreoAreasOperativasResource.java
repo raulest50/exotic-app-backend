@@ -1,7 +1,9 @@
 package exotic.app.planta.resource.produccion;
 
 import exotic.app.planta.dto.ErrorResponse;
+import exotic.app.planta.model.produccion.dto.AreaOperativaInactivityAlertDTO;
 import exotic.app.planta.model.produccion.dto.AreaOperativaMonitoreoDTO;
+import exotic.app.planta.service.produccion.AreaOperativaInactivityAlertService;
 import exotic.app.planta.service.produccion.MonitoreoAreasOperativasMetricasService;
 import exotic.app.planta.service.produccion.MonitoreoAreasOperativasService;
 import exotic.app.planta.service.produccion.MonitoreoAreasOperativasMetricasService.AreaOperativaMetricasDTO;
@@ -27,10 +29,16 @@ public class MonitoreoAreasOperativasResource {
 
     private final MonitoreoAreasOperativasService monitoreoAreasOperativasService;
     private final MonitoreoAreasOperativasMetricasService monitoreoAreasOperativasMetricasService;
+    private final AreaOperativaInactivityAlertService areaOperativaInactivityAlertService;
 
     @GetMapping("/areas")
     public ResponseEntity<List<AreaOperativaMonitoreoDTO>> listarAreasMonitoreables() {
         return ResponseEntity.ok(monitoreoAreasOperativasService.listarAreasMonitoreables());
+    }
+
+    @GetMapping("/alertas-inactividad")
+    public ResponseEntity<List<AreaOperativaInactivityAlertDTO>> getAlertasInactividad() {
+        return ResponseEntity.ok(areaOperativaInactivityAlertService.getAlertasInactividad());
     }
 
     @GetMapping("/areas/{areaId}/tablero")

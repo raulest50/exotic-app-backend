@@ -28,6 +28,12 @@ public class MasterDirectiveInitializer {
     private static final String AREA_OPERATIVA_NOISE_INTERVAL_AYUDA = "Define cada cuantos minutos la tablet intentara tomar una muestra de ruido mientras el panel de Area Operativa este activo. Acepta valores entre 10 y 60.";
     private static final String AREA_OPERATIVA_NOISE_SAMPLE_RESUMEN = "Tamano de muestra de ruido en segundos";
     private static final String AREA_OPERATIVA_NOISE_SAMPLE_AYUDA = "Define cuantos segundos de audio se procesan localmente para calcular un unico valor de ruido relativo en dB. Acepta valores entre 1 y 5.";
+    private static final String AREA_OPERATIVA_INACTIVITY_ENABLED_RESUMEN = "Habilita alertas de inactividad por terminaciones";
+    private static final String AREA_OPERATIVA_INACTIVITY_ENABLED_AYUDA = "Cuando esta activa, el monitoreo de Area Operativa puede marcar areas con carga activa que llevan demasiado tiempo sin terminaciones reportadas por el lider.";
+    private static final String AREA_OPERATIVA_INACTIVITY_THRESHOLD_RESUMEN = "Umbral sin terminaciones para alertar inactividad";
+    private static final String AREA_OPERATIVA_INACTIVITY_THRESHOLD_AYUDA = "Define cuantos minutos puede pasar un area con carga activa sin terminaciones reportadas antes de marcar alerta. Acepta valores entre 5 y 480.";
+    private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_RESUMEN = "Intervalo de chequeo de alertas en monitoreo";
+    private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_AYUDA = "Define cada cuantos minutos el tab de monitoreo consulta las alertas mientras esta abierto y visible. Acepta valores entre 5 y 20.";
 
     private final MasterDirectiveRepo masterDirectiveRepo;
 
@@ -40,6 +46,9 @@ public class MasterDirectiveInitializer {
         ensureAreaOperativaNoiseEnabled();
         ensureAreaOperativaNoiseIntervalMinutes();
         ensureAreaOperativaNoiseSampleSeconds();
+        ensureAreaOperativaInactivityAlertEnabled();
+        ensureAreaOperativaInactivityThresholdMinutes();
+        ensureAreaOperativaInactivityCheckIntervalMinutes();
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {
@@ -240,5 +249,80 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(AREA_OPERATIVA_NOISE_SAMPLE_AYUDA);
+    }
+
+    private void ensureAreaOperativaInactivityAlertEnabled() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_ALERT_ENABLED)
+                .map(this::actualizarMetadataAreaOperativaInactivityAlertEnabled)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_ALERT_ENABLED);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_INACTIVITY_ALERT_ENABLED));
+                    aplicarMetadataAreaOperativaInactivityAlertEnabled(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaInactivityAlertEnabled(MasterDirective directive) {
+        aplicarMetadataAreaOperativaInactivityAlertEnabled(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaInactivityAlertEnabled(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_INACTIVITY_ENABLED_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_INACTIVITY_ENABLED_AYUDA);
+    }
+
+    private void ensureAreaOperativaInactivityThresholdMinutes() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_THRESHOLD_MINUTES)
+                .map(this::actualizarMetadataAreaOperativaInactivityThresholdMinutes)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_THRESHOLD_MINUTES);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_INACTIVITY_THRESHOLD_MINUTES));
+                    aplicarMetadataAreaOperativaInactivityThresholdMinutes(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaInactivityThresholdMinutes(MasterDirective directive) {
+        aplicarMetadataAreaOperativaInactivityThresholdMinutes(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaInactivityThresholdMinutes(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_INACTIVITY_THRESHOLD_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_INACTIVITY_THRESHOLD_AYUDA);
+    }
+
+    private void ensureAreaOperativaInactivityCheckIntervalMinutes() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES)
+                .map(this::actualizarMetadataAreaOperativaInactivityCheckIntervalMinutes)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES));
+                    aplicarMetadataAreaOperativaInactivityCheckIntervalMinutes(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaInactivityCheckIntervalMinutes(MasterDirective directive) {
+        aplicarMetadataAreaOperativaInactivityCheckIntervalMinutes(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaInactivityCheckIntervalMinutes(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_INACTIVITY_INTERVAL_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_INACTIVITY_INTERVAL_AYUDA);
     }
 }
