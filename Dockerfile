@@ -60,6 +60,8 @@ RUN set -eu; \
     if command -v pg_dump >/dev/null 2>&1; then pg_dump --version; else echo "[WARN] pg_dump unavailable in runtime image."; fi; \
     if command -v pg_restore >/dev/null 2>&1; then pg_restore --version; else echo "[WARN] pg_restore unavailable in runtime image."; fi
 
+RUN mkdir -p /root/.ssh && chmod 0700 /root/.ssh
+
 WORKDIR /app
 
 COPY --from=builder /app/build/libs/exotic-app-v1.jar app.jar
