@@ -95,7 +95,6 @@ CREATE TEMP TABLE tmp_reboot_preserve_counts (
 INSERT INTO tmp_reboot_preserve_counts (table_name, row_count)
 SELECT 'productos', COUNT(*) FROM public.productos
 UNION ALL SELECT 'categoria', COUNT(*) FROM public.categoria
-UNION ALL SELECT 'familia', COUNT(*) FROM public.familia
 UNION ALL SELECT 'case_pack', COUNT(*) FROM public.case_pack
 UNION ALL SELECT 'insumos', COUNT(*) FROM public.insumos
 UNION ALL SELECT 'insumos_empaque', COUNT(*) FROM public.insumos_empaque
