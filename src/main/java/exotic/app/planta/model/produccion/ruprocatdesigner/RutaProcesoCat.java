@@ -29,12 +29,12 @@ public class RutaProcesoCat {
     private Categoria categoria;
 
     @OneToMany(mappedBy = "rutaProcesoCat", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RutaProcesoNode> nodes = new ArrayList<>();
+    private List<RutaProcesoCatVersion> versions = new ArrayList<>();
 
-    @OneToMany(mappedBy = "rutaProcesoCat", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RutaProcesoEdge> edges = new ArrayList<>();
-
+    @Column(name = "fecha_creacion")
     private LocalDateTime fechaCreacion;
+
+    @Column(name = "fecha_modificacion")
     private LocalDateTime fechaModificacion;
 
     @PrePersist

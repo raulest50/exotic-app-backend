@@ -1,20 +1,23 @@
 package exotic.app.planta.service.produccion;
 
+import exotic.app.planta.config.AppTime;
 import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
-import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
+import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -25,44 +28,66 @@ import java.util.stream.Collectors;
 public class RutaProcesoCatService {
 
     private final RutaProcesoCatRepo rutaProcesoCatRepo;
+    private final RutaProcesoCatVersionRepo rutaProcesoCatVersionRepo;
     private final CategoriaRepo categoriaRepo;
     private final AreaProduccionRepo areaProduccionRepo;
-    private final OrdenProduccionRepo ordenProduccionRepo;
 
+    @Transactional(readOnly = true)
     public RutaProcesoCatDTO getRutaByCategoria(int categoriaId) {
-        return rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
+        return rutaProcesoCatVersionRepo.findByCategoriaIdAndEstado(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE)
                 .map(this::toDTO)
                 .orElse(null);
     }
 
-    public RutaProcesoCatDTO saveRuta(int categoriaId, RutaProcesoCatDTO dto) {
+    @Transactional(readOnly = true)
+    public List<RutaProcesoCatDTO> getVersionesByCategoria(int categoriaId) {
+        return rutaProcesoCatVersionRepo.findAllByCategoriaIdOrderByVersionDesc(categoriaId)
+                .stream()
+                .map(this::toDTO)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public RutaProcesoCatDTO getVersionByCategoria(int categoriaId, Long versionId) {
+        return rutaProcesoCatVersionRepo.findByCategoriaIdAndVersionId(categoriaId, versionId)
+                .map(this::toDTO)
+                .orElse(null);
+    }
+
+    public RutaProcesoCatDTO saveRuta(int categoriaId, RutaProcesoCatDTO dto, String username) {
         Categoria categoria = categoriaRepo.findById(categoriaId)
                 .orElseThrow(() -> new IllegalArgumentException("Categoria no encontrada con ID: " + categoriaId));
 
-        if (ordenProduccionRepo.countActiveByCategoriaId(categoriaId) > 0) {
-            throw new IllegalStateException("No se puede editar la ruta porque la categoría tiene órdenes de producción activas.");
-        }
-
         validateRuta(dto);
 
+        LocalDateTime now = AppTime.now();
         RutaProcesoCat ruta = rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
                 .orElseGet(() -> {
                     RutaProcesoCat newRuta = new RutaProcesoCat();
                     newRuta.setCategoria(categoria);
-                    return newRuta;
+                    return rutaProcesoCatRepo.save(newRuta);
                 });
 
-        // Clear existing nodes and edges
-        ruta.getNodes().clear();
-        ruta.getEdges().clear();
+        rutaProcesoCatVersionRepo.findByCategoriaIdAndEstadoForUpdate(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE)
+                .ifPresent(vigente -> {
+                    vigente.setEstado(RutaProcesoCatVersion.Estado.RETIRADA);
+                    vigente.setVigenteHasta(now);
+                    rutaProcesoCatVersionRepo.save(vigente);
+                });
 
-        // Create a map to track frontendId -> RutaProcesoNode for edge creation
+        RutaProcesoCatVersion nuevaVersion = new RutaProcesoCatVersion();
+        nuevaVersion.setRutaProcesoCat(ruta);
+        nuevaVersion.setVersionNumber(rutaProcesoCatVersionRepo.findMaxVersionNumberByCategoriaId(categoriaId) + 1);
+        nuevaVersion.setEstado(RutaProcesoCatVersion.Estado.VIGENTE);
+        nuevaVersion.setVigenteDesde(now);
+        nuevaVersion.setCreadoEn(now);
+        nuevaVersion.setCreadoPor(normalizeText(username));
+        nuevaVersion.setMotivoCambio(normalizeText(dto.getMotivoCambio()));
+
         Map<String, RutaProcesoNode> nodeMap = new HashMap<>();
-
-        // Create nodes
         for (RutaProcesoNodeDTO nodeDto : dto.getNodes()) {
             RutaProcesoNode node = new RutaProcesoNode();
-            node.setRutaProcesoCat(ruta);  // Set parent reference
+            node.setRutaProcesoCatVersion(nuevaVersion);
             node.setFrontendId(nodeDto.getId());
             node.setPosicionX(nodeDto.getPosicionX());
             node.setPosicionY(nodeDto.getPosicionY());
@@ -77,20 +102,17 @@ public class RutaProcesoCatService {
                 node.setAreaOperativa(area);
             }
 
-            ruta.getNodes().add(node);
+            nuevaVersion.getNodes().add(node);
             nodeMap.put(nodeDto.getId(), node);
         }
 
-        // Save to get node IDs
-        ruta = rutaProcesoCatRepo.save(ruta);
+        nuevaVersion = rutaProcesoCatVersionRepo.saveAndFlush(nuevaVersion);
 
-        // Rebuild nodeMap with persisted nodes
         nodeMap.clear();
-        for (RutaProcesoNode node : ruta.getNodes()) {
+        for (RutaProcesoNode node : nuevaVersion.getNodes()) {
             nodeMap.put(node.getFrontendId(), node);
         }
 
-        // Create edges
         for (RutaProcesoEdgeDTO edgeDto : dto.getEdges()) {
             RutaProcesoNode sourceNode = nodeMap.get(edgeDto.getSourceNodeId());
             RutaProcesoNode targetNode = nodeMap.get(edgeDto.getTargetNodeId());
@@ -102,44 +124,57 @@ public class RutaProcesoCatService {
             }
 
             RutaProcesoEdge edge = new RutaProcesoEdge();
-            edge.setRutaProcesoCat(ruta);  // Set parent reference
+            edge.setRutaProcesoCatVersion(nuevaVersion);
             edge.setFrontendId(edgeDto.getId());
             edge.setSourceNode(sourceNode);
             edge.setTargetNode(targetNode);
-            ruta.getEdges().add(edge);
+            nuevaVersion.getEdges().add(edge);
         }
 
-        ruta = rutaProcesoCatRepo.save(ruta);
-        return toDTO(ruta);
+        return toDTO(rutaProcesoCatVersionRepo.save(nuevaVersion));
     }
 
     public void deleteRuta(int categoriaId) {
-        if (ordenProduccionRepo.countActiveByCategoriaId(categoriaId) > 0) {
-            throw new IllegalStateException("No se puede eliminar la ruta porque la categoría tiene órdenes de producción activas.");
-        }
-        rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
-                .ifPresent(rutaProcesoCatRepo::delete);
+        LocalDateTime now = AppTime.now();
+        rutaProcesoCatVersionRepo.findByCategoriaIdAndEstadoForUpdate(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE)
+                .ifPresent(vigente -> {
+                    vigente.setEstado(RutaProcesoCatVersion.Estado.RETIRADA);
+                    vigente.setVigenteHasta(now);
+                    rutaProcesoCatVersionRepo.save(vigente);
+                });
     }
 
+    @Transactional(readOnly = true)
     public Map<Integer, Boolean> checkRoutesExist(List<Integer> categoriaIds) {
         Map<Integer, Boolean> result = new HashMap<>();
         for (Integer categoriaId : categoriaIds) {
-            result.put(categoriaId, rutaProcesoCatRepo.existsByCategoria_CategoriaId(categoriaId));
+            result.put(categoriaId, rutaProcesoCatVersionRepo.existsByRutaProcesoCat_Categoria_CategoriaIdAndEstado(
+                    categoriaId,
+                    RutaProcesoCatVersion.Estado.VIGENTE
+            ));
         }
         return result;
     }
 
-    private RutaProcesoCatDTO toDTO(RutaProcesoCat ruta) {
+    private RutaProcesoCatDTO toDTO(RutaProcesoCatVersion version) {
         RutaProcesoCatDTO dto = new RutaProcesoCatDTO();
-        dto.setId(ruta.getId());
-        dto.setCategoriaId(ruta.getCategoria().getCategoriaId());
+        dto.setId(version.getRutaProcesoCat().getId());
+        dto.setCategoriaId(version.getRutaProcesoCat().getCategoria().getCategoriaId());
+        dto.setVersionId(version.getId());
+        dto.setVersionNumber(version.getVersionNumber());
+        dto.setEstado(version.getEstado().name());
+        dto.setVigenteDesde(version.getVigenteDesde());
+        dto.setVigenteHasta(version.getVigenteHasta());
+        dto.setCreadoEn(version.getCreadoEn());
+        dto.setCreadoPor(version.getCreadoPor());
+        dto.setMotivoCambio(version.getMotivoCambio());
 
-        List<RutaProcesoNodeDTO> nodeDtos = ruta.getNodes().stream()
+        List<RutaProcesoNodeDTO> nodeDtos = version.getNodes().stream()
                 .map(this::toNodeDTO)
                 .collect(Collectors.toList());
         dto.setNodes(nodeDtos);
 
-        List<RutaProcesoEdgeDTO> edgeDtos = ruta.getEdges().stream()
+        List<RutaProcesoEdgeDTO> edgeDtos = version.getEdges().stream()
                 .map(this::toEdgeDTO)
                 .collect(Collectors.toList());
         dto.setEdges(edgeDtos);
@@ -312,11 +347,26 @@ public class RutaProcesoCatService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    // DTOs
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
     @lombok.Data
     public static class RutaProcesoCatDTO {
         private Long id;
         private int categoriaId;
+        private Long versionId;
+        private Integer versionNumber;
+        private String estado;
+        private LocalDateTime vigenteDesde;
+        private LocalDateTime vigenteHasta;
+        private LocalDateTime creadoEn;
+        private String creadoPor;
+        private String motivoCambio;
         private List<RutaProcesoNodeDTO> nodes = new ArrayList<>();
         private List<RutaProcesoEdgeDTO> edges = new ArrayList<>();
     }

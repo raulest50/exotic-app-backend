@@ -31,48 +31,57 @@ public class InformesDiariosResource {
     }
 
     @GetMapping("/almacen/ingreso-materiales/excel")
-    public ResponseEntity<byte[]> exportarIngresoMaterialesExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+    public ResponseEntity<?> exportarIngresoMaterialesExcel(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
-        byte[] excel = informesDiariosService.exportarIngresoMaterialesExcel(
-                fecha,
-                BiExcelExportOptions.of(decimalSeparator));
-        String filename = "informe_ingreso_materiales_" + fecha + ".xlsx";
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .body(excel);
+        try {
+            InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
+            byte[] excel = informesDiariosService.exportarIngresoMaterialesExcel(
+                    range.fechaDesde(),
+                    range.fechaHasta(),
+                    BiExcelExportOptions.of(decimalSeparator));
+            return excelResponse(excel, "informe_ingreso_materiales_" + range.filenameSuffix() + ".xlsx");
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
     }
 
     @GetMapping("/almacen/dispensacion-materiales/excel")
-    public ResponseEntity<byte[]> exportarDispensacionMaterialesExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+    public ResponseEntity<?> exportarDispensacionMaterialesExcel(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
-        byte[] excel = informesDiariosService.exportarDispensacionMaterialesExcel(
-                fecha,
-                BiExcelExportOptions.of(decimalSeparator));
-        String filename = "informe_dispensacion_materiales_" + fecha + ".xlsx";
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .body(excel);
+        try {
+            InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
+            byte[] excel = informesDiariosService.exportarDispensacionMaterialesExcel(
+                    range.fechaDesde(),
+                    range.fechaHasta(),
+                    BiExcelExportOptions.of(decimalSeparator));
+            return excelResponse(excel, "informe_dispensacion_materiales_" + range.filenameSuffix() + ".xlsx");
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
     }
 
     @GetMapping("/almacen/ingreso-terminados/excel")
-    public ResponseEntity<byte[]> exportarIngresoTerminadosExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+    public ResponseEntity<?> exportarIngresoTerminadosExcel(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
-        byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(
-                fecha,
-                BiExcelExportOptions.of(decimalSeparator));
-        String filename = "informe_ingreso_terminados_" + fecha + ".xlsx";
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .body(excel);
+        try {
+            InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
+            byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(
+                    range.fechaDesde(),
+                    range.fechaHasta(),
+                    BiExcelExportOptions.of(decimalSeparator));
+            return excelResponse(excel, "informe_ingreso_terminados_" + range.filenameSuffix() + ".xlsx");
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
     }
 
     @GetMapping("/almacen/ingreso-terminados/reporte")
@@ -97,18 +106,21 @@ public class InformesDiariosResource {
     }
 
     @GetMapping("/compras/excel")
-    public ResponseEntity<byte[]> exportarComprasExcel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+    public ResponseEntity<?> exportarComprasExcel(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
-        byte[] excel = informesDiariosService.exportarComprasExcel(
-                fecha,
-                BiExcelExportOptions.of(decimalSeparator));
-        String filename = "informe_compras_ocm_" + fecha + ".xlsx";
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .body(excel);
+        try {
+            InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
+            byte[] excel = informesDiariosService.exportarComprasExcel(
+                    range.fechaDesde(),
+                    range.fechaHasta(),
+                    BiExcelExportOptions.of(decimalSeparator));
+            return excelResponse(excel, "informe_compras_ocm_" + range.filenameSuffix() + ".xlsx");
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
     }
 
     @GetMapping("/almacen/ajustes/excel")
@@ -132,6 +144,42 @@ public class InformesDiariosResource {
                     .body(excel);
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    private ResponseEntity<byte[]> excelResponse(byte[] excel, String filename) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
+
+    private InformeFechaRange resolveInformeRange(LocalDate fecha, LocalDate fechaDesde, LocalDate fechaHasta) {
+        boolean hasSingleDate = fecha != null;
+        boolean hasRangeStart = fechaDesde != null;
+        boolean hasRangeEnd = fechaHasta != null;
+
+        if (hasSingleDate && (hasRangeStart || hasRangeEnd)) {
+            throw new IllegalArgumentException("Use fecha o fechaDesde/fechaHasta, no ambas opciones.");
+        }
+        if (hasSingleDate) {
+            return new InformeFechaRange(fecha, fecha);
+        }
+        if (!hasRangeStart || !hasRangeEnd) {
+            throw new IllegalArgumentException("Debe enviar fecha o el rango completo fechaDesde/fechaHasta.");
+        }
+        if (fechaDesde.isAfter(fechaHasta)) {
+            throw new IllegalArgumentException("fechaDesde no puede ser posterior a fechaHasta.");
+        }
+        return new InformeFechaRange(fechaDesde, fechaHasta);
+    }
+
+    private record InformeFechaRange(LocalDate fechaDesde, LocalDate fechaHasta) {
+        private String filenameSuffix() {
+            return fechaDesde.equals(fechaHasta)
+                    ? fechaDesde.toString()
+                    : fechaDesde + "_a_" + fechaHasta;
         }
     }
 }

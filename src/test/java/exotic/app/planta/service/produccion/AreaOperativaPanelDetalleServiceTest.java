@@ -9,19 +9,18 @@ import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
 import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
-import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.service.productos.ProductoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,13 +33,11 @@ class AreaOperativaPanelDetalleServiceTest {
     void getDetalleOperativoOrden_returnsAggregatedRouteAndBom() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
-        RutaProcesoCatRepo rutaRepo = mock(RutaProcesoCatRepo.class);
         ProductoService productoService = mock(ProductoService.class);
 
         AreaOperativaPanelDetalleService service = new AreaOperativaPanelDetalleService(
                 seguimientoRepo,
                 areaRepo,
-                rutaRepo,
                 productoService
         );
 
@@ -48,7 +45,6 @@ class AreaOperativaPanelDetalleServiceTest {
 
         when(areaRepo.findAllByResponsableArea_Id(99L)).thenReturn(List.of(fixture.areaPesaje));
         when(seguimientoRepo.findDetalleByOrdenId(55)).thenReturn(List.of(fixture.segAlmacen, fixture.segPesaje));
-        when(rutaRepo.findByCategoria_CategoriaId(7)).thenReturn(Optional.of(fixture.ruta));
         when(productoService.getInsumosWithStock("TER-001")).thenReturn(List.of(fixture.insumoSemi));
 
         AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO result =
@@ -69,13 +65,11 @@ class AreaOperativaPanelDetalleServiceTest {
     void getDetalleOperativoOrden_forbiddenWhenOrderIsNotFromResponsibleArea() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
-        RutaProcesoCatRepo rutaRepo = mock(RutaProcesoCatRepo.class);
         ProductoService productoService = mock(ProductoService.class);
 
         AreaOperativaPanelDetalleService service = new AreaOperativaPanelDetalleService(
                 seguimientoRepo,
                 areaRepo,
-                rutaRepo,
                 productoService
         );
 
@@ -90,13 +84,11 @@ class AreaOperativaPanelDetalleServiceTest {
     void getDetalleOperativoOrden_notFoundWhenNoSeguimientoExists() {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
-        RutaProcesoCatRepo rutaRepo = mock(RutaProcesoCatRepo.class);
         ProductoService productoService = mock(ProductoService.class);
 
         AreaOperativaPanelDetalleService service = new AreaOperativaPanelDetalleService(
                 seguimientoRepo,
                 areaRepo,
-                rutaRepo,
                 productoService
         );
 
@@ -153,6 +145,13 @@ class AreaOperativaPanelDetalleServiceTest {
         fixture.ruta = new RutaProcesoCat();
         fixture.ruta.setCategoria(categoria);
 
+        fixture.rutaVersion = new RutaProcesoCatVersion();
+        fixture.rutaVersion.setId(10L);
+        fixture.rutaVersion.setRutaProcesoCat(fixture.ruta);
+        fixture.rutaVersion.setVersionNumber(1);
+        fixture.rutaVersion.setEstado(RutaProcesoCatVersion.Estado.VIGENTE);
+        orden.setRutaProcesoCatVersion(fixture.rutaVersion);
+
         RutaProcesoNode nodeAlmacen = new RutaProcesoNode();
         nodeAlmacen.setId(1L);
         nodeAlmacen.setFrontendId("1");
@@ -160,7 +159,7 @@ class AreaOperativaPanelDetalleServiceTest {
         nodeAlmacen.setAreaOperativa(fixture.areaAlmacen);
         nodeAlmacen.setPosicionX(0);
         nodeAlmacen.setPosicionY(0);
-        nodeAlmacen.setRutaProcesoCat(fixture.ruta);
+        nodeAlmacen.setRutaProcesoCatVersion(fixture.rutaVersion);
 
         RutaProcesoNode nodePesaje = new RutaProcesoNode();
         nodePesaje.setId(2L);
@@ -169,17 +168,17 @@ class AreaOperativaPanelDetalleServiceTest {
         nodePesaje.setAreaOperativa(fixture.areaPesaje);
         nodePesaje.setPosicionX(300);
         nodePesaje.setPosicionY(0);
-        nodePesaje.setRutaProcesoCat(fixture.ruta);
+        nodePesaje.setRutaProcesoCatVersion(fixture.rutaVersion);
 
         RutaProcesoEdge edge = new RutaProcesoEdge();
         edge.setId(100L);
         edge.setFrontendId("e1-2");
         edge.setSourceNode(nodeAlmacen);
         edge.setTargetNode(nodePesaje);
-        edge.setRutaProcesoCat(fixture.ruta);
+        edge.setRutaProcesoCatVersion(fixture.rutaVersion);
 
-        fixture.ruta.setNodes(List.of(nodeAlmacen, nodePesaje));
-        fixture.ruta.setEdges(List.of(edge));
+        fixture.rutaVersion.setNodes(List.of(nodeAlmacen, nodePesaje));
+        fixture.rutaVersion.setEdges(List.of(edge));
 
         fixture.segAlmacen = new SeguimientoOrdenArea();
         fixture.segAlmacen.setId(1000L);
@@ -224,6 +223,7 @@ class AreaOperativaPanelDetalleServiceTest {
         private AreaOperativa areaPesaje;
         private AreaOperativa areaExtrusion;
         private RutaProcesoCat ruta;
+        private RutaProcesoCatVersion rutaVersion;
         private SeguimientoOrdenArea segAlmacen;
         private SeguimientoOrdenArea segPesaje;
         private InsumoWithStockDTO insumoSemi;

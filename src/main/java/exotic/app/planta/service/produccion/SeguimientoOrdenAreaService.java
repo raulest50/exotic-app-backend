@@ -6,7 +6,7 @@ import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
-import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
@@ -14,7 +14,7 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
-import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
+import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.Data;
@@ -54,7 +54,7 @@ public class SeguimientoOrdenAreaService {
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
     private final AreaProduccionRepo areaProduccionRepo;
-    private final RutaProcesoCatRepo rutaProcesoCatRepo;
+    private final RutaProcesoCatVersionRepo rutaProcesoCatVersionRepo;
     private final UserRepository userRepository;
     private final MasterDirectiveService masterDirectiveService;
     private final Clock applicationClock;
@@ -80,19 +80,24 @@ public class SeguimientoOrdenAreaService {
             return;
         }
 
-        Optional<RutaProcesoCat> rutaOpt = rutaProcesoCatRepo.findByCategoria_CategoriaId(categoria.getCategoriaId());
-        if (rutaOpt.isEmpty()) {
-            log.info("Categoria {} no tiene ruta de proceso definida", categoria.getCategoriaId());
+        Optional<RutaProcesoCatVersion> rutaVersionOpt = rutaProcesoCatVersionRepo.findByCategoriaIdAndEstado(
+                categoria.getCategoriaId(),
+                RutaProcesoCatVersion.Estado.VIGENTE
+        );
+        if (rutaVersionOpt.isEmpty()) {
+            log.info("Categoria {} no tiene ruta de proceso vigente definida", categoria.getCategoriaId());
             return;
         }
 
-        RutaProcesoCat ruta = rutaOpt.get();
-        if (ruta.getNodes() == null || ruta.getNodes().isEmpty()) {
-            log.info("Ruta de proceso para categoria {} no tiene nodos definidos", categoria.getCategoriaId());
+        RutaProcesoCatVersion rutaVersion = rutaVersionOpt.get();
+        if (rutaVersion.getNodes() == null || rutaVersion.getNodes().isEmpty()) {
+            log.info("Ruta de proceso vigente para categoria {} no tiene nodos definidos", categoria.getCategoriaId());
             return;
         }
 
-        Set<Long> nodosConPredecesores = ruta.getEdges().stream()
+        orden.setRutaProcesoCatVersion(rutaVersion);
+
+        Set<Long> nodosConPredecesores = rutaVersion.getEdges().stream()
                 .map(edge -> edge.getTargetNode().getId())
                 .collect(Collectors.toSet());
 
@@ -100,7 +105,7 @@ public class SeguimientoOrdenAreaService {
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         SeguimientoOrdenArea seguimientoAlmacenGeneral = null;
 
-        for (RutaProcesoNode node : ruta.getNodes()) {
+        for (RutaProcesoNode node : rutaVersion.getNodes()) {
             if (node.getAreaOperativa() == null) {
                 log.warn("Nodo {} no tiene area operativa asignada, se omite", node.getId());
                 continue;

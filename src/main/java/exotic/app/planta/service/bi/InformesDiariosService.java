@@ -72,7 +72,7 @@ public class InformesDiariosService {
 
     private static final String[] HEADERS_INFORME_COMPRAS = {
             "Fecha ingreso",
-            "ID transacciÃ³n",
+            "ID transacción",
             "ID OCM",
             "ID factura compra",
             "Proveedor NIT",
@@ -84,7 +84,7 @@ public class InformesDiariosService {
             "Unidad",
             "Lote (batch)",
             "Fecha vencimiento lote",
-            "AlmacÃ©n",
+            "Almacén",
             "Usuario aprobador",
             "Observaciones"
     };
@@ -150,10 +150,16 @@ public class InformesDiariosService {
     }
 
     public byte[] exportarIngresoMaterialesExcel(LocalDate fecha, BiExcelExportOptions options) {
-        LocalDateTime start = fecha.atStartOfDay();
-        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        return exportarIngresoMaterialesExcel(fecha, fecha, options);
+    }
+
+    public byte[] exportarIngresoMaterialesExcel(
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            BiExcelExportOptions options) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
         List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosMaterialPorDia(
-                start, end, TIPOS_INGRESO_MATERIAL);
+                range.start(), range.end(), TIPOS_INGRESO_MATERIAL);
         return generarExcelMovimientosAlmacen(movimientos, "Ingreso materiales", "ingreso materiales", options);
     }
 
@@ -165,10 +171,16 @@ public class InformesDiariosService {
     }
 
     public byte[] exportarDispensacionMaterialesExcel(LocalDate fecha, BiExcelExportOptions options) {
-        LocalDateTime start = fecha.atStartOfDay();
-        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        return exportarDispensacionMaterialesExcel(fecha, fecha, options);
+    }
+
+    public byte[] exportarDispensacionMaterialesExcel(
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            BiExcelExportOptions options) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
         List<Movimiento> movimientos = transaccionAlmacenRepo.findDispensacionesMaterialPorDia(
-                start, end, Movimiento.TipoMovimiento.DISPENSACION);
+                range.start(), range.end(), Movimiento.TipoMovimiento.DISPENSACION);
         return generarExcelMovimientosAlmacen(movimientos, "Dispensación materiales", "dispensación materiales", options);
     }
 
@@ -180,10 +192,16 @@ public class InformesDiariosService {
     }
 
     public byte[] exportarIngresoTerminadosExcel(LocalDate fecha, BiExcelExportOptions options) {
-        LocalDateTime start = fecha.atStartOfDay();
-        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        return exportarIngresoTerminadosExcel(fecha, fecha, options);
+    }
+
+    public byte[] exportarIngresoTerminadosExcel(
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            BiExcelExportOptions options) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
         List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
-                start, end, Movimiento.TipoMovimiento.BACKFLUSH);
+                range.start(), range.end(), Movimiento.TipoMovimiento.BACKFLUSH);
         return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado", options);
     }
 
@@ -321,18 +339,24 @@ public class InformesDiariosService {
     }
 
     /**
-     * Excel con ingresos a almacÃ©n originados por OCM en el dÃ­a indicado.
+     * Excel con ingresos a almacén originados por OCM en el día indicado.
      */
     public byte[] exportarComprasExcel(LocalDate fecha) {
         return exportarComprasExcel(fecha, BiExcelExportOptions.standard());
     }
 
     public byte[] exportarComprasExcel(LocalDate fecha, BiExcelExportOptions options) {
-        LocalDateTime start = fecha.atStartOfDay();
-        LocalDateTime end = fecha.atTime(LocalTime.MAX);
+        return exportarComprasExcel(fecha, fecha, options);
+    }
+
+    public byte[] exportarComprasExcel(
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            BiExcelExportOptions options) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
         List<InformeDiarioComprasRowDTO> rows = transaccionAlmacenRepo.findInformeDiarioComprasPorDia(
-                start,
-                end,
+                range.start(),
+                range.end(),
                 TransaccionAlmacen.TipoEntidadCausante.OCM,
                 Movimiento.TipoMovimiento.COMPRA);
         return generarExcelCompras(rows, "Compras", "compras OCM", options);
@@ -398,6 +422,16 @@ public class InformesDiariosService {
                 .stream()
                 .mapToDouble(Movimiento::getCantidad)
                 .sum();
+    }
+
+    private static DateTimeRange resolveDateTimeRange(LocalDate fechaDesde, LocalDate fechaHasta) {
+        if (fechaDesde == null || fechaHasta == null) {
+            throw new IllegalArgumentException("fechaDesde y fechaHasta son obligatorias");
+        }
+        if (fechaDesde.isAfter(fechaHasta)) {
+            throw new IllegalArgumentException("fechaDesde no puede ser posterior a fechaHasta");
+        }
+        return new DateTimeRange(fechaDesde.atStartOfDay(), fechaHasta.atTime(LocalTime.MAX));
     }
 
     private void agregarPlaneacionDia(
@@ -706,6 +740,9 @@ public class InformesDiariosService {
 
     private static String defaultIfBlank(String value, String fallback) {
         return value != null && !value.isBlank() ? value : fallback;
+    }
+
+    private record DateTimeRange(LocalDateTime start, LocalDateTime end) {
     }
 
     private record DatosProductoTerminado(

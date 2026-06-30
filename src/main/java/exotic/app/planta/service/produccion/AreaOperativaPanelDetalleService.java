@@ -8,12 +8,11 @@ import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
-import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
-import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +27,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,7 +37,6 @@ public class AreaOperativaPanelDetalleService {
 
     private final SeguimientoOrdenAreaRepo seguimientoOrdenAreaRepo;
     private final AreaProduccionRepo areaProduccionRepo;
-    private final RutaProcesoCatRepo rutaProcesoCatRepo;
     private final ProductoService productoService;
 
     public AreaOperativaOrdenDetalleDTO getDetalleOperativoOrden(int ordenId, Long userId) {
@@ -82,7 +79,7 @@ public class AreaOperativaPanelDetalleService {
                 .sorted(Comparator.comparing(SeguimientoOrdenArea::getPosicionSecuencia, Comparator.nullsLast(Integer::compareTo)))
                 .map(this::buildSeguimientoDTO)
                 .toList());
-        dto.setRutaProceso(buildRutaProcesoDTO(terminado, seguimientos, areaIdsResponsables));
+        dto.setRutaProceso(buildRutaProcesoDTO(orden, seguimientos, areaIdsResponsables));
         dto.setBom(buildBomDTO(terminado, orden.getCantidadProducir()));
         return dto;
     }
@@ -125,22 +122,20 @@ public class AreaOperativaPanelDetalleService {
     }
 
     private RutaProcesoVisualDTO buildRutaProcesoDTO(
-            Terminado terminado,
+            OrdenProduccion orden,
             List<SeguimientoOrdenArea> seguimientos,
             Set<Integer> areaIdsResponsables
     ) {
         RutaProcesoVisualDTO dto = new RutaProcesoVisualDTO();
 
-        if (terminado.getCategoria() == null) {
+        RutaProcesoCatVersion rutaVersion = orden.getRutaProcesoCatVersion();
+        if (rutaVersion == null && !seguimientos.isEmpty()) {
+            rutaVersion = seguimientos.get(0).getRutaProcesoNode().getRutaProcesoCatVersion();
+        }
+        if (rutaVersion == null) {
             return dto;
         }
 
-        Optional<RutaProcesoCat> rutaOpt = rutaProcesoCatRepo.findByCategoria_CategoriaId(terminado.getCategoria().getCategoriaId());
-        if (rutaOpt.isEmpty()) {
-            return dto;
-        }
-
-        RutaProcesoCat ruta = rutaOpt.get();
         Map<Long, SeguimientoOrdenArea> seguimientoPorNodeId = seguimientos.stream()
                 .collect(Collectors.toMap(
                         seguimiento -> seguimiento.getRutaProcesoNode().getId(),
@@ -149,12 +144,12 @@ public class AreaOperativaPanelDetalleService {
                         LinkedHashMap::new
                 ));
 
-        dto.setNodes(ruta.getNodes().stream()
+        dto.setNodes(rutaVersion.getNodes().stream()
                 .sorted(Comparator.comparing(RutaProcesoNode::getId))
                 .map(node -> buildRutaNodeDTO(node, seguimientoPorNodeId.get(node.getId()), areaIdsResponsables))
                 .toList());
 
-        dto.setEdges(ruta.getEdges().stream()
+        dto.setEdges(rutaVersion.getEdges().stream()
                 .sorted(Comparator.comparing(RutaProcesoEdge::getId))
                 .map(this::buildRutaEdgeDTO)
                 .toList());

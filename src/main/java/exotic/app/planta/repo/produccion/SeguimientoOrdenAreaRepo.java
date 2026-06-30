@@ -97,8 +97,8 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
     @Query("""
         SELECT COUNT(s) FROM SeguimientoOrdenArea s
         JOIN s.rutaProcesoNode srcNode
-        JOIN srcNode.rutaProcesoCat rpc
-        JOIN rpc.edges e
+        JOIN srcNode.rutaProcesoCatVersion rpcv
+        JOIN rpcv.edges e
         WHERE s.ordenProduccion.ordenId = :ordenId
         AND e.sourceNode.id = srcNode.id
         AND e.targetNode.id = :targetNodeId
@@ -112,8 +112,8 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
     @Query("""
         SELECT s FROM SeguimientoOrdenArea s
         JOIN s.rutaProcesoNode tgtNode
-        JOIN tgtNode.rutaProcesoCat rpc
-        JOIN rpc.edges e
+        JOIN tgtNode.rutaProcesoCatVersion rpcv
+        JOIN rpcv.edges e
         WHERE s.ordenProduccion.ordenId = :ordenId
         AND e.targetNode.id = tgtNode.id
         AND e.sourceNode.id = :sourceNodeId

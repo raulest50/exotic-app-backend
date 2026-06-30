@@ -18,9 +18,9 @@ public class RutaProcesoEdge {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "ruta_proceso_cat_id")
-    private RutaProcesoCat rutaProcesoCat;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ruta_proceso_cat_version_id", nullable = false)
+    private RutaProcesoCatVersion rutaProcesoCatVersion;
 
     @Column(name = "frontend_id")
     private String frontendId;
