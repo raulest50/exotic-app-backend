@@ -28,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -673,10 +675,11 @@ public class InformesDiariosService {
             return;
         }
         if (value instanceof Number number) {
-            cell.setCellValue(number.doubleValue());
-            if (isDecimalNumber(number)) {
-                styles.applyDecimalNumberStyle(cell);
+            if (isDecimalNumber(number) && styles.hasDecimalTextFormatter()) {
+                styles.writeDecimalTextCell(cell, number);
+                return;
             }
+            cell.setCellValue(number.doubleValue());
             return;
         }
         if (value instanceof Boolean bool) {
@@ -696,21 +699,37 @@ public class InformesDiariosService {
         if (options == null || !options.hasDecimalSeparator()) {
             return ExcelStyles.none();
         }
-        CellStyle decimalNumberStyle = workbook.createCellStyle();
+        CellStyle decimalTextStyle = workbook.createCellStyle();
         DataFormat dataFormat = workbook.createDataFormat();
-        decimalNumberStyle.setDataFormat(dataFormat.getFormat(options.decimalSeparator().excelNumberFormat()));
-        return new ExcelStyles(decimalNumberStyle);
+        decimalTextStyle.setDataFormat(dataFormat.getFormat("@"));
+        return new ExcelStyles(decimalTextStyle, options.decimalSeparator().createFormatter());
     }
 
-    private record ExcelStyles(CellStyle decimalNumberStyle) {
+    private record ExcelStyles(CellStyle decimalTextStyle, DecimalFormat decimalFormatter) {
         private static ExcelStyles none() {
-            return new ExcelStyles(null);
+            return new ExcelStyles(null, null);
         }
 
-        private void applyDecimalNumberStyle(Cell cell) {
-            if (decimalNumberStyle != null) {
-                cell.setCellStyle(decimalNumberStyle);
+        private boolean hasDecimalTextFormatter() {
+            return decimalFormatter != null;
+        }
+
+        private void writeDecimalTextCell(Cell cell, Number number) {
+            cell.setCellValue(decimalFormatter.format(decimalFormatValue(number)));
+            if (decimalTextStyle != null) {
+                cell.setCellStyle(decimalTextStyle);
             }
+        }
+
+        private Object decimalFormatValue(Number number) {
+            if (number instanceof BigDecimal bigDecimal) {
+                return bigDecimal;
+            }
+            double doubleValue = number.doubleValue();
+            if (!Double.isFinite(doubleValue)) {
+                return doubleValue;
+            }
+            return BigDecimal.valueOf(doubleValue);
         }
     }
 

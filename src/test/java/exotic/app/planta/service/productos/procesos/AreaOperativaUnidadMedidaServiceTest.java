@@ -1,20 +1,14 @@
 package exotic.app.planta.service.productos.procesos;
 
-import exotic.app.planta.dto.CapacidadAreaOperativaDTO;
-import exotic.app.planta.dto.CapacidadAreaOperativaRequestDTO;
 import exotic.app.planta.dto.ConversionUnidadAreaOperativaRequestDTO;
 import exotic.app.planta.dto.ConversionUnidadAreaOperativaResponseDTO;
 import exotic.app.planta.dto.UnidadMedidaAreaOperativaDTO;
 import exotic.app.planta.dto.UnidadMedidaAreaOperativaRequestDTO;
 import exotic.app.planta.model.organizacion.AreaOperativa;
-import exotic.app.planta.model.organizacion.CapacidadAreaOperativa;
-import exotic.app.planta.model.organizacion.PeriodoCapacidadAreaOperativa;
-import exotic.app.planta.model.organizacion.TipoCapacidadAreaOperativa;
 import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
 import exotic.app.planta.model.organizacion.UnidadRelacionAreaOperativa;
 import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
-import exotic.app.planta.repo.producto.procesos.CapacidadAreaOperativaRepo;
 import exotic.app.planta.repo.producto.procesos.UnidadMedidaAreaOperativaRepo;
 import org.junit.jupiter.api.Test;
 
@@ -27,18 +21,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class AreaOperativaCapacidadServiceTest {
+class AreaOperativaUnidadMedidaServiceTest {
 
     @Test
     void crearUnidad_validRequest_savesUnidad() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
-        CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
         AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+        AreaOperativaUnidadMedidaService service = new AreaOperativaUnidadMedidaService(
                 areaRepo,
                 unidadRepo,
-                capacidadRepo,
                 areaCategoriaUnidadRepo
         );
 
@@ -67,12 +59,10 @@ class AreaOperativaCapacidadServiceTest {
     void crearUnidad_duplicateName_throwsValidationError() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
-        CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
         AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+        AreaOperativaUnidadMedidaService service = new AreaOperativaUnidadMedidaService(
                 areaRepo,
                 unidadRepo,
-                capacidadRepo,
                 areaCategoriaUnidadRepo
         );
 
@@ -92,59 +82,13 @@ class AreaOperativaCapacidadServiceTest {
     }
 
     @Test
-    void crearCapacidad_validUnidad_savesCapacidad() {
-        AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
-        UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
-        CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
-        AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
-                areaRepo,
-                unidadRepo,
-                capacidadRepo,
-                areaCategoriaUnidadRepo
-        );
-
-        AreaOperativa area = buildArea(10, "Fabricacion 1");
-        UnidadMedidaAreaOperativa unidad = buildUnidad(3L, area, "Marmita", UnidadRelacionAreaOperativa.L, "1000");
-
-        when(areaRepo.findById(10)).thenReturn(Optional.of(area));
-        when(unidadRepo.findByIdAndAreaOperativa_AreaId(3L, 10)).thenReturn(Optional.of(unidad));
-        when(capacidadRepo.save(any(CapacidadAreaOperativa.class))).thenAnswer(invocation -> {
-            CapacidadAreaOperativa capacidad = invocation.getArgument(0);
-            capacidad.setId(9L);
-            return capacidad;
-        });
-
-        CapacidadAreaOperativaDTO result = service.crearCapacidad(
-                10,
-                new CapacidadAreaOperativaRequestDTO(
-                        3L,
-                        TipoCapacidadAreaOperativa.PRODUCTIVA,
-                        new BigDecimal("3"),
-                        PeriodoCapacidadAreaOperativa.DIA,
-                        BigDecimal.ONE,
-                        null,
-                        null,
-                        null,
-                        true
-                )
-        );
-
-        assertEquals(9L, result.getId());
-        assertEquals(3L, result.getUnidadMedidaId());
-        assertEquals("Marmita", result.getUnidadNombre());
-    }
-
-    @Test
     void convertir_compatibleUnits_returnsConvertedQuantity() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
-        CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
         AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+        AreaOperativaUnidadMedidaService service = new AreaOperativaUnidadMedidaService(
                 areaRepo,
                 unidadRepo,
-                capacidadRepo,
                 areaCategoriaUnidadRepo
         );
 
@@ -168,12 +112,10 @@ class AreaOperativaCapacidadServiceTest {
     void convertir_incompatibleUnits_throwsValidationError() {
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         UnidadMedidaAreaOperativaRepo unidadRepo = mock(UnidadMedidaAreaOperativaRepo.class);
-        CapacidadAreaOperativaRepo capacidadRepo = mock(CapacidadAreaOperativaRepo.class);
         AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo = mock(AreaOperativaCategoriaUnidadMedidaRepo.class);
-        AreaOperativaCapacidadService service = new AreaOperativaCapacidadService(
+        AreaOperativaUnidadMedidaService service = new AreaOperativaUnidadMedidaService(
                 areaRepo,
                 unidadRepo,
-                capacidadRepo,
                 areaCategoriaUnidadRepo
         );
 

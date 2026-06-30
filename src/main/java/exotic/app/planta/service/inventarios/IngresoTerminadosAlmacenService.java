@@ -242,6 +242,18 @@ public class IngresoTerminadosAlmacenService {
      */
     @Transactional(readOnly = true)
     public byte[] generarPlantillaExcel() {
+        return generarPlantillaExcel(LocalDate.now(applicationClock));
+    }
+
+    /**
+     * Genera una plantilla Excel consolidada con todos los productos terminados
+     * y replica fechaReporte en cada fila para facilitar formulas externas.
+     *
+     * @return byte[] con el contenido del archivo Excel
+     */
+    @Transactional(readOnly = true)
+    public byte[] generarPlantillaExcel(LocalDate fechaReporte) {
+        LocalDate fechaEfectiva = fechaReporte != null ? fechaReporte : LocalDate.now(applicationClock);
         List<Terminado> terminados = terminadoRepo.findAllConCategoriaOrderByProductoIdAsc()
                 .stream()
                 .sorted(Comparator
@@ -285,7 +297,7 @@ public class IngresoTerminadosAlmacenService {
 
             // Headers (fila 0)
             String[] headers = {
-                "producto_id", "producto_nombre", "categoria_nombre", "cantidad_producida"
+                "producto_id", "producto_nombre", "categoria_nombre", "cantidad_producida", "fecha_reporte"
             };
 
             Row headerRow = sheet.createRow(0);
@@ -320,6 +332,11 @@ public class IngresoTerminadosAlmacenService {
                 // Columna D: cantidad_producida (EDITABLE - vacía equivale a cero)
                 Cell cellCantidadProducida = row.createCell(3);
                 cellCantidadProducida.setCellStyle(editableStyle);
+
+                // Columna E: fecha_reporte (solo lectura - redundante para formulas externas)
+                Cell cellFechaReporte = row.createCell(4);
+                cellFechaReporte.setCellValue(fechaEfectiva.toString());
+                cellFechaReporte.setCellStyle(readOnlyStyle);
             }
 
             // Ajustar ancho de columnas

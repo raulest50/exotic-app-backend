@@ -9,12 +9,14 @@ import exotic.app.planta.model.inventarios.dto.IngresoTerminadoRequestDTO;
 import exotic.app.planta.service.inventarios.IngresoTerminadosAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/ingresos_terminados_almacen")
@@ -63,7 +65,8 @@ public class IngresoTerminadosAlmacenResource {
 
     /**
      * Descarga una plantilla Excel consolidada con todos los productos terminados.
-     * Las columnas editables son cantidad_producida, fecha_produccion y observaciones.
+     * La unica columna editable es cantidad_producida; fecha_reporte se replica por fila
+     * como dato de apoyo para contabilidad/finanzas.
      *
      * El formato por lote/OP queda temporalmente en desuso y se conserva en los endpoints
      * de registro por posible reintegración del workflow.
@@ -71,10 +74,14 @@ public class IngresoTerminadosAlmacenResource {
      * @return Archivo Excel con Content-Disposition attachment
      */
     @GetMapping("/plantilla")
-    public ResponseEntity<byte[]> descargarPlantilla() {
-        byte[] excel = ingresoTerminadosAlmacenService.generarPlantillaExcel();
+    public ResponseEntity<byte[]> descargarPlantilla(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate fechaReporte) {
+        LocalDate fechaEfectiva = fechaReporte != null ? fechaReporte : AppTime.today();
+        byte[] excel = ingresoTerminadosAlmacenService.generarPlantillaExcel(fechaEfectiva);
 
-        String filename = "plantilla_reporte_produccion_terminados_" + AppTime.today() + ".xlsx";
+        String filename = "plantilla_reporte_produccion_terminados_" + fechaEfectiva + ".xlsx";
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
