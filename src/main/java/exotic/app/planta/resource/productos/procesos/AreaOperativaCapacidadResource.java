@@ -67,15 +67,15 @@ public class AreaOperativaCapacidadResource {
     }
 
     @DeleteMapping("/{areaId}/unidades/{unidadId}")
-    public ResponseEntity<?> desactivarUnidad(
+    public ResponseEntity<?> eliminarUnidad(
             @PathVariable Integer areaId,
             @PathVariable Long unidadId
     ) {
         try {
-            areaOperativaCapacidadService.desactivarUnidad(areaId, unidadId);
+            areaOperativaCapacidadService.eliminarUnidad(areaId, unidadId);
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
-            return badRequest("Error al desactivar unidad", e);
+            return badRequest("Error al eliminar unidad", e);
         }
     }
 

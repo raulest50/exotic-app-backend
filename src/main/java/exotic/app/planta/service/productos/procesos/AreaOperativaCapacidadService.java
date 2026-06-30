@@ -8,8 +8,8 @@ import exotic.app.planta.dto.UnidadMedidaAreaOperativaDTO;
 import exotic.app.planta.dto.UnidadMedidaAreaOperativaRequestDTO;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.organizacion.CapacidadAreaOperativa;
-import exotic.app.planta.model.organizacion.DimensionUnidadAreaOperativa;
 import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
+import exotic.app.planta.model.organizacion.UnidadRelacionAreaOperativa;
 import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.CapacidadAreaOperativaRepo;
@@ -21,8 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,12 +28,6 @@ import java.util.Set;
 public class AreaOperativaCapacidadService {
 
     private static final int CONVERSION_SCALE = 6;
-    private static final Map<DimensionUnidadAreaOperativa, Set<String>> UNIDADES_ESTANDAR_VALIDAS = Map.of(
-            DimensionUnidadAreaOperativa.VOLUMEN, Set.of("L"),
-            DimensionUnidadAreaOperativa.MASA, Set.of("KG"),
-            DimensionUnidadAreaOperativa.CONTEO, Set.of("U"),
-            DimensionUnidadAreaOperativa.TIEMPO, Set.of("MIN")
-    );
 
     private final AreaProduccionRepo areaProduccionRepo;
     private final UnidadMedidaAreaOperativaRepo unidadRepo;
@@ -45,7 +37,7 @@ public class AreaOperativaCapacidadService {
     @Transactional(readOnly = true)
     public List<UnidadMedidaAreaOperativaDTO> listarUnidades(Integer areaId) {
         requireArea(areaId);
-        return unidadRepo.findAllByAreaOperativa_AreaIdOrderByPrincipalDescNombreAsc(areaId).stream()
+        return unidadRepo.findAllByAreaOperativa_AreaIdOrderByNombreAsc(areaId).stream()
                 .map(UnidadMedidaAreaOperativaDTO::fromEntity)
                 .toList();
     }
@@ -54,7 +46,7 @@ public class AreaOperativaCapacidadService {
         AreaOperativa area = requireArea(areaId);
         UnidadMedidaAreaOperativa unidad = new UnidadMedidaAreaOperativa();
         unidad.setAreaOperativa(area);
-        applyUnidadRequest(areaId, unidad, request, true);
+        applyUnidadRequest(unidad, request, true);
         return UnidadMedidaAreaOperativaDTO.fromEntity(unidadRepo.save(unidad));
     }
 
@@ -65,17 +57,18 @@ public class AreaOperativaCapacidadService {
     ) {
         requireArea(areaId);
         UnidadMedidaAreaOperativa unidad = requireUnidad(areaId, unidadId);
-        applyUnidadRequest(areaId, unidad, request, false);
+        applyUnidadRequest(unidad, request, false);
         return UnidadMedidaAreaOperativaDTO.fromEntity(unidadRepo.save(unidad));
     }
 
-    public void desactivarUnidad(Integer areaId, Long unidadId) {
+    public void eliminarUnidad(Integer areaId, Long unidadId) {
         requireArea(areaId);
         UnidadMedidaAreaOperativa unidad = requireUnidad(areaId, unidadId);
-        unidad.setActivo(false);
-        unidad.setPrincipal(false);
+        if (capacidadRepo.existsByUnidadMedida_Id(unidadId)) {
+            throw new IllegalArgumentException("No se puede eliminar una unidad con capacidades asociadas");
+        }
         areaCategoriaUnidadRepo.deleteAllByUnidadMedida_Id(unidadId);
-        unidadRepo.save(unidad);
+        unidadRepo.delete(unidad);
     }
 
     @Transactional(readOnly = true)
@@ -123,17 +116,15 @@ public class AreaOperativaCapacidadService {
         UnidadMedidaAreaOperativa destino = unidadRepo.findById(request.getUnidadDestinoId())
                 .orElseThrow(() -> new IllegalArgumentException("Unidad destino no encontrada: " + request.getUnidadDestinoId()));
 
-        if (!origen.isActivo() || !destino.isActivo()) {
-            throw new IllegalArgumentException("Solo se pueden convertir unidades activas");
-        }
-        if (origen.getDimension() != destino.getDimension()
-                || !origen.getUnidadEstandar().equalsIgnoreCase(destino.getUnidadEstandar())) {
+        if (!origen.getUnidadRelacion().isCompatibleWith(destino.getUnidadRelacion())) {
             throw new IllegalArgumentException("Las unidades no son compatibles para conversion");
         }
 
-        BigDecimal cantidadEstandar = cantidadOrigen.multiply(origen.getCantidadUnidadEstandar());
-        BigDecimal cantidadDestino = cantidadEstandar.divide(
-                destino.getCantidadUnidadEstandar(),
+        BigDecimal cantidadBase = origen.getUnidadRelacion()
+                .toBase(cantidadOrigen.multiply(origen.getRelacionEstandar()));
+        BigDecimal unidadDestinoBase = destino.getUnidadRelacion().toBase(destino.getRelacionEstandar());
+        BigDecimal cantidadDestino = cantidadBase.divide(
+                unidadDestinoBase,
                 CONVERSION_SCALE,
                 RoundingMode.HALF_UP
         );
@@ -142,14 +133,13 @@ public class AreaOperativaCapacidadService {
                 .unidadOrigen(UnidadMedidaAreaOperativaDTO.fromEntity(origen))
                 .unidadDestino(UnidadMedidaAreaOperativaDTO.fromEntity(destino))
                 .cantidadOrigen(cantidadOrigen)
-                .cantidadEstandar(cantidadEstandar)
-                .unidadEstandar(origen.getUnidadEstandar())
+                .cantidadBase(cantidadBase)
+                .unidadBase(resolveUnidadBase(origen.getUnidadRelacion()))
                 .cantidadDestino(cantidadDestino)
                 .build();
     }
 
     private void applyUnidadRequest(
-            Integer areaId,
             UnidadMedidaAreaOperativa unidad,
             UnidadMedidaAreaOperativaRequestDTO request,
             boolean isCreate
@@ -158,44 +148,29 @@ public class AreaOperativaCapacidadService {
             throw new IllegalArgumentException("La solicitud de unidad no puede ser nula");
         }
 
-        String codigo = normalizeCodigo(request.getCodigo());
         String nombre = normalizeRequired(request.getNombre(), "El nombre de la unidad es obligatorio");
-        DimensionUnidadAreaOperativa dimension = request.getDimension();
-        if (dimension == null) {
-            throw new IllegalArgumentException("La dimension de la unidad es obligatoria");
+        if (nombre.length() > 120) {
+            throw new IllegalArgumentException("El nombre de la unidad no puede superar 120 caracteres");
         }
-        String unidadEstandar = normalizeCodigo(request.getUnidadEstandar());
-        validateUnidadEstandar(dimension, unidadEstandar);
-        BigDecimal cantidadUnidadEstandar = requirePositive(
-                request.getCantidadUnidadEstandar(),
-                "La cantidad en unidad estandar debe ser mayor que 0"
+        UnidadRelacionAreaOperativa unidadRelacion = request.getUnidadRelacion();
+        if (unidadRelacion == null) {
+            throw new IllegalArgumentException("La unidad de relacion es obligatoria");
+        }
+        BigDecimal relacionEstandar = requirePositive(
+                request.getRelacionEstandar(),
+                "La relacion estandar debe ser mayor que 0"
         );
 
-        boolean duplicateCode = isCreate
-                ? unidadRepo.existsByAreaOperativa_AreaIdAndCodigoIgnoreCase(areaId, codigo)
-                : unidadRepo.existsByAreaOperativa_AreaIdAndCodigoIgnoreCaseAndIdNot(areaId, codigo, unidad.getId());
-        if (duplicateCode) {
-            throw new IllegalArgumentException("Ya existe una unidad con codigo " + codigo + " para esta area operativa");
+        boolean duplicateName = isCreate
+                ? unidadRepo.existsByNombreIgnoreCase(nombre)
+                : unidadRepo.existsByNombreIgnoreCaseAndIdNot(nombre, unidad.getId());
+        if (duplicateName) {
+            throw new IllegalArgumentException("Ya existe una unidad de medida con el nombre: " + nombre);
         }
 
-        boolean principal = request.getPrincipal() != null ? request.getPrincipal() : unidad.isPrincipal();
-        boolean activo = request.getActivo() != null ? request.getActivo() : unidad.isActivo();
-        if (principal && !activo) {
-            throw new IllegalArgumentException("Una unidad principal debe estar activa");
-        }
-        if (principal) {
-            clearPrincipal(areaId, unidad.getId());
-        }
-
-        unidad.setCodigo(codigo);
         unidad.setNombre(nombre);
-        unidad.setDescripcion(trimToNull(request.getDescripcion()));
-        unidad.setDimension(dimension);
-        unidad.setUnidadEstandar(unidadEstandar);
-        unidad.setCantidadUnidadEstandar(cantidadUnidadEstandar);
-        unidad.setPrincipal(principal);
-        unidad.setDiscreta(request.getDiscreta() != null ? request.getDiscreta() : unidad.isDiscreta());
-        unidad.setActivo(activo);
+        unidad.setRelacionEstandar(relacionEstandar);
+        unidad.setUnidadRelacion(unidadRelacion);
     }
 
     private void applyCapacidadRequest(
@@ -208,9 +183,6 @@ public class AreaOperativaCapacidadService {
         }
 
         UnidadMedidaAreaOperativa unidad = requireUnidad(areaId, request.getUnidadMedidaId());
-        if (!unidad.isActivo()) {
-            throw new IllegalArgumentException("La unidad de medida seleccionada no esta activa");
-        }
         if (request.getTipoCapacidad() == null) {
             throw new IllegalArgumentException("El tipo de capacidad es obligatorio");
         }
@@ -263,37 +235,11 @@ public class AreaOperativaCapacidadService {
                 .orElseThrow(() -> new IllegalArgumentException("Capacidad no encontrada para esta area: " + capacidadId));
     }
 
-    private void clearPrincipal(Integer areaId, Long currentUnidadId) {
-        unidadRepo.findAllByAreaOperativa_AreaIdOrderByPrincipalDescNombreAsc(areaId).forEach(unidad -> {
-            if (!unidad.getId().equals(currentUnidadId) && unidad.isPrincipal()) {
-                unidad.setPrincipal(false);
-                unidadRepo.save(unidad);
-            }
-        });
-    }
-
-    private void validateUnidadEstandar(DimensionUnidadAreaOperativa dimension, String unidadEstandar) {
-        Set<String> unidadesEstandar = UNIDADES_ESTANDAR_VALIDAS.get(dimension);
-        if (unidadesEstandar == null || !unidadesEstandar.contains(unidadEstandar)) {
-            throw new IllegalArgumentException(
-                    "La unidad estandar " + unidadEstandar + " no es valida para la dimension " + dimension
-            );
-        }
-    }
-
     private BigDecimal requirePositive(BigDecimal value, String message) {
         if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException(message);
         }
         return value;
-    }
-
-    private String normalizeCodigo(String value) {
-        String normalized = normalizeRequired(value, "El codigo de la unidad es obligatorio").toUpperCase();
-        if (normalized.length() > 32) {
-            throw new IllegalArgumentException("El codigo de la unidad no puede superar 32 caracteres");
-        }
-        return normalized;
     }
 
     private String normalizeRequired(String value, String message) {
@@ -307,5 +253,13 @@ public class AreaOperativaCapacidadService {
     private String trimToNull(String value) {
         String trimmed = value != null ? value.trim() : "";
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String resolveUnidadBase(UnidadRelacionAreaOperativa unidadRelacion) {
+        return switch (unidadRelacion) {
+            case ML, L -> "ML";
+            case G, KG -> "G";
+            case U -> "U";
+        };
     }
 }

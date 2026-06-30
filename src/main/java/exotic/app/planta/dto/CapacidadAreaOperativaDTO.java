@@ -3,6 +3,7 @@ package exotic.app.planta.dto;
 import exotic.app.planta.model.organizacion.CapacidadAreaOperativa;
 import exotic.app.planta.model.organizacion.PeriodoCapacidadAreaOperativa;
 import exotic.app.planta.model.organizacion.TipoCapacidadAreaOperativa;
+import exotic.app.planta.model.organizacion.UnidadRelacionAreaOperativa;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,9 +20,9 @@ public class CapacidadAreaOperativaDTO {
     private Long id;
     private Integer areaId;
     private Long unidadMedidaId;
-    private String unidadCodigo;
     private String unidadNombre;
-    private String unidadEstandar;
+    private BigDecimal unidadRelacionEstandar;
+    private UnidadRelacionAreaOperativa unidadRelacion;
     private TipoCapacidadAreaOperativa tipoCapacidad;
     private BigDecimal cantidad;
     private PeriodoCapacidadAreaOperativa periodo;
@@ -36,9 +37,9 @@ public class CapacidadAreaOperativaDTO {
                 .id(entity.getId())
                 .areaId(entity.getAreaOperativa() != null ? entity.getAreaOperativa().getAreaId() : null)
                 .unidadMedidaId(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getId() : null)
-                .unidadCodigo(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getCodigo() : null)
                 .unidadNombre(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getNombre() : null)
-                .unidadEstandar(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getUnidadEstandar() : null)
+                .unidadRelacionEstandar(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getRelacionEstandar() : null)
+                .unidadRelacion(entity.getUnidadMedida() != null ? entity.getUnidadMedida().getUnidadRelacion() : null)
                 .tipoCapacidad(entity.getTipoCapacidad())
                 .cantidad(entity.getCantidad())
                 .periodo(entity.getPeriodo())

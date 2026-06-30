@@ -24,8 +24,8 @@ import java.math.BigDecimal;
         name = "unidad_medida_area_operativa",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_umao_area_codigo",
-                        columnNames = {"area_operativa_id", "codigo"}
+                        name = "uk_umao_nombre",
+                        columnNames = {"nombre"}
                 )
         }
 )
@@ -44,31 +44,13 @@ public class UnidadMedidaAreaOperativa {
     @JoinColumn(name = "area_operativa_id", nullable = false)
     private AreaOperativa areaOperativa;
 
-    @Column(name = "codigo", nullable = false, length = 32)
-    private String codigo;
-
     @Column(name = "nombre", nullable = false, length = 120)
     private String nombre;
 
-    @Column(name = "descripcion")
-    private String descripcion;
-
     @Enumerated(EnumType.STRING)
-    @Column(name = "dimension", nullable = false, length = 32)
-    private DimensionUnidadAreaOperativa dimension;
+    @Column(name = "unidad_relacion", nullable = false, length = 16)
+    private UnidadRelacionAreaOperativa unidadRelacion;
 
-    @Column(name = "unidad_estandar", nullable = false, length = 16)
-    private String unidadEstandar;
-
-    @Column(name = "cantidad_unidad_estandar", nullable = false, precision = 19, scale = 6)
-    private BigDecimal cantidadUnidadEstandar;
-
-    @Column(name = "principal", nullable = false)
-    private boolean principal;
-
-    @Column(name = "discreta", nullable = false)
-    private boolean discreta;
-
-    @Column(name = "activo", nullable = false)
-    private boolean activo = true;
+    @Column(name = "relacion_estandar", nullable = false, precision = 19, scale = 6)
+    private BigDecimal relacionEstandar;
 }

@@ -1,7 +1,7 @@
 package exotic.app.planta.dto;
 
-import exotic.app.planta.model.organizacion.DimensionUnidadAreaOperativa;
 import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
+import exotic.app.planta.model.organizacion.UnidadRelacionAreaOperativa;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,29 +16,17 @@ import java.math.BigDecimal;
 public class UnidadMedidaAreaOperativaDTO {
     private Long id;
     private Integer areaId;
-    private String codigo;
     private String nombre;
-    private String descripcion;
-    private DimensionUnidadAreaOperativa dimension;
-    private String unidadEstandar;
-    private BigDecimal cantidadUnidadEstandar;
-    private boolean principal;
-    private boolean discreta;
-    private boolean activo;
+    private BigDecimal relacionEstandar;
+    private UnidadRelacionAreaOperativa unidadRelacion;
 
     public static UnidadMedidaAreaOperativaDTO fromEntity(UnidadMedidaAreaOperativa entity) {
         return UnidadMedidaAreaOperativaDTO.builder()
                 .id(entity.getId())
                 .areaId(entity.getAreaOperativa() != null ? entity.getAreaOperativa().getAreaId() : null)
-                .codigo(entity.getCodigo())
                 .nombre(entity.getNombre())
-                .descripcion(entity.getDescripcion())
-                .dimension(entity.getDimension())
-                .unidadEstandar(entity.getUnidadEstandar())
-                .cantidadUnidadEstandar(entity.getCantidadUnidadEstandar())
-                .principal(entity.isPrincipal())
-                .discreta(entity.isDiscreta())
-                .activo(entity.isActivo())
+                .relacionEstandar(entity.getRelacionEstandar())
+                .unidadRelacion(entity.getUnidadRelacion())
                 .build();
     }
 }

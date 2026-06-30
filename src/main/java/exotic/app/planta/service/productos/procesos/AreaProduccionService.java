@@ -24,6 +24,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -237,7 +238,8 @@ public class AreaProduccionService {
                 .collect(Collectors.toMap(Categoria::getCategoriaId, Function.identity()));
 
         LinkedHashSet<Long> unidadIds = dto.getCategoriasHabilitadas().stream()
-                .flatMap(categoria -> safeUnidadIds(categoria).stream())
+                .map(AreaProduccionDTO.CategoriaHabilitadaRequestDTO::getUnidadMedidaId)
+                .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<Long, UnidadMedidaAreaOperativa> unidadesById = unidadMedidaAreaOperativaRepo.findAllById(unidadIds).stream()
@@ -251,7 +253,7 @@ public class AreaProduccionService {
         }
 
         List<AreaOperativaCategoriaUnidadMedida> nextAssociations = new ArrayList<>();
-        Set<String> seenPairs = new HashSet<>();
+        Set<Integer> seenCategoriaIds = new HashSet<>();
 
         for (AreaProduccionDTO.CategoriaHabilitadaRequestDTO categoriaRequest : dto.getCategoriasHabilitadas()) {
             Categoria categoria = categoriasById.get(categoriaRequest.getCategoriaId());
@@ -260,43 +262,36 @@ public class AreaProduccionService {
                         "La categoria " + categoriaRequest.getCategoriaId() + " no esta habilitada para esta area"
                 );
             }
-
-            for (Long unidadId : safeUnidadIds(categoriaRequest)) {
-                UnidadMedidaAreaOperativa unidad = unidadesById.get(unidadId);
-                if (unidad.getAreaOperativa().getAreaId() != area.getAreaId()) {
-                    throw new IllegalArgumentException(
-                            "La unidad " + unidadId + " no pertenece al area operativa " + area.getAreaId()
-                    );
-                }
-                if (!unidad.isActivo()) {
-                    throw new IllegalArgumentException("La unidad " + unidad.getCodigo() + " no esta activa");
-                }
-
-                String pairKey = categoria.getCategoriaId() + ":" + unidad.getId();
-                if (!seenPairs.add(pairKey)) {
-                    continue;
-                }
-
-                AreaOperativaCategoriaUnidadMedida association = new AreaOperativaCategoriaUnidadMedida();
-                association.setAreaOperativa(area);
-                association.setCategoria(categoria);
-                association.setUnidadMedida(unidad);
-                nextAssociations.add(association);
+            if (!seenCategoriaIds.add(categoria.getCategoriaId())) {
+                throw new IllegalArgumentException("La categoria " + categoria.getCategoriaId() + " esta duplicada en la solicitud");
             }
+
+            Long unidadId = categoriaRequest.getUnidadMedidaId();
+            if (unidadId == null) {
+                if (categoriaRequest.getFactorLote() != null) {
+                    throw new IllegalArgumentException("No se puede configurar factor lote sin unidad de medida");
+                }
+                continue;
+            }
+
+            UnidadMedidaAreaOperativa unidad = unidadesById.get(unidadId);
+            if (!area.getAreaId().equals(unidad.getAreaOperativa().getAreaId())) {
+                throw new IllegalArgumentException(
+                        "La unidad " + unidadId + " no pertenece al area operativa " + area.getAreaId()
+                );
+            }
+
+            AreaOperativaCategoriaUnidadMedida association = new AreaOperativaCategoriaUnidadMedida();
+            association.setAreaOperativa(area);
+            association.setCategoria(categoria);
+            association.setUnidadMedida(unidad);
+            association.setFactorLote(requirePositiveFactorLote(categoriaRequest.getFactorLote()));
+            nextAssociations.add(association);
         }
 
         if (!nextAssociations.isEmpty()) {
             areaCategoriaUnidadRepo.saveAll(nextAssociations);
         }
-    }
-
-    private List<Long> safeUnidadIds(AreaProduccionDTO.CategoriaHabilitadaRequestDTO categoriaRequest) {
-        if (categoriaRequest.getUnidadMedidaIds() == null || categoriaRequest.getUnidadMedidaIds().isEmpty()) {
-            return List.of();
-        }
-        return categoriaRequest.getUnidadMedidaIds().stream()
-                .filter(java.util.Objects::nonNull)
-                .toList();
     }
 
     private void removeAssociationsForDisabledCategorias(AreaOperativa area) {
@@ -327,15 +322,19 @@ public class AreaProduccionService {
                     .build();
         }
 
-        Map<Integer, List<Long>> unidadIdsByCategoria = buildUnidadIdsByCategoria(area.getAreaId());
+        Map<Integer, AreaOperativaCategoriaUnidadMedida> unidadByCategoria = buildUnidadByCategoria(area.getAreaId());
 
         List<AreaOperativaResponseDTO.CategoriaHabilitadaDTO> categoriasDto = area.getCategoriasHabilitadas().stream()
                 .sorted(Comparator.comparing(Categoria::getCategoriaNombre, String.CASE_INSENSITIVE_ORDER))
-                .map(categoria -> AreaOperativaResponseDTO.CategoriaHabilitadaDTO.builder()
-                        .categoriaId(categoria.getCategoriaId())
-                        .categoriaNombre(categoria.getCategoriaNombre())
-                        .unidadMedidaIds(unidadIdsByCategoria.getOrDefault(categoria.getCategoriaId(), List.of()))
-                        .build())
+                .map(categoria -> {
+                    AreaOperativaCategoriaUnidadMedida association = unidadByCategoria.get(categoria.getCategoriaId());
+                    return AreaOperativaResponseDTO.CategoriaHabilitadaDTO.builder()
+                            .categoriaId(categoria.getCategoriaId())
+                            .categoriaNombre(categoria.getCategoriaNombre())
+                            .unidadMedidaId(association != null ? association.getUnidadMedida().getId() : null)
+                            .factorLote(association != null ? association.getFactorLote() : null)
+                            .build();
+                })
                 .toList();
 
         return AreaOperativaResponseDTO.builder()
@@ -347,19 +346,24 @@ public class AreaProduccionService {
                 .build();
     }
 
-    private Map<Integer, List<Long>> buildUnidadIdsByCategoria(Integer areaId) {
-        Map<Integer, List<Long>> unidadIdsByCategoria = new HashMap<>();
+    private Map<Integer, AreaOperativaCategoriaUnidadMedida> buildUnidadByCategoria(Integer areaId) {
+        Map<Integer, AreaOperativaCategoriaUnidadMedida> unidadByCategoria = new HashMap<>();
         if (areaId == null) {
-            return unidadIdsByCategoria;
+            return unidadByCategoria;
         }
 
         for (AreaOperativaCategoriaUnidadMedida association : areaCategoriaUnidadRepo.findAllByAreaOperativa_AreaId(areaId)) {
             Integer categoriaId = association.getCategoria().getCategoriaId();
-            Long unidadId = association.getUnidadMedida().getId();
-            unidadIdsByCategoria.computeIfAbsent(categoriaId, ignored -> new ArrayList<>()).add(unidadId);
+            unidadByCategoria.putIfAbsent(categoriaId, association);
         }
 
-        unidadIdsByCategoria.values().forEach(ids -> ids.sort(Long::compareTo));
-        return unidadIdsByCategoria;
+        return unidadByCategoria;
+    }
+
+    private BigDecimal requirePositiveFactorLote(BigDecimal factorLote) {
+        if (factorLote == null || factorLote.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("El factor lote debe ser mayor que 0");
+        }
+        return factorLote;
     }
 }

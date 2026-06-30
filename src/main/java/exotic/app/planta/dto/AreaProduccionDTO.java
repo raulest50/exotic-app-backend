@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -38,6 +38,8 @@ public class AreaProduccionDTO {
         @NotNull(message = "La categoria es obligatoria")
         private Integer categoriaId;
 
-        private List<Long> unidadMedidaIds = new ArrayList<>();
+        private Long unidadMedidaId;
+
+        private BigDecimal factorLote;
     }
 }

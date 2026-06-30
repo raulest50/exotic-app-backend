@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface CapacidadAreaOperativaRepo extends JpaRepository<CapacidadAreaOperativa, Long> {
     List<CapacidadAreaOperativa> findAllByAreaOperativa_AreaIdOrderByActivoDescTipoCapacidadAscPeriodoAsc(Integer areaId);
     Optional<CapacidadAreaOperativa> findByIdAndAreaOperativa_AreaId(Long id, Integer areaId);
+    boolean existsByUnidadMedida_Id(Long unidadId);
 }

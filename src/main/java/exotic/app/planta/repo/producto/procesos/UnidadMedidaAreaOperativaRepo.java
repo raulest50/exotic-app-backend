@@ -9,8 +9,8 @@ import java.util.Optional;
 
 @Repository
 public interface UnidadMedidaAreaOperativaRepo extends JpaRepository<UnidadMedidaAreaOperativa, Long> {
-    List<UnidadMedidaAreaOperativa> findAllByAreaOperativa_AreaIdOrderByPrincipalDescNombreAsc(Integer areaId);
+    List<UnidadMedidaAreaOperativa> findAllByAreaOperativa_AreaIdOrderByNombreAsc(Integer areaId);
     Optional<UnidadMedidaAreaOperativa> findByIdAndAreaOperativa_AreaId(Long id, Integer areaId);
-    boolean existsByAreaOperativa_AreaIdAndCodigoIgnoreCase(Integer areaId, String codigo);
-    boolean existsByAreaOperativa_AreaIdAndCodigoIgnoreCaseAndIdNot(Integer areaId, String codigo, Long id);
+    boolean existsByNombreIgnoreCase(String nombre);
+    boolean existsByNombreIgnoreCaseAndIdNot(String nombre, Long id);
 }

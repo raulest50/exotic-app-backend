@@ -16,13 +16,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(
         name = "area_operativa_categoria_unidad_medida",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_aocum_area_categoria_unidad",
-                        columnNames = {"area_operativa_id", "categoria_id", "unidad_medida_area_operativa_id"}
+                        name = "uk_aocum_area_categoria",
+                        columnNames = {"area_operativa_id", "categoria_id"}
                 )
         }
 )
@@ -48,4 +50,7 @@ public class AreaOperativaCategoriaUnidadMedida {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "unidad_medida_area_operativa_id", nullable = false)
     private UnidadMedidaAreaOperativa unidadMedida;
+
+    @Column(name = "factor_lote", nullable = false, precision = 19, scale = 6)
+    private BigDecimal factorLote;
 }

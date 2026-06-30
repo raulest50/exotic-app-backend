@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,8 +40,7 @@ public class AreaOperativaResponseDTO {
     public static class CategoriaHabilitadaDTO {
         private Integer categoriaId;
         private String categoriaNombre;
-
-        @Builder.Default
-        private List<Long> unidadMedidaIds = new ArrayList<>();
+        private Long unidadMedidaId;
+        private BigDecimal factorLote;
     }
 }

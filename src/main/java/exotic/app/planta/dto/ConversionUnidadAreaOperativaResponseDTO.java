@@ -15,7 +15,7 @@ public class ConversionUnidadAreaOperativaResponseDTO {
     private UnidadMedidaAreaOperativaDTO unidadOrigen;
     private UnidadMedidaAreaOperativaDTO unidadDestino;
     private BigDecimal cantidadOrigen;
-    private BigDecimal cantidadEstandar;
-    private String unidadEstandar;
+    private BigDecimal cantidadBase;
+    private String unidadBase;
     private BigDecimal cantidadDestino;
 }
