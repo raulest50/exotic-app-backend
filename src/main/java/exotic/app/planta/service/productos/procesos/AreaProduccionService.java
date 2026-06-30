@@ -275,7 +275,7 @@ public class AreaProduccionService {
             }
 
             UnidadMedidaAreaOperativa unidad = unidadesById.get(unidadId);
-            if (!area.getAreaId().equals(unidad.getAreaOperativa().getAreaId())) {
+            if (area.getAreaId() != unidad.getAreaOperativa().getAreaId()) {
                 throw new IllegalArgumentException(
                         "La unidad " + unidadId + " no pertenece al area operativa " + area.getAreaId()
                 );
