@@ -94,6 +94,8 @@ public class RutaProcesoCatService {
             node.setLabel(nodeDto.getLabel());
             node.setHasLeftHandle(nodeDto.isHasLeftHandle());
             node.setHasRightHandle(nodeDto.isHasRightHandle());
+            node.setDuracionEstimadaMinutos(nodeDto.getDuracionEstimadaMinutos());
+            node.setRequiereJornadaLaboral(nodeDto.isRequiereJornadaLaboral());
 
             if (nodeDto.getAreaOperativaId() != null) {
                 AreaOperativa area = areaProduccionRepo.findById(nodeDto.getAreaOperativaId())
@@ -190,6 +192,8 @@ public class RutaProcesoCatService {
         dto.setLabel(node.getLabel());
         dto.setHasLeftHandle(node.isHasLeftHandle());
         dto.setHasRightHandle(node.isHasRightHandle());
+        dto.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
+        dto.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
 
         if (node.getAreaOperativa() != null) {
             dto.setAreaOperativaId(node.getAreaOperativa().getAreaId());
@@ -235,6 +239,9 @@ public class RutaProcesoCatService {
             }
             if (node.getAreaOperativaId() == null) {
                 throw new IllegalArgumentException("Todos los nodos deben tener un área operativa asignada.");
+            }
+            if (node.getDuracionEstimadaMinutos() < 0) {
+                throw new IllegalArgumentException("La duración estimada de los nodos debe ser mayor o igual a 0 minutos.");
             }
             if (!usedAreaIds.add(node.getAreaOperativaId())) {
                 throw new IllegalArgumentException(
@@ -381,6 +388,8 @@ public class RutaProcesoCatService {
         private String label;
         private boolean hasLeftHandle = true;
         private boolean hasRightHandle = true;
+        private int duracionEstimadaMinutos = 0;
+        private boolean requiereJornadaLaboral = true;
     }
 
     @lombok.Data

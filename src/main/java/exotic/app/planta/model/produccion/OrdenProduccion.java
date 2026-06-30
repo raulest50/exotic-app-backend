@@ -3,6 +3,7 @@ package exotic.app.planta.model.produccion;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import exotic.app.planta.model.empresa.JornadaLaboralVersion;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.ventas.Vendedor;
@@ -45,6 +46,11 @@ public class OrdenProduccion {
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "ruta_proceso_cat_version_id")
     private RutaProcesoCatVersion rutaProcesoCatVersion;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "jornada_laboral_version_id")
+    private JornadaLaboralVersion jornadaLaboralVersion;
 
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = true)

@@ -1,6 +1,7 @@
 package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.empresa.JornadaLaboralVersion;
 import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
@@ -11,6 +12,7 @@ import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.empresa.JornadaLaboralVersionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
@@ -55,6 +57,8 @@ public class SeguimientoOrdenAreaService {
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
     private final AreaProduccionRepo areaProduccionRepo;
     private final RutaProcesoCatVersionRepo rutaProcesoCatVersionRepo;
+    private final JornadaLaboralVersionRepo jornadaLaboralVersionRepo;
+    private final RutaProcesoEstimacionService rutaProcesoEstimacionService;
     private final UserRepository userRepository;
     private final MasterDirectiveService masterDirectiveService;
     private final Clock applicationClock;
@@ -96,6 +100,10 @@ public class SeguimientoOrdenAreaService {
         }
 
         orden.setRutaProcesoCatVersion(rutaVersion);
+        if (orden.getJornadaLaboralVersion() == null) {
+            jornadaLaboralVersionRepo.findFirstByEstadoOrderByVersionDesc(JornadaLaboralVersion.Estado.VIGENTE)
+                    .ifPresent(orden::setJornadaLaboralVersion);
+        }
 
         Set<Long> nodosConPredecesores = rutaVersion.getEdges().stream()
                 .map(edge -> edge.getTargetNode().getId())
@@ -117,6 +125,8 @@ public class SeguimientoOrdenAreaService {
             seguimiento.setAreaOperativa(node.getAreaOperativa());
             seguimiento.setPosicionSecuencia(posicion++);
             seguimiento.setFechaEstadoActual(ahora);
+            seguimiento.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
+            seguimiento.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
 
             boolean esNodoInicial = !nodosConPredecesores.contains(node.getId());
             if (esNodoInicial) {
@@ -295,6 +305,13 @@ public class SeguimientoOrdenAreaService {
         detalle.setFechaInicio(orden.getFechaInicio());
         detalle.setFechaFinal(orden.getFechaFinal());
         detalle.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
+        RutaProcesoEstimacionService.RutaProcesoEstimacionDTO estimacion =
+                rutaProcesoEstimacionService.estimarOrden(orden, ruta);
+        if (estimacion != null) {
+            detalle.setFechaInicioEstimacion(estimacion.getFechaInicioEstimacion());
+            detalle.setFechaFinalEstimada(estimacion.getFechaFinalEstimada());
+            detalle.setDuracionCalendarioRutaCriticaMinutos(estimacion.getDuracionCalendarioRutaCriticaMinutos());
+        }
         detalle.setRutaEstados(ruta.stream().map(this::toRutaEstadoDTO).toList());
         return detalle;
     }
@@ -536,6 +553,8 @@ public class SeguimientoOrdenAreaService {
         dto.setFechaVisible(entity.getFechaVisible());
         dto.setFechaEstadoActual(entity.getFechaEstadoActual());
         dto.setFechaCompletado(entity.getFechaCompletado());
+        dto.setDuracionEstimadaMinutos(entity.getDuracionEstimadaMinutos());
+        dto.setRequiereJornadaLaboral(entity.isRequiereJornadaLaboral());
         dto.setObservaciones(entity.getObservaciones());
         dto.setMinutosEnEstadoActual(calculateMinutesBetween(entity.getFechaEstadoActual(), instanteReferencia));
 
@@ -633,6 +652,8 @@ public class SeguimientoOrdenAreaService {
         dto.setFechaVisible(entity.getFechaVisible());
         dto.setFechaEstadoActual(entity.getFechaEstadoActual());
         dto.setFechaCompletado(entity.getFechaCompletado());
+        dto.setDuracionEstimadaMinutos(entity.getDuracionEstimadaMinutos());
+        dto.setRequiereJornadaLaboral(entity.isRequiereJornadaLaboral());
         dto.setObservaciones(entity.getObservaciones());
         if (entity.getUsuarioReporta() != null) {
             dto.setUsuarioReportaId(entity.getUsuarioReporta().getId());
@@ -772,6 +793,8 @@ public class SeguimientoOrdenAreaService {
         private LocalDateTime fechaEstadoActual;
         private LocalDateTime fechaCompletado;
         private Long minutosEnEstadoActual;
+        private int duracionEstimadaMinutos;
+        private boolean requiereJornadaLaboral;
 
         private Long usuarioReportaId;
         private String usuarioReportaNombre;
@@ -808,6 +831,8 @@ public class SeguimientoOrdenAreaService {
         private LocalDateTime fechaVisible;
         private LocalDateTime fechaEstadoActual;
         private LocalDateTime fechaCompletado;
+        private int duracionEstimadaMinutos;
+        private boolean requiereJornadaLaboral;
         private Long usuarioReportaId;
         private String usuarioReportaNombre;
         private String observaciones;
@@ -826,6 +851,9 @@ public class SeguimientoOrdenAreaService {
         private LocalDateTime fechaInicio;
         private LocalDateTime fechaFinal;
         private LocalDateTime fechaFinalPlanificada;
+        private LocalDateTime fechaInicioEstimacion;
+        private LocalDateTime fechaFinalEstimada;
+        private Long duracionCalendarioRutaCriticaMinutos;
         private List<RutaEstadoDTO> rutaEstados = new ArrayList<>();
     }
 

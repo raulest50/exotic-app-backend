@@ -34,11 +34,13 @@ class AreaOperativaPanelDetalleServiceTest {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         ProductoService productoService = mock(ProductoService.class);
+        RutaProcesoEstimacionService estimacionService = mock(RutaProcesoEstimacionService.class);
 
         AreaOperativaPanelDetalleService service = new AreaOperativaPanelDetalleService(
                 seguimientoRepo,
                 areaRepo,
-                productoService
+                productoService,
+                estimacionService
         );
 
         Fixture fixture = buildFixture();
@@ -66,11 +68,13 @@ class AreaOperativaPanelDetalleServiceTest {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         ProductoService productoService = mock(ProductoService.class);
+        RutaProcesoEstimacionService estimacionService = mock(RutaProcesoEstimacionService.class);
 
         AreaOperativaPanelDetalleService service = new AreaOperativaPanelDetalleService(
                 seguimientoRepo,
                 areaRepo,
-                productoService
+                productoService,
+                estimacionService
         );
 
         Fixture fixture = buildFixture();
@@ -85,11 +89,13 @@ class AreaOperativaPanelDetalleServiceTest {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
         ProductoService productoService = mock(ProductoService.class);
+        RutaProcesoEstimacionService estimacionService = mock(RutaProcesoEstimacionService.class);
 
         AreaOperativaPanelDetalleService service = new AreaOperativaPanelDetalleService(
                 seguimientoRepo,
                 areaRepo,
-                productoService
+                productoService,
+                estimacionService
         );
 
         when(areaRepo.findAllByResponsableArea_Id(99L)).thenReturn(List.of(new AreaOperativa()));

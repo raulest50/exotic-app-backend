@@ -65,6 +65,12 @@ public class SeguimientoOrdenArea {
     @Column(name = "fecha_completado")
     private LocalDateTime fechaCompletado;
 
+    @Column(name = "duracion_estimada_minutos", nullable = false)
+    private int duracionEstimadaMinutos = 0;
+
+    @Column(name = "requiere_jornada_laboral", nullable = false)
+    private boolean requiereJornadaLaboral = true;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_reporta_id")
     private User usuarioReporta;

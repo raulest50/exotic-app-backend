@@ -43,4 +43,10 @@ public class RutaProcesoNode {
 
     @Column(name = "has_right_handle")
     private boolean hasRightHandle = true;
+
+    @Column(name = "duracion_estimada_minutos", nullable = false)
+    private int duracionEstimadaMinutos = 0;
+
+    @Column(name = "requiere_jornada_laboral", nullable = false)
+    private boolean requiereJornadaLaboral = true;
 }

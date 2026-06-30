@@ -38,6 +38,7 @@ public class AreaOperativaPanelDetalleService {
     private final SeguimientoOrdenAreaRepo seguimientoOrdenAreaRepo;
     private final AreaProduccionRepo areaProduccionRepo;
     private final ProductoService productoService;
+    private final RutaProcesoEstimacionService rutaProcesoEstimacionService;
 
     public AreaOperativaOrdenDetalleDTO getDetalleOperativoOrden(int ordenId, Long userId) {
         if (userId == null) {
@@ -74,7 +75,7 @@ public class AreaOperativaPanelDetalleService {
         }
 
         AreaOperativaOrdenDetalleDTO dto = new AreaOperativaOrdenDetalleDTO();
-        dto.setOrden(buildOrdenDTO(orden, terminado));
+        dto.setOrden(buildOrdenDTO(orden, terminado, seguimientos));
         dto.setSeguimiento(seguimientos.stream()
                 .sorted(Comparator.comparing(SeguimientoOrdenArea::getPosicionSecuencia, Comparator.nullsLast(Integer::compareTo)))
                 .map(this::buildSeguimientoDTO)
@@ -84,7 +85,11 @@ public class AreaOperativaPanelDetalleService {
         return dto;
     }
 
-    private OrdenOperativaResumenDTO buildOrdenDTO(OrdenProduccion orden, Terminado terminado) {
+    private OrdenOperativaResumenDTO buildOrdenDTO(
+            OrdenProduccion orden,
+            Terminado terminado,
+            List<SeguimientoOrdenArea> seguimientos
+    ) {
         OrdenOperativaResumenDTO dto = new OrdenOperativaResumenDTO();
         dto.setOrdenId(orden.getOrdenId());
         dto.setLoteAsignado(orden.getLoteAsignado());
@@ -101,6 +106,13 @@ public class AreaOperativaPanelDetalleService {
             dto.setCategoriaId(terminado.getCategoria().getCategoriaId());
             dto.setCategoriaNombre(terminado.getCategoria().getCategoriaNombre());
         }
+        RutaProcesoEstimacionService.RutaProcesoEstimacionDTO estimacion =
+                rutaProcesoEstimacionService.estimarOrden(orden, seguimientos);
+        if (estimacion != null) {
+            dto.setFechaInicioEstimacion(estimacion.getFechaInicioEstimacion());
+            dto.setFechaFinalEstimada(estimacion.getFechaFinalEstimada());
+            dto.setDuracionCalendarioRutaCriticaMinutos(estimacion.getDuracionCalendarioRutaCriticaMinutos());
+        }
         return dto;
     }
 
@@ -116,6 +128,8 @@ public class AreaOperativaPanelDetalleService {
         dto.setFechaVisible(seguimiento.getFechaVisible());
         dto.setFechaEstadoActual(seguimiento.getFechaEstadoActual());
         dto.setFechaCompletado(seguimiento.getFechaCompletado());
+        dto.setDuracionEstimadaMinutos(seguimiento.getDuracionEstimadaMinutos());
+        dto.setRequiereJornadaLaboral(seguimiento.isRequiereJornadaLaboral());
         dto.setUsuarioReportaNombre(seguimiento.getUsuarioReporta() != null ? seguimiento.getUsuarioReporta().getNombreCompleto() : null);
         dto.setObservaciones(seguimiento.getObservaciones());
         return dto;
@@ -173,12 +187,16 @@ public class AreaOperativaPanelDetalleService {
         dto.setHasLeftHandle(node.isHasLeftHandle());
         dto.setHasRightHandle(node.isHasRightHandle());
         dto.setCurrentLeaderArea(node.getAreaOperativa() != null && areaIdsResponsables.contains(node.getAreaOperativa().getAreaId()));
+        dto.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
+        dto.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
 
         if (seguimiento != null) {
             dto.setSeguimientoId(seguimiento.getId());
             dto.setEstadoActual(seguimiento.getEstado());
             dto.setEstadoDescripcion(EstadoSeguimientoOrdenArea.fromCode(seguimiento.getEstado()).getDescripcion());
             dto.setFechaEstadoActual(seguimiento.getFechaEstadoActual());
+            dto.setDuracionEstimadaMinutos(seguimiento.getDuracionEstimadaMinutos());
+            dto.setRequiereJornadaLaboral(seguimiento.isRequiereJornadaLaboral());
         }
 
         return dto;
@@ -284,6 +302,9 @@ public class AreaOperativaPanelDetalleService {
         private LocalDateTime fechaInicio;
         private LocalDateTime fechaFinal;
         private LocalDateTime fechaFinalPlanificada;
+        private LocalDateTime fechaInicioEstimacion;
+        private LocalDateTime fechaFinalEstimada;
+        private Long duracionCalendarioRutaCriticaMinutos;
         private Integer categoriaId;
         private String categoriaNombre;
     }
@@ -300,6 +321,8 @@ public class AreaOperativaPanelDetalleService {
         private LocalDateTime fechaVisible;
         private LocalDateTime fechaEstadoActual;
         private LocalDateTime fechaCompletado;
+        private int duracionEstimadaMinutos;
+        private boolean requiereJornadaLaboral;
         private String usuarioReportaNombre;
         private String observaciones;
     }
@@ -325,6 +348,8 @@ public class AreaOperativaPanelDetalleService {
         private Integer estadoActual;
         private String estadoDescripcion;
         private LocalDateTime fechaEstadoActual;
+        private int duracionEstimadaMinutos;
+        private boolean requiereJornadaLaboral;
         private boolean currentLeaderArea;
     }
 
