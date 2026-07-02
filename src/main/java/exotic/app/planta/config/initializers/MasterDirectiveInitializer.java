@@ -15,7 +15,7 @@ public class MasterDirectiveInitializer {
     private static final String LIMITE_OCM_RESUMEN = "Tope global para configurar limites de recepciones OCM por proveedor";
     private static final String LIMITE_OCM_AYUDA = "Define el maximo permitido al crear o editar el limite de recepciones parciales OCM de un proveedor. No afecta retroactivamente limites ya configurados y no se usa directamente para validar ingresos OCM.";
     private static final String DISPENSACION_NO_BLOQUEA_RESUMEN = "Permite iniciar el proceso productivo sin esperar la dispensacion de materiales";
-    private static final String DISPENSACION_NO_BLOQUEA_AYUDA = "Cuando esta activa, Almacen General se marca automaticamente como completado solo a nivel de seguimiento de proceso al crear la orden de produccion. No crea transacciones de almacen, no descuenta inventario y no acredita la dispensacion real.";
+    private static final String DISPENSACION_NO_BLOQUEA_AYUDA = "Cuando esta activa, Almacen General se marca automaticamente como completado solo a nivel de seguimiento de proceso al crear ordenes de produccion nuevas. No crea transacciones de almacen, no descuenta inventario y no acredita la dispensacion real. Para ordenes existentes use la accion retroactiva de esta pantalla.";
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_RESUMEN = "Permite que master vea y entre al modulo de Directivas Super Master";
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_AYUDA = "Cuando esta activa, el usuario master puede ver el acceso en Inicio y entrar a la ruta de Directivas Super Master. No agrega proteccion adicional sobre los endpoints API.";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN = "Cantidad de dias bloqueados para editar MPS semanal";
@@ -34,6 +34,8 @@ public class MasterDirectiveInitializer {
     private static final String AREA_OPERATIVA_INACTIVITY_THRESHOLD_AYUDA = "Define cuantos minutos puede pasar un area con carga activa sin terminaciones reportadas antes de marcar alerta. Acepta valores entre 5 y 480.";
     private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_RESUMEN = "Intervalo de chequeo de alertas en monitoreo";
     private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_AYUDA = "Define cada cuantos minutos el tab de monitoreo consulta las alertas mientras esta abierto y visible. Acepta valores entre 5 y 20.";
+    private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_RESUMEN = "Habilita alternar entre semana actual e historico en Area Operativa";
+    private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA = "Cuando esta activa, el panel de Area Operativa muestra un control para que el operario alterne entre ordenes con fecha planificada de entrega en la semana actual e historico completo. Cuando esta apagada, el panel conserva la vista historica actual.";
 
     private final MasterDirectiveRepo masterDirectiveRepo;
 
@@ -49,6 +51,7 @@ public class MasterDirectiveInitializer {
         ensureAreaOperativaInactivityAlertEnabled();
         ensureAreaOperativaInactivityThresholdMinutes();
         ensureAreaOperativaInactivityCheckIntervalMinutes();
+        ensureAreaOperativaPanelHistoricoToggleEnabled();
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {
@@ -324,5 +327,30 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(AREA_OPERATIVA_INACTIVITY_INTERVAL_AYUDA);
+    }
+
+    private void ensureAreaOperativaPanelHistoricoToggleEnabled() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED)
+                .map(this::actualizarMetadataAreaOperativaPanelHistoricoToggleEnabled)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED));
+                    aplicarMetadataAreaOperativaPanelHistoricoToggleEnabled(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaPanelHistoricoToggleEnabled(MasterDirective directive) {
+        aplicarMetadataAreaOperativaPanelHistoricoToggleEnabled(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaPanelHistoricoToggleEnabled(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA);
     }
 }

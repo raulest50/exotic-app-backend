@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -73,6 +74,24 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH op.producto p
         JOIN FETCH s.areaOperativa a
         JOIN FETCH s.rutaProcesoNode n
+        WHERE a.responsableArea.id = :userId
+        AND op.estadoOrden != -1
+        AND op.fechaFinalPlanificada >= :weekStart
+        AND op.fechaFinalPlanificada < :weekEndExclusive
+        ORDER BY s.posicionSecuencia ASC, s.id ASC
+        """)
+    List<SeguimientoOrdenArea> findTableroByResponsableUserIdAndFechaFinalPlanificadaBetween(
+            @Param("userId") Long userId,
+            @Param("weekStart") LocalDateTime weekStart,
+            @Param("weekEndExclusive") LocalDateTime weekEndExclusive
+    );
+
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH op.producto p
+        JOIN FETCH s.areaOperativa a
+        JOIN FETCH s.rutaProcesoNode n
         WHERE a.areaId = :areaId
         AND op.estadoOrden != -1
         ORDER BY s.posicionSecuencia ASC, s.id ASC
@@ -131,6 +150,28 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
      */
     Optional<SeguimientoOrdenArea> findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
             int ordenId, int areaId, int estado);
+
+    @Query("""
+        SELECT ag FROM SeguimientoOrdenArea ag
+        JOIN FETCH ag.ordenProduccion op
+        JOIN FETCH ag.areaOperativa a
+        JOIN FETCH ag.rutaProcesoNode n
+        WHERE a.areaId = :almacenGeneralAreaId
+        AND ag.estado = :estadoEspera
+        AND op.estadoOrden NOT IN (-1, 2)
+        AND NOT EXISTS (
+            SELECT 1 FROM SeguimientoOrdenArea s
+            WHERE s.ordenProduccion.ordenId = op.ordenId
+            AND s.areaOperativa.areaId <> :almacenGeneralAreaId
+            AND s.estado <> :estadoCola
+        )
+        ORDER BY op.ordenId ASC
+        """)
+    List<SeguimientoOrdenArea> findCandidatosRetroactividadDispensacionNoBloqueante(
+            @Param("almacenGeneralAreaId") int almacenGeneralAreaId,
+            @Param("estadoEspera") int estadoEspera,
+            @Param("estadoCola") int estadoCola
+    );
 
     @Query("""
         SELECT s.areaOperativa.areaId AS areaId,

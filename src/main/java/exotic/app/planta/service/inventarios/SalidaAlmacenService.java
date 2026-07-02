@@ -12,6 +12,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
 import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.producto.Material;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.users.User;
@@ -178,6 +179,10 @@ public class SalidaAlmacenService {
             produccionService.updateEstadoOrdenProduccion(ordenProduccion.getOrdenId(), nuevoEstado);
             log.info("Actualizado estado de orden de producción {} de {} a {}", ordenProduccion.getOrdenId(), estadoActual, nuevoEstado);
         }
+        ordenProduccionRepo.updateEstadoDispensacionMaterialesById(
+                ordenProduccion.getOrdenId(),
+                EstadoDispensacionMateriales.PARCIAL
+        );
 
         // Logica contable dispensacion
         // Pendiente implementación de lógica contable para dispensaciones

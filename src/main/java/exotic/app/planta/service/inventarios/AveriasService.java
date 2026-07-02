@@ -67,6 +67,13 @@ public class AveriasService {
         dto.setFechaLanzamiento(orden.getFechaLanzamiento());
         dto.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
         dto.setEstadoOrden(orden.getEstadoOrden());
+        dto.setPoliticaDispensacionInicio(orden.getPoliticaDispensacionInicio() != null
+                ? orden.getPoliticaDispensacionInicio().name()
+                : null);
+        dto.setFechaAplicacionPoliticaDispensacion(orden.getFechaAplicacionPoliticaDispensacion());
+        dto.setEstadoDispensacionMateriales(orden.getEstadoDispensacionMateriales() != null
+                ? orden.getEstadoDispensacionMateriales().name()
+                : null);
         dto.setObservaciones(orden.getObservaciones());
         dto.setCantidadProducir(orden.getCantidadProducir());
         dto.setNumeroPedidoComercial(orden.getNumeroPedidoComercial());

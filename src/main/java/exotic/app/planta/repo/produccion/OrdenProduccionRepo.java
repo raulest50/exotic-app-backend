@@ -1,6 +1,7 @@
 package exotic.app.planta.repo.produccion;
 
 import jakarta.transaction.Transactional;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.producto.Terminado;
 import org.springframework.data.domain.Page;
@@ -87,6 +88,14 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
     @Modifying
     @Query("UPDATE OrdenProduccion o SET o.estadoOrden = :estadoOrden, o.fechaFinal = :fechaFinal WHERE o.ordenId = :id")
     void updateEstadoOrdenById(@Param("id") int id, @Param("estadoOrden") int estadoOrden, @Param("fechaFinal") LocalDateTime fechaFinal);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE OrdenProduccion o SET o.estadoDispensacionMateriales = :estado WHERE o.ordenId = :id")
+    void updateEstadoDispensacionMaterialesById(
+            @Param("id") int id,
+            @Param("estado") EstadoDispensacionMateriales estado
+    );
 
     /**
      * Encuentra todas las órdenes de producción en estado abierto (0) o en curso (1)

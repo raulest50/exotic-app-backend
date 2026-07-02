@@ -18,6 +18,8 @@ import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
 import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
+import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
 import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionBatchDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
@@ -29,6 +31,7 @@ import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
@@ -67,6 +70,7 @@ public class ProduccionService {
     //private final UserRepository userRepository;
     private final VendedorRepository vendedorRepository;
     private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
+    private final MasterDirectiveService masterDirectiveService;
     private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
@@ -88,6 +92,7 @@ public class ProduccionService {
         ordenProduccion.setAreaOperativa(ordenProduccionDTO.getAreaOperativa());
         ordenProduccion.setDepartamentoOperativo(ordenProduccionDTO.getDepartamentoOperativo());
         ordenProduccion.setVendedorResponsable(vendedorResponsable);
+        aplicarPoliticaDispensacionInicial(ordenProduccion);
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
@@ -146,6 +151,7 @@ public class ProduccionService {
             ordenProduccion.setAreaOperativa(dto.getAreaOperativa());
             ordenProduccion.setDepartamentoOperativo(dto.getDepartamentoOperativo());
             ordenProduccion.setVendedorResponsable(vendedorResponsable);
+            aplicarPoliticaDispensacionInicial(ordenProduccion);
 
             OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
@@ -305,6 +311,13 @@ public class ProduccionService {
         dto.setFechaLanzamiento(orden.getFechaLanzamiento());
         dto.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
         dto.setEstadoOrden(orden.getEstadoOrden());
+        dto.setPoliticaDispensacionInicio(orden.getPoliticaDispensacionInicio() != null
+                ? orden.getPoliticaDispensacionInicio().name()
+                : null);
+        dto.setFechaAplicacionPoliticaDispensacion(orden.getFechaAplicacionPoliticaDispensacion());
+        dto.setEstadoDispensacionMateriales(orden.getEstadoDispensacionMateriales() != null
+                ? orden.getEstadoDispensacionMateriales().name()
+                : null);
         dto.setObservaciones(orden.getObservaciones());
         dto.setCantidadProducir(orden.getCantidadProducir());
         dto.setNumeroPedidoComercial(orden.getNumeroPedidoComercial());
@@ -649,6 +662,7 @@ public class ProduccionService {
         ordenProduccion.setVendedorResponsable(vendedorResponsable);
         ordenProduccion.setMpsSemanal(mpsSemanal);
         ordenProduccion.setMpsLotePlanificado(lotePlanificado);
+        aplicarPoliticaDispensacionInicial(ordenProduccion);
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
@@ -671,5 +685,16 @@ public class ProduccionService {
 
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
         return savedOrden;
+    }
+
+    private void aplicarPoliticaDispensacionInicial(OrdenProduccion ordenProduccion) {
+        boolean noBloqueante = masterDirectiveService.isDispensacionNoBloqueaInicioProduccion();
+        ordenProduccion.setPoliticaDispensacionInicio(noBloqueante
+                ? PoliticaDispensacionInicio.NO_BLOQUEANTE
+                : PoliticaDispensacionInicio.BLOQUEANTE);
+        ordenProduccion.setFechaAplicacionPoliticaDispensacion(LocalDateTime.now(applicationClock));
+        ordenProduccion.setEstadoDispensacionMateriales(noBloqueante
+                ? EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION
+                : EstadoDispensacionMateriales.PENDIENTE);
     }
 }

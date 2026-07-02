@@ -3,6 +3,8 @@ package exotic.app.planta.resource.master.configs;
 import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import exotic.app.planta.model.master.configs.SuperMasterConfig;
 import exotic.app.planta.service.master.configs.SuperMasterOpsService;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.DispensacionRetroactividadDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -21,10 +23,23 @@ public class SuperMasterOpsResource {
     private static final String SUPER_MASTER_USERNAME = "super_master";
 
     private final SuperMasterOpsService superMasterOpsService;
+    private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
     private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
 
     private boolean isSuperMaster(Authentication auth) {
-        return auth != null && auth.isAuthenticated() && SUPER_MASTER_USERNAME.equals(auth.getName());
+        return auth != null && auth.isAuthenticated() && SUPER_MASTER_USERNAME.equals(normalizeUsername(auth.getName()));
+    }
+
+    private boolean isMasterOrSuperMaster(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return false;
+        }
+        String username = normalizeUsername(auth.getName());
+        return "master".equals(username) || SUPER_MASTER_USERNAME.equals(username);
+    }
+
+    private String normalizeUsername(String username) {
+        return username == null ? "" : username.trim().toLowerCase();
     }
 
     /**
@@ -59,6 +74,24 @@ public class SuperMasterOpsResource {
             log.error("Error updating Super Master config: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
+    }
+
+    @GetMapping("/dispensacion-inicio/retroactividad-preview")
+    public ResponseEntity<?> previewRetroactividadDispensacionNoBloqueante(Authentication authentication) {
+        if (!isMasterOrSuperMaster(authentication)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Only master or super_master can preview this action"));
+        }
+        DispensacionRetroactividadDTO preview = seguimientoOrdenAreaService.previewRetroactividadDispensacionNoBloqueante();
+        return ResponseEntity.ok(preview);
+    }
+
+    @PostMapping("/dispensacion-inicio/aplicar-retroactividad")
+    public ResponseEntity<?> aplicarRetroactividadDispensacionNoBloqueante(Authentication authentication) {
+        if (!isMasterOrSuperMaster(authentication)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Only master or super_master can run this action"));
+        }
+        DispensacionRetroactividadDTO result = seguimientoOrdenAreaService.aplicarRetroactividadDispensacionNoBloqueante();
+        return ResponseEntity.ok(result);
     }
 
     /**

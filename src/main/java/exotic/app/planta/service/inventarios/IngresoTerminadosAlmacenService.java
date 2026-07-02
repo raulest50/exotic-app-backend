@@ -98,6 +98,13 @@ public class IngresoTerminadosAlmacenService {
         opDTO.setOrdenId(op.getOrdenId());
         opDTO.setLoteAsignado(op.getLoteAsignado());
         opDTO.setEstadoOrden(op.getEstadoOrden());
+        opDTO.setPoliticaDispensacionInicio(op.getPoliticaDispensacionInicio() != null
+                ? op.getPoliticaDispensacionInicio().name()
+                : null);
+        opDTO.setFechaAplicacionPoliticaDispensacion(op.getFechaAplicacionPoliticaDispensacion());
+        opDTO.setEstadoDispensacionMateriales(op.getEstadoDispensacionMateriales() != null
+                ? op.getEstadoDispensacionMateriales().name()
+                : null);
         opDTO.setCantidadProducir(op.getCantidadProducir());
         opDTO.setFechaCreacion(op.getFechaCreacion());
         opDTO.setFechaLanzamiento(op.getFechaLanzamiento());

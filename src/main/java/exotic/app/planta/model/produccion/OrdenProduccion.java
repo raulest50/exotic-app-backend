@@ -75,6 +75,17 @@ public class OrdenProduccion {
      */
     private int estadoOrden;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "politica_dispensacion_inicio", nullable = false, length = 30)
+    private PoliticaDispensacionInicio politicaDispensacionInicio = PoliticaDispensacionInicio.BLOQUEANTE;
+
+    @Column(name = "fecha_aplicacion_politica_dispensacion")
+    private LocalDateTime fechaAplicacionPoliticaDispensacion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_dispensacion_materiales", nullable = false, length = 40)
+    private EstadoDispensacionMateriales estadoDispensacionMateriales = EstadoDispensacionMateriales.PENDIENTE;
+
     private String observaciones;
 
     /**

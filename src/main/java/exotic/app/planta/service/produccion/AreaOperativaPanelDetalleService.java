@@ -97,6 +97,13 @@ public class AreaOperativaPanelDetalleService {
         dto.setProductoNombre(terminado.getNombre());
         dto.setCantidadProducir(orden.getCantidadProducir());
         dto.setEstadoOrden(orden.getEstadoOrden());
+        dto.setPoliticaDispensacionInicio(orden.getPoliticaDispensacionInicio() != null
+                ? orden.getPoliticaDispensacionInicio().name()
+                : null);
+        dto.setFechaAplicacionPoliticaDispensacion(orden.getFechaAplicacionPoliticaDispensacion());
+        dto.setEstadoDispensacionMateriales(orden.getEstadoDispensacionMateriales() != null
+                ? orden.getEstadoDispensacionMateriales().name()
+                : null);
         dto.setOrdenObservaciones(orden.getObservaciones());
         dto.setFechaCreacion(orden.getFechaCreacion());
         dto.setFechaInicio(orden.getFechaInicio());
@@ -297,6 +304,9 @@ public class AreaOperativaPanelDetalleService {
         private String productoNombre;
         private double cantidadProducir;
         private int estadoOrden;
+        private String politicaDispensacionInicio;
+        private LocalDateTime fechaAplicacionPoliticaDispensacion;
+        private String estadoDispensacionMateriales;
         private String ordenObservaciones;
         private LocalDateTime fechaCreacion;
         private LocalDateTime fechaInicio;

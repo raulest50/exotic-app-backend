@@ -3,8 +3,10 @@ package exotic.app.planta.service.produccion;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.empresa.JornadaLaboralVersion;
 import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
 import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
@@ -52,6 +54,7 @@ public class SeguimientoOrdenAreaService {
     private static final String NOTA_INICIALIZACION = "Inicializacion de seguimiento";
     private static final String NOTA_DEPENDENCIAS_RESUELTAS = "Paso habilitado automaticamente por resolucion de dependencias previas";
     private static final String NOTA_DISPENSACION_NO_BLOQUEANTE = "Dispensacion no bloqueante habilitada por directiva maestra";
+    private static final String NOTA_DISPENSACION_NO_BLOQUEANTE_RETROACTIVA = "Aplicacion retroactiva de politica de dispensacion no bloqueante";
 
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
@@ -154,7 +157,7 @@ public class SeguimientoOrdenAreaService {
 
         log.info("Seguimiento inicializado para orden {} con {} nodos", orden.getOrdenId(), posicion);
 
-        if (seguimientoAlmacenGeneral != null && masterDirectiveService.isDispensacionNoBloqueaInicioProduccion()) {
+        if (seguimientoAlmacenGeneral != null && isPoliticaDispensacionNoBloqueante(orden)) {
             completarSeguimiento(
                     seguimientoAlmacenGeneral,
                     ActorTipoEventoSeguimiento.SYSTEM,
@@ -163,6 +166,62 @@ public class SeguimientoOrdenAreaService {
             );
             log.info("Almacen General completado automaticamente a nivel de seguimiento para orden {}", orden.getOrdenId());
         }
+    }
+
+    @Transactional(readOnly = true)
+    public DispensacionRetroactividadDTO previewRetroactividadDispensacionNoBloqueante() {
+        boolean directivaActual = masterDirectiveService.isDispensacionNoBloqueaInicioProduccion();
+        int candidatos = findCandidatosRetroactividadDispensacionNoBloqueante().size();
+
+        DispensacionRetroactividadDTO dto = new DispensacionRetroactividadDTO();
+        dto.setDirectivaActual(directivaActual);
+        dto.setEjecutable(directivaActual && candidatos > 0);
+        dto.setOrdenesCandidatas(candidatos);
+        dto.setOrdenesAplicadas(0);
+        dto.setOrdenesOmitidas(0);
+        dto.setMensaje(buildRetroactividadMensaje(directivaActual, candidatos, false));
+        return dto;
+    }
+
+    public DispensacionRetroactividadDTO aplicarRetroactividadDispensacionNoBloqueante() {
+        boolean directivaActual = masterDirectiveService.isDispensacionNoBloqueaInicioProduccion();
+        List<SeguimientoOrdenArea> candidatos = findCandidatosRetroactividadDispensacionNoBloqueante();
+
+        DispensacionRetroactividadDTO dto = new DispensacionRetroactividadDTO();
+        dto.setDirectivaActual(directivaActual);
+        dto.setOrdenesCandidatas(candidatos.size());
+
+        if (!directivaActual) {
+            dto.setEjecutable(false);
+            dto.setOrdenesAplicadas(0);
+            dto.setOrdenesOmitidas(candidatos.size());
+            dto.setMensaje(buildRetroactividadMensaje(false, candidatos.size(), true));
+            return dto;
+        }
+
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        for (SeguimientoOrdenArea seguimientoAlmacenGeneral : candidatos) {
+            OrdenProduccion orden = seguimientoAlmacenGeneral.getOrdenProduccion();
+            orden.setPoliticaDispensacionInicio(PoliticaDispensacionInicio.NO_BLOQUEANTE);
+            orden.setFechaAplicacionPoliticaDispensacion(ahora);
+            if (orden.getEstadoDispensacionMateriales() == null
+                    || orden.getEstadoDispensacionMateriales() == EstadoDispensacionMateriales.PENDIENTE) {
+                orden.setEstadoDispensacionMateriales(EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION);
+            }
+            completarSeguimiento(
+                    seguimientoAlmacenGeneral,
+                    ActorTipoEventoSeguimiento.SYSTEM,
+                    null,
+                    NOTA_DISPENSACION_NO_BLOQUEANTE_RETROACTIVA
+            );
+            dto.getOrdenIdsAplicadas().add(orden.getOrdenId());
+        }
+
+        dto.setEjecutable(!candidatos.isEmpty());
+        dto.setOrdenesAplicadas(candidatos.size());
+        dto.setOrdenesOmitidas(0);
+        dto.setMensaje(buildRetroactividadMensaje(true, candidatos.size(), true));
+        return dto;
     }
 
     public SeguimientoOrdenAreaDTO reportarEnProceso(int ordenId, int areaId, Long userId, String observaciones) {
@@ -269,12 +328,40 @@ public class SeguimientoOrdenAreaService {
 
     @Transactional(readOnly = true)
     public TableroOperativoDTO getTableroOperativoUsuario(Long userId) {
-        List<SeguimientoOrdenAreaDTO> tarjetas = seguimientoRepo.findTableroByResponsableUserId(userId)
+        return getTableroOperativoUsuario(userId, TableroVista.HISTORICO);
+    }
+
+    @Transactional(readOnly = true)
+    public TableroOperativoDTO getTableroOperativoUsuario(Long userId, TableroVista vista) {
+        TableroVista effectiveVista = vista != null ? vista : TableroVista.HISTORICO;
+        LocalDate weekStartDate = null;
+        LocalDate weekEndDate = null;
+
+        List<SeguimientoOrdenArea> seguimientos;
+        if (effectiveVista == TableroVista.SEMANA_ACTUAL) {
+            weekStartDate = getCurrentIsoWeekMonday();
+            weekEndDate = weekStartDate.plusDays(5);
+            LocalDateTime weekStart = weekStartDate.atStartOfDay();
+            LocalDateTime weekEndExclusive = weekStartDate.plusDays(6).atStartOfDay();
+            seguimientos = seguimientoRepo.findTableroByResponsableUserIdAndFechaFinalPlanificadaBetween(
+                    userId,
+                    weekStart,
+                    weekEndExclusive
+            );
+        } else {
+            seguimientos = seguimientoRepo.findTableroByResponsableUserId(userId);
+        }
+
+        List<SeguimientoOrdenAreaDTO> tarjetas = seguimientos
                 .stream()
                 .map(this::toDTO)
                 .toList();
 
-        return buildTableroOperativo(tarjetas);
+        TableroOperativoDTO tablero = buildTableroOperativo(tarjetas);
+        tablero.setVista(effectiveVista);
+        tablero.setWeekStartDate(weekStartDate);
+        tablero.setWeekEndDate(weekEndDate);
+        return tablero;
     }
 
     @Transactional(readOnly = true)
@@ -300,6 +387,13 @@ public class SeguimientoOrdenAreaService {
         detalle.setProductoNombre(orden.getProducto().getNombre());
         detalle.setCantidadProducir(orden.getCantidadProducir());
         detalle.setEstadoOrden(orden.getEstadoOrden());
+        detalle.setPoliticaDispensacionInicio(orden.getPoliticaDispensacionInicio() != null
+                ? orden.getPoliticaDispensacionInicio().name()
+                : null);
+        detalle.setFechaAplicacionPoliticaDispensacion(orden.getFechaAplicacionPoliticaDispensacion());
+        detalle.setEstadoDispensacionMateriales(orden.getEstadoDispensacionMateriales() != null
+                ? orden.getEstadoDispensacionMateriales().name()
+                : null);
         detalle.setOrdenObservaciones(orden.getObservaciones());
         detalle.setFechaCreacion(orden.getFechaCreacion());
         detalle.setFechaInicio(orden.getFechaInicio());
@@ -447,6 +541,31 @@ public class SeguimientoOrdenAreaService {
         registrarEvento(seguimiento, estadoOrigen, estadoDestino, actorTipo, actor, notaNormalizada, ahora);
     }
 
+    private boolean isPoliticaDispensacionNoBloqueante(OrdenProduccion orden) {
+        return orden != null
+                && orden.getPoliticaDispensacionInicio() == PoliticaDispensacionInicio.NO_BLOQUEANTE;
+    }
+
+    private List<SeguimientoOrdenArea> findCandidatosRetroactividadDispensacionNoBloqueante() {
+        return seguimientoRepo.findCandidatosRetroactividadDispensacionNoBloqueante(
+                ALMACEN_GENERAL_AREA_ID,
+                EstadoSeguimientoOrdenArea.ESPERA.getCode(),
+                EstadoSeguimientoOrdenArea.COLA.getCode()
+        );
+    }
+
+    private String buildRetroactividadMensaje(boolean directivaActual, int candidatos, boolean ejecucion) {
+        if (!directivaActual) {
+            return "La directiva de dispensacion no bloqueante esta apagada. No se re-bloquean ordenes retroactivamente.";
+        }
+        if (candidatos == 0) {
+            return "No hay ordenes activas candidatas para liberacion retroactiva.";
+        }
+        return ejecucion
+                ? "Politica no bloqueante aplicada retroactivamente a " + candidatos + " orden(es)."
+                : "Hay " + candidatos + " orden(es) activas candidatas para liberacion retroactiva.";
+    }
+
     private void validarTransicion(
             SeguimientoOrdenArea seguimiento,
             EstadoSeguimientoOrdenArea estadoOrigen,
@@ -536,6 +655,13 @@ public class SeguimientoOrdenAreaService {
         dto.setProductoNombre(entity.getOrdenProduccion().getProducto().getNombre());
         dto.setCantidadProducir(entity.getOrdenProduccion().getCantidadProducir());
         dto.setEstadoOrden(entity.getOrdenProduccion().getEstadoOrden());
+        dto.setPoliticaDispensacionInicio(entity.getOrdenProduccion().getPoliticaDispensacionInicio() != null
+                ? entity.getOrdenProduccion().getPoliticaDispensacionInicio().name()
+                : null);
+        dto.setFechaAplicacionPoliticaDispensacion(entity.getOrdenProduccion().getFechaAplicacionPoliticaDispensacion());
+        dto.setEstadoDispensacionMateriales(entity.getOrdenProduccion().getEstadoDispensacionMateriales() != null
+                ? entity.getOrdenProduccion().getEstadoDispensacionMateriales().name()
+                : null);
         dto.setOrdenObservaciones(entity.getOrdenProduccion().getObservaciones());
         dto.setFechaFinalPlanificada(entity.getOrdenProduccion().getFechaFinalPlanificada());
 
@@ -734,6 +860,11 @@ public class SeguimientoOrdenAreaService {
                 .orElse(null);
     }
 
+    private LocalDate getCurrentIsoWeekMonday() {
+        LocalDate today = LocalDate.now(applicationClock);
+        return today.minusDays(today.getDayOfWeek().getValue() - 1L);
+    }
+
     private ResponsableAreaResumenDTO toResponsableResumen(User user) {
         ResponsableAreaResumenDTO dto = new ResponsableAreaResumenDTO();
         dto.setId(user.getId());
@@ -775,6 +906,9 @@ public class SeguimientoOrdenAreaService {
         private String productoNombre;
         private double cantidadProducir;
         private int estadoOrden;
+        private String politicaDispensacionInicio;
+        private LocalDateTime fechaAplicacionPoliticaDispensacion;
+        private String estadoDispensacionMateriales;
         private String ordenObservaciones;
         private LocalDateTime fechaFinalPlanificada;
 
@@ -812,11 +946,19 @@ public class SeguimientoOrdenAreaService {
 
     @Data
     public static class TableroOperativoDTO {
+        private TableroVista vista;
+        private LocalDate weekStartDate;
+        private LocalDate weekEndDate;
         private EstadoResumenDTO resumen;
         private List<SeguimientoOrdenAreaDTO> cola = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> espera = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> enProceso = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> completado = new ArrayList<>();
+    }
+
+    public enum TableroVista {
+        HISTORICO,
+        SEMANA_ACTUAL
     }
 
     @Data
@@ -846,6 +988,9 @@ public class SeguimientoOrdenAreaService {
         private String productoNombre;
         private double cantidadProducir;
         private int estadoOrden;
+        private String politicaDispensacionInicio;
+        private LocalDateTime fechaAplicacionPoliticaDispensacion;
+        private String estadoDispensacionMateriales;
         private String ordenObservaciones;
         private LocalDateTime fechaCreacion;
         private LocalDateTime fechaInicio;
@@ -862,6 +1007,17 @@ public class SeguimientoOrdenAreaService {
         private Long id;
         private String username;
         private String nombreCompleto;
+    }
+
+    @Data
+    public static class DispensacionRetroactividadDTO {
+        private boolean directivaActual;
+        private boolean ejecutable;
+        private int ordenesCandidatas;
+        private int ordenesAplicadas;
+        private int ordenesOmitidas;
+        private List<Integer> ordenIdsAplicadas = new ArrayList<>();
+        private String mensaje;
     }
 
     @Data

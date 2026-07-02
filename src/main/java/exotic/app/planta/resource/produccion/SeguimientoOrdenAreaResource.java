@@ -7,6 +7,7 @@ import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.OrdenSeg
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.ReportarCompletadoRequest;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.SeguimientoOrdenAreaDTO;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroOperativoDTO;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroVista;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -50,9 +51,11 @@ public class SeguimientoOrdenAreaResource {
     }
 
     @GetMapping("/mis-ordenes-tablero")
-    public ResponseEntity<TableroOperativoDTO> getMisOrdenesTablero(Authentication authentication) {
+    public ResponseEntity<TableroOperativoDTO> getMisOrdenesTablero(
+            Authentication authentication,
+            @RequestParam(defaultValue = "HISTORICO") TableroVista vista) {
         User user = getCurrentUser(authentication);
-        return ResponseEntity.ok(seguimientoService.getTableroOperativoUsuario(user.getId()));
+        return ResponseEntity.ok(seguimientoService.getTableroOperativoUsuario(user.getId(), vista));
     }
 
     @GetMapping("/area/{areaId}/pendientes")

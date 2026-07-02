@@ -115,6 +115,13 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isAreaOperativaPanelHistoricoToggleEnabled() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED
+        );
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {
