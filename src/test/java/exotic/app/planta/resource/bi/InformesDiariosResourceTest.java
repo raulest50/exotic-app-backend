@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.bi;
 
+import exotic.app.planta.service.bi.BiExcelExportMode;
 import exotic.app.planta.service.bi.BiExcelExportOptions;
 import exotic.app.planta.service.bi.ExcelDecimalSeparator;
 import exotic.app.planta.service.bi.InformesDiariosService;
@@ -15,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -63,6 +65,7 @@ class InformesDiariosResourceTest {
         mockMvc.perform(get("/bi/informes-diarios/almacen/ingreso-materiales/excel")
                         .param("fechaDesde", "2026-06-01")
                         .param("fechaHasta", "2026-06-30")
+                        .param("exportMode", "TEXT_DETERMINISTIC")
                         .param("decimalSeparator", "DOT"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(
@@ -71,6 +74,45 @@ class InformesDiariosResourceTest {
 
         ArgumentCaptor<BiExcelExportOptions> optionsCaptor = ArgumentCaptor.forClass(BiExcelExportOptions.class);
         verify(informesDiariosService).exportarIngresoMaterialesExcel(eq(desde), eq(hasta), optionsCaptor.capture());
+        assertEquals(BiExcelExportMode.TEXT_DETERMINISTIC, optionsCaptor.getValue().exportMode());
+        assertEquals(ExcelDecimalSeparator.DOT, optionsCaptor.getValue().decimalSeparator());
+    }
+
+    @Test
+    void exportarComprasExcel_acceptsNumericExportMode() throws Exception {
+        LocalDate fecha = LocalDate.of(2026, 6, 15);
+        when(informesDiariosService.exportarComprasExcel(eq(fecha), eq(fecha), any(BiExcelExportOptions.class)))
+                .thenReturn(EXCEL_BYTES);
+
+        mockMvc.perform(get("/bi/informes-diarios/compras/excel")
+                        .param("fecha", "2026-06-15")
+                        .param("exportMode", "NUMERIC")
+                        .param("decimalSeparator", "COMMA"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"informe_compras_ocm_2026-06-15.xlsx\""));
+
+        ArgumentCaptor<BiExcelExportOptions> optionsCaptor = ArgumentCaptor.forClass(BiExcelExportOptions.class);
+        verify(informesDiariosService).exportarComprasExcel(eq(fecha), eq(fecha), optionsCaptor.capture());
+        assertEquals(BiExcelExportMode.NUMERIC, optionsCaptor.getValue().exportMode());
+        assertNull(optionsCaptor.getValue().decimalSeparator());
+    }
+
+    @Test
+    void exportarComprasExcel_legacyDecimalSeparatorUsesTextMode() throws Exception {
+        LocalDate fecha = LocalDate.of(2026, 6, 15);
+        when(informesDiariosService.exportarComprasExcel(eq(fecha), eq(fecha), any(BiExcelExportOptions.class)))
+                .thenReturn(EXCEL_BYTES);
+
+        mockMvc.perform(get("/bi/informes-diarios/compras/excel")
+                        .param("fecha", "2026-06-15")
+                        .param("decimalSeparator", "DOT"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<BiExcelExportOptions> optionsCaptor = ArgumentCaptor.forClass(BiExcelExportOptions.class);
+        verify(informesDiariosService).exportarComprasExcel(eq(fecha), eq(fecha), optionsCaptor.capture());
+        assertEquals(BiExcelExportMode.TEXT_DETERMINISTIC, optionsCaptor.getValue().exportMode());
         assertEquals(ExcelDecimalSeparator.DOT, optionsCaptor.getValue().decimalSeparator());
     }
 

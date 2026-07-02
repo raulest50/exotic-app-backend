@@ -73,6 +73,37 @@ class InformesDiariosServiceTest {
     }
 
     @Test
+    void exportarComprasExcel_modoNumericoConSeparadorMantieneDecimalComoNumero() throws Exception {
+        when(transaccionAlmacenRepo.findInformeDiarioComprasPorDia(
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
+                eq(TransaccionAlmacen.TipoEntidadCausante.OCM),
+                eq(Movimiento.TipoMovimiento.COMPRA)))
+                .thenReturn(List.of(compra(1234.5)));
+
+        byte[] excel = service.exportarComprasExcel(
+                LocalDate.of(2026, 6, 15),
+                BiExcelExportOptions.of(BiExcelExportMode.NUMERIC, ExcelDecimalSeparator.COMMA));
+
+        assertNumericCell(excel, "Compras", 1, 9, 1234.5);
+    }
+
+    @Test
+    void exportarIngresoMaterialesExcel_modoTextoSinSeparadorUsaComaPorDefecto() throws Exception {
+        when(transaccionAlmacenRepo.findIngresosMaterialPorDia(
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
+                anyCollection()))
+                .thenReturn(List.of(movimiento(1234.5)));
+
+        byte[] excel = service.exportarIngresoMaterialesExcel(
+                LocalDate.of(2026, 6, 15),
+                BiExcelExportOptions.of(BiExcelExportMode.TEXT_DETERMINISTIC, null));
+
+        assertStringCell(excel, "Ingreso materiales", 1, 3, "1.234,50");
+    }
+
+    @Test
     void exportarComprasExcel_sinSeparadorMantieneDecimalComoNumero() throws Exception {
         when(transaccionAlmacenRepo.findInformeDiarioComprasPorDia(
                 any(LocalDateTime.class),

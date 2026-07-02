@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.bi;
 
 import exotic.app.planta.model.bi.dto.InformeDiarioIngresoTerminadosReporteDTO;
+import exotic.app.planta.service.bi.BiExcelExportMode;
 import exotic.app.planta.service.bi.BiExcelExportOptions;
 import exotic.app.planta.service.bi.ExcelDecimalSeparator;
 import exotic.app.planta.service.bi.InformesDiariosService;
@@ -35,13 +36,14 @@ public class InformesDiariosResource {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) BiExcelExportMode exportMode,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         try {
             InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
             byte[] excel = informesDiariosService.exportarIngresoMaterialesExcel(
                     range.fechaDesde(),
                     range.fechaHasta(),
-                    BiExcelExportOptions.of(decimalSeparator));
+                    BiExcelExportOptions.of(exportMode, decimalSeparator));
             return excelResponse(excel, "informe_ingreso_materiales_" + range.filenameSuffix() + ".xlsx");
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
@@ -53,13 +55,14 @@ public class InformesDiariosResource {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) BiExcelExportMode exportMode,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         try {
             InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
             byte[] excel = informesDiariosService.exportarDispensacionMaterialesExcel(
                     range.fechaDesde(),
                     range.fechaHasta(),
-                    BiExcelExportOptions.of(decimalSeparator));
+                    BiExcelExportOptions.of(exportMode, decimalSeparator));
             return excelResponse(excel, "informe_dispensacion_materiales_" + range.filenameSuffix() + ".xlsx");
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
@@ -71,13 +74,14 @@ public class InformesDiariosResource {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) BiExcelExportMode exportMode,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         try {
             InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
             byte[] excel = informesDiariosService.exportarIngresoTerminadosExcel(
                     range.fechaDesde(),
                     range.fechaHasta(),
-                    BiExcelExportOptions.of(decimalSeparator));
+                    BiExcelExportOptions.of(exportMode, decimalSeparator));
             return excelResponse(excel, "informe_ingreso_terminados_" + range.filenameSuffix() + ".xlsx");
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
@@ -93,10 +97,11 @@ public class InformesDiariosResource {
     @GetMapping("/almacen/ingreso-terminados/reporte-excel")
     public ResponseEntity<byte[]> exportarReporteIngresoTerminadosExcel(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) BiExcelExportMode exportMode,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         byte[] excel = informesDiariosService.exportarReporteIngresoTerminadosExcel(
                 fecha,
-                BiExcelExportOptions.of(decimalSeparator));
+                BiExcelExportOptions.of(exportMode, decimalSeparator));
         String filename = "reporte_produccion_terminados_" + fecha + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -110,13 +115,14 @@ public class InformesDiariosResource {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) BiExcelExportMode exportMode,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         try {
             InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
             byte[] excel = informesDiariosService.exportarComprasExcel(
                     range.fechaDesde(),
                     range.fechaHasta(),
-                    BiExcelExportOptions.of(decimalSeparator));
+                    BiExcelExportOptions.of(exportMode, decimalSeparator));
             return excelResponse(excel, "informe_compras_ocm_" + range.filenameSuffix() + ".xlsx");
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
@@ -128,13 +134,14 @@ public class InformesDiariosResource {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam SentidoAjusteInforme sentido,
+            @RequestParam(required = false) BiExcelExportMode exportMode,
             @RequestParam(required = false) ExcelDecimalSeparator decimalSeparator) {
         try {
             byte[] excel = informesDiariosService.exportarAjustesAlmacenExcel(
                     fechaDesde,
                     fechaHasta,
                     sentido,
-                    BiExcelExportOptions.of(decimalSeparator));
+                    BiExcelExportOptions.of(exportMode, decimalSeparator));
             String filename = String.format(
                     "informe_ajustes_almacen_%s_%s_%s.xlsx", sentido.name(), fechaDesde, fechaHasta);
             return ResponseEntity.ok()

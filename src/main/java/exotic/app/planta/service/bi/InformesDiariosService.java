@@ -696,7 +696,7 @@ public class InformesDiariosService {
     }
 
     private static ExcelStyles createExcelStyles(XSSFWorkbook workbook, BiExcelExportOptions options) {
-        if (options == null || !options.hasDecimalSeparator()) {
+        if (options == null || !options.isTextDeterministic()) {
             return ExcelStyles.none();
         }
         CellStyle decimalTextStyle = workbook.createCellStyle();
