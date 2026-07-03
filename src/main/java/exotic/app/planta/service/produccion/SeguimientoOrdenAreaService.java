@@ -10,7 +10,9 @@ import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
+import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
@@ -37,6 +39,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +58,8 @@ public class SeguimientoOrdenAreaService {
     private static final String NOTA_DEPENDENCIAS_RESUELTAS = "Paso habilitado automaticamente por resolucion de dependencias previas";
     private static final String NOTA_DISPENSACION_NO_BLOQUEANTE = "Dispensacion no bloqueante habilitada por directiva maestra";
     private static final String NOTA_DISPENSACION_NO_BLOQUEANTE_RETROACTIVA = "Aplicacion retroactiva de politica de dispensacion no bloqueante";
+    private static final String NOTA_REVERSION_SUCESOR_CORRECCION = "Reversion automatica por correccion administrativa previa: ";
+    private static final int MAX_MOTIVO_CORRECCION_LENGTH = 500;
 
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
@@ -277,6 +282,70 @@ public class SeguimientoOrdenAreaService {
                         "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
 
         completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.USER, requireUser(userId), observaciones);
+        return toDTO(seguimiento);
+    }
+
+    public SeguimientoOrdenAreaDTO corregirEstadoAdministrativamente(
+            int areaId,
+            Long seguimientoId,
+            Integer expectedEstado,
+            Integer targetEstado,
+            Long userId,
+            String motivo
+    ) {
+        if (seguimientoId == null) {
+            throw new IllegalArgumentException("Se requiere el identificador del seguimiento a corregir.");
+        }
+        if (expectedEstado == null) {
+            throw new IllegalArgumentException("Se requiere el estado actual esperado para aplicar la correccion.");
+        }
+        if (targetEstado == null) {
+            throw new IllegalArgumentException("Se requiere el estado destino para aplicar la correccion.");
+        }
+
+        User actor = requireUser(userId);
+        String motivoNormalizado = normalizeMotivoCorreccion(motivo);
+        SeguimientoOrdenArea seguimiento = seguimientoRepo.findById(seguimientoId)
+                .orElseThrow(() -> new IllegalArgumentException("Seguimiento no encontrado: " + seguimientoId));
+
+        validarCorreccionSobreSeguimiento(seguimiento, areaId, expectedEstado);
+
+        EstadoSeguimientoOrdenArea estadoOrigen = seguimiento.getEstadoEnum();
+        EstadoSeguimientoOrdenArea estadoDestino = EstadoSeguimientoOrdenArea.fromCode(targetEstado);
+        validarEstadosCorreccion(seguimiento, estadoOrigen, estadoDestino);
+        validarDependenciasCorreccion(seguimiento, estadoDestino);
+
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        if (estadoOrigen == EstadoSeguimientoOrdenArea.COMPLETADO
+                && estadoDestino != EstadoSeguimientoOrdenArea.COMPLETADO) {
+            revertirSucesoresAutoHabilitados(seguimiento, actor, motivoNormalizado, ahora);
+        }
+
+        SeguimientoOrdenAreaEvento eventoRevertido = findLatestUnrevertedEventForState(seguimiento, estadoOrigen)
+                .orElse(null);
+        aplicarEstadoPorCorreccion(seguimiento, estadoDestino, actor, motivoNormalizado, ahora);
+        seguimientoRepo.save(seguimiento);
+        registrarEvento(
+                seguimiento,
+                estadoOrigen,
+                estadoDestino,
+                ActorTipoEventoSeguimiento.USER,
+                actor,
+                motivoNormalizado,
+                ahora,
+                TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA,
+                eventoRevertido
+        );
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COLA
+                || estadoDestino == EstadoSeguimientoOrdenArea.ESPERA) {
+            clearOrdenFechaInicioIfNoOperativeWork(seguimiento.getOrdenProduccion());
+        }
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO) {
+            propagarVisibilidad(seguimiento.getOrdenProduccion().getOrdenId(), seguimiento.getRutaProcesoNode().getId());
+        }
+
         return toDTO(seguimiento);
     }
 
@@ -606,6 +675,217 @@ public class SeguimientoOrdenAreaService {
         }
     }
 
+    private void validarCorreccionSobreSeguimiento(
+            SeguimientoOrdenArea seguimiento,
+            int areaId,
+            int expectedEstado
+    ) {
+        if (seguimiento.getAreaOperativa() == null || seguimiento.getAreaOperativa().getAreaId() != areaId) {
+            throw new IllegalArgumentException("El seguimiento no pertenece al area operativa seleccionada.");
+        }
+        if (areaId == ALMACEN_GENERAL_AREA_ID) {
+            throw new IllegalArgumentException("Las correcciones administrativas de Almacen General no estan habilitadas.");
+        }
+        if (seguimiento.getOrdenProduccion() == null || seguimiento.getOrdenProduccion().getEstadoOrden() == -1) {
+            throw new IllegalArgumentException("No se puede corregir una orden cancelada.");
+        }
+        if (seguimiento.getOrdenProduccion().getEstadoOrden() == 2) {
+            throw new IllegalArgumentException("No se puede corregir una orden finalizada.");
+        }
+        if (seguimiento.getEstado() != expectedEstado) {
+            throw new IllegalArgumentException("El estado de la orden cambio. Actualice el tablero antes de corregir.");
+        }
+    }
+
+    private void validarEstadosCorreccion(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoOrigen,
+            EstadoSeguimientoOrdenArea estadoDestino
+    ) {
+        if (estadoOrigen == estadoDestino) {
+            throw new IllegalArgumentException("La orden ya se encuentra en estado " + estadoDestino.getDescripcion() + ".");
+        }
+        if (estadoOrigen == EstadoSeguimientoOrdenArea.OMITIDO || estadoDestino == EstadoSeguimientoOrdenArea.OMITIDO) {
+            throw new IllegalArgumentException("El estado omitido no esta disponible para correcciones administrativas.");
+        }
+        if (seguimiento.getRutaProcesoNode() == null) {
+            throw new IllegalArgumentException("El seguimiento no tiene nodo de ruta de proceso asociado.");
+        }
+    }
+
+    private void validarDependenciasCorreccion(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoDestino
+    ) {
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COLA) {
+            return;
+        }
+
+        long predecesoresNoCompletados = seguimientoRepo.countPredecesoresNoCompletados(
+                seguimiento.getOrdenProduccion().getOrdenId(),
+                seguimiento.getRutaProcesoNode().getId()
+        );
+        if (predecesoresNoCompletados > 0) {
+            throw new IllegalArgumentException("No se puede mover la orden a este estado porque tiene pasos predecesores pendientes.");
+        }
+    }
+
+    private void revertirSucesoresAutoHabilitados(
+            SeguimientoOrdenArea seguimientoCorregido,
+            User actor,
+            String motivo,
+            LocalDateTime ahora
+    ) {
+        Set<Long> descendantNodeIds = collectDescendantNodeIds(seguimientoCorregido);
+        if (descendantNodeIds.isEmpty()) {
+            return;
+        }
+
+        List<SeguimientoOrdenArea> descendants = seguimientoRepo
+                .findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(
+                        seguimientoCorregido.getOrdenProduccion().getOrdenId())
+                .stream()
+                .filter(candidate -> candidate.getRutaProcesoNode() != null)
+                .filter(candidate -> descendantNodeIds.contains(candidate.getRutaProcesoNode().getId()))
+                .toList();
+
+        List<Long> descendantSeguimientoIds = descendants.stream()
+                .map(SeguimientoOrdenArea::getId)
+                .toList();
+
+        if (!descendantSeguimientoIds.isEmpty()
+                && seguimientoEventoRepo.existsUnrevertedEventBySeguimientoIdsAndActorTipoAndTipoEvento(
+                        descendantSeguimientoIds,
+                        ActorTipoEventoSeguimiento.USER,
+                        TipoEventoSeguimiento.OPERATIVO
+                )) {
+            throw new IllegalArgumentException(
+                    "No se puede revertir el estado completado porque un paso sucesor ya tiene trabajo operativo registrado.");
+        }
+
+        for (SeguimientoOrdenArea descendant : descendants) {
+            EstadoSeguimientoOrdenArea estadoActual = descendant.getEstadoEnum();
+            if (estadoActual == EstadoSeguimientoOrdenArea.COLA) {
+                continue;
+            }
+            if (estadoActual != EstadoSeguimientoOrdenArea.ESPERA) {
+                throw new IllegalArgumentException(
+                        "No se puede revertir el estado completado porque un paso sucesor ya avanzo.");
+            }
+
+            SeguimientoOrdenAreaEvento eventoRevertido = findLatestUnrevertedEventForState(descendant, estadoActual)
+                    .orElse(null);
+            String notaReversion = buildNotaReversionCorreccion(motivo);
+            aplicarEstadoPorCorreccion(descendant, EstadoSeguimientoOrdenArea.COLA, actor, notaReversion, ahora);
+            seguimientoRepo.save(descendant);
+            registrarEvento(
+                    descendant,
+                    estadoActual,
+                    EstadoSeguimientoOrdenArea.COLA,
+                    ActorTipoEventoSeguimiento.USER,
+                    actor,
+                    notaReversion,
+                    ahora,
+                    TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA,
+                    eventoRevertido
+            );
+        }
+    }
+
+    private Set<Long> collectDescendantNodeIds(SeguimientoOrdenArea seguimiento) {
+        if (seguimiento.getRutaProcesoNode() == null
+                || seguimiento.getRutaProcesoNode().getRutaProcesoCatVersion() == null
+                || seguimiento.getRutaProcesoNode().getRutaProcesoCatVersion().getEdges() == null) {
+            return Set.of();
+        }
+
+        Map<Long, List<Long>> adjacency = new HashMap<>();
+        for (RutaProcesoEdge edge : seguimiento.getRutaProcesoNode().getRutaProcesoCatVersion().getEdges()) {
+            if (edge.getSourceNode() == null || edge.getTargetNode() == null) {
+                continue;
+            }
+            adjacency.computeIfAbsent(edge.getSourceNode().getId(), ignored -> new ArrayList<>())
+                    .add(edge.getTargetNode().getId());
+        }
+
+        Set<Long> visited = new HashSet<>();
+        List<Long> pending = new ArrayList<>(adjacency.getOrDefault(seguimiento.getRutaProcesoNode().getId(), List.of()));
+        while (!pending.isEmpty()) {
+            Long nodeId = pending.remove(0);
+            if (!visited.add(nodeId)) {
+                continue;
+            }
+            pending.addAll(adjacency.getOrDefault(nodeId, List.of()));
+        }
+        return visited;
+    }
+
+    private Optional<SeguimientoOrdenAreaEvento> findLatestUnrevertedEventForState(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estado
+    ) {
+        if (seguimiento == null || seguimiento.getId() == null || estado == null) {
+            return Optional.empty();
+        }
+        return seguimientoEventoRepo
+                .findEventosActualesNoRevertidos(seguimiento.getId(), estado.getCode())
+                .stream()
+                .findFirst();
+    }
+
+    private void aplicarEstadoPorCorreccion(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoDestino,
+            User actor,
+            String motivo,
+            LocalDateTime ahora
+    ) {
+        seguimiento.setEstadoEnum(estadoDestino);
+        seguimiento.setFechaEstadoActual(ahora);
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COLA) {
+            seguimiento.setFechaVisible(null);
+        } else if (seguimiento.getFechaVisible() == null) {
+            seguimiento.setFechaVisible(ahora);
+        }
+
+        if ((estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO
+                || estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO)
+                && seguimiento.getOrdenProduccion().getFechaInicio() == null) {
+            seguimiento.getOrdenProduccion().setFechaInicio(ahora);
+        }
+
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO) {
+            seguimiento.setFechaCompletado(ahora);
+            seguimiento.setUsuarioReporta(actor);
+            seguimiento.setObservaciones(motivo);
+            return;
+        }
+
+        seguimiento.setFechaCompletado(null);
+        seguimiento.setUsuarioReporta(null);
+        seguimiento.setObservaciones(null);
+    }
+
+    private void clearOrdenFechaInicioIfNoOperativeWork(OrdenProduccion orden) {
+        if (orden == null || orden.getFechaInicio() == null) {
+            return;
+        }
+
+        boolean hasOperativeWork = seguimientoEventoRepo.existsUserStartOrCompletionEventByOrdenId(
+                orden.getOrdenId(),
+                ActorTipoEventoSeguimiento.USER,
+                TipoEventoSeguimiento.OPERATIVO,
+                List.of(
+                        EstadoSeguimientoOrdenArea.EN_PROCESO.getCode(),
+                        EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
+                )
+        );
+        if (!hasOperativeWork) {
+            orden.setFechaInicio(null);
+        }
+    }
+
     private void registrarEvento(
             SeguimientoOrdenArea seguimiento,
             EstadoSeguimientoOrdenArea estadoOrigen,
@@ -615,12 +895,41 @@ public class SeguimientoOrdenAreaService {
             String nota,
             LocalDateTime fechaEvento
     ) {
+        TipoEventoSeguimiento tipoEvento = actorTipo == ActorTipoEventoSeguimiento.SYSTEM
+                ? TipoEventoSeguimiento.SISTEMA
+                : TipoEventoSeguimiento.OPERATIVO;
+        registrarEvento(
+                seguimiento,
+                estadoOrigen,
+                estadoDestino,
+                actorTipo,
+                actor,
+                nota,
+                fechaEvento,
+                tipoEvento,
+                null
+        );
+    }
+
+    private void registrarEvento(
+            SeguimientoOrdenArea seguimiento,
+            EstadoSeguimientoOrdenArea estadoOrigen,
+            EstadoSeguimientoOrdenArea estadoDestino,
+            ActorTipoEventoSeguimiento actorTipo,
+            User actor,
+            String nota,
+            LocalDateTime fechaEvento,
+            TipoEventoSeguimiento tipoEvento,
+            SeguimientoOrdenAreaEvento eventoRevertido
+    ) {
         SeguimientoOrdenAreaEvento evento = new SeguimientoOrdenAreaEvento();
         evento.setSeguimientoOrdenArea(seguimiento);
         evento.setEstadoOrigen(estadoOrigen != null ? estadoOrigen.getCode() : null);
         evento.setEstadoDestino(estadoDestino.getCode());
         evento.setFechaEvento(fechaEvento);
         evento.setActorTipo(actorTipo);
+        evento.setTipoEvento(tipoEvento);
+        evento.setEventoRevertido(eventoRevertido);
         evento.setUsuario(actor);
         evento.setNota(normalizeNota(nota));
         seguimientoEventoRepo.save(evento);
@@ -640,6 +949,25 @@ public class SeguimientoOrdenAreaService {
         }
         String trimmed = nota.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeMotivoCorreccion(String motivo) {
+        String normalized = normalizeNota(motivo);
+        if (normalized == null) {
+            throw new IllegalArgumentException("El motivo de la correccion administrativa es obligatorio.");
+        }
+        if (normalized.length() > MAX_MOTIVO_CORRECCION_LENGTH) {
+            throw new IllegalArgumentException("El motivo de la correccion no puede superar 500 caracteres.");
+        }
+        return normalized;
+    }
+
+    private String buildNotaReversionCorreccion(String motivo) {
+        String nota = NOTA_REVERSION_SUCESOR_CORRECCION + motivo;
+        if (nota.length() <= MAX_MOTIVO_CORRECCION_LENGTH) {
+            return nota;
+        }
+        return nota.substring(0, MAX_MOTIVO_CORRECCION_LENGTH);
     }
 
     private SeguimientoOrdenAreaDTO toDTO(SeguimientoOrdenArea entity) {
@@ -731,7 +1059,7 @@ public class SeguimientoOrdenAreaService {
             return null;
         }
 
-        SeguimientoOrdenAreaEvento ultimoEvento = eventos.stream()
+        SeguimientoOrdenAreaEvento ultimoEvento = filterUnrevertedEvents(eventos).stream()
                 .filter(evento -> !evento.getFechaEvento().isAfter(instanteFoto))
                 .reduce((ignored, current) -> current)
                 .orElse(null);
@@ -764,6 +1092,26 @@ public class SeguimientoOrdenAreaService {
         }
 
         return dto;
+    }
+
+    private List<SeguimientoOrdenAreaEvento> filterUnrevertedEvents(List<SeguimientoOrdenAreaEvento> eventos) {
+        if (eventos == null || eventos.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> revertedEventIds = eventos.stream()
+                .map(SeguimientoOrdenAreaEvento::getEventoRevertido)
+                .filter(java.util.Objects::nonNull)
+                .map(SeguimientoOrdenAreaEvento::getId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (revertedEventIds.isEmpty()) {
+            return eventos;
+        }
+
+        return eventos.stream()
+                .filter(evento -> evento.getId() == null || !revertedEventIds.contains(evento.getId()))
+                .toList();
     }
 
     private RutaEstadoDTO toRutaEstadoDTO(SeguimientoOrdenArea entity) {
@@ -881,12 +1229,15 @@ public class SeguimientoOrdenAreaService {
             return Optional.empty();
         }
         return seguimientoEventoRepo
-                .findFirstBySeguimientoOrdenArea_AreaOperativa_AreaIdAndActorTipoAndUsuario_IdAndFechaEventoLessThanEqualOrderByFechaEventoDescIdDesc(
+                .findReportesOperativosResponsableBefore(
                         area.getAreaId(),
                         ActorTipoEventoSeguimiento.USER,
+                        TipoEventoSeguimiento.OPERATIVO,
                         area.getResponsableArea().getId(),
                         instanteFoto
-                );
+                )
+                .stream()
+                .findFirst();
     }
 
     private Long calculateMinutesBetween(LocalDateTime start, LocalDateTime end) {

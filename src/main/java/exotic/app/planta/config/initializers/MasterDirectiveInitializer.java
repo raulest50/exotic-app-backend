@@ -36,6 +36,8 @@ public class MasterDirectiveInitializer {
     private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_AYUDA = "Define cada cuantos minutos el tab de monitoreo consulta las alertas mientras esta abierto y visible. Acepta valores entre 5 y 20.";
     private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_RESUMEN = "Habilita alternar entre semana actual e historico en Area Operativa";
     private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA = "Cuando esta activa, el panel de Area Operativa muestra un control para que el operario alterne entre ordenes con fecha planificada de entrega en la semana actual e historico completo. Cuando esta apagada, el panel conserva la vista historica actual.";
+    private static final String AREA_OPERATIVA_ADMIN_CORRECTION_RESUMEN = "Habilita correcciones administrativas de estados en monitoreo de Area Operativa";
+    private static final String AREA_OPERATIVA_ADMIN_CORRECTION_AYUDA = "Cuando esta activa, usuarios con nivel suficiente en Monitorear Areas Operativas pueden corregir estados de ordenes del area desde el monitoreo. Cada cambio queda auditado como correccion administrativa y no debe usarse como flujo operativo normal.";
 
     private final MasterDirectiveRepo masterDirectiveRepo;
 
@@ -52,6 +54,7 @@ public class MasterDirectiveInitializer {
         ensureAreaOperativaInactivityThresholdMinutes();
         ensureAreaOperativaInactivityCheckIntervalMinutes();
         ensureAreaOperativaPanelHistoricoToggleEnabled();
+        ensureAreaOperativaAdminCorrectionEnabled();
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {
@@ -352,5 +355,30 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA);
+    }
+
+    private void ensureAreaOperativaAdminCorrectionEnabled() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED)
+                .map(this::actualizarMetadataAreaOperativaAdminCorrectionEnabled)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED);
+                    directive.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED));
+                    aplicarMetadataAreaOperativaAdminCorrectionEnabled(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataAreaOperativaAdminCorrectionEnabled(MasterDirective directive) {
+        aplicarMetadataAreaOperativaAdminCorrectionEnabled(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataAreaOperativaAdminCorrectionEnabled(MasterDirective directive) {
+        directive.setResumen(AREA_OPERATIVA_ADMIN_CORRECTION_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(AREA_OPERATIVA_ADMIN_CORRECTION_AYUDA);
     }
 }

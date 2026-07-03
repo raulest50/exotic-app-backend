@@ -122,6 +122,13 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isAreaOperativaAdminCorrectionEnabled() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED,
+                MasterDirectiveKeys.DEFAULT_AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED
+        );
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {

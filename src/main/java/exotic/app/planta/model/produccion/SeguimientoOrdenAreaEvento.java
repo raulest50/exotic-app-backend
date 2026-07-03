@@ -38,6 +38,14 @@ public class SeguimientoOrdenAreaEvento {
     @Column(name = "actor_tipo", nullable = false, length = 16)
     private ActorTipoEventoSeguimiento actorTipo;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_evento", nullable = false, length = 32)
+    private TipoEventoSeguimiento tipoEvento = TipoEventoSeguimiento.OPERATIVO;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "evento_revertido_id")
+    private SeguimientoOrdenAreaEvento eventoRevertido;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id")
     private User usuario;

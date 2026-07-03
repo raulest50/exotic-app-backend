@@ -17,7 +17,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -27,12 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(
-        name = "mps_semanal_item",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_mps_sem_item_dia_terminado", columnNames = {"mps_dia_id", "terminado_id"})
-        }
-)
+@Table(name = "mps_semanal_item")
 @Getter
 @Setter
 @NoArgsConstructor

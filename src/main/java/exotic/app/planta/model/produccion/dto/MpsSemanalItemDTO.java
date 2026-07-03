@@ -32,5 +32,7 @@ public class MpsSemanalItemDTO {
     private int ordenesCancelables;
     private int lotesActivos;
     private int lotesCancelados;
+    private int lotesCancelables;
+    private int lotesNoCancelables;
     private List<MpsSemanalLotePlanificadoDTO> lotesPlanificados = new ArrayList<>();
 }

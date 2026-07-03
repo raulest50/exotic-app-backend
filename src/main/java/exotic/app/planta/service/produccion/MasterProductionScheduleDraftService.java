@@ -262,11 +262,13 @@ public class MasterProductionScheduleDraftService {
     }
 
     private void fillItemEditMetadata(MpsSemanalItemDTO dto, MpsSemanalItem item) {
+        List<MpsSemanalLotePlanificado> activeLotes = item.getLotesPlanificados().stream()
+                .filter(lote -> lote.getEstado() != EstadoMpsSemanalLotePlanificado.CANCELADO)
+                .toList();
         long lotesCancelados = item.getLotesPlanificados().stream()
                 .filter(lote -> lote.getEstado() == EstadoMpsSemanalLotePlanificado.CANCELADO)
                 .count();
-        List<OrdenProduccion> activeOrdenes = item.getLotesPlanificados().stream()
-                .filter(lote -> lote.getEstado() != EstadoMpsSemanalLotePlanificado.CANCELADO)
+        List<OrdenProduccion> activeOrdenes = activeLotes.stream()
                 .map(MpsSemanalLotePlanificado::getOrdenProduccion)
                 .filter(java.util.Objects::nonNull)
                 .filter(orden -> orden.getEstadoOrden() != -1)
@@ -277,18 +279,25 @@ public class MasterProductionScheduleDraftService {
         int ordenesCancelables = (int) activeOrdenes.stream()
                 .filter(ordenInicioPolicyService::isOrdenCancelable)
                 .count();
+        int lotesCancelables = (int) activeLotes.stream()
+                .filter(lote -> lote.getOrdenProduccion() == null
+                        || ordenInicioPolicyService.isOrdenCancelable(lote.getOrdenProduccion()))
+                .count();
+        int lotesNoCancelables = activeLotes.size() - lotesCancelables;
 
         dto.setLotesCancelados((int) lotesCancelados);
-        dto.setLotesActivos(item.getLotesPlanificados().size() - dto.getLotesCancelados());
+        dto.setLotesActivos(activeLotes.size());
         dto.setOrdenesIniciadas(ordenesIniciadas);
         dto.setOrdenesCancelables(ordenesCancelables);
+        dto.setLotesCancelables(lotesCancelables);
+        dto.setLotesNoCancelables(lotesNoCancelables);
 
-        String blockedReason = resolveItemBlockedReason(item, ordenesIniciadas);
+        String blockedReason = resolveItemBlockedReason(item, lotesNoCancelables, lotesCancelables);
         dto.setBlockedReason(blockedReason);
         dto.setEditable(blockedReason == null);
     }
 
-    private String resolveItemBlockedReason(MpsSemanalItem item, int ordenesIniciadas) {
+    private String resolveItemBlockedReason(MpsSemanalItem item, int lotesNoCancelables, int lotesCancelables) {
         if (resolveItemEstado(item) == EstadoMpsSemanalItem.CANCELADO) {
             return "Tarjeta MPS cancelada.";
         }
@@ -300,8 +309,13 @@ public class MasterProductionScheduleDraftService {
                 && !mpsSemanalEditWindowService.isEditable(item.getMpsDia().getFecha())) {
             return "Dia bloqueado. La primera fecha editable es " + mpsSemanalEditWindowService.getEditableFromDate() + ".";
         }
-        if (ordenesIniciadas > 0) {
-            return "Tiene " + ordenesIniciadas + " OP iniciada(s).";
+        if (lotesNoCancelables > 0) {
+            if (lotesCancelables > 0) {
+                return "Tiene " + lotesNoCancelables
+                        + " lote(s) con OP iniciada o movimientos reales. Puede cancelar "
+                        + lotesCancelables + " lote(s) sin ejecucion.";
+            }
+            return "Tiene " + lotesNoCancelables + " lote(s) con OP iniciada o movimientos reales.";
         }
         return null;
     }

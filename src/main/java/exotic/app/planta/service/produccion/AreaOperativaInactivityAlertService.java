@@ -4,6 +4,7 @@ import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.dto.AreaOperativaInactivityAlertDTO;
 import exotic.app.planta.model.produccion.dto.AreaOperativaInactivityAlertDTO.EstadoAlertaInactividad;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
@@ -51,6 +52,7 @@ public class AreaOperativaInactivityAlertService {
                 .findUltimasTerminacionesByAreaIds(
                         areaIds,
                         ActorTipoEventoSeguimiento.USER,
+                        TipoEventoSeguimiento.OPERATIVO,
                         EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
                 )
                 .stream()

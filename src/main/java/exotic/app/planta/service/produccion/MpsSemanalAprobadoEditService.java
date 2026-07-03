@@ -70,11 +70,12 @@ public class MpsSemanalAprobadoEditService {
         requireNoDuplicateTargetItem(item, targetDia);
 
         List<MpsSemanalLotePlanificado> activeLotes = getActiveLotes(item);
-        if (hasStartedOrden(activeLotes)) {
-            throw new IllegalStateException("La tarjeta MPS tiene al menos una OP iniciada y no puede editarse.");
-        }
+        int desiredLotes = request.getNumeroLotes();
+        int currentActiveLotes = activeLotes.size();
+        int lotesNoCancelables = countNoCancelableLotes(activeLotes);
 
         boolean moved = !Objects.equals(sourceDia.getId(), targetDia.getId());
+        validateAllowedEditWithExecutedLotes(moved, desiredLotes, currentActiveLotes, lotesNoCancelables);
         if (moved) {
             MpsSemanalFechaPlanificadaCalculator.FechasPlanificadas fechas =
                     MpsSemanalFechaPlanificadaCalculator.desdeFechaEntrega(
@@ -88,8 +89,6 @@ public class MpsSemanalAprobadoEditService {
             item.setDisplayOrder(nextDisplayOrder(targetDia, item.getId()));
         }
 
-        int desiredLotes = request.getNumeroLotes();
-        int currentActiveLotes = activeLotes.size();
         if (desiredLotes < currentActiveLotes) {
             cancelExcessLotes(activeLotes, currentActiveLotes - desiredLotes);
         } else if (desiredLotes > currentActiveLotes) {
@@ -239,6 +238,7 @@ public class MpsSemanalAprobadoEditService {
         String productoId = item.getTerminado() != null ? item.getTerminado().getProductoId() : null;
         boolean duplicate = targetDia.getItems().stream()
                 .anyMatch(existing -> !Objects.equals(existing.getId(), item.getId())
+                        && existing.getEstado() != EstadoMpsSemanalItem.CANCELADO
                         && isSameTerminado(existing, productoId));
         if (duplicate) {
             throw new IllegalStateException("El producto ya existe en el dia destino del MPS.");
@@ -247,7 +247,8 @@ public class MpsSemanalAprobadoEditService {
 
     private void requireNoDuplicateTerminadoOnDia(MpsSemanalDia targetDia, String productoId) {
         boolean duplicate = targetDia.getItems().stream()
-                .anyMatch(existing -> isSameTerminado(existing, productoId));
+                .anyMatch(existing -> existing.getEstado() != EstadoMpsSemanalItem.CANCELADO
+                        && isSameTerminado(existing, productoId));
         if (duplicate) {
             throw new IllegalStateException("El producto ya existe en el dia destino del MPS.");
         }
@@ -323,18 +324,48 @@ public class MpsSemanalAprobadoEditService {
                 .toList();
     }
 
-    private boolean hasStartedOrden(List<MpsSemanalLotePlanificado> lotes) {
-        return lotes.stream()
-                .map(MpsSemanalLotePlanificado::getOrdenProduccion)
-                .filter(Objects::nonNull)
-                .anyMatch(ordenInicioPolicyService::isOrdenIniciada);
+    private int countNoCancelableLotes(List<MpsSemanalLotePlanificado> lotes) {
+        return (int) lotes.stream()
+                .filter(lote -> !isLoteCancelable(lote))
+                .count();
+    }
+
+    private boolean isLoteCancelable(MpsSemanalLotePlanificado lote) {
+        OrdenProduccion orden = lote.getOrdenProduccion();
+        return orden == null || ordenInicioPolicyService.isOrdenCancelable(orden);
+    }
+
+    private void validateAllowedEditWithExecutedLotes(
+            boolean moved,
+            int desiredLotes,
+            int currentActiveLotes,
+            int lotesNoCancelables
+    ) {
+        if (lotesNoCancelables <= 0) {
+            return;
+        }
+        if (moved) {
+            throw new IllegalStateException("La tarjeta MPS tiene lotes con OP iniciada o movimientos reales y no puede moverse.");
+        }
+        if (desiredLotes > currentActiveLotes) {
+            throw new IllegalStateException("La tarjeta MPS tiene lotes con OP iniciada o movimientos reales; cree una nueva tarjeta para lotes adicionales.");
+        }
+        if (desiredLotes < lotesNoCancelables) {
+            int lotesCancelables = currentActiveLotes - lotesNoCancelables;
+            throw new IllegalStateException("Solo se pueden cancelar " + lotesCancelables + " lote(s) sin ejecucion real.");
+        }
     }
 
     private void cancelExcessLotes(List<MpsSemanalLotePlanificado> activeLotes, int quantityToCancel) {
         List<MpsSemanalLotePlanificado> lotesToCancel = activeLotes.stream()
+                .filter(this::isLoteCancelable)
                 .sorted(Comparator.comparingInt(MpsSemanalLotePlanificado::getLoteOrdinal).reversed())
                 .limit(quantityToCancel)
                 .toList();
+
+        if (lotesToCancel.size() < quantityToCancel) {
+            throw new IllegalStateException("No hay suficientes lotes sin ejecucion real para cancelar.");
+        }
 
         for (MpsSemanalLotePlanificado lote : lotesToCancel) {
             OrdenProduccion orden = lote.getOrdenProduccion();

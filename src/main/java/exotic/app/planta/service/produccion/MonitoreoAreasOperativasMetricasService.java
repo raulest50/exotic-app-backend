@@ -130,7 +130,36 @@ public class MonitoreoAreasOperativasMetricasService {
                         evento -> evento.getSeguimientoOrdenArea().getId(),
                         HashMap::new,
                         Collectors.toList()
+                ))
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> filterUnrevertedEvents(entry.getValue()),
+                        (left, right) -> left,
+                        HashMap::new
                 ));
+    }
+
+    private List<SeguimientoOrdenAreaEvento> filterUnrevertedEvents(List<SeguimientoOrdenAreaEvento> events) {
+        if (events == null || events.isEmpty()) {
+            return List.of();
+        }
+
+        var revertedEventIds = events.stream()
+                .map(SeguimientoOrdenAreaEvento::getEventoRevertido)
+                .filter(Objects::nonNull)
+                .map(SeguimientoOrdenAreaEvento::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (revertedEventIds.isEmpty()) {
+            return events;
+        }
+
+        return events.stream()
+                .filter(evento -> evento.getId() == null || !revertedEventIds.contains(evento.getId()))
+                .toList();
     }
 
     private List<Long> collectClosedStateDurations(
