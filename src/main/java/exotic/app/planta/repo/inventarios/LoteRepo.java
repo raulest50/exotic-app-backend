@@ -1,6 +1,7 @@
 package exotic.app.planta.repo.inventarios;
 
 import exotic.app.planta.model.inventarios.Lote;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -38,6 +39,20 @@ public interface LoteRepo extends JpaRepository<Lote, Long> {
      */
     @Query("SELECT l FROM Lote l WHERE l.ordenProduccion IS NOT NULL AND l.ordenProduccion.producto.productoId = :productoId")
     List<Lote> findByOrdenProduccion_Producto_ProductoId(@Param("productoId") String productoId);
+
+    @Query("""
+            SELECT l
+            FROM Lote l
+            WHERE l.ordenProduccion IS NOT NULL
+              AND l.ordenProduccion.producto IS NOT NULL
+              AND (:search IS NULL
+                   OR :search = ''
+                   OR LOWER(l.batchNumber) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR LOWER(l.ordenProduccion.producto.productoId) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR LOWER(l.ordenProduccion.producto.nombre) LIKE LOWER(CONCAT('%', :search, '%')))
+            ORDER BY l.batchNumber DESC
+            """)
+    List<Lote> searchProduccionLotes(@Param("search") String search, Pageable pageable);
 
     /**
      * Busca todos los lotes asociados a una orden de producción por su ID.
