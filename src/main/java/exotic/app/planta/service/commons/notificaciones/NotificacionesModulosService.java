@@ -104,6 +104,9 @@ public class NotificacionesModulosService {
                     case ORGANIGRAMA:
                         notification = checkNotificacionesOrganigrama(user);
                         break;
+                    case CALIDAD:
+                        notification = checkNotificacionesCalidad(user);
+                        break;
                     case PAGOS_PROVEEDORES:
                         notification = checkNotificacionesPagosProveedores(user);
                         break;
@@ -417,6 +420,19 @@ public class NotificacionesModulosService {
     public ModuleNotificationDTA checkNotificacionesOrganigrama(User user) {
         ModuleNotificationDTA notification = new ModuleNotificationDTA();
         notification.setModulo(ModuloSistema.ORGANIGRAMA);
+        notification.setRequireAtention(false);
+        notification.setMessage("");
+        return notification;
+    }
+
+    /**
+     * Verifica si hay notificaciones para el m?dulo CALIDAD
+     * @param user Usuario para el que se verifican las notificaciones
+     * @return Objeto con informaci?n de notificaci?n
+     */
+    public ModuleNotificationDTA checkNotificacionesCalidad(User user) {
+        ModuleNotificationDTA notification = new ModuleNotificationDTA();
+        notification.setModulo(ModuloSistema.CALIDAD);
         notification.setRequireAtention(false);
         notification.setMessage("");
         return notification;

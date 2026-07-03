@@ -26,5 +26,6 @@ public enum ModuloSistema {
     MASTER_DIRECTIVES,
     CRONOGRAMA,
     ORGANIGRAMA,
+    CALIDAD,
     PAGOS_PROVEEDORES
 }
