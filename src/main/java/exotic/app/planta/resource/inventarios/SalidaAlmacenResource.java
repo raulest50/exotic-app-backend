@@ -3,8 +3,12 @@ package exotic.app.planta.resource.inventarios;
 
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.*;
+import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
+import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
+import exotic.app.planta.service.inventarios.DispensacionV2MpsService;
 import exotic.app.planta.service.inventarios.SalidaAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +19,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.util.Locale;
+
 @RestController
 @RequestMapping("/salidas_almacen")
 @RequiredArgsConstructor
@@ -22,7 +29,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class SalidaAlmacenResource {
 
     private final SalidaAlmacenService salidaAlmacenService;
+    private final DispensacionV2MpsService dispensacionV2MpsService;
     private final UserRepository userRepository;
+
+    @GetMapping("/dispensacion-v2/mps-semanal")
+    public ResponseEntity<MpsSemanalDraftDTO> getDispensacionV2MpsSemanal(
+            Authentication authentication,
+            @RequestParam LocalDate weekStartDate,
+            @RequestParam int areaId
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        MpsSemanalDraftDTO response = dispensacionV2MpsService.getMpsSemanalFiltradoPorArea(weekStartDate, areaId);
+        return ResponseEntity.ok(response);
+    }
 
     /**
      * Endpoint para obtener recomendaciones de lotes para dispensación.
@@ -173,6 +193,26 @@ public class SalidaAlmacenResource {
 
         return userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+    }
+
+    private void requireDispensacionV2Access(User user) {
+        if (isMasterLike(user.getUsername())) {
+            return;
+        }
+
+        boolean hasTabAccess = UserAccessEvaluator
+                .tabNivel(user, ModuloSistema.TRANSACCIONES_ALMACEN, "DISPENSACION_V2")
+                .orElse(0) >= 1;
+
+        if (!hasTabAccess) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permisos para Dispensacion v2.");
+        }
+    }
+
+    private boolean isMasterLike(String username) {
+        if (username == null) return false;
+        String normalized = username.trim().toLowerCase(Locale.ROOT);
+        return "master".equals(normalized) || "super_master".equals(normalized);
     }
 
 

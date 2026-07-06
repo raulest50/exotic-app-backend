@@ -1,6 +1,8 @@
 package exotic.app.planta.repo.produccion;
 
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalLotePlanificado;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,6 +27,26 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
      * Obtiene un seguimiento específico por orden y nodo
      */
     Optional<SeguimientoOrdenArea> findByOrdenProduccion_OrdenIdAndRutaProcesoNode_Id(int ordenId, Long nodeId);
+
+    @Query("""
+        SELECT DISTINCT item.id AS mpsItemId,
+               lote.id AS mpsLotePlanificadoId
+        FROM SeguimientoOrdenArea s
+        JOIN s.ordenProduccion op
+        JOIN op.mpsLotePlanificado lote
+        JOIN lote.mpsItem item
+        WHERE op.mpsSemanal.mpsId = :mpsId
+        AND s.areaOperativa.areaId = :areaId
+        AND op.estadoOrden <> -1
+        AND (item.estado IS NULL OR item.estado <> :cancelledItemEstado)
+        AND (lote.estado IS NULL OR lote.estado <> :cancelledLoteEstado)
+        """)
+    List<MpsIntervencionAreaProjection> findMpsIntervencionesByMpsIdAndAreaId(
+            @Param("mpsId") Integer mpsId,
+            @Param("areaId") int areaId,
+            @Param("cancelledItemEstado") EstadoMpsSemanalItem cancelledItemEstado,
+            @Param("cancelledLoteEstado") EstadoMpsSemanalLotePlanificado cancelledLoteEstado
+    );
 
     /**
      * Obtiene órdenes visibles para un área específica (estado = VISIBLE)
@@ -190,5 +212,10 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
     interface CargaActivaAreaProjection {
         Integer getAreaId();
         Long getTotal();
+    }
+
+    interface MpsIntervencionAreaProjection {
+        Long getMpsItemId();
+        Long getMpsLotePlanificadoId();
     }
 }
