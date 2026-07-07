@@ -56,6 +56,16 @@ public class SalidaAlmacenResource {
         return ResponseEntity.ok(dispensacionV2WorkflowService.preparar(request));
     }
 
+    @PostMapping("/dispensacion-v2/materiales-receta")
+    public ResponseEntity<DispensacionV2MaterialesRecetaResponseDTO> prepararMaterialesRecetaDispensacionV2(
+            Authentication authentication,
+            @RequestBody DispensacionV2MaterialesRecetaRequestDTO request
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService.prepararMaterialesReceta(request));
+    }
+
     @PostMapping("/dispensacion-v2/asignacion-lotes")
     public ResponseEntity<DispensacionV2PreparacionResponseDTO> asignarLotesDispensacionV2(
             Authentication authentication,

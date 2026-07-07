@@ -68,6 +68,46 @@ public class DispensacionV2WorkflowService {
     }
 
     @Transactional(readOnly = true)
+    public DispensacionV2MaterialesRecetaResponseDTO prepararMaterialesReceta(DispensacionV2MaterialesRecetaRequestDTO request) {
+        AreaOperativa area = requireArea(request != null ? request.getAreaId() : null);
+        String productoId = request != null ? request.getProductoId() : null;
+        if (productoId == null || productoId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El productoId es obligatorio.");
+        }
+        double cantidadBase = request != null && request.getCantidadBase() != null ? request.getCantidadBase() : 0;
+        if (cantidadBase <= TOLERANCE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidadBase debe ser mayor a cero.");
+        }
+
+        Producto producto = productoRepo.findById(productoId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado."));
+        if (!(producto instanceof Terminado terminado)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El producto seleccionado no es un terminado valido.");
+        }
+
+        List<String> warnings = new ArrayList<>();
+        List<DispensacionV2MaterialDTO> materiales = buildMaterialesRequeridos(terminado, cantidadBase)
+                .values()
+                .stream()
+                .map(material -> toMaterialDTO(material, 0, null, false))
+                .peek(material -> {
+                    if (material.getWarning() != null && !material.getWarning().isBlank()) {
+                        warnings.add(material.getProductoNombre() + ": " + material.getWarning());
+                    }
+                })
+                .toList();
+
+        return new DispensacionV2MaterialesRecetaResponseDTO(
+                toAreaDTO(area),
+                producto.getProductoId(),
+                producto.getNombre(),
+                cantidadBase,
+                materiales,
+                warnings
+        );
+    }
+
+    @Transactional(readOnly = true)
     public LoteDisponiblePageResponseDTO getLotesDisponiblesV2(String productoId, int page, int size) {
         if (productoId == null || productoId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El productoId es obligatorio.");
