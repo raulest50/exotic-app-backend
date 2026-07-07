@@ -9,6 +9,7 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.inventarios.DispensacionV2MpsService;
+import exotic.app.planta.service.inventarios.DispensacionV2WorkflowService;
 import exotic.app.planta.service.inventarios.SalidaAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ public class SalidaAlmacenResource {
 
     private final SalidaAlmacenService salidaAlmacenService;
     private final DispensacionV2MpsService dispensacionV2MpsService;
+    private final DispensacionV2WorkflowService dispensacionV2WorkflowService;
     private final UserRepository userRepository;
 
     @GetMapping("/dispensacion-v2/mps-semanal")
@@ -42,6 +44,38 @@ public class SalidaAlmacenResource {
         requireDispensacionV2Access(currentUser);
         MpsSemanalDraftDTO response = dispensacionV2MpsService.getMpsSemanalFiltradoPorArea(weekStartDate, areaId);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/dispensacion-v2/preparacion")
+    public ResponseEntity<DispensacionV2PreparacionResponseDTO> prepararDispensacionV2(
+            Authentication authentication,
+            @RequestBody DispensacionV2PreparacionRequestDTO request
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService.preparar(request));
+    }
+
+    @PostMapping("/dispensacion-v2/asignacion-lotes")
+    public ResponseEntity<DispensacionV2PreparacionResponseDTO> asignarLotesDispensacionV2(
+            Authentication authentication,
+            @RequestBody DispensacionV2AsignacionLotesRequestDTO request
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService.asignarLotes(request));
+    }
+
+    @GetMapping("/dispensacion-v2/materiales/{productoId}/lotes-disponibles")
+    public ResponseEntity<LoteDisponiblePageResponseDTO> getLotesDisponiblesDispensacionV2(
+            Authentication authentication,
+            @PathVariable String productoId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService.getLotesDisponiblesV2(productoId, page, size));
     }
 
     /**
