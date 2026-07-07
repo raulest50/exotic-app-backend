@@ -54,7 +54,7 @@ public class DispensacionV2WorkflowService {
     public DispensacionV2PreparacionResponseDTO preparar(DispensacionV2PreparacionRequestDTO request) {
         AreaOperativa area = requireArea(request != null ? request.getAreaId() : null);
         List<OrdenInput> ordenes = normalizePreparacionOrdenes(request != null ? request.getOrdenes() : null);
-        return buildResponse(area, ordenes, Collections.emptyMap(), false);
+        return buildResponse(area, ordenes, Collections.emptyMap(), false, false);
     }
 
     @Transactional(readOnly = true)
@@ -64,7 +64,7 @@ public class DispensacionV2WorkflowService {
         Map<Integer, Map<String, DispensacionV2MaterialEditableRequestDTO>> overrides = buildOverrides(
                 request != null ? request.getOrdenes() : null
         );
-        return buildResponse(area, ordenes, overrides, true);
+        return buildResponse(area, ordenes, overrides, true, false);
     }
 
     @Transactional(readOnly = true)
@@ -112,7 +112,8 @@ public class DispensacionV2WorkflowService {
             AreaOperativa area,
             List<OrdenInput> ordenInputs,
             Map<Integer, Map<String, DispensacionV2MaterialEditableRequestDTO>> overrides,
-            boolean asignarLotes
+            boolean asignarLotes,
+            boolean defaultChecked
     ) {
         DispensacionV2PreparacionResponseDTO response = new DispensacionV2PreparacionResponseDTO();
         response.setArea(toAreaDTO(area));
@@ -134,6 +135,7 @@ public class DispensacionV2WorkflowService {
                     orden,
                     overrides.getOrDefault(orden.getOrdenId(), Collections.emptyMap()),
                     asignarLotes,
+                    defaultChecked,
                     stockCache,
                     stockRestantePorLote
             );
@@ -166,6 +168,7 @@ public class DispensacionV2WorkflowService {
             OrdenProduccion orden,
             Map<String, DispensacionV2MaterialEditableRequestDTO> overrides,
             boolean asignarLotes,
+            boolean defaultChecked,
             Map<String, List<LoteStock>> stockCache,
             Map<String, Double> stockRestantePorLote
     ) {
@@ -183,7 +186,12 @@ public class DispensacionV2WorkflowService {
         List<DispensacionV2MaterialDTO> materialesDTO = new ArrayList<>();
         for (MaterialAccumulator material : materiales.values()) {
             DispensacionV2MaterialEditableRequestDTO override = overrides.get(material.productoId);
-            DispensacionV2MaterialDTO dto = toMaterialDTO(material, historico.getOrDefault(material.productoId, 0.0), override);
+            DispensacionV2MaterialDTO dto = toMaterialDTO(
+                    material,
+                    historico.getOrDefault(material.productoId, 0.0),
+                    override,
+                    defaultChecked
+            );
             if (asignarLotes && dto.isChecked() && dto.isInventareable() && dto.getCantidadADispensar() > TOLERANCE) {
                 asignarLotesSugeridos(dto, stockCache, stockRestantePorLote);
             }
@@ -310,11 +318,12 @@ public class DispensacionV2WorkflowService {
     private DispensacionV2MaterialDTO toMaterialDTO(
             MaterialAccumulator material,
             double cantidadHistorica,
-            DispensacionV2MaterialEditableRequestDTO override
+            DispensacionV2MaterialEditableRequestDTO override,
+            boolean defaultChecked
     ) {
         boolean checked = override != null && override.getChecked() != null
                 ? override.getChecked()
-                : material.inventareable;
+                : defaultChecked && material.inventareable;
         if (!material.inventareable) {
             checked = false;
         }
