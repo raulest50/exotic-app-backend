@@ -76,6 +76,16 @@ public class SalidaAlmacenResource {
         return ResponseEntity.ok(dispensacionV2WorkflowService.asignarLotes(request));
     }
 
+    @PostMapping("/dispensacion-v2/finalizar")
+    public ResponseEntity<DispensacionV2FinalizacionResponseDTO> finalizarDispensacionV2(
+            Authentication authentication,
+            @RequestBody DispensacionV2FinalizacionRequestDTO request
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService.finalizar(request, currentUser));
+    }
+
     @GetMapping("/dispensacion-v2/materiales/{productoId}/lotes-disponibles")
     public ResponseEntity<LoteDisponiblePageResponseDTO> getLotesDisponiblesDispensacionV2(
             Authentication authentication,
