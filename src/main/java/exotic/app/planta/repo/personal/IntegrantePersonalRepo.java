@@ -27,7 +27,15 @@ public interface IntegrantePersonalRepo extends JpaRepository<IntegrantePersonal
     /**
      * Find integrantes by nombre or apellidos containing the given text (case insensitive) with pagination
      */
-    @Query("SELECT i FROM IntegrantePersonal i WHERE LOWER(i.nombres) LIKE LOWER(CONCAT('%', :searchText, '%')) OR LOWER(i.apellidos) LIKE LOWER(CONCAT('%', :searchText, '%'))")
+    @Query("""
+            SELECT i
+            FROM IntegrantePersonal i
+            WHERE :searchText IS NULL
+               OR :searchText = ''
+               OR LOWER(i.nombres) LIKE LOWER(CONCAT('%', :searchText, '%'))
+               OR LOWER(i.apellidos) LIKE LOWER(CONCAT('%', :searchText, '%'))
+               OR CAST(i.id AS string) LIKE CONCAT('%', :searchText, '%')
+            """)
     Page<IntegrantePersonal> findByNombresOrApellidosContainingIgnoreCase(@Param("searchText") String searchText, Pageable pageable);
 
     /**

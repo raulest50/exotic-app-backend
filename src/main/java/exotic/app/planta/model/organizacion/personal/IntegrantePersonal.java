@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +41,22 @@ public class IntegrantePersonal {
 
     private String email;
 
+    private String nombreContactoEmergencia;
+
+    private String celularContactoEmergencia;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private EstadoCivil estadoCivil;
+
+    private Integer numeroHijos;
+
+    private LocalDate fechaIngreso;
+
+    private String numeroCuentaBancaria;
+
+    private String banco;
+
     private String cargo;
 
     private Departamento departamento;
@@ -71,6 +88,15 @@ public class IntegrantePersonal {
     public enum Estado {
         ACTIVO,
         INACTIVO,
+    }
+
+    public enum EstadoCivil {
+        SOLTERO,
+        CASADO,
+        UNION_LIBRE,
+        SEPARADO,
+        DIVORCIADO,
+        VIUDO,
     }
 
 }

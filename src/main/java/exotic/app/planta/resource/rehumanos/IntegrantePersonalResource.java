@@ -2,6 +2,9 @@ package exotic.app.planta.resource.rehumanos;
 
 import exotic.app.planta.model.organizacion.personal.IntegrantePersonal;
 import exotic.app.planta.model.organizacion.personal.RegistroHoraExtra;
+import exotic.app.planta.model.organizacion.personal.dto.IntegrantePersonalDetalleDTO;
+import exotic.app.planta.model.organizacion.personal.dto.IntegrantePersonalRequestDTO;
+import exotic.app.planta.model.organizacion.personal.dto.IntegrantePersonalResumenDTO;
 import exotic.app.planta.model.organizacion.personal.dto.RegistroHoraExtraDecisionDTO;
 import exotic.app.planta.model.organizacion.personal.dto.RegistroHoraExtraRequestDTO;
 import exotic.app.planta.model.organizacion.personal.dto.RegistroHoraExtraResponseDTO;
@@ -49,19 +52,15 @@ public class IntegrantePersonalResource {
      * @return The saved IntegrantePersonal entity
      */
     @PostMapping("/save")
-    public ResponseEntity<IntegrantePersonal> saveIntegrantePersonal(
-            @RequestBody IntegrantePersonal integrantePersonal,
+    public ResponseEntity<IntegrantePersonalDetalleDTO> saveIntegrantePersonal(
+            @RequestBody IntegrantePersonalRequestDTO integrantePersonal,
             @RequestParam(value = "usuarioResponsable", defaultValue = "sistema") String usuarioResponsable
     ) {
         try {
-            IntegrantePersonal saved = integrantePersonalService.saveIntegrantePersonal(integrantePersonal, usuarioResponsable);
+            IntegrantePersonalDetalleDTO saved = integrantePersonalService.saveIntegrantePersonal(integrantePersonal, usuarioResponsable);
             return ResponseEntity.created(URI.create("/integrantes-personal/" + saved.getId())).body(saved);
-        } catch (IllegalArgumentException e) {
-            // Return a 400 Bad Request for validation errors
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            // Log error and return 500 Internal Server Error for other exceptions
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
         }
     }
 
@@ -72,10 +71,23 @@ public class IntegrantePersonalResource {
      * @return The IntegrantePersonal if found, or 404 Not Found
      */
     @GetMapping("/{id}")
-    public ResponseEntity<IntegrantePersonal> findById(@PathVariable Long id) {
-        Optional<IntegrantePersonal> integranteOpt = integrantePersonalService.findById(id);
+    public ResponseEntity<IntegrantePersonalDetalleDTO> findById(@PathVariable Long id) {
+        Optional<IntegrantePersonalDetalleDTO> integranteOpt = integrantePersonalService.findById(id);
         return integranteOpt.map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<IntegrantePersonalDetalleDTO> updateIntegrantePersonal(
+            @PathVariable Long id,
+            @RequestBody IntegrantePersonalRequestDTO request,
+            @RequestParam(value = "usuarioResponsable", defaultValue = "sistema") String usuarioResponsable
+    ) {
+        try {
+            return ResponseEntity.ok(integrantePersonalService.updateIntegrantePersonal(id, request, usuarioResponsable));
+        } catch (RuntimeException e) {
+            throw toResponseStatusException(e);
+        }
     }
 
     /**
@@ -87,12 +99,12 @@ public class IntegrantePersonalResource {
      * @return A page of IntegrantePersonal entities matching the search criteria
      */
     @GetMapping("/search")
-    public ResponseEntity<Page<IntegrantePersonal>> searchIntegrantes(
-            @RequestParam("q") String searchText,
+    public ResponseEntity<Page<IntegrantePersonalResumenDTO>> searchIntegrantes(
+            @RequestParam(value = "q", defaultValue = "") String searchText,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "10") int size
     ) {
-        Page<IntegrantePersonal> integrantes = integrantePersonalService.searchIntegrantes(searchText, page, size);
+        Page<IntegrantePersonalResumenDTO> integrantes = integrantePersonalService.searchIntegrantes(searchText, page, size);
         return ResponseEntity.ok(integrantes);
     }
 
@@ -103,10 +115,10 @@ public class IntegrantePersonalResource {
      * @return A list of IntegrantePersonal entities in the specified department
      */
     @GetMapping("/by-departamento/{departamento}")
-    public ResponseEntity<List<IntegrantePersonal>> findByDepartamento(
+    public ResponseEntity<List<IntegrantePersonalResumenDTO>> findByDepartamento(
             @PathVariable IntegrantePersonal.Departamento departamento
     ) {
-        List<IntegrantePersonal> integrantes = integrantePersonalService.findByDepartamento(departamento);
+        List<IntegrantePersonalResumenDTO> integrantes = integrantePersonalService.findByDepartamento(departamento);
         return ResponseEntity.ok(integrantes);
     }
 
@@ -117,10 +129,10 @@ public class IntegrantePersonalResource {
      * @return A list of IntegrantePersonal entities with the specified status
      */
     @GetMapping("/by-estado/{estado}")
-    public ResponseEntity<List<IntegrantePersonal>> findByEstado(
+    public ResponseEntity<List<IntegrantePersonalResumenDTO>> findByEstado(
             @PathVariable IntegrantePersonal.Estado estado
     ) {
-        List<IntegrantePersonal> integrantes = integrantePersonalService.findByEstado(estado);
+        List<IntegrantePersonalResumenDTO> integrantes = integrantePersonalService.findByEstado(estado);
         return ResponseEntity.ok(integrantes);
     }
 
