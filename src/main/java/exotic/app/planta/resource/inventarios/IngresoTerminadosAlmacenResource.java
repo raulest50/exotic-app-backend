@@ -6,6 +6,7 @@ import exotic.app.planta.model.inventarios.dto.IngresoMasivoRequestDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoMasivoResponseDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoTerminadoConsultaResponseDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoTerminadoRequestDTO;
+import exotic.app.planta.model.inventarios.dto.ReporteHyLRequestDTO;
 import exotic.app.planta.service.inventarios.IngresoTerminadosAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,6 +88,21 @@ public class IngresoTerminadosAlmacenResource {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(MediaType.parseMediaType(
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
+    }
+
+    @PostMapping("/reporte-hyl")
+    public ResponseEntity<byte[]> descargarReporteHyL(
+            @RequestBody ReporteHyLRequestDTO request) {
+        LocalDate fechaEfectiva = request != null && request.getFechaReporte() != null
+                ? request.getFechaReporte()
+                : AppTime.today();
+        byte[] excel = ingresoTerminadosAlmacenService.generarReporteHyLXls(request);
+        String filename = "reporte_hyl_" + fechaEfectiva.toString().replace("-", "") + ".xls";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("application/vnd.ms-excel"))
                 .body(excel);
     }
 
