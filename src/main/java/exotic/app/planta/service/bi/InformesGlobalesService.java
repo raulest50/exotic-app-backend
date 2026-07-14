@@ -1,8 +1,10 @@
 package exotic.app.planta.service.bi;
 
+import exotic.app.planta.model.bi.dto.InformeGlobalAlmacenDTO;
 import exotic.app.planta.model.bi.dto.InformeGlobalProduccionDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
@@ -36,6 +38,11 @@ import java.util.Set;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class InformesGlobalesService {
+
+    private static final List<Movimiento.TipoMovimiento> TIPOS_ENTRADA_MATERIAL = List.of(
+            Movimiento.TipoMovimiento.COMPRA,
+            Movimiento.TipoMovimiento.AJUSTE_POSITIVO,
+            Movimiento.TipoMovimiento.TRANSFERENCIA);
 
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final MasterProductionScheduleSemanalRepo masterProductionScheduleSemanalRepo;
@@ -166,6 +173,168 @@ public class InformesGlobalesService {
                 .detalleReferencias(detalleReferencias)
                 .notas(crearNotas(mpsIds, resumen))
                 .build();
+    }
+
+    public InformeGlobalAlmacenDTO obtenerReporteAlmacen(LocalDate fechaDesde, LocalDate fechaHasta) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
+        int diasRango = (int) ChronoUnit.DAYS.between(fechaDesde, fechaHasta) + 1;
+
+        List<Movimiento> ingresos = transaccionAlmacenRepo.findIngresosMaterialPorDia(
+                range.start(), range.end(), TIPOS_ENTRADA_MATERIAL);
+        List<Movimiento> dispensaciones = transaccionAlmacenRepo.findDispensacionesMaterialPorDia(
+                range.start(), range.end(), Movimiento.TipoMovimiento.DISPENSACION);
+
+        Map<String, MaterialAlmacenAccumulator> materiales = new LinkedHashMap<>();
+        Map<LocalDate, DiaAlmacenAccumulator> porDia = new LinkedHashMap<>();
+        Map<String, TipoMaterialAccumulator> porTipoMaterial = new LinkedHashMap<>();
+        for (LocalDate fecha = fechaDesde; !fecha.isAfter(fechaHasta); fecha = fecha.plusDays(1)) {
+            porDia.put(fecha, new DiaAlmacenAccumulator(fecha));
+        }
+
+        ingresos.forEach((movimiento) -> agregarMovimientoAlmacen(
+                movimiento, true, fechaDesde, materiales, porDia, porTipoMaterial));
+        dispensaciones.forEach((movimiento) -> agregarMovimientoAlmacen(
+                movimiento, false, fechaDesde, materiales, porDia, porTipoMaterial));
+
+        Map<String, CantidadUnidadAccumulator> porUnidad = new LinkedHashMap<>();
+        for (MaterialAlmacenAccumulator material : materiales.values()) {
+            porUnidad.computeIfAbsent(material.unidadMedida, CantidadUnidadAccumulator::new)
+                    .add(material.cantidadIngresada, material.cantidadDispensada);
+        }
+
+        double valorIngresos = materiales.values().stream()
+                .mapToDouble((material) -> material.valorIngresosEstimado)
+                .sum();
+        double valorDispensaciones = materiales.values().stream()
+                .mapToDouble((material) -> material.valorDispensacionesEstimado)
+                .sum();
+        int materialesConCosto = (int) materiales.values().stream()
+                .filter((material) -> material.costoDisponible)
+                .count();
+        int materialesSinCosto = materiales.size() - materialesConCosto;
+        int materialesIngresados = (int) materiales.values().stream()
+                .filter((material) -> material.cantidadIngresada > 0)
+                .count();
+        int materialesDispensados = (int) materiales.values().stream()
+                .filter((material) -> material.cantidadDispensada > 0)
+                .count();
+
+        InformeGlobalAlmacenDTO.ResumenDTO resumen = InformeGlobalAlmacenDTO.ResumenDTO.builder()
+                .valorIngresosEstimado(valorIngresos)
+                .valorDispensacionesEstimado(valorDispensaciones)
+                .balanceValorEstimado(valorIngresos - valorDispensaciones)
+                .movimientosIngreso(ingresos.size())
+                .movimientosDispensacion(dispensaciones.size())
+                .materialesIngresados(materialesIngresados)
+                .materialesDispensados(materialesDispensados)
+                .materialesConCosto(materialesConCosto)
+                .materialesSinCosto(materialesSinCosto)
+                .coberturaCostosPct(pct(materialesConCosto, materiales.size()))
+                .build();
+
+        boolean hayValoracion = materialesConCosto > 0;
+        Comparator<MaterialAlmacenAccumulator> comparadorTop = Comparator
+                .comparingDouble((MaterialAlmacenAccumulator material) -> hayValoracion
+                        ? material.impactoValorEstimado()
+                        : material.volumenTotal())
+                .reversed()
+                .thenComparing((material) -> material.productoNombre);
+
+        List<InformeGlobalAlmacenDTO.TopMaterialDTO> topMateriales = materiales.values().stream()
+                .sorted(comparadorTop)
+                .limit(5)
+                .map(MaterialAlmacenAccumulator::toTopDto)
+                .toList();
+
+        return InformeGlobalAlmacenDTO.builder()
+                .fechaDesde(fechaDesde)
+                .fechaHasta(fechaHasta)
+                .modoFecha(fechaDesde.equals(fechaHasta) ? "FECHA_UNICA" : "RANGO")
+                .diasRango(diasRango)
+                .resumen(resumen)
+                .cantidadesPorUnidad(porUnidad.values().stream()
+                        .sorted(Comparator.comparing((cantidad) -> cantidad.unidadMedida))
+                        .map(CantidadUnidadAccumulator::toDto)
+                        .toList())
+                .serieDiaria(porDia.values().stream()
+                        .map(DiaAlmacenAccumulator::toDto)
+                        .toList())
+                .consolidadoTipoMaterial(porTipoMaterial.values().stream()
+                        .sorted(Comparator.comparing((tipo) -> tipo.tipoMaterial))
+                        .map(TipoMaterialAccumulator::toDto)
+                        .toList())
+                .topMateriales(topMateriales)
+                .notas(crearNotasAlmacen(ingresos, dispensaciones, resumen, porUnidad.size()))
+                .build();
+    }
+
+    private void agregarMovimientoAlmacen(
+            Movimiento movimiento,
+            boolean ingreso,
+            LocalDate fechaFallback,
+            Map<String, MaterialAlmacenAccumulator> materiales,
+            Map<LocalDate, DiaAlmacenAccumulator> porDia,
+            Map<String, TipoMaterialAccumulator> porTipoMaterial) {
+        if (!(movimiento.getProducto() instanceof Material material)) {
+            return;
+        }
+
+        String productoId = defaultIfBlank(material.getProductoId(), "MOV-" + movimiento.getMovimientoId());
+        MaterialAlmacenAccumulator materialAccumulator = materiales.computeIfAbsent(
+                productoId,
+                (ignored) -> new MaterialAlmacenAccumulator(material));
+        double cantidad = Math.abs(movimiento.getCantidad());
+        double valorEstimado = materialAccumulator.costoDisponible
+                ? cantidad * materialAccumulator.costoUnitario
+                : 0;
+        materialAccumulator.add(ingreso, cantidad, valorEstimado);
+
+        LocalDate fechaMovimiento = movimiento.getFechaMovimiento() != null
+                ? movimiento.getFechaMovimiento().toLocalDate()
+                : fechaFallback;
+        DiaAlmacenAccumulator dia = porDia.get(fechaMovimiento);
+        if (dia != null) {
+            dia.add(ingreso, valorEstimado);
+        }
+
+        porTipoMaterial.computeIfAbsent(
+                        materialAccumulator.tipoMaterial,
+                        TipoMaterialAccumulator::new)
+                .add(ingreso, materialAccumulator.unidadMedida, cantidad, valorEstimado);
+    }
+
+    private List<InformeGlobalAlmacenDTO.NotaDTO> crearNotasAlmacen(
+            List<Movimiento> ingresos,
+            List<Movimiento> dispensaciones,
+            InformeGlobalAlmacenDTO.ResumenDTO resumen,
+            int unidadesMedida) {
+        List<InformeGlobalAlmacenDTO.NotaDTO> notas = new ArrayList<>();
+        if (ingresos.isEmpty() && dispensaciones.isEmpty()) {
+            notas.add(InformeGlobalAlmacenDTO.NotaDTO.builder()
+                    .tipo("INFO")
+                    .mensaje("No se registraron ingresos ni dispensaciones de materiales en el periodo seleccionado.")
+                    .build());
+        }
+        if (resumen.getMaterialesSinCosto() > 0) {
+            notas.add(InformeGlobalAlmacenDTO.NotaDTO.builder()
+                    .tipo("WARNING")
+                    .mensaje("Hay materiales sin costo valido; los valores monetarios del informe son parciales.")
+                    .build());
+        }
+        if (ingresos.stream().anyMatch((movimiento) ->
+                movimiento.getTipoMovimiento() == Movimiento.TipoMovimiento.TRANSFERENCIA)) {
+            notas.add(InformeGlobalAlmacenDTO.NotaDTO.builder()
+                    .tipo("INFO")
+                    .mensaje("Los ingresos incluyen transferencias positivas entre almacenes y no representan exclusivamente compras.")
+                    .build());
+        }
+        if (unidadesMedida > 1) {
+            notas.add(InformeGlobalAlmacenDTO.NotaDTO.builder()
+                    .tipo("INFO")
+                    .mensaje("Las cantidades se presentan por unidad de medida para no sumar magnitudes incompatibles.")
+                    .build());
+        }
+        return notas;
     }
 
     private static DateTimeRange resolveDateTimeRange(LocalDate fechaDesde, LocalDate fechaHasta) {
@@ -305,6 +474,166 @@ public class InformesGlobalesService {
             String productoNombre,
             Integer categoriaId,
             String categoriaNombre) {
+    }
+
+    private static class MaterialAlmacenAccumulator {
+        private final String productoId;
+        private final String productoNombre;
+        private final String tipoMaterial;
+        private final String unidadMedida;
+        private final double costoUnitario;
+        private final boolean costoDisponible;
+        private double cantidadIngresada;
+        private double cantidadDispensada;
+        private double valorIngresosEstimado;
+        private double valorDispensacionesEstimado;
+
+        private MaterialAlmacenAccumulator(Material material) {
+            this.productoId = defaultIfBlank(material.getProductoId(), "Sin codigo");
+            this.productoNombre = defaultIfBlank(material.getNombre(), this.productoId);
+            this.tipoMaterial = nombreTipoMaterial(material.getTipoMaterial());
+            this.unidadMedida = nombreUnidadMedida(material.getTipoUnidades());
+            this.costoUnitario = material.getCosto();
+            this.costoDisponible = costoUnitario > 0;
+        }
+
+        private void add(boolean ingreso, double cantidad, double valorEstimado) {
+            if (ingreso) {
+                cantidadIngresada += cantidad;
+                valorIngresosEstimado += valorEstimado;
+            } else {
+                cantidadDispensada += cantidad;
+                valorDispensacionesEstimado += valorEstimado;
+            }
+        }
+
+        private double impactoValorEstimado() {
+            return valorIngresosEstimado + valorDispensacionesEstimado;
+        }
+
+        private double volumenTotal() {
+            return cantidadIngresada + cantidadDispensada;
+        }
+
+        private InformeGlobalAlmacenDTO.TopMaterialDTO toTopDto() {
+            return InformeGlobalAlmacenDTO.TopMaterialDTO.builder()
+                    .productoId(productoId)
+                    .productoNombre(productoNombre)
+                    .tipoMaterial(tipoMaterial)
+                    .unidadMedida(unidadMedida)
+                    .cantidadIngresada(cantidadIngresada)
+                    .cantidadDispensada(cantidadDispensada)
+                    .valorIngresosEstimado(valorIngresosEstimado)
+                    .valorDispensacionesEstimado(valorDispensacionesEstimado)
+                    .impactoValorEstimado(impactoValorEstimado())
+                    .costoDisponible(costoDisponible)
+                    .build();
+        }
+    }
+
+    private static class CantidadUnidadAccumulator {
+        private final String unidadMedida;
+        private double cantidadIngresada;
+        private double cantidadDispensada;
+
+        private CantidadUnidadAccumulator(String unidadMedida) {
+            this.unidadMedida = unidadMedida;
+        }
+
+        private void add(double ingreso, double dispensacion) {
+            cantidadIngresada += ingreso;
+            cantidadDispensada += dispensacion;
+        }
+
+        private InformeGlobalAlmacenDTO.CantidadUnidadDTO toDto() {
+            return InformeGlobalAlmacenDTO.CantidadUnidadDTO.builder()
+                    .unidadMedida(unidadMedida)
+                    .cantidadIngresada(cantidadIngresada)
+                    .cantidadDispensada(cantidadDispensada)
+                    .balanceNeto(cantidadIngresada - cantidadDispensada)
+                    .build();
+        }
+    }
+
+    private static class DiaAlmacenAccumulator {
+        private final LocalDate fecha;
+        private double valorIngresosEstimado;
+        private double valorDispensacionesEstimado;
+        private int movimientosIngreso;
+        private int movimientosDispensacion;
+
+        private DiaAlmacenAccumulator(LocalDate fecha) {
+            this.fecha = fecha;
+        }
+
+        private void add(boolean ingreso, double valorEstimado) {
+            if (ingreso) {
+                valorIngresosEstimado += valorEstimado;
+                movimientosIngreso++;
+            } else {
+                valorDispensacionesEstimado += valorEstimado;
+                movimientosDispensacion++;
+            }
+        }
+
+        private InformeGlobalAlmacenDTO.SerieDiariaDTO toDto() {
+            return InformeGlobalAlmacenDTO.SerieDiariaDTO.builder()
+                    .fecha(fecha)
+                    .valorIngresosEstimado(valorIngresosEstimado)
+                    .valorDispensacionesEstimado(valorDispensacionesEstimado)
+                    .movimientosIngreso(movimientosIngreso)
+                    .movimientosDispensacion(movimientosDispensacion)
+                    .build();
+        }
+    }
+
+    private static class TipoMaterialAccumulator {
+        private final String tipoMaterial;
+        private final Map<String, CantidadUnidadAccumulator> porUnidad = new LinkedHashMap<>();
+        private double valorIngresosEstimado;
+        private double valorDispensacionesEstimado;
+        private int movimientos;
+
+        private TipoMaterialAccumulator(String tipoMaterial) {
+            this.tipoMaterial = tipoMaterial;
+        }
+
+        private void add(boolean ingreso, String unidadMedida, double cantidad, double valorEstimado) {
+            CantidadUnidadAccumulator cantidadUnidad = porUnidad.computeIfAbsent(
+                    unidadMedida, CantidadUnidadAccumulator::new);
+            cantidadUnidad.add(ingreso ? cantidad : 0, ingreso ? 0 : cantidad);
+            if (ingreso) {
+                valorIngresosEstimado += valorEstimado;
+            } else {
+                valorDispensacionesEstimado += valorEstimado;
+            }
+            movimientos++;
+        }
+
+        private InformeGlobalAlmacenDTO.ConsolidadoTipoMaterialDTO toDto() {
+            return InformeGlobalAlmacenDTO.ConsolidadoTipoMaterialDTO.builder()
+                    .tipoMaterial(tipoMaterial)
+                    .valorIngresosEstimado(valorIngresosEstimado)
+                    .valorDispensacionesEstimado(valorDispensacionesEstimado)
+                    .movimientos(movimientos)
+                    .cantidadesPorUnidad(porUnidad.values().stream()
+                            .sorted(Comparator.comparing((cantidad) -> cantidad.unidadMedida))
+                            .map(CantidadUnidadAccumulator::toDto)
+                            .toList())
+                    .build();
+        }
+    }
+
+    private static String nombreTipoMaterial(int tipoMaterial) {
+        return switch (tipoMaterial) {
+            case 1 -> "Materia prima";
+            case 2 -> "Material de empaque";
+            default -> "Otro";
+        };
+    }
+
+    private static String nombreUnidadMedida(String unidadMedida) {
+        return defaultIfBlank(unidadMedida, "Sin unidad").trim().toUpperCase();
     }
 
     private static class ReferenciaAccumulator {

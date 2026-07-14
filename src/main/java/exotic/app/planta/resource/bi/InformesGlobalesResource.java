@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.bi;
 
+import exotic.app.planta.model.bi.dto.InformeGlobalAlmacenDTO;
 import exotic.app.planta.model.bi.dto.InformeGlobalProduccionDTO;
 import exotic.app.planta.service.bi.InformesGlobalesService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,22 @@ public class InformesGlobalesResource {
         try {
             InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
             InformeGlobalProduccionDTO reporte = informesGlobalesService.obtenerReporteProduccion(
+                    range.fechaDesde(),
+                    range.fechaHasta());
+            return ResponseEntity.ok(reporte);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
+    }
+
+    @GetMapping("/almacen")
+    public ResponseEntity<?> obtenerReporteAlmacen(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta) {
+        try {
+            InformeFechaRange range = resolveInformeRange(fecha, fechaDesde, fechaHasta);
+            InformeGlobalAlmacenDTO reporte = informesGlobalesService.obtenerReporteAlmacen(
                     range.fechaDesde(),
                     range.fechaHasta());
             return ResponseEntity.ok(reporte);
