@@ -1,103 +1,78 @@
 package exotic.app.planta.resource.inventarios;
 
 import exotic.app.planta.config.AppTime;
-import exotic.app.planta.model.inventarios.TransaccionAlmacen;
-import exotic.app.planta.model.inventarios.dto.IngresoMasivoRequestDTO;
-import exotic.app.planta.model.inventarios.dto.IngresoMasivoResponseDTO;
-import exotic.app.planta.model.inventarios.dto.IngresoTerminadoConsultaResponseDTO;
-import exotic.app.planta.model.inventarios.dto.IngresoTerminadoRequestDTO;
+import exotic.app.planta.dto.ErrorResponse;
 import exotic.app.planta.model.inventarios.dto.ReporteHyLRequestDTO;
-import exotic.app.planta.service.inventarios.IngresoTerminadosAlmacenService;
+import exotic.app.planta.model.produccion.dto.CierreProduccionRequestDTO;
+import exotic.app.planta.model.produccion.dto.CierreProduccionResponseDTO;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionPendientesDTO;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionPendientesResumenDTO;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.UserAccessEvaluator;
+import exotic.app.planta.repo.usuarios.UserRepository;
+import exotic.app.planta.service.inventarios.ReporteHyLService;
+import exotic.app.planta.service.produccion.CierreProduccionConflictException;
+import exotic.app.planta.service.produccion.CierreProduccionService;
+import exotic.app.planta.service.produccion.ReporteProduccionLoteService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.net.URI;
 import java.time.LocalDate;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/ingresos_terminados_almacen")
 @RequiredArgsConstructor
-@Slf4j
 public class IngresoTerminadosAlmacenResource {
 
-    private final IngresoTerminadosAlmacenService ingresoTerminadosAlmacenService;
+    private static final String TAB_INGRESO_PRODUCTO_TERMINADO = "INGRESO_PRODUCTO_TERMINADO";
 
-    /**
-     * Busca una OrdenProduccion activa por su loteAsignado exacto y retorna los datos
-     * del producto terminado junto con el tamaño de lote esperado según la categoría.
-     *
-     * Temporalmente en desuso: el flujo activo del asistente genera reporte consolidado
-     * por terminado sin cierre de OP. Se conserva por posible reintegración del workflow
-     * por lote/orden.
-     *
-     * @param loteAsignado Número de lote de la orden de producción
-     * @return 200 con IngresoTerminadoConsultaResponseDTO, 404 si no existe, 409 si ya está terminada/cancelada
-     */
-    @GetMapping("/buscar-op-por-lote")
-    public ResponseEntity<IngresoTerminadoConsultaResponseDTO> buscarOpPorLote(
-            @RequestParam String loteAsignado) {
-        IngresoTerminadoConsultaResponseDTO resultado =
-                ingresoTerminadosAlmacenService.buscarOpPorLote(loteAsignado);
-        return ResponseEntity.ok(resultado);
+    private final ReporteHyLService reporteHyLService;
+    private final ReporteProduccionLoteService reporteProduccionLoteService;
+    private final CierreProduccionService cierreProduccionService;
+    private final UserRepository userRepository;
+
+    @GetMapping("/pendientes/resumen")
+    public ResponseEntity<ReporteProduccionPendientesResumenDTO> resumirPendientes(
+            Authentication authentication) {
+        requireTabAccess(authentication, 1);
+        return ResponseEntity.ok(reporteProduccionLoteService.resumirPendientes());
     }
 
-    /**
-     * Registra el ingreso de producto terminado al almacén general, crea la TransaccionAlmacen
-     * con su Movimiento BACKFLUSH y cierra la OrdenProduccion (estadoOrden = 2).
-     *
-     * Temporalmente en desuso: el flujo activo del asistente no registra BACKFLUSH ni cierra OPs.
-     * Se conserva por posible reintegración del workflow por lote/orden.
-     *
-     * @param dto Datos del ingreso: ordenProduccionId, cantidadIngresada, fechaVencimiento, observaciones
-     * @return 201 Created con Location apuntando a la transacción creada
-     */
-    @PostMapping("/registrar")
-    public ResponseEntity<TransaccionAlmacen> registrarIngresoTerminado(
-            @RequestBody IngresoTerminadoRequestDTO dto) {
-        TransaccionAlmacen transaccion = ingresoTerminadosAlmacenService.registrarIngresoTerminado(dto);
-        URI location = URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId());
-        return ResponseEntity.created(location).body(transaccion);
-    }
-
-    /**
-     * Descarga una plantilla Excel consolidada con todos los productos terminados.
-     * La unica columna editable es cantidad_producida; fecha_reporte se replica por fila
-     * como dato de apoyo para contabilidad/finanzas.
-     *
-     * El formato por lote/OP queda temporalmente en desuso y se conserva en los endpoints
-     * de registro por posible reintegración del workflow.
-     *
-     * @return Archivo Excel con Content-Disposition attachment
-     */
-    @GetMapping("/plantilla")
-    public ResponseEntity<byte[]> descargarPlantilla(
-            @RequestParam(required = false)
+    @GetMapping("/pendientes")
+    public ResponseEntity<ReporteProduccionPendientesDTO> consultarPendientes(
+            Authentication authentication,
+            @RequestParam
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate fechaReporte) {
-        LocalDate fechaEfectiva = fechaReporte != null ? fechaReporte : AppTime.today();
-        byte[] excel = ingresoTerminadosAlmacenService.generarPlantillaExcel(fechaEfectiva);
-
-        String filename = "plantilla_reporte_produccion_terminados_" + fechaEfectiva + ".xlsx";
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .body(excel);
+            LocalDate fecha) {
+        requireTabAccess(authentication, 1);
+        return ResponseEntity.ok(reporteProduccionLoteService.consultarPendientes(fecha));
     }
 
     @PostMapping("/reporte-hyl")
     public ResponseEntity<byte[]> descargarReporteHyL(
+            Authentication authentication,
             @RequestBody ReporteHyLRequestDTO request) {
+        requireTabAccess(authentication, 1);
         LocalDate fechaEfectiva = request != null && request.getFechaReporte() != null
                 ? request.getFechaReporte()
                 : AppTime.today();
-        byte[] excel = ingresoTerminadosAlmacenService.generarReporteHyLXls(request);
+        byte[] excel = reporteHyLService.generarReporteXls(request);
         String filename = "reporte_hyl_" + fechaEfectiva.toString().replace("-", "") + ".xls";
 
         return ResponseEntity.ok()
@@ -106,28 +81,54 @@ public class IngresoTerminadosAlmacenResource {
                 .body(excel);
     }
 
-    /**
-     * Registra múltiples ingresos de producto terminado de forma masiva.
-     * Procesa cada ingreso de forma independiente y retorna un resumen con los resultados.
-     * Si algunos ingresos fallan, retorna 207 Multi-Status con el detalle de éxitos y fallos.
-     *
-     * Temporalmente en desuso: el frontend del asistente no usa este endpoint mientras el
-     * flujo sea solo reporte consolidado sin cierre de OPs.
-     *
-     * @param request DTO con username y lista de ingresos a procesar
-     * @return 200 si todos exitosos, 207 si hay errores parciales
-     */
-    @PostMapping("/registrar-masivo")
-    public ResponseEntity<IngresoMasivoResponseDTO> registrarMasivo(
-            @RequestBody IngresoMasivoRequestDTO request) {
+    @PostMapping("/cierres")
+    public ResponseEntity<CierreProduccionResponseDTO> confirmarCierre(
+            Authentication authentication,
+            @Valid @RequestBody CierreProduccionRequestDTO request) {
+        User actor = requireTabAccess(authentication, 2);
+        return ResponseEntity.ok(cierreProduccionService.confirmar(actor, request));
+    }
 
-        IngresoMasivoResponseDTO response = ingresoTerminadosAlmacenService.registrarIngresosMasivos(request);
-
-        if (response.isSuccess()) {
-            return ResponseEntity.ok(response);
-        } else {
-            // 207 Multi-Status si hay errores parciales
-            return ResponseEntity.status(207).body(response);
+    private User requireTabAccess(Authentication authentication, int minNivel) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        if (isMasterLike(user.getUsername())) {
+            return user;
+        }
+
+        int nivel = UserAccessEvaluator.tabNivel(
+                user,
+                ModuloSistema.TRANSACCIONES_ALMACEN,
+                TAB_INGRESO_PRODUCTO_TERMINADO
+        ).orElse(0);
+        if (nivel < minNivel) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "No tiene permisos suficientes para el reporte de producto terminado.");
+        }
+        return user;
+    }
+
+    private boolean isMasterLike(String username) {
+        if (username == null) {
+            return false;
+        }
+        String normalized = username.trim().toLowerCase(Locale.ROOT);
+        return "master".equals(normalized) || "super_master".equals(normalized);
+    }
+
+    @ExceptionHandler(CierreProduccionConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(CierreProduccionConflictException error) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Los reportes cambiaron", error.getMessage()));
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<ErrorResponse> handleBusinessError(RuntimeException error) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("No fue posible procesar el cierre", error.getMessage()));
     }
 }

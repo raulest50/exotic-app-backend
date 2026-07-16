@@ -79,3 +79,6 @@ fix-flyway-local.sql
 fix-*.sql
 *-local-fix.sql
 /id_rsa.ppk
+
+
+usuarios.txt

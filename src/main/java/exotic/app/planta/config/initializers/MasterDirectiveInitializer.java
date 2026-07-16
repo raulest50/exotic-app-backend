@@ -34,8 +34,8 @@ public class MasterDirectiveInitializer {
     private static final String AREA_OPERATIVA_INACTIVITY_THRESHOLD_AYUDA = "Define cuantos minutos puede pasar un area con carga activa sin terminaciones reportadas antes de marcar alerta. Acepta valores entre 5 y 480.";
     private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_RESUMEN = "Intervalo de chequeo de alertas en monitoreo";
     private static final String AREA_OPERATIVA_INACTIVITY_INTERVAL_AYUDA = "Define cada cuantos minutos el tab de monitoreo consulta las alertas mientras esta abierto y visible. Acepta valores entre 5 y 20.";
-    private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_RESUMEN = "Habilita alternar entre semana actual e historico en Area Operativa";
-    private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA = "Cuando esta activa, el panel de Area Operativa muestra un control para que el operario alterne entre ordenes con fecha planificada de entrega en la semana actual e historico completo. Cuando esta apagada, el panel conserva la vista historica actual.";
+    private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_RESUMEN = "Habilita el periodo de completadas en Area Operativa";
+    private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA = "Cuando esta activa, el panel de Area Operativa permite alternar las ordenes completadas entre hoy, semana actual e historico. Las ordenes activas siempre permanecen visibles. Cuando esta apagada, el panel conserva la vista historica.";
     private static final String AREA_OPERATIVA_ADMIN_CORRECTION_RESUMEN = "Habilita correcciones administrativas de estados en monitoreo de Area Operativa";
     private static final String AREA_OPERATIVA_ADMIN_CORRECTION_AYUDA = "Cuando esta activa, usuarios con nivel suficiente en Monitorear Areas Operativas pueden corregir estados de ordenes del area desde el monitoreo. Cada cambio queda auditado como correccion administrativa y no debe usarse como flujo operativo normal.";
 

@@ -105,12 +105,16 @@ public class ProduccionResource {
      * Update estadoOrden of OrdenProduccion.
      */
     @PutMapping("/orden_produccion/{id}/update_estado")
-    public ResponseEntity<OrdenProduccionDTO> updateEstadoOrdenProduccion(
+    public ResponseEntity<?> updateEstadoOrdenProduccion(
             @PathVariable int id,
             @RequestParam int estadoOrden
     ) {
-        OrdenProduccionDTO updatedOrden = produccionService.updateEstadoOrdenProduccion(id, estadoOrden);
-        return ResponseEntity.ok(updatedOrden);
+        try {
+            OrdenProduccionDTO updatedOrden = produccionService.updateEstadoOrdenProduccion(id, estadoOrden);
+            return ResponseEntity.ok(updatedOrden);
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        }
     }
 
     @GetMapping("/orden_produccion/{id}/is_deletable")

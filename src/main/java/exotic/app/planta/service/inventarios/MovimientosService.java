@@ -9,9 +9,6 @@ import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.contabilidad.AsientoContable;
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
 import exotic.app.planta.model.inventarios.dto.AjusteItemDTO;
-import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoDTO;
-import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoItemDTO;
-import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO;
 import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.LoteDisponiblePageResponseDTO;
@@ -917,35 +914,6 @@ public class MovimientosService {
 
         double nuevoCosto = ((currentCosto * currentStock) + (incomingPrecio * incomingUnits)) / (currentStock + incomingUnits);
         return Math.ceil(nuevoCosto);
-    }
-
-
-    /**
-     * Creates an unplanned backflush transaction without a production order.
-     * This method checks if unplanned backflush is allowed by system configuration.
-     * 
-     * @param backflushDTO The DTO containing the backflush information
-     * @return The created transaction
-     */
-    @Transactional
-    public TransaccionAlmacen createBackflushNoPlanificado(BackflushNoPlanificadoDTO backflushDTO) {
-        // Backflush no planificado no permitido por defecto (directiva eliminada; ver Super Master si se reintroduce).
-        throw new RuntimeException("El backflush no planificado no está permitido según la configuración del sistema");
-    }
-
-
-    /**
-     * Creates multiple unplanned backflush transactions without a production order.
-     * This method checks if unplanned backflush is allowed by system configuration.
-     * Allows specifying lots for each product.
-     * 
-     * @param backflushDTO The DTO containing the backflush information for multiple products
-     * @return The created transaction
-     */
-    @Transactional
-    public TransaccionAlmacen createBackflushMultipleNoPlanificado(BackflushMultipleNoPlanificadoDTO backflushDTO) {
-        // Backflush no planificado no permitido por defecto (directiva eliminada; ver Super Master si se reintroduce).
-        throw new RuntimeException("El backflush no planificado no está permitido según la configuración del sistema");
     }
 
 

@@ -259,6 +259,9 @@ public class RutaProcesoCatService {
         if (almacenCount != 1) {
             throw new IllegalArgumentException("La ruta debe incluir exactamente un nodo de Almacen General.");
         }
+        if (nodes.size() < 2) {
+            throw new IllegalArgumentException("La ruta debe incluir al menos un area productiva ademas de Almacen General.");
+        }
 
         for (RutaProcesoEdgeDTO edge : edges) {
             String sourceId = normalizeId(edge.getSourceNodeId());
@@ -278,6 +281,19 @@ public class RutaProcesoCatService {
             }
 
             indegree.put(targetId, indegree.get(targetId) + 1);
+        }
+
+        List<String> terminalIds = adjacency.entrySet().stream()
+                .filter(entry -> entry.getValue().isEmpty())
+                .map(Map.Entry::getKey)
+                .toList();
+        if (terminalIds.size() != 1) {
+            throw new IllegalArgumentException("La ruta debe terminar en exactamente una unica area operativa.");
+        }
+        if (Objects.equals(
+                nodesById.get(terminalIds.get(0)).getAreaOperativaId(),
+                AreaOperativaInitializer.ALMACEN_GENERAL_ID)) {
+            throw new IllegalArgumentException("Almacen General no puede ser el nodo terminal de la ruta.");
         }
 
         List<String> rootIds = indegree.entrySet().stream()

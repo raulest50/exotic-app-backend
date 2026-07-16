@@ -385,61 +385,18 @@ public class ProduccionService {
     }
 
     /**
-     * Update the estadoOrden of an OrdenProduccion and register Movimiento.
-     * For completed production orders (estado = 2), also creates an accounting entry.
+     * Actualiza estados administrativos distintos del cierre definitivo.
+     * El estado 2 se reserva al cierre de producto terminado.
      */
     @Transactional
     public OrdenProduccionDTO updateEstadoOrdenProduccion(int ordenId, int estadoOrden) {
+        if (estadoOrden == 2) {
+            throw new IllegalArgumentException(
+                    "El cierre de una orden de produccion solo puede realizarse desde el reporte de producto terminado.");
+        }
         ordenProduccionRepo.updateEstadoOrdenById(ordenId, estadoOrden, LocalDateTime.now(applicationClock));
 
-        // Fetch updated OrdenProduccion
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId).orElseThrow(() -> new RuntimeException("OrdenProduccion not found"));
-
-        // Solo crear transacción de almacén si el estado es TERMINADA (2)
-        if (estadoOrden == 2) {
-            // Register Movimiento for the produced Producto
-            Movimiento movimientoReal = new Movimiento();
-            movimientoReal.setCantidad(ordenProduccion.getProducto().getCantidadUnidad()); // Adjust as per your business logic
-            movimientoReal.setProducto(ordenProduccion.getProducto());
-            movimientoReal.setTipoMovimiento(Movimiento.TipoMovimiento.BACKFLUSH);
-            movimientoReal.setAlmacen(Movimiento.Almacen.GENERAL);
-
-            // Create a transaction for this movement
-            TransaccionAlmacen transaccion = new TransaccionAlmacen();
-            transaccion.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.OP);
-            transaccion.setIdEntidadCausante(ordenId);
-            transaccion.setObservaciones("Producción finalizada para Orden ID: " + ordenId);
-
-            // Add the movement to the transaction
-            List<Movimiento> movimientos = new ArrayList<>();
-            movimientos.add(movimientoReal);
-            transaccion.setMovimientosTransaccion(movimientos);
-            movimientoReal.setTransaccionAlmacen(transaccion);
-
-            // Save the transaction
-            transaccionAlmacenHeaderRepo.save(transaccion);
-
-            // Create accounting entry for BACKFLUSH
-            try {
-                // Calculate the total amount based on the product cost
-                BigDecimal montoTotal = BigDecimal.valueOf(ordenProduccion.getProducto().getCosto() * 
-                                                          ordenProduccion.getProducto().getCantidadUnidad());
-
-                // Register the accounting entry
-                AsientoContable asiento = contabilidadService.registrarAsientoBackflush(transaccion, ordenProduccion, montoTotal);
-
-                // Update the transaction with the accounting entry reference
-                transaccion.setAsientoContable(asiento);
-                transaccion.setEstadoContable(TransaccionAlmacen.EstadoContable.CONTABILIZADA);
-                transaccionAlmacenHeaderRepo.save(transaccion);
-
-                log.info("Asiento contable registrado con ID: " + asiento.getId() + " para la OP: " + ordenId);
-            } catch (Exception e) {
-                log.error("Error al registrar asiento contable para OP " + ordenId + ": " + e.getMessage(), e);
-                // We don't interrupt the main flow if accounting fails
-            }
-        }
-
         return convertToDto(ordenProduccion);
     }
 

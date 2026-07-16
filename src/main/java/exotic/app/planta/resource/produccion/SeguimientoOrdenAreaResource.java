@@ -1,7 +1,9 @@
 package exotic.app.planta.resource.produccion;
 
+import exotic.app.planta.dto.ErrorResponse;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
+import exotic.app.planta.service.produccion.CierreProduccionConflictException;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.OrdenSeguimientoDetalleDTO;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.ReportarCompletadoRequest;
@@ -14,8 +16,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -119,7 +123,8 @@ public class SeguimientoOrdenAreaResource {
                 request.getOrdenId(),
                 request.getAreaId(),
                 user.getId(),
-                request.getObservaciones()
+                request.getObservaciones(),
+                request.getCantidadProducida()
         );
 
         return ResponseEntity.ok(result);
@@ -133,5 +138,23 @@ public class SeguimientoOrdenAreaResource {
         String username = authentication.getName();
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<ErrorResponse> handleBusinessError(RuntimeException error) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("No fue posible actualizar el seguimiento", error.getMessage()));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException error) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("Acceso denegado", error.getMessage()));
+    }
+
+    @ExceptionHandler(CierreProduccionConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(CierreProduccionConflictException error) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("La produccion ya fue cerrada", error.getMessage()));
     }
 }

@@ -22,10 +22,10 @@ flows:
     - POST /salidas_almacen/historial_dispensacion_filter
     - GET /api/seguimiento-orden-area/orden/{ordenId}/progreso
   ingreso_terminados:
-    - GET /ingresos_terminados_almacen/buscar-op-por-lote
-    - GET /ingresos_terminados_almacen/plantilla
-    - POST /ingresos_terminados_almacen/registrar
-    - POST /ingresos_terminados_almacen/registrar-masivo
+    - GET /ingresos_terminados_almacen/pendientes/resumen
+    - GET /ingresos_terminados_almacen/pendientes
+    - POST /ingresos_terminados_almacen/reporte-hyl
+    - POST /ingresos_terminados_almacen/cierres
   ajustes:
     - POST /productos/consulta1
     - GET /movimientos/ajustes/lotes-disponibles

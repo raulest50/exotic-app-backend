@@ -53,8 +53,7 @@ public class InformesGlobalesService {
         DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
         int diasRango = (int) ChronoUnit.DAYS.between(fechaDesde, fechaHasta) + 1;
 
-        List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
-                range.start(), range.end(), Movimiento.TipoMovimiento.BACKFLUSH);
+        List<Movimiento> movimientos = findIngresosTerminados(fechaDesde, fechaHasta);
         double producidasPeriodoAnterior = totalProducidoEnRango(
                 fechaDesde.minusDays(diasRango), fechaDesde.minusDays(1));
 
@@ -348,12 +347,20 @@ public class InformesGlobalesService {
     }
 
     private double totalProducidoEnRango(LocalDate fechaDesde, LocalDate fechaHasta) {
-        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
-        return transaccionAlmacenRepo.findIngresosTerminadoPorDia(
-                        range.start(), range.end(), Movimiento.TipoMovimiento.BACKFLUSH)
+        return findIngresosTerminados(fechaDesde, fechaHasta)
                 .stream()
                 .mapToDouble(Movimiento::getCantidad)
                 .sum();
+    }
+
+    private List<Movimiento> findIngresosTerminados(LocalDate fechaDesde, LocalDate fechaHasta) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
+        return transaccionAlmacenRepo.findIngresosTerminadoPorFechaEfectiva(
+                fechaDesde,
+                fechaHasta,
+                range.start(),
+                range.end(),
+                Movimiento.TipoMovimiento.BACKFLUSH);
     }
 
     private void agregarPlaneacionDia(

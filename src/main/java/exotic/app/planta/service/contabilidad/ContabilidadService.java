@@ -8,7 +8,6 @@ import exotic.app.planta.model.contabilidad.LineaAsientoContable;
 import exotic.app.planta.model.contabilidad.dto.search.DTO_SearchIncorporacionActivo;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.produccion.OrdenProduccion;
-import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.repo.activos.fijos.gestion.IncorporacionActivoHeaderRepo;
 import exotic.app.planta.repo.contabilidad.AsientoContableRepo;
 import exotic.app.planta.repo.contabilidad.CuentaContableRepo;
@@ -295,57 +294,4 @@ public class ContabilidadService {
         return asientoContableRepo.save(asiento);
     }
 
-    /**
-     * Registra un asiento contable para un backflush no planificado
-     * 
-     * @param transaccion La transacción de almacén
-     * @param producto El producto ingresado
-     * @param montoTotal El monto total de la transacción
-     * @return El asiento contable creado
-     */
-    public AsientoContable registrarAsientoBackflushNoPlanificado(
-            TransaccionAlmacen transaccion, 
-            Producto producto,
-            BigDecimal montoTotal) {
-
-        // Validar que las cuentas existan
-        validarCuentasExisten(
-            CuentaContableCodigo.INVENTARIO_PRODUCTOS_TERMINADOS.getCodigo(),
-            CuentaContableCodigo.INVENTARIO_WIP.getCodigo()
-        );
-
-        AsientoContable asiento = new AsientoContable();
-        asiento.setFecha(LocalDateTime.now(applicationClock));
-        asiento.setDescripcion("Ingreso no planificado de producto: " + producto.getNombre());
-        asiento.setModulo("INVENTARIO");
-        asiento.setDocumentoOrigen("BF-NP-" + transaccion.getTransaccionId());
-        asiento.setEstado(AsientoContable.EstadoAsiento.PUBLICADO);
-
-        List<LineaAsientoContable> lineas = new ArrayList<>();
-
-        // 1. Débito a Inventario Productos Terminados
-        lineas.add(crearLineaAsiento(
-            asiento,
-            CuentaContableCodigo.INVENTARIO_PRODUCTOS_TERMINADOS.getCodigo(),
-            montoTotal,
-            BigDecimal.ZERO,
-            "Ingreso de producto terminado a inventario"
-        ));
-
-        // 2. Crédito a Inventario WIP
-        lineas.add(crearLineaAsiento(
-            asiento,
-            CuentaContableCodigo.INVENTARIO_WIP.getCodigo(),
-            BigDecimal.ZERO,
-            montoTotal,
-            "Salida de WIP por backflush no planificado"
-        ));
-
-        asiento.setLineas(lineas);
-
-        // Validar que el asiento esté balanceado
-        validarCuadreContable(asiento);
-
-        return asientoContableRepo.save(asiento);
-    }
 }

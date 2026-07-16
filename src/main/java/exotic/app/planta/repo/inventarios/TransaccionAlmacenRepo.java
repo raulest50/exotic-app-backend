@@ -14,6 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
@@ -296,6 +297,32 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     List<Movimiento> findIngresosTerminadoPorDia(
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
+            @Param("tipoBackflush") Movimiento.TipoMovimiento tipoBackflush);
+
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            LEFT JOIN FETCH m.lote l
+            WHERE TYPE(m.producto) = Terminado
+              AND (
+                    (l.productionDate IS NOT NULL
+                     AND l.productionDate >= :fechaDesde
+                     AND l.productionDate <= :fechaHasta)
+                    OR
+                    (l.productionDate IS NULL
+                     AND m.fechaMovimiento >= :fallbackStart
+                     AND m.fechaMovimiento <= :fallbackEnd)
+                  )
+              AND m.cantidad > 0
+              AND m.tipoMovimiento = :tipoBackflush
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
+    List<Movimiento> findIngresosTerminadoPorFechaEfectiva(
+            @Param("fechaDesde") LocalDate fechaDesde,
+            @Param("fechaHasta") LocalDate fechaHasta,
+            @Param("fallbackStart") LocalDateTime fallbackStart,
+            @Param("fallbackEnd") LocalDateTime fallbackEnd,
             @Param("tipoBackflush") Movimiento.TipoMovimiento tipoBackflush);
 
     /**

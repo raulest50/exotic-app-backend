@@ -2,8 +2,6 @@ package exotic.app.planta.resource.inventarios;
 
 
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
-import exotic.app.planta.model.inventarios.dto.BackflushNoPlanificadoDTO;
-import exotic.app.planta.model.inventarios.dto.BackflushMultipleNoPlanificadoDTO;
 import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
 import exotic.app.planta.model.inventarios.dto.IngresoOCM_DTA;
 import exotic.app.planta.model.inventarios.dto.MovimientoExcelRequestDTO;
@@ -161,31 +159,6 @@ public class MovimientosResource {
     }
 
 
-
-    /**
-     * Endpoint para crear un backflush no planificado (sin orden de producción).
-     * Verifica la directiva "Permitir Backflush No Planificado" antes de permitir la operación.
-     */
-    @PostMapping("/backflush-no-planificado")
-    public ResponseEntity<?> createBackflushNoPlanificado(@RequestBody BackflushNoPlanificadoDTO backflushDTO) {
-        TransaccionAlmacen transaccion = movimientoService.createBackflushNoPlanificado(backflushDTO);
-        return ResponseEntity.created(java.net.URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
-            .body(transaccion);
-    }
-
-
-    /**
-     * Endpoint para crear múltiples backflush no planificados (sin orden de producción).
-     * Verifica la directiva "Permitir Backflush No Planificado" antes de permitir la operación.
-     * Permite especificar lotes para cada producto terminado.
-     */
-    @PostMapping("/backflush-multiple-no-planificado")
-    public ResponseEntity<?> createBackflushMultipleNoPlanificado(
-            @RequestBody BackflushMultipleNoPlanificadoDTO backflushDTO) {
-        TransaccionAlmacen transaccion = movimientoService.createBackflushMultipleNoPlanificado(backflushDTO);
-        return ResponseEntity.created(java.net.URI.create("/movimientos/transaccion/" + transaccion.getTransaccionId()))
-            .body(transaccion);
-    }
 
     /**
      * Endpoint para buscar transacciones de almacén filtradas por tipo de entidad causante,

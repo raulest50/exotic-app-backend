@@ -69,6 +69,45 @@ class RutaProcesoCatServiceTest {
     }
 
     @Test
+    void saveRuta_multipleTerminalNodes_throwsValidationError() {
+        RutaProcesoCatService service = createService();
+        RutaProcesoCatDTO dto = new RutaProcesoCatDTO();
+        dto.setCategoriaId(10);
+        dto.setNodes(List.of(
+                node("1", AreaOperativaInitializer.ALMACEN_GENERAL_ID, "Almacen General"),
+                node("2", 101, "Pesaje"),
+                node("3", 102, "Mezcla")
+        ));
+        dto.setEdges(List.of(
+                edge("e1", "1", "2"),
+                edge("e2", "1", "3")
+        ));
+
+        assertThrows(IllegalArgumentException.class, () -> service.saveRuta(10, dto, "tester"));
+    }
+
+    @Test
+    void saveRuta_branchesConvergeInOneTerminal_savesSuccessfully() {
+        RutaProcesoCatService service = createService();
+        RutaProcesoCatDTO dto = new RutaProcesoCatDTO();
+        dto.setCategoriaId(10);
+        dto.setNodes(List.of(
+                node("1", AreaOperativaInitializer.ALMACEN_GENERAL_ID, "Almacen General"),
+                node("2", 101, "Pesaje"),
+                node("3", 102, "Mezcla"),
+                node("4", 103, "Empaque")
+        ));
+        dto.setEdges(List.of(
+                edge("e1", "1", "2"),
+                edge("e2", "1", "3"),
+                edge("e3", "2", "4"),
+                edge("e4", "3", "4")
+        ));
+
+        assertDoesNotThrow(() -> service.saveRuta(10, dto, "tester"));
+    }
+
+    @Test
     void saveRuta_activeOrdersAllowedByVersioning_savesSuccessfully() {
         RutaProcesoCatService service = createService();
 
@@ -96,6 +135,10 @@ class RutaProcesoCatServiceTest {
         areaB.setAreaId(102);
         areaB.setNombre("Mezcla");
 
+        AreaOperativa areaC = new AreaOperativa();
+        areaC.setAreaId(103);
+        areaC.setNombre("Empaque");
+
         when(categoriaRepo.findById(10)).thenReturn(Optional.of(categoria));
         when(rutaRepo.findByCategoria_CategoriaId(10)).thenReturn(Optional.empty());
         when(rutaRepo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -106,6 +149,7 @@ class RutaProcesoCatServiceTest {
         when(areaRepo.findById(AreaOperativaInitializer.ALMACEN_GENERAL_ID)).thenReturn(Optional.of(almacen));
         when(areaRepo.findById(101)).thenReturn(Optional.of(areaA));
         when(areaRepo.findById(102)).thenReturn(Optional.of(areaB));
+        when(areaRepo.findById(103)).thenReturn(Optional.of(areaC));
 
         return new RutaProcesoCatService(rutaRepo, versionRepo, categoriaRepo, areaRepo);
     }

@@ -1,14 +1,11 @@
 package exotic.app.planta.modules.transaccionesalmacen.ingreso_terminados;
 
-import exotic.app.planta.model.inventarios.dto.IngresoMasivoRequestDTO;
-import exotic.app.planta.model.inventarios.dto.IngresoTerminadoRequestDTO;
 import exotic.app.planta.model.inventarios.dto.ReporteHyLRequestDTO;
 import exotic.app.planta.modules.transaccionesalmacen.support.AbstractTransaccionesAlmacenIntegrationTest;
 import exotic.app.planta.modules.transaccionesalmacen.support.TransaccionesAlmacenFixtureFactory.ModuleFixture;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
@@ -22,76 +19,26 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class TransaccionesAlmacenIngresoTerminadosIntegrationTest extends AbstractTransaccionesAlmacenIntegrationTest {
-
-    @Test
-    void buscarOpPorLoteYPlantilla_returnOperationalData() throws Exception {
-        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
-        LocalDate fechaReporte = LocalDate.of(2026, 6, 30);
-
-        mockMvc.perform(get("/ingresos_terminados_almacen/buscar-op-por-lote")
-                        .with(bearerToken())
-                        .param("loteAsignado", fixture.ordenAbierta().getLoteAsignado()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ordenProduccion.ordenId").value(fixture.ordenAbierta().getOrdenId()))
-                .andExpect(jsonPath("$.terminado.productoId").value(fixture.terminado().getProductoId()));
-
-        MvcResult result = mockMvc.perform(get("/ingresos_terminados_almacen/plantilla")
-                        .with(bearerToken())
-                        .param("fechaReporte", fechaReporte.toString()))
-                .andExpect(status().isOk())
-                .andExpect(header().string(
-                        "Content-Disposition",
-                        org.hamcrest.Matchers.containsString("plantilla_reporte_produccion_terminados_" + fechaReporte)))
-                .andReturn();
-
-        try (XSSFWorkbook workbook = new XSSFWorkbook(
-                new ByteArrayInputStream(result.getResponse().getContentAsByteArray()))) {
-            Sheet sheet = workbook.getSheet("Produccion Diaria PT");
-            assertNotNull(sheet);
-            Row headerRow = sheet.getRow(0);
-            assertNotNull(headerRow);
-            assertEquals("producto_id", headerRow.getCell(0).getStringCellValue());
-            assertEquals("producto_nombre", headerRow.getCell(1).getStringCellValue());
-            assertEquals("categoria_nombre", headerRow.getCell(2).getStringCellValue());
-            assertEquals("cantidad_producida", headerRow.getCell(3).getStringCellValue());
-            assertEquals("fecha_reporte", headerRow.getCell(4).getStringCellValue());
-
-            Row firstDataRow = sheet.getRow(1);
-            assertNotNull(firstDataRow);
-            assertEquals(fechaReporte.toString(), firstDataRow.getCell(4).getStringCellValue());
-        }
-    }
+class TransaccionesAlmacenIngresoTerminadosIntegrationTest
+        extends AbstractTransaccionesAlmacenIntegrationTest {
 
     @Test
     void reporteHyL_generatesBinaryXlsWithRealCostsAndConsolidatesRows() throws Exception {
         ModuleFixture fixture = fixtureFactory.seedModuleFixture();
-        LocalDate fechaReporte = LocalDate.of(2026, 6, 30);
         ReporteHyLRequestDTO payload = new ReporteHyLRequestDTO(
-                fechaReporte,
+                LocalDate.of(2026, 6, 30),
                 false,
                 List.of(
                         new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                                fixture.terminado().getProductoId(),
-                                fixture.terminado().getNombre(),
-                                3
-                        ),
+                                fixture.terminado().getProductoId(), fixture.terminado().getNombre(), 3),
                         new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                                fixture.terminado().getProductoId(),
-                                fixture.terminado().getNombre(),
-                                4
-                        ),
+                                fixture.terminado().getProductoId(), fixture.terminado().getNombre(), 4),
                         new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                                fixture.terminado().getProductoId(),
-                                fixture.terminado().getNombre(),
-                                0
-                        )
+                                fixture.terminado().getProductoId(), fixture.terminado().getNombre(), 0)
                 )
         );
 
@@ -140,10 +87,7 @@ class TransaccionesAlmacenIngresoTerminadosIntegrationTest extends AbstractTrans
                 LocalDate.of(2026, 6, 30),
                 true,
                 List.of(new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                        fixture.terminado().getProductoId(),
-                        fixture.terminado().getNombre(),
-                        5
-                ))
+                        fixture.terminado().getProductoId(), fixture.terminado().getNombre(), 5))
         );
 
         MvcResult result = mockMvc.perform(post("/ingresos_terminados_almacen/reporte-hyl")
@@ -166,10 +110,7 @@ class TransaccionesAlmacenIngresoTerminadosIntegrationTest extends AbstractTrans
                 LocalDate.of(2026, 6, 30),
                 true,
                 List.of(new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                        fixture.terminado().getProductoId(),
-                        fixture.terminado().getNombre(),
-                        0
-                ))
+                        fixture.terminado().getProductoId(), fixture.terminado().getNombre(), 0))
         );
 
         mockMvc.perform(post("/ingresos_terminados_almacen/reporte-hyl")
@@ -181,15 +122,7 @@ class TransaccionesAlmacenIngresoTerminadosIntegrationTest extends AbstractTrans
 
     @Test
     void reporteHyL_rejectsMissingProductWhenRealCostsAreRequired() throws Exception {
-        ReporteHyLRequestDTO payload = new ReporteHyLRequestDTO(
-                LocalDate.of(2026, 6, 30),
-                false,
-                List.of(new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                        "PT-NO-EXISTE",
-                        "Producto inexistente",
-                        2
-                ))
-        );
+        ReporteHyLRequestDTO payload = missingProductPayload(false);
 
         mockMvc.perform(post("/ingresos_terminados_almacen/reporte-hyl")
                         .with(bearerToken())
@@ -200,15 +133,7 @@ class TransaccionesAlmacenIngresoTerminadosIntegrationTest extends AbstractTrans
 
     @Test
     void reporteHyL_rejectsMissingProductEvenWhenCostsAreZero() throws Exception {
-        ReporteHyLRequestDTO payload = new ReporteHyLRequestDTO(
-                LocalDate.of(2026, 6, 30),
-                true,
-                List.of(new ReporteHyLRequestDTO.IngresoHyLItemDTO(
-                        "PT-NO-EXISTE",
-                        "Producto inexistente",
-                        2
-                ))
-        );
+        ReporteHyLRequestDTO payload = missingProductPayload(true);
 
         mockMvc.perform(post("/ingresos_terminados_almacen/reporte-hyl")
                         .with(bearerToken())
@@ -217,54 +142,12 @@ class TransaccionesAlmacenIngresoTerminadosIntegrationTest extends AbstractTrans
                 .andExpect(status().isNotFound());
     }
 
-    @Test
-    void registrarIngresoTerminado_createsBackflushAndClosesOrder() throws Exception {
-        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
-
-        IngresoTerminadoRequestDTO payload = new IngresoTerminadoRequestDTO(
-                "master",
-                fixture.ordenAbierta().getOrdenId(),
-                8,
-                LocalDate.now().plusMonths(12),
-                "Ingreso terminado desde test"
+    private static ReporteHyLRequestDTO missingProductPayload(boolean costosEnCero) {
+        return new ReporteHyLRequestDTO(
+                LocalDate.of(2026, 6, 30),
+                costosEnCero,
+                List.of(new ReporteHyLRequestDTO.IngresoHyLItemDTO(
+                        "PT-NO-EXISTE", "Producto inexistente", 2))
         );
-
-        mockMvc.perform(post("/ingresos_terminados_almacen/registrar")
-                        .with(bearerToken())
-                        .contentType("application/json")
-                        .content(objectMapper.writeValueAsBytes(payload)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.tipoEntidadCausante").value("OP"))
-                .andExpect(jsonPath("$.movimientosTransaccion[0].tipoMovimiento").value("BACKFLUSH"));
-    }
-
-    @Test
-    void registrarMasivo_returnsMultiStatusWhenOneOrderFails() throws Exception {
-        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
-
-        IngresoMasivoRequestDTO payload = new IngresoMasivoRequestDTO(
-                "master",
-                List.of(
-                        new IngresoMasivoRequestDTO.IngresoItemDTO(
-                                fixture.ordenMasivo().getOrdenId(),
-                                5,
-                                LocalDate.now().plusMonths(9)
-                        ),
-                        new IngresoMasivoRequestDTO.IngresoItemDTO(
-                                fixture.ordenCancelada().getOrdenId(),
-                                5,
-                                LocalDate.now().plusMonths(9)
-                        )
-                )
-        );
-
-        mockMvc.perform(post("/ingresos_terminados_almacen/registrar-masivo")
-                        .with(bearerToken())
-                        .contentType("application/json")
-                        .content(objectMapper.writeValueAsBytes(payload)))
-                .andExpect(status().is(207))
-                .andExpect(jsonPath("$.totalProcesados").value(2))
-                .andExpect(jsonPath("$.exitosos").value(1))
-                .andExpect(jsonPath("$.fallidos").value(1));
     }
 }

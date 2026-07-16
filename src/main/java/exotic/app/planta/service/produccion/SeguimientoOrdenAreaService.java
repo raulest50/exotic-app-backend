@@ -28,18 +28,24 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,6 +73,7 @@ public class SeguimientoOrdenAreaService {
     private final RutaProcesoCatVersionRepo rutaProcesoCatVersionRepo;
     private final JornadaLaboralVersionRepo jornadaLaboralVersionRepo;
     private final RutaProcesoEstimacionService rutaProcesoEstimacionService;
+    private final ReporteProduccionLoteService reporteProduccionLoteService;
     private final UserRepository userRepository;
     private final MasterDirectiveService masterDirectiveService;
     private final Clock applicationClock;
@@ -238,11 +245,13 @@ public class SeguimientoOrdenAreaService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No se encontro seguimiento en espera para orden " + ordenId + " y area " + areaId));
 
+        User actor = requireUser(userId);
+        validarUsuarioResponsableArea(seguimiento, actor);
         transicionarSeguimiento(
                 seguimiento,
                 EstadoSeguimientoOrdenArea.EN_PROCESO,
                 ActorTipoEventoSeguimiento.USER,
-                requireUser(userId),
+                actor,
                 observaciones
         );
 
@@ -258,11 +267,13 @@ public class SeguimientoOrdenAreaService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
 
+        User actor = requireUser(userId);
+        validarUsuarioResponsableArea(seguimiento, actor);
         transicionarSeguimiento(
                 seguimiento,
                 EstadoSeguimientoOrdenArea.ESPERA,
                 ActorTipoEventoSeguimiento.USER,
-                requireUser(userId),
+                actor,
                 observaciones
         );
 
@@ -272,7 +283,13 @@ public class SeguimientoOrdenAreaService {
     /**
      * El cierre manual solo es valido para pasos actualmente en proceso.
      */
-    public SeguimientoOrdenAreaDTO reportarCompletado(int ordenId, int areaId, Long userId, String observaciones) {
+    public SeguimientoOrdenAreaDTO reportarCompletado(
+            int ordenId,
+            int areaId,
+            Long userId,
+            String observaciones,
+            BigDecimal cantidadProducida
+    ) {
         SeguimientoOrdenArea seguimiento = seguimientoRepo
                 .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
                         ordenId,
@@ -281,7 +298,20 @@ public class SeguimientoOrdenAreaService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
 
-        completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.USER, requireUser(userId), observaciones);
+        User actor = requireUser(userId);
+        validarUsuarioResponsableArea(seguimiento, actor);
+        boolean nodoFinal = esNodoFinalConRutaValida(seguimiento, true);
+        if (nodoFinal && cantidadProducida == null) {
+            throw new IllegalArgumentException("La cantidad producida es obligatoria para el area final.");
+        }
+        if (!nodoFinal && cantidadProducida != null) {
+            throw new IllegalArgumentException("Solo el area final puede reportar unidades producidas.");
+        }
+
+        completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.USER, actor, observaciones);
+        if (nodoFinal) {
+            reporteProduccionLoteService.registrarPendiente(seguimiento, actor, cantidadProducida);
+        }
         return toDTO(seguimiento);
     }
 
@@ -314,11 +344,18 @@ public class SeguimientoOrdenAreaService {
         EstadoSeguimientoOrdenArea estadoDestino = EstadoSeguimientoOrdenArea.fromCode(targetEstado);
         validarEstadosCorreccion(seguimiento, estadoOrigen, estadoDestino);
         validarDependenciasCorreccion(seguimiento, estadoDestino);
+        if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
+                && estadoOrigen != EstadoSeguimientoOrdenArea.COMPLETADO
+                && esNodoFinalConRutaValida(seguimiento, true)) {
+            throw new IllegalArgumentException(
+                    "El area final debe completarse desde el tablero operativo reportando la cantidad producida.");
+        }
 
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         if (estadoOrigen == EstadoSeguimientoOrdenArea.COMPLETADO
                 && estadoDestino != EstadoSeguimientoOrdenArea.COMPLETADO) {
             revertirSucesoresAutoHabilitados(seguimiento, actor, motivoNormalizado, ahora);
+            reporteProduccionLoteService.anularPendientePorSeguimiento(seguimiento, actor, motivoNormalizado);
         }
 
         SeguimientoOrdenAreaEvento eventoRevertido = findLatestUnrevertedEventForState(seguimiento, estadoOrigen)
@@ -403,22 +440,41 @@ public class SeguimientoOrdenAreaService {
     @Transactional(readOnly = true)
     public TableroOperativoDTO getTableroOperativoUsuario(Long userId, TableroVista vista) {
         TableroVista effectiveVista = vista != null ? vista : TableroVista.HISTORICO;
-        LocalDate weekStartDate = null;
-        LocalDate weekEndDate = null;
+        LocalDate periodStartDate = null;
+        LocalDate periodEndDate = null;
 
-        List<SeguimientoOrdenArea> seguimientos;
-        if (effectiveVista == TableroVista.SEMANA_ACTUAL) {
-            weekStartDate = getCurrentIsoWeekMonday();
-            weekEndDate = weekStartDate.plusDays(5);
-            LocalDateTime weekStart = weekStartDate.atStartOfDay();
-            LocalDateTime weekEndExclusive = weekStartDate.plusDays(6).atStartOfDay();
-            seguimientos = seguimientoRepo.findTableroByResponsableUserIdAndFechaFinalPlanificadaBetween(
+        List<Integer> activeStates = List.of(
+                EstadoSeguimientoOrdenArea.COLA.getCode(),
+                EstadoSeguimientoOrdenArea.ESPERA.getCode(),
+                EstadoSeguimientoOrdenArea.EN_PROCESO.getCode()
+        );
+        List<SeguimientoOrdenArea> seguimientos = new ArrayList<>(
+                seguimientoRepo.findTableroActivosByResponsableUserId(userId, activeStates)
+        );
+
+        if (effectiveVista == TableroVista.HISTORICO) {
+            seguimientos.addAll(seguimientoRepo.findTableroCompletadosByResponsableUserId(
                     userId,
-                    weekStart,
-                    weekEndExclusive
-            );
+                    EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
+            ));
         } else {
-            seguimientos = seguimientoRepo.findTableroByResponsableUserId(userId);
+            LocalDate today = LocalDate.now(applicationClock);
+            if (effectiveVista == TableroVista.HOY) {
+                periodStartDate = today;
+                periodEndDate = today;
+            } else {
+                periodStartDate = getCurrentIsoWeekMonday();
+                periodEndDate = periodStartDate.plusDays(6);
+            }
+
+            seguimientos.addAll(
+                    seguimientoRepo.findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
+                            userId,
+                            EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
+                            periodStartDate.atStartOfDay(),
+                            periodEndDate.plusDays(1).atStartOfDay()
+                    )
+            );
         }
 
         List<SeguimientoOrdenAreaDTO> tarjetas = seguimientos
@@ -428,8 +484,8 @@ public class SeguimientoOrdenAreaService {
 
         TableroOperativoDTO tablero = buildTableroOperativo(tarjetas);
         tablero.setVista(effectiveVista);
-        tablero.setWeekStartDate(weekStartDate);
-        tablero.setWeekEndDate(weekEndDate);
+        tablero.setPeriodStartDate(periodStartDate);
+        tablero.setPeriodEndDate(periodEndDate);
         return tablero;
     }
 
@@ -981,6 +1037,7 @@ public class SeguimientoOrdenAreaService {
         dto.setLoteAsignado(entity.getOrdenProduccion().getLoteAsignado());
         dto.setProductoId(entity.getOrdenProduccion().getProducto().getProductoId());
         dto.setProductoNombre(entity.getOrdenProduccion().getProducto().getNombre());
+        dto.setTipoUnidades(entity.getOrdenProduccion().getProducto().getTipoUnidades());
         dto.setCantidadProducir(entity.getOrdenProduccion().getCantidadProducir());
         dto.setEstadoOrden(entity.getOrdenProduccion().getEstadoOrden());
         dto.setPoliticaDispensacionInicio(entity.getOrdenProduccion().getPoliticaDispensacionInicio() != null
@@ -995,6 +1052,7 @@ public class SeguimientoOrdenAreaService {
 
         dto.setNodeId(entity.getRutaProcesoNode().getId());
         dto.setNodeLabel(entity.getRutaProcesoNode().getLabel());
+        dto.setEsNodoFinal(esNodoFinalConRutaValida(entity, false));
 
         AreaOperativa area = entity.getAreaOperativa();
         dto.setAreaId(area.getAreaId());
@@ -1022,6 +1080,137 @@ public class SeguimientoOrdenAreaService {
 
     private String getEstadoDescripcion(int estado) {
         return EstadoSeguimientoOrdenArea.fromCode(estado).getDescripcion();
+    }
+
+    private void validarUsuarioResponsableArea(SeguimientoOrdenArea seguimiento, User actor) {
+        User responsable = seguimiento.getAreaOperativa() != null
+                ? seguimiento.getAreaOperativa().getResponsableArea()
+                : null;
+        if (responsable == null || !responsable.getId().equals(actor.getId())) {
+            throw new AccessDeniedException("El usuario no es responsable del area operativa indicada.");
+        }
+    }
+
+    private boolean esNodoFinalConRutaValida(SeguimientoOrdenArea seguimiento, boolean failOnInvalid) {
+        OrdenProduccion orden = seguimiento.getOrdenProduccion();
+        RutaProcesoCatVersion version = orden != null ? orden.getRutaProcesoCatVersion() : null;
+        try {
+            RutaProcesoNode terminal = resolverTerminalRutaValida(version);
+            return seguimiento.getRutaProcesoNode() != null
+                    && terminal.getId().equals(seguimiento.getRutaProcesoNode().getId());
+        } catch (IllegalStateException error) {
+            if (failOnInvalid) {
+                throw error;
+            }
+            return false;
+        }
+    }
+
+    private RutaProcesoNode resolverTerminalRutaValida(RutaProcesoCatVersion version) {
+        if (version == null || version.getNodes() == null || version.getNodes().size() < 2) {
+            throw new IllegalStateException(
+                    "La version de ruta de la OP debe incluir Almacen General y al menos un area productiva.");
+        }
+
+        Map<Long, RutaProcesoNode> nodesById = new LinkedHashMap<>();
+        Map<Long, Integer> indegree = new LinkedHashMap<>();
+        Map<Long, Set<Long>> adjacency = new LinkedHashMap<>();
+        Set<Integer> areaIds = new HashSet<>();
+        int warehouseCount = 0;
+
+        for (RutaProcesoNode node : version.getNodes()) {
+            if (node == null || node.getId() == null || node.getAreaOperativa() == null) {
+                throw new IllegalStateException("La version de ruta de la OP contiene nodos incompletos.");
+            }
+            if (nodesById.put(node.getId(), node) != null
+                    || !areaIds.add(node.getAreaOperativa().getAreaId())) {
+                throw new IllegalStateException("La version de ruta de la OP contiene nodos o areas repetidas.");
+            }
+            if (node.getAreaOperativa().getAreaId() == ALMACEN_GENERAL_AREA_ID) {
+                warehouseCount++;
+            }
+            indegree.put(node.getId(), 0);
+            adjacency.put(node.getId(), new LinkedHashSet<>());
+        }
+        if (warehouseCount != 1) {
+            throw new IllegalStateException("La version de ruta de la OP debe contener un unico Almacen General.");
+        }
+
+        for (RutaProcesoEdge edge : Optional.ofNullable(version.getEdges()).orElse(List.of())) {
+            Long sourceId = edge != null && edge.getSourceNode() != null
+                    ? edge.getSourceNode().getId()
+                    : null;
+            Long targetId = edge != null && edge.getTargetNode() != null
+                    ? edge.getTargetNode().getId()
+                    : null;
+            if (sourceId == null || targetId == null
+                    || !nodesById.containsKey(sourceId) || !nodesById.containsKey(targetId)
+                    || sourceId.equals(targetId)) {
+                throw new IllegalStateException("La version de ruta de la OP contiene conexiones invalidas.");
+            }
+            if (!adjacency.get(sourceId).add(targetId)) {
+                throw new IllegalStateException("La version de ruta de la OP contiene conexiones repetidas.");
+            }
+            indegree.put(targetId, indegree.get(targetId) + 1);
+        }
+
+        List<Long> rootIds = indegree.entrySet().stream()
+                .filter(entry -> entry.getValue() == 0)
+                .map(Map.Entry::getKey)
+                .toList();
+        if (rootIds.size() != 1
+                || nodesById.get(rootIds.get(0)).getAreaOperativa().getAreaId() != ALMACEN_GENERAL_AREA_ID) {
+            throw new IllegalStateException(
+                    "La version de ruta de la OP debe tener Almacen General como unica raiz.");
+        }
+
+        List<Long> terminalIds = adjacency.entrySet().stream()
+                .filter(entry -> entry.getValue().isEmpty())
+                .map(Map.Entry::getKey)
+                .toList();
+        if (terminalIds.size() != 1
+                || nodesById.get(terminalIds.get(0)).getAreaOperativa().getAreaId()
+                == ALMACEN_GENERAL_AREA_ID) {
+            throw new IllegalStateException(
+                    "La version de ruta de la OP debe tener una unica area productiva final.");
+        }
+
+        Set<Long> reachable = new HashSet<>();
+        Deque<Long> pending = new ArrayDeque<>();
+        pending.add(rootIds.get(0));
+        reachable.add(rootIds.get(0));
+        while (!pending.isEmpty()) {
+            for (Long targetId : adjacency.get(pending.removeFirst())) {
+                if (reachable.add(targetId)) {
+                    pending.addLast(targetId);
+                }
+            }
+        }
+        if (reachable.size() != nodesById.size()) {
+            throw new IllegalStateException("La version de ruta de la OP contiene nodos desconectados.");
+        }
+
+        Map<Long, Integer> remainingIndegree = new HashMap<>(indegree);
+        Deque<Long> zeroIndegree = remainingIndegree.entrySet().stream()
+                .filter(entry -> entry.getValue() == 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(ArrayDeque::new));
+        int processed = 0;
+        while (!zeroIndegree.isEmpty()) {
+            Long sourceId = zeroIndegree.removeFirst();
+            processed++;
+            for (Long targetId : adjacency.get(sourceId)) {
+                int next = remainingIndegree.get(targetId) - 1;
+                remainingIndegree.put(targetId, next);
+                if (next == 0) {
+                    zeroIndegree.addLast(targetId);
+                }
+            }
+        }
+        if (processed != nodesById.size()) {
+            throw new IllegalStateException("La version de ruta de la OP contiene ciclos.");
+        }
+        return nodesById.get(terminalIds.get(0));
     }
 
     private Map<Long, List<SeguimientoOrdenAreaEvento>> loadEventosPorSeguimiento(List<SeguimientoOrdenArea> seguimientos) {
@@ -1255,6 +1444,7 @@ public class SeguimientoOrdenAreaService {
         private String loteAsignado;
         private String productoId;
         private String productoNombre;
+        private String tipoUnidades;
         private double cantidadProducir;
         private int estadoOrden;
         private String politicaDispensacionInicio;
@@ -1265,6 +1455,7 @@ public class SeguimientoOrdenAreaService {
 
         private Long nodeId;
         private String nodeLabel;
+        private boolean esNodoFinal;
 
         private int areaId;
         private String areaNombre;
@@ -1298,8 +1489,8 @@ public class SeguimientoOrdenAreaService {
     @Data
     public static class TableroOperativoDTO {
         private TableroVista vista;
-        private LocalDate weekStartDate;
-        private LocalDate weekEndDate;
+        private LocalDate periodStartDate;
+        private LocalDate periodEndDate;
         private EstadoResumenDTO resumen;
         private List<SeguimientoOrdenAreaDTO> cola = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> espera = new ArrayList<>();
@@ -1308,6 +1499,7 @@ public class SeguimientoOrdenAreaService {
     }
 
     public enum TableroVista {
+        HOY,
         HISTORICO,
         SEMANA_ACTUAL
     }
@@ -1407,5 +1599,6 @@ public class SeguimientoOrdenAreaService {
         private int ordenId;
         private int areaId;
         private String observaciones;
+        private BigDecimal cantidadProducida;
     }
 }

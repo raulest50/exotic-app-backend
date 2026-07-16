@@ -86,9 +86,13 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH s.rutaProcesoNode n
         WHERE a.responsableArea.id = :userId
         AND op.estadoOrden != -1
+        AND s.estado IN :activeStates
         ORDER BY s.posicionSecuencia ASC, s.id ASC
         """)
-    List<SeguimientoOrdenArea> findTableroByResponsableUserId(@Param("userId") Long userId);
+    List<SeguimientoOrdenArea> findTableroActivosByResponsableUserId(
+            @Param("userId") Long userId,
+            @Param("activeStates") Collection<Integer> activeStates
+    );
 
     @Query("""
         SELECT s FROM SeguimientoOrdenArea s
@@ -98,14 +102,32 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH s.rutaProcesoNode n
         WHERE a.responsableArea.id = :userId
         AND op.estadoOrden != -1
-        AND op.fechaFinalPlanificada >= :weekStart
-        AND op.fechaFinalPlanificada < :weekEndExclusive
+        AND s.estado = :completedState
         ORDER BY s.posicionSecuencia ASC, s.id ASC
         """)
-    List<SeguimientoOrdenArea> findTableroByResponsableUserIdAndFechaFinalPlanificadaBetween(
+    List<SeguimientoOrdenArea> findTableroCompletadosByResponsableUserId(
             @Param("userId") Long userId,
-            @Param("weekStart") LocalDateTime weekStart,
-            @Param("weekEndExclusive") LocalDateTime weekEndExclusive
+            @Param("completedState") int completedState
+    );
+
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH op.producto p
+        JOIN FETCH s.areaOperativa a
+        JOIN FETCH s.rutaProcesoNode n
+        WHERE a.responsableArea.id = :userId
+        AND op.estadoOrden != -1
+        AND s.estado = :completedState
+        AND s.fechaCompletado >= :periodStart
+        AND s.fechaCompletado < :periodEndExclusive
+        ORDER BY s.posicionSecuencia ASC, s.id ASC
+        """)
+    List<SeguimientoOrdenArea> findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
+            @Param("userId") Long userId,
+            @Param("completedState") int completedState,
+            @Param("periodStart") LocalDateTime periodStart,
+            @Param("periodEndExclusive") LocalDateTime periodEndExclusive
     );
 
     @Query("""

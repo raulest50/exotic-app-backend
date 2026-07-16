@@ -201,17 +201,12 @@ public class InformesDiariosService {
             LocalDate fechaDesde,
             LocalDate fechaHasta,
             BiExcelExportOptions options) {
-        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
-        List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
-                range.start(), range.end(), Movimiento.TipoMovimiento.BACKFLUSH);
+        List<Movimiento> movimientos = findIngresosTerminados(fechaDesde, fechaHasta);
         return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado", options);
     }
 
     public InformeDiarioIngresoTerminadosReporteDTO obtenerReporteIngresoTerminados(LocalDate fecha) {
-        LocalDateTime start = fecha.atStartOfDay();
-        LocalDateTime end = fecha.atTime(LocalTime.MAX);
-        List<Movimiento> movimientos = transaccionAlmacenRepo.findIngresosTerminadoPorDia(
-                start, end, Movimiento.TipoMovimiento.BACKFLUSH);
+        List<Movimiento> movimientos = findIngresosTerminados(fecha, fecha);
         double producidasDiaAnterior = totalProducidoEnFecha(fecha.minusDays(1));
 
         Optional<MasterProductionScheduleSemanal> mpsOpt = masterProductionScheduleSemanalRepo
@@ -417,13 +412,20 @@ public class InformesDiariosService {
     }
 
     private double totalProducidoEnFecha(LocalDate fecha) {
-        LocalDateTime start = fecha.atStartOfDay();
-        LocalDateTime end = fecha.atTime(LocalTime.MAX);
-        return transaccionAlmacenRepo.findIngresosTerminadoPorDia(
-                        start, end, Movimiento.TipoMovimiento.BACKFLUSH)
+        return findIngresosTerminados(fecha, fecha)
                 .stream()
                 .mapToDouble(Movimiento::getCantidad)
                 .sum();
+    }
+
+    private List<Movimiento> findIngresosTerminados(LocalDate fechaDesde, LocalDate fechaHasta) {
+        DateTimeRange range = resolveDateTimeRange(fechaDesde, fechaHasta);
+        return transaccionAlmacenRepo.findIngresosTerminadoPorFechaEfectiva(
+                fechaDesde,
+                fechaHasta,
+                range.start(),
+                range.end(),
+                Movimiento.TipoMovimiento.BACKFLUSH);
     }
 
     private static DateTimeRange resolveDateTimeRange(LocalDate fechaDesde, LocalDate fechaHasta) {
@@ -479,11 +481,18 @@ public class InformesDiariosService {
             Movimiento movimiento,
             DatosProductoTerminado datosProducto) {
         TransaccionAlmacen tx = movimiento.getTransaccionAlmacen();
+        LocalDateTime fechaEfectiva = movimiento.getLote() != null
+                && movimiento.getLote().getProductionDate() != null
+                ? movimiento.getLote().getProductionDate().atStartOfDay()
+                : movimiento.getFechaMovimiento();
         return InformeDiarioIngresoTerminadosReporteDTO.MovimientoDTO.builder()
                 .movimientoId(movimiento.getMovimientoId())
-                .fechaMovimiento(movimiento.getFechaMovimiento())
+                .fechaMovimiento(fechaEfectiva)
                 .transaccionId(tx != null ? tx.getTransaccionId() : null)
-                .ordenProduccionId(tx != null ? tx.getIdEntidadCausante() : null)
+                .ordenProduccionId(tx != null
+                        && tx.getTipoEntidadCausante() == TransaccionAlmacen.TipoEntidadCausante.OP
+                        ? tx.getIdEntidadCausante()
+                        : null)
                 .productoId(datosProducto.productoId())
                 .productoNombre(datosProducto.productoNombre())
                 .categoriaId(datosProducto.categoriaId())
