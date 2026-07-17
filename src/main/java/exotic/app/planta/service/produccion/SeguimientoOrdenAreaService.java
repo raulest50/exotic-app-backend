@@ -27,6 +27,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -66,6 +68,9 @@ public class SeguimientoOrdenAreaService {
     private static final String NOTA_DISPENSACION_NO_BLOQUEANTE_RETROACTIVA = "Aplicacion retroactiva de politica de dispensacion no bloqueante";
     private static final String NOTA_REVERSION_SUCESOR_CORRECCION = "Reversion automatica por correccion administrativa previa: ";
     private static final int MAX_MOTIVO_CORRECCION_LENGTH = 500;
+    private static final int DEFAULT_COMPLETED_PAGE_SIZE = 20;
+    private static final int MAX_COMPLETED_PAGE_SIZE = 100;
+    private static final int MAX_BOARD_SEARCH_LENGTH = 100;
 
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
@@ -434,11 +439,29 @@ public class SeguimientoOrdenAreaService {
 
     @Transactional(readOnly = true)
     public TableroOperativoDTO getTableroOperativoUsuario(Long userId) {
-        return getTableroOperativoUsuario(userId, TableroVista.HISTORICO);
+        return getTableroOperativoUsuario(
+                userId,
+                TableroVista.HISTORICO,
+                0,
+                DEFAULT_COMPLETED_PAGE_SIZE,
+                null
+        );
     }
 
     @Transactional(readOnly = true)
     public TableroOperativoDTO getTableroOperativoUsuario(Long userId, TableroVista vista) {
+        return getTableroOperativoUsuario(userId, vista, 0, DEFAULT_COMPLETED_PAGE_SIZE, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TableroOperativoDTO getTableroOperativoUsuario(
+            Long userId,
+            TableroVista vista,
+            int completedPage,
+            int completedPageSize,
+            String search
+    ) {
+        validateCompletedPagination(completedPage, completedPageSize, search);
         TableroVista effectiveVista = vista != null ? vista : TableroVista.HISTORICO;
         LocalDate periodStartDate = null;
         LocalDate periodEndDate = null;
@@ -448,15 +471,28 @@ public class SeguimientoOrdenAreaService {
                 EstadoSeguimientoOrdenArea.ESPERA.getCode(),
                 EstadoSeguimientoOrdenArea.EN_PROCESO.getCode()
         );
-        List<SeguimientoOrdenArea> seguimientos = new ArrayList<>(
+        List<SeguimientoOrdenArea> activeSeguimientos = new ArrayList<>(
                 seguimientoRepo.findTableroActivosByResponsableUserId(userId, activeStates)
         );
+        List<SeguimientoOrdenArea> completedSeguimientos;
+        Page<SeguimientoOrdenArea> completedHistoryPage = null;
+        long totalCompleted;
 
         if (effectiveVista == TableroVista.HISTORICO) {
-            seguimientos.addAll(seguimientoRepo.findTableroCompletadosByResponsableUserId(
+            String searchPattern = normalizeBoardSearchPattern(search);
+            completedHistoryPage = seguimientoRepo.findTableroCompletadosHistoricosByResponsableUserId(
                     userId,
-                    EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
-            ));
+                    EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
+                    searchPattern,
+                    PageRequest.of(completedPage, completedPageSize)
+            );
+            completedSeguimientos = completedHistoryPage.getContent();
+            totalCompleted = searchPattern.isEmpty()
+                    ? completedHistoryPage.getTotalElements()
+                    : seguimientoRepo.countTableroCompletadosHistoricosByResponsableUserId(
+                            userId,
+                            EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
+                    );
         } else {
             LocalDate today = LocalDate.now(applicationClock);
             if (effectiveVista == TableroVista.HOY) {
@@ -467,26 +503,68 @@ public class SeguimientoOrdenAreaService {
                 periodEndDate = periodStartDate.plusDays(6);
             }
 
-            seguimientos.addAll(
-                    seguimientoRepo.findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
+            completedSeguimientos = seguimientoRepo.findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
                             userId,
                             EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
                             periodStartDate.atStartOfDay(),
                             periodEndDate.plusDays(1).atStartOfDay()
-                    )
-            );
+                    );
+            totalCompleted = completedSeguimientos.size();
         }
 
-        List<SeguimientoOrdenAreaDTO> tarjetas = seguimientos
-                .stream()
+        List<SeguimientoOrdenAreaDTO> tarjetas = new ArrayList<>(activeSeguimientos.size() + completedSeguimientos.size());
+        tarjetas.addAll(activeSeguimientos.stream()
                 .map(this::toDTO)
-                .toList();
+                .toList());
+        tarjetas.addAll(completedSeguimientos.stream()
+                .map(this::toDTO)
+                .toList());
 
         TableroOperativoDTO tablero = buildTableroOperativo(tarjetas);
+        tablero.getResumen().setCompletado(totalCompleted);
+        tablero.getResumen().setTotal(
+                tablero.getResumen().getCola()
+                        + tablero.getResumen().getEspera()
+                        + tablero.getResumen().getEnProceso()
+                        + totalCompleted
+        );
         tablero.setVista(effectiveVista);
         tablero.setPeriodStartDate(periodStartDate);
         tablero.setPeriodEndDate(periodEndDate);
+        if (completedHistoryPage != null) {
+            tablero.setPaginacionCompletadas(toCompletedPaginationDTO(completedHistoryPage));
+        }
         return tablero;
+    }
+
+    private void validateCompletedPagination(int completedPage, int completedPageSize, String search) {
+        if (completedPage < 0) {
+            throw new IllegalArgumentException("La pagina de completadas no puede ser negativa");
+        }
+        if (completedPageSize < 1 || completedPageSize > MAX_COMPLETED_PAGE_SIZE) {
+            throw new IllegalArgumentException("El tamano de pagina de completadas debe estar entre 1 y 100");
+        }
+        if (search != null && search.trim().length() > MAX_BOARD_SEARCH_LENGTH) {
+            throw new IllegalArgumentException("La busqueda no puede superar 100 caracteres");
+        }
+    }
+
+    private String normalizeBoardSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return "";
+        }
+        return "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+    }
+
+    private PaginacionCompletadasDTO toCompletedPaginationDTO(Page<?> page) {
+        PaginacionCompletadasDTO dto = new PaginacionCompletadasDTO();
+        dto.setPage(page.getNumber());
+        dto.setSize(page.getSize());
+        dto.setTotalElements(page.getTotalElements());
+        dto.setTotalPages(page.getTotalPages());
+        dto.setFirst(page.isFirst());
+        dto.setLast(page.isLast());
+        return dto;
     }
 
     @Transactional(readOnly = true)
@@ -1492,10 +1570,21 @@ public class SeguimientoOrdenAreaService {
         private LocalDate periodStartDate;
         private LocalDate periodEndDate;
         private EstadoResumenDTO resumen;
+        private PaginacionCompletadasDTO paginacionCompletadas;
         private List<SeguimientoOrdenAreaDTO> cola = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> espera = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> enProceso = new ArrayList<>();
         private List<SeguimientoOrdenAreaDTO> completado = new ArrayList<>();
+    }
+
+    @Data
+    public static class PaginacionCompletadasDTO {
+        private int page;
+        private int size;
+        private long totalElements;
+        private int totalPages;
+        private boolean first;
+        private boolean last;
     }
 
     public enum TableroVista {

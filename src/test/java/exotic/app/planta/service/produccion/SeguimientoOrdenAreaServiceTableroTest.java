@@ -17,6 +17,8 @@ import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroO
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroVista;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -27,6 +29,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -93,11 +96,8 @@ class SeguimientoOrdenAreaServiceTableroTest {
         assertEquals(1L, result.getResumen().getCola());
         assertEquals(1L, result.getResumen().getEnProceso());
         assertEquals(1L, result.getResumen().getCompletado());
+        assertNull(result.getPaginacionCompletadas());
         verify(seguimientoRepo).findTableroActivosByResponsableUserId(USER_ID, ACTIVE_STATES);
-        verify(seguimientoRepo, never()).findTableroCompletadosByResponsableUserId(
-                USER_ID,
-                EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
-        );
     }
 
     @Test
@@ -130,11 +130,15 @@ class SeguimientoOrdenAreaServiceTableroTest {
     void historico_includesCompletedCardsWithoutCompletionDateAndHasNoPeriodMetadata() {
         when(seguimientoRepo.findTableroActivosByResponsableUserId(USER_ID, ACTIVE_STATES))
                 .thenReturn(List.of());
-        when(seguimientoRepo.findTableroCompletadosByResponsableUserId(
+        when(seguimientoRepo.findTableroCompletadosHistoricosByResponsableUserId(
                 USER_ID,
-                EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
-        )).thenReturn(List.of(
-                seguimiento(4L, 104, EstadoSeguimientoOrdenArea.COMPLETADO, null)
+                EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
+                "",
+                PageRequest.of(0, 20)
+        )).thenReturn(new PageImpl<>(
+                List.of(seguimiento(4L, 104, EstadoSeguimientoOrdenArea.COMPLETADO, null)),
+                PageRequest.of(0, 20),
+                1
         ));
 
         TableroOperativoDTO result = service.getTableroOperativoUsuario(
@@ -146,6 +150,10 @@ class SeguimientoOrdenAreaServiceTableroTest {
         assertNull(result.getPeriodEndDate());
         assertEquals(1L, result.getResumen().getTotal());
         assertEquals(1L, result.getResumen().getCompletado());
+        assertEquals(0, result.getPaginacionCompletadas().getPage());
+        assertEquals(20, result.getPaginacionCompletadas().getSize());
+        assertEquals(1L, result.getPaginacionCompletadas().getTotalElements());
+        assertEquals(1, result.getPaginacionCompletadas().getTotalPages());
         verify(seguimientoRepo, never())
                 .findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
                         USER_ID,
@@ -153,6 +161,57 @@ class SeguimientoOrdenAreaServiceTableroTest {
                         LocalDateTime.of(2026, 7, 16, 0, 0),
                         LocalDateTime.of(2026, 7, 17, 0, 0)
                 );
+    }
+
+    @Test
+    void historico_searchKeepsGlobalKpiAndUsesFilteredPaginationTotal() {
+        when(seguimientoRepo.findTableroActivosByResponsableUserId(USER_ID, ACTIVE_STATES))
+                .thenReturn(List.of(seguimiento(1L, 101, EstadoSeguimientoOrdenArea.ESPERA, null)));
+        when(seguimientoRepo.findTableroCompletadosHistoricosByResponsableUserId(
+                USER_ID,
+                EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
+                "%riso%",
+                PageRequest.of(1, 20)
+        )).thenReturn(new PageImpl<>(
+                List.of(seguimiento(
+                        22L,
+                        122,
+                        EstadoSeguimientoOrdenArea.COMPLETADO,
+                        LocalDateTime.of(2026, 7, 10, 8, 0)
+                )),
+                PageRequest.of(1, 20),
+                21
+        ));
+        when(seguimientoRepo.countTableroCompletadosHistoricosByResponsableUserId(
+                USER_ID,
+                EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
+        )).thenReturn(45L);
+
+        TableroOperativoDTO result = service.getTableroOperativoUsuario(
+                USER_ID,
+                TableroVista.HISTORICO,
+                1,
+                20,
+                " RISO "
+        );
+
+        assertEquals(46L, result.getResumen().getTotal());
+        assertEquals(45L, result.getResumen().getCompletado());
+        assertEquals(1, result.getCompletado().size());
+        assertEquals(21L, result.getPaginacionCompletadas().getTotalElements());
+        assertEquals(2, result.getPaginacionCompletadas().getTotalPages());
+    }
+
+    @Test
+    void historico_rejectsInvalidPagination() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getTableroOperativoUsuario(USER_ID, TableroVista.HISTORICO, -1, 20, null)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getTableroOperativoUsuario(USER_ID, TableroVista.HISTORICO, 0, 101, null)
+        );
     }
 
     private SeguimientoOrdenArea seguimiento(

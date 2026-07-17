@@ -57,9 +57,18 @@ public class SeguimientoOrdenAreaResource {
     @GetMapping("/mis-ordenes-tablero")
     public ResponseEntity<TableroOperativoDTO> getMisOrdenesTablero(
             Authentication authentication,
-            @RequestParam(defaultValue = "HISTORICO") TableroVista vista) {
+            @RequestParam(defaultValue = "HISTORICO") TableroVista vista,
+            @RequestParam(defaultValue = "0") int paginaCompletadas,
+            @RequestParam(defaultValue = "20") int tamanoCompletadas,
+            @RequestParam(required = false) String buscar) {
         User user = getCurrentUser(authentication);
-        return ResponseEntity.ok(seguimientoService.getTableroOperativoUsuario(user.getId(), vista));
+        return ResponseEntity.ok(seguimientoService.getTableroOperativoUsuario(
+                user.getId(),
+                vista,
+                paginaCompletadas,
+                tamanoCompletadas,
+                buscar
+        ));
     }
 
     @GetMapping("/area/{areaId}/pendientes")

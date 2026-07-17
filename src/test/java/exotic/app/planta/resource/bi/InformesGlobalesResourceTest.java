@@ -37,10 +37,9 @@ class InformesGlobalesResourceTest {
                 .fechaHasta(fecha)
                 .modoFecha("FECHA_UNICA")
                 .diasRango(1)
-                .cantidadesPorUnidad(List.of())
-                .serieDiaria(List.of())
-                .consolidadoTipoMaterial(List.of())
-                .topMateriales(List.of())
+                .resumenPorUnidad(List.of())
+                .rankingDispensacion(List.of())
+                .serieFisicaDiaria(List.of())
                 .notas(List.of())
                 .build();
         when(informesGlobalesService.obtenerReporteAlmacen(eq(fecha), eq(fecha))).thenReturn(reporte);

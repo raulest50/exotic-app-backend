@@ -94,18 +94,66 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
             @Param("activeStates") Collection<Integer> activeStates
     );
 
+    @Query(
+            value = """
+                SELECT s FROM SeguimientoOrdenArea s
+                JOIN FETCH s.ordenProduccion op
+                JOIN FETCH op.producto p
+                JOIN FETCH s.areaOperativa a
+                JOIN FETCH s.rutaProcesoNode n
+                WHERE a.responsableArea.id = :userId
+                AND op.estadoOrden != -1
+                AND s.estado = :completedState
+                AND (
+                    :searchPattern = ''
+                    OR LOWER(COALESCE(op.loteAsignado, '')) LIKE :searchPattern
+                    OR LOWER(CONCAT('op-', CAST(op.ordenId AS string))) LIKE :searchPattern
+                    OR LOWER(COALESCE(p.productoId, '')) LIKE :searchPattern
+                    OR LOWER(COALESCE(p.nombre, '')) LIKE :searchPattern
+                    OR LOWER(COALESCE(a.nombre, '')) LIKE :searchPattern
+                    OR LOWER(COALESCE(n.label, '')) LIKE :searchPattern
+                )
+                ORDER BY
+                    CASE WHEN s.fechaCompletado IS NULL THEN 1 ELSE 0 END ASC,
+                    s.fechaCompletado DESC,
+                    s.id DESC
+                """,
+            countQuery = """
+                SELECT COUNT(s) FROM SeguimientoOrdenArea s
+                JOIN s.ordenProduccion op
+                JOIN op.producto p
+                JOIN s.areaOperativa a
+                JOIN s.rutaProcesoNode n
+                WHERE a.responsableArea.id = :userId
+                AND op.estadoOrden != -1
+                AND s.estado = :completedState
+                AND (
+                    :searchPattern = ''
+                    OR LOWER(COALESCE(op.loteAsignado, '')) LIKE :searchPattern
+                    OR LOWER(CONCAT('op-', CAST(op.ordenId AS string))) LIKE :searchPattern
+                    OR LOWER(COALESCE(p.productoId, '')) LIKE :searchPattern
+                    OR LOWER(COALESCE(p.nombre, '')) LIKE :searchPattern
+                    OR LOWER(COALESCE(a.nombre, '')) LIKE :searchPattern
+                    OR LOWER(COALESCE(n.label, '')) LIKE :searchPattern
+                )
+                """
+    )
+    Page<SeguimientoOrdenArea> findTableroCompletadosHistoricosByResponsableUserId(
+            @Param("userId") Long userId,
+            @Param("completedState") int completedState,
+            @Param("searchPattern") String searchPattern,
+            Pageable pageable
+    );
+
     @Query("""
-        SELECT s FROM SeguimientoOrdenArea s
-        JOIN FETCH s.ordenProduccion op
-        JOIN FETCH op.producto p
-        JOIN FETCH s.areaOperativa a
-        JOIN FETCH s.rutaProcesoNode n
+        SELECT COUNT(s) FROM SeguimientoOrdenArea s
+        JOIN s.ordenProduccion op
+        JOIN s.areaOperativa a
         WHERE a.responsableArea.id = :userId
         AND op.estadoOrden != -1
         AND s.estado = :completedState
-        ORDER BY s.posicionSecuencia ASC, s.id ASC
         """)
-    List<SeguimientoOrdenArea> findTableroCompletadosByResponsableUserId(
+    long countTableroCompletadosHistoricosByResponsableUserId(
             @Param("userId") Long userId,
             @Param("completedState") int completedState
     );

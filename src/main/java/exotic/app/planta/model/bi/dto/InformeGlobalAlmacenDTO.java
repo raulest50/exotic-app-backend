@@ -19,10 +19,9 @@ public class InformeGlobalAlmacenDTO {
     private String modoFecha;
     private int diasRango;
     private ResumenDTO resumen;
-    private List<CantidadUnidadDTO> cantidadesPorUnidad;
-    private List<SerieDiariaDTO> serieDiaria;
-    private List<ConsolidadoTipoMaterialDTO> consolidadoTipoMaterial;
-    private List<TopMaterialDTO> topMateriales;
+    private List<ResumenUnidadDTO> resumenPorUnidad;
+    private List<RankingUnidadDTO> rankingDispensacion;
+    private List<SerieFisicaDiariaDTO> serieFisicaDiaria;
     private List<NotaDTO> notas;
 
     @Data
@@ -30,13 +29,15 @@ public class InformeGlobalAlmacenDTO {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class ResumenDTO {
-        private double valorIngresosEstimado;
-        private double valorDispensacionesEstimado;
-        private double balanceValorEstimado;
-        private int movimientosIngreso;
         private int movimientosDispensacion;
-        private int materialesIngresados;
         private int materialesDispensados;
+        private int movimientosRecepcionCompra;
+        private int materialesRecibidosCompra;
+        private int movimientosOtrosIngresos;
+        private int materialesOtrosIngresos;
+        private double valorDispensacionesEstimado;
+        private double valorRecepcionesCompraEstimado;
+        private double valorOtrosIngresosEstimado;
         private int materialesConCosto;
         private int materialesSinCosto;
         private Double coberturaCostosPct;
@@ -46,52 +47,48 @@ public class InformeGlobalAlmacenDTO {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class CantidadUnidadDTO {
+    public static class ResumenUnidadDTO {
         private String unidadMedida;
-        private double cantidadIngresada;
         private double cantidadDispensada;
-        private double balanceNeto;
+        private double cantidadRecibidaCompra;
+        private double cantidadOtrosIngresos;
     }
 
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class SerieDiariaDTO {
-        private LocalDate fecha;
-        private double valorIngresosEstimado;
-        private double valorDispensacionesEstimado;
-        private int movimientosIngreso;
-        private int movimientosDispensacion;
+    public static class RankingUnidadDTO {
+        private String unidadMedida;
+        private double cantidadTotal;
+        private int materialesTotales;
+        private List<MaterialDispensadoDTO> materiales;
+        private double cantidadOtros;
+        private int materialesOtros;
     }
 
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class ConsolidadoTipoMaterialDTO {
-        private String tipoMaterial;
-        private double valorIngresosEstimado;
-        private double valorDispensacionesEstimado;
-        private int movimientos;
-        private List<CantidadUnidadDTO> cantidadesPorUnidad;
-    }
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TopMaterialDTO {
+    public static class MaterialDispensadoDTO {
         private String productoId;
         private String productoNombre;
         private String tipoMaterial;
-        private String unidadMedida;
-        private double cantidadIngresada;
         private double cantidadDispensada;
-        private double valorIngresosEstimado;
-        private double valorDispensacionesEstimado;
-        private double impactoValorEstimado;
-        private boolean costoDisponible;
+        private double participacionPct;
+        private int movimientos;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SerieFisicaDiariaDTO {
+        private LocalDate fecha;
+        private String unidadMedida;
+        private double cantidadDispensada;
+        private double cantidadRecibidaCompra;
     }
 
     @Data

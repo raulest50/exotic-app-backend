@@ -243,7 +243,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
      */
     @Query("""
             SELECT DISTINCT m FROM Movimiento m
-            JOIN FETCH m.transaccionAlmacen t
+            LEFT JOIN FETCH m.transaccionAlmacen t
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE TYPE(m.producto) = Material
