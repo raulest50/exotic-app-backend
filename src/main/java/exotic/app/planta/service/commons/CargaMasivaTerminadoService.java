@@ -11,6 +11,8 @@ import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.service.productos.ProductoCostoService;
+import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
@@ -52,6 +54,7 @@ public class CargaMasivaTerminadoService {
     private final TerminadoRepo terminadoRepo;
     private final CategoriaRepo categoriaRepo;
     private final ObjectMapper objectMapper;
+    private final ProductoCostoService productoCostoService;
 
     public byte[] generateTemplateExcel() {
         try (Workbook workbook = new XSSFWorkbook()) {
@@ -399,7 +402,7 @@ public class CargaMasivaTerminadoService {
                     terminado.setProductoId(productoId);
                     terminado.setNombre(getCellValueAsString(row, 1) != null ? getCellValueAsString(row, 1).trim() : "");
                     terminado.setObservaciones(getCellValueAsString(row, 2));
-                    terminado.setCosto(getCellValueAsDouble(row, 3));
+                    terminado.asignarCostoInicial(java.math.BigDecimal.valueOf(getCellValueAsDouble(row, 3)));
                     terminado.setIvaPercentual(getCellValueAsDouble(row, 4));
                     terminado.setTipoUnidades(getCellValueAsString(row, 5) != null ? getCellValueAsString(row, 5).trim().toUpperCase(Locale.ROOT) : "U");
                     terminado.setCantidadUnidad(getCellValueAsDouble(row, 6));
@@ -417,6 +420,9 @@ public class CargaMasivaTerminadoService {
                     terminado.setCasePack(null);
                     terminado.setInventareable(true);
                     terminadoRepo.save(terminado);
+                    productoCostoService.registrarCostoInicial(
+                            terminado,
+                            ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.IMPORTACION_TERMINADO));
                     successCount++;
                 } catch (Exception e) {
                     errors.add(new ErrorRecord(rowNum + 1, productoId, e.getMessage()));
@@ -453,7 +459,7 @@ public class CargaMasivaTerminadoService {
                 terminado.setProductoId(productoId);
                 terminado.setNombre(safeTrim(dto.nombre()) != null ? safeTrim(dto.nombre()) : "");
                 terminado.setObservaciones(dto.observaciones());
-                terminado.setCosto(dto.costo());
+                terminado.asignarCostoInicial(java.math.BigDecimal.valueOf(dto.costo()));
                 terminado.setIvaPercentual(dto.ivaPercentual());
                 terminado.setTipoUnidades(normalizeTipoUnidades(dto.tipoUnidades()));
                 terminado.setCantidadUnidad(dto.cantidadUnidad());
@@ -482,6 +488,9 @@ public class CargaMasivaTerminadoService {
 
                 terminado.setInsumos(insumos);
                 terminadoRepo.save(terminado);
+                productoCostoService.registrarCostoInicial(
+                        terminado,
+                        ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.IMPORTACION_TERMINADO));
                 successCount++;
             } catch (Exception e) {
                 errors.add(new ErrorRecord(rowNumber, productoId, e.getMessage()));

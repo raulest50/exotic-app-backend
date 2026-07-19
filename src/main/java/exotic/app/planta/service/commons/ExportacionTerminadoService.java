@@ -139,7 +139,7 @@ public class ExportacionTerminadoService {
             row.createCell(0).setCellValue(t.getProductoId() != null ? t.getProductoId() : "");
             row.createCell(1).setCellValue(t.getNombre() != null ? t.getNombre() : "");
             row.createCell(2).setCellValue(t.getObservaciones() != null ? t.getObservaciones() : "");
-            row.createCell(3).setCellValue(t.getCosto());
+            row.createCell(3).setCellValue(t.getCosto().doubleValue());
             row.createCell(4).setCellValue(t.getIvaPercentual());
             row.createCell(5).setCellValue(t.getTipoUnidades() != null ? t.getTipoUnidades() : "U");
             row.createCell(6).setCellValue(t.getCantidadUnidad());
@@ -164,7 +164,7 @@ public class ExportacionTerminadoService {
                 terminado.getProductoId(),
                 terminado.getNombre(),
                 terminado.getObservaciones(),
-                terminado.getCosto(),
+                terminado.getCosto().doubleValue(),
                 terminado.getIvaPercentual(),
                 terminado.getTipoUnidades(),
                 terminado.getCantidadUnidad(),

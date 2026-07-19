@@ -20,6 +20,60 @@ import java.util.List;
 
 public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Integer> {
 
+    @Query("""
+            SELECT p, COALESCE(SUM(m.cantidad), 0)
+            FROM Producto p
+            LEFT JOIN Movimiento m ON m.producto = p AND m.almacen = :almacen
+            WHERE p.inventareable = true
+            GROUP BY p
+            """)
+    List<Object[]> findInventariablesWithStockByAlmacen(@Param("almacen") Movimiento.Almacen almacen);
+
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            LEFT JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            WHERE m.almacen = :almacen
+              AND m.fechaMovimiento >= :start AND m.fechaMovimiento <= :end
+            ORDER BY m.fechaMovimiento, m.movimientoId
+            """)
+    List<Movimiento> findMovimientosBiByAlmacenAndRango(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            WHERE m.almacen = :almacen
+              AND m.cantidad > 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante = :causante
+              AND t.idEntidadCausante IN :entidadIds
+            """)
+    List<Movimiento> findRecepcionesPorCausanteYEntidades(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causante") TransaccionAlmacen.TipoEntidadCausante causante,
+            @Param("entidadIds") Collection<Integer> entidadIds);
+
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
+            JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            WHERE m.almacen = :almacen
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante IN :causantes
+              AND t.idEntidadCausante IN :entidadIds
+            """)
+    List<Movimiento> findDispensacionesPorCausantesYEntidades(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes,
+            @Param("entidadIds") Collection<Integer> entidadIds);
+
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId")
     Double findTotalCantidadByProductoId(@Param("productoId") String productoId);
 

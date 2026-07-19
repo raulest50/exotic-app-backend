@@ -1,0 +1,14 @@
+package exotic.app.planta.model.producto.costos;
+
+public enum ProductoCostoOrigen {
+    MIGRACION_INICIAL,
+    CREACION,
+    EDICION_PRODUCTO,
+    CARGA_MASIVA_COSTOS,
+    CARGA_MASIVA_INVENTARIO,
+    RECEPCION_OCM,
+    MANUFACTURING_EDIT,
+    CASCADA_RECETA,
+    IMPORTACION_MATERIAL,
+    IMPORTACION_TERMINADO
+}

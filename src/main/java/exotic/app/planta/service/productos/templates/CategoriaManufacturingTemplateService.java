@@ -359,12 +359,12 @@ public class CategoriaManufacturingTemplateService {
 
     private ProductoManufacturingInsumoDTO toInsumoDTO(CategoriaTemplateInsumo insumo) {
         Producto producto = insumo.getProducto();
-        double subtotal = producto.getCosto() * insumo.getCantidadRequerida();
+        double subtotal = producto.getCosto().doubleValue() * insumo.getCantidadRequerida();
         return new ProductoManufacturingInsumoDTO(
                 null,
                 producto.getProductoId(),
                 producto.getNombre(),
-                producto.getCosto(),
+                producto.getCosto().doubleValue(),
                 producto.getTipoUnidades(),
                 insumo.getCantidadRequerida(),
                 subtotal

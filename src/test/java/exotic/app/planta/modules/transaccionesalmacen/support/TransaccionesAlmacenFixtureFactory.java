@@ -185,7 +185,7 @@ public class TransaccionesAlmacenFixtureFactory {
         material.setTipoMaterial(tipoMaterial);
         material.setTipoUnidades(tipoUnidades);
         material.setCantidadUnidad(1.0);
-        material.setCosto(costo);
+        material.setCosto(java.math.BigDecimal.valueOf(costo));
         material.setIvaPercentual(19.0);
         material.setPuntoReorden(5);
         material.setObservaciones("Fixture " + productoId);
@@ -292,7 +292,7 @@ public class TransaccionesAlmacenFixtureFactory {
         terminado.setProductoId(productoId);
         terminado.setNombre(nombre);
         terminado.setObservaciones("Terminado fixture");
-        terminado.setCosto(35.0);
+        terminado.setCosto(java.math.BigDecimal.valueOf(35.0));
         terminado.setIvaPercentual(19.0);
         terminado.setTipoUnidades("U");
         terminado.setCantidadUnidad(1.0);

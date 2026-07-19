@@ -32,7 +32,7 @@ public class TargetDTO {
         dto.setProductoId(producto.getProductoId());
         dto.setNombre(producto.getNombre());
         dto.setObservaciones(producto.getObservaciones());
-        dto.setCosto(producto.getCosto());
+        dto.setCosto(producto.getCosto().doubleValue());
         // Format the date as needed. Here we simply use toString() (or use a formatter)
         dto.setFechaCreacion(producto.getFechaCreacion().toString());
         dto.setTipoUnidades(producto.getTipoUnidades());

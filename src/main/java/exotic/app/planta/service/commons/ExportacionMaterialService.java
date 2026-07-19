@@ -45,7 +45,7 @@ public class ExportacionMaterialService {
                 row.createCell(0).setCellValue(m.getProductoId() != null ? m.getProductoId() : "");
                 row.createCell(1).setCellValue(m.getNombre() != null ? m.getNombre() : "");
                 row.createCell(2).setCellValue(m.getObservaciones() != null ? m.getObservaciones() : "");
-                row.createCell(3).setCellValue(m.getCosto());
+                row.createCell(3).setCellValue(m.getCosto().doubleValue());
                 row.createCell(4).setCellValue(m.getIvaPercentual());
                 row.createCell(5).setCellValue(m.getTipoUnidades() != null ? m.getTipoUnidades() : "U");
                 row.createCell(6).setCellValue(m.getCantidadUnidad());

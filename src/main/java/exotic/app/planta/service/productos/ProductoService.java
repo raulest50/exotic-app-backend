@@ -20,9 +20,11 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.service.commons.FileStorageService;
 import exotic.app.planta.service.commons.notificaciones.PuntoReordenEvaluacionService;
+import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -63,6 +65,7 @@ public class ProductoService {
     private final ItemOrdenCompraRepo itemOrdenCompraRepo;
 
     private final FileStorageService fileStorageService;
+    private final ProductoCostoService productoCostoService;
 
     // fetch all products para el producto picker component en frontend
     public Page<Producto> getAllProductos(int page, int size){
@@ -81,11 +84,28 @@ public class ProductoService {
      */
     @Transactional
     public Producto saveProducto(Producto producto){
-        if (producto instanceof SemiTerminado semiTerminado) {
-            return productoRepo.save(semiTerminado);
-        } else{
-            return productoRepo.save(producto);
+        java.math.BigDecimal requestedCosto = producto.getCosto();
+        Optional<Producto> existing = producto.getProductoId() == null
+                ? Optional.empty()
+                : productoRepo.findById(producto.getProductoId());
+        if (existing.isPresent()) {
+            Producto managed = existing.get();
+            if (!managed.getTipo_producto().equals(producto.getTipo_producto())) {
+                throw new IllegalArgumentException("No se puede cambiar el tipo de un producto existente");
+            }
+            BeanUtils.copyProperties(
+                    producto,
+                    managed,
+                    "productoId", "costo", "costoVersion", "fechaCreacion");
+            Producto saved = productoRepo.save(managed);
+            return productoCostoService.actualizarCosto(
+                    saved.getProductoId(), requestedCosto,
+                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.EDICION_PRODUCTO)).producto();
         }
+        producto.asignarCostoInicial(requestedCosto);
+        Producto saved = productoRepo.save(producto);
+        return productoCostoService.registrarCostoInicial(
+                saved, ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION)).producto();
     }
 
 
@@ -113,7 +133,10 @@ public class ProductoService {
                 String fichaTecnicaPath = fileStorageService.storeFichaTecnica(file);
                 material.setFichaTecnicaUrl(fichaTecnicaPath);
             }
-            return materialRepo.save(material); // Persist the MateriaPrima entity.
+            Material saved = materialRepo.save(material);
+            return (Material) productoCostoService.registrarCostoInicial(
+                    saved,
+                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION)).producto();
         } catch (Exception e) {
             throw new RuntimeException("Error saving MateriaPrima: " + e.getMessage(), e);
         }
@@ -465,7 +488,7 @@ public class ProductoService {
                     mp.setProductoId(productoId);
                     mp.setNombre(nombre);
                     mp.setTipoUnidades(tipoUnidades);
-                    mp.setCosto(0);
+                    mp.asignarCostoInicial(java.math.BigDecimal.ZERO);
                     mp.setObservaciones("");
                     mp.setCantidadUnidad(1);
                     mp.setTipoMaterial(tipoMateria);
@@ -474,6 +497,9 @@ public class ProductoService {
                     // fechaCreacion is automatically set by @CreationTimestamp
 
                     materialRepo.save(mp);
+                    productoCostoService.registrarCostoInicial(
+                            mp,
+                            ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION));
                     insertedCount++;
                 }
             }

@@ -5,6 +5,8 @@ import exotic.app.planta.model.commons.dto.ValidationResultDTO;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
+import exotic.app.planta.service.productos.ProductoCostoService;
+import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.CellType;
@@ -34,6 +36,7 @@ public class CargaMasivaMaterialService {
 
     private final ProductoRepo productoRepo;
     private final MaterialRepo materialRepo;
+    private final ProductoCostoService productoCostoService;
 
     private static final String[] TEMPLATE_HEADERS = {
             "producto_id", "nombre", "observaciones", "costo", "iva_percentual", "tipo_unidades",
@@ -209,7 +212,7 @@ public class CargaMasivaMaterialService {
                     material.setProductoId(productoId);
                     material.setNombre(getCellValueAsString(row, 1) != null ? getCellValueAsString(row, 1).trim() : "");
                     material.setObservaciones(getCellValueAsString(row, 2));
-                    material.setCosto(getCellValueAsDouble(row, 3));
+                    material.asignarCostoInicial(java.math.BigDecimal.valueOf(getCellValueAsDouble(row, 3)));
                     material.setIvaPercentual(getCellValueAsDouble(row, 4));
                     material.setTipoUnidades(getCellValueAsString(row, 5) != null ? getCellValueAsString(row, 5).trim().toUpperCase() : "U");
                     material.setCantidadUnidad(getCellValueAsDouble(row, 6));
@@ -221,6 +224,9 @@ public class CargaMasivaMaterialService {
                     material.setInventareable(true);
 
                     materialRepo.save(material);
+                    productoCostoService.registrarCostoInicial(
+                            material,
+                            ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.IMPORTACION_MATERIAL));
                     successCount++;
                 } catch (Exception e) {
                     log.warn("Error guardando fila {} producto_id {}: {}", rowNum + 1, productoId, e.getMessage());

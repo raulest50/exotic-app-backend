@@ -16,6 +16,7 @@ import exotic.app.planta.repo.producto.*;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
+import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,7 @@ public class ProductoManufacturingService {
     private final AreaProduccionRepo areaProduccionRepo;
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final ObjectMapper objectMapper;
+    private final ProductoCostoService productoCostoService;
 
     @Transactional
     public ProductoManufacturingDTO createProductoManufacturing(ProductoManufacturingDTO dto) {
@@ -54,12 +56,16 @@ public class ProductoManufacturingService {
 
         Producto producto = instantiateProducto(dto.getTipoProducto());
         log.debug("[PRODUCTOS_MANUFACTURING] service create instantiated productoId={} entityType={}", dto.getProductoId(), producto.getClass().getSimpleName());
+        producto.asignarCostoInicial(java.math.BigDecimal.valueOf(defaultDouble(dto.getCosto())));
         applyCommonProductFields(producto, dto);
         updateTypedFields(producto, dto);
         assignInsumos(producto, dto.getInsumos());
         assignProceso(producto, dto.getProcesoProduccionCompleto());
 
         Producto saved = productoRepo.save(producto);
+        productoCostoService.registrarCostoInicial(
+                saved,
+                ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION));
         log.info(
                 "[PRODUCTOS_MANUFACTURING] service create persisted productoId={} entityType={} insumos={} procesoNodes={} procesoEdges={}",
                 saved.getProductoId(),
@@ -96,6 +102,7 @@ public class ProductoManufacturingService {
         validateTipoCompatibility(existing, dto.getTipoProducto());
 
         boolean originalInventareable = existing.isInventareable();
+        java.math.BigDecimal requestedCosto = java.math.BigDecimal.valueOf(defaultDouble(dto.getCosto()));
         applyCommonProductFields(existing, dto);
         existing.setInventareable(originalInventareable);
         updateTypedFields(existing, dto);
@@ -103,6 +110,9 @@ public class ProductoManufacturingService {
         assignProceso(existing, dto.getProcesoProduccionCompleto());
 
         Producto saved = productoRepo.save(existing);
+        saved = productoCostoService.actualizarCosto(
+                saved.getProductoId(), requestedCosto,
+                ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.MANUFACTURING_EDIT)).producto();
         saveManufacturingSnapshot(saved);
         log.info(
                 "[PRODUCTOS_MANUFACTURING] service update persisted productoId={} entityType={} insumos={} procesoNodes={} procesoEdges={}",
@@ -153,7 +163,6 @@ public class ProductoManufacturingService {
         producto.setProductoId(dto.getProductoId());
         producto.setNombre(dto.getNombre());
         producto.setObservaciones(dto.getObservaciones());
-        producto.setCosto(defaultDouble(dto.getCosto()));
         producto.setIvaPercentual(defaultDouble(dto.getIvaPercentual()));
         producto.setTipoUnidades(dto.getTipoUnidades());
         producto.setCantidadUnidad(defaultDouble(dto.getCantidadUnidad()));
@@ -494,7 +503,7 @@ public class ProductoManufacturingService {
         dto.setTipoProducto(producto.getTipo_producto());
         dto.setNombre(producto.getNombre());
         dto.setObservaciones(producto.getObservaciones());
-        dto.setCosto(producto.getCosto());
+        dto.setCosto(producto.getCosto().doubleValue());
         dto.setIvaPercentual(producto.getIvaPercentual());
         dto.setTipoUnidades(producto.getTipoUnidades());
         dto.setCantidadUnidad(producto.getCantidadUnidad());
@@ -518,12 +527,12 @@ public class ProductoManufacturingService {
 
     private ProductoManufacturingInsumoDTO toInsumoDTO(Insumo insumo) {
         Producto producto = insumo.getProducto();
-        double subtotal = producto != null ? producto.getCosto() * insumo.getCantidadRequerida() : 0.0;
+        double subtotal = producto != null ? producto.getCosto().doubleValue() * insumo.getCantidadRequerida() : 0.0;
         return new ProductoManufacturingInsumoDTO(
                 insumo.getInsumoId(),
                 producto != null ? producto.getProductoId() : null,
                 producto != null ? producto.getNombre() : null,
-                producto != null ? producto.getCosto() : null,
+                producto != null ? producto.getCosto().doubleValue() : null,
                 producto != null ? producto.getTipoUnidades() : null,
                 insumo.getCantidadRequerida(),
                 subtotal

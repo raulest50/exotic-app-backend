@@ -12,6 +12,8 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.service.inventarios.MovimientosService;
+import exotic.app.planta.service.productos.ProductoCostoService;
+import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Row;
@@ -25,10 +27,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,6 +40,7 @@ public class CargaMasivaService {
     private final ProductoRepo productoRepo;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final MovimientosService movimientosService;
+    private final ProductoCostoService productoCostoService;
 
     public byte[] generateTemplateExcel() {
         List<Material> materiales = materialRepo.findByInventareableTrue();
@@ -60,13 +61,13 @@ public class CargaMasivaService {
                 Row row = sheet.createRow(rowIdx++);
                 row.createCell(0).setCellValue(material.getProductoId() != null ? material.getProductoId() : "");
                 row.createCell(1).setCellValue(material.getNombre() != null ? material.getNombre() : "");
-                row.createCell(2).setCellValue(material.getCosto());
+                row.createCell(2).setCellValue(material.getCosto().doubleValue());
                 Double cantidadConsolidada = transaccionAlmacenRepo.findTotalCantidadByProductoId(material.getProductoId());
                 row.createCell(3).setCellValue(cantidadConsolidada != null ? cantidadConsolidada : 0);
                 // nuevo_valor_absoluto vacío para completar
                 row.createCell(4).setCellValue("");
                 // nuevo_costo precargado con costo actual
-                row.createCell(5).setCellValue(material.getCosto());
+                row.createCell(5).setCellValue(material.getCosto().doubleValue());
             }
 
             for (int i = 0; i < 6; i++) {
@@ -88,7 +89,6 @@ public class CargaMasivaService {
         List<ErrorRecord> errors = new ArrayList<>();
         int successCount = 0;
         List<AjusteItemDTO> ajusteItems = new ArrayList<>();
-        Set<String> updatedProductIds = new HashSet<>();
 
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheet("Carga masiva");
@@ -143,7 +143,7 @@ public class CargaMasivaService {
                         continue;
                     }
 
-                    double costoActual = material.getCosto();
+                    double costoActual = material.getCosto().doubleValue();
 
                     if (nuevoValorAbsoluto == -1.0 || nuevoValorAbsoluto == -7.0) {
                         log.debug("[CARGA_MASIVA] Fila {}: '{}' nuevoValorAbsoluto={} (ignorar -1/-7)", rowNum + 1, productoid, nuevoValorAbsoluto);
@@ -171,9 +171,12 @@ public class CargaMasivaService {
                     }
 
                     if (nuevoCosto > 0 && nuevoCosto != costoActual) {
-                        material.setCosto(nuevoCosto);
-                        materialRepo.save(material);
-                        updateCostoCascade(material, updatedProductIds);
+                        productoCostoService.actualizarCosto(
+                                material.getProductoId(),
+                                java.math.BigDecimal.valueOf(nuevoCosto),
+                                new ProductoCostoService.ContextoCambio(
+                                        null, username, ProductoCostoOrigen.CARGA_MASIVA_INVENTARIO,
+                                        "Carga masiva de inventario", file.getOriginalFilename(), null));
                         hasChanges = true;
                         log.info("[CARGA_MASIVA] Fila {}: actualizado costo de {} a {} para '{}'", rowNum + 1, costoActual, nuevoCosto, productoid);
                     }
@@ -254,14 +257,6 @@ public class CargaMasivaService {
             log.warn("Error parseando celda {} como número: {}", cellIndex, e.getMessage());
         }
         return 0;
-    }
-
-    private void updateCostoCascade(Material material, Set<String> updatedProductIds) {
-        if (updatedProductIds.contains(material.getProductoId())) {
-            return;
-        }
-        updatedProductIds.add(material.getProductoId());
-        movimientosService.updateCostoCascade(material, updatedProductIds);
     }
 
     private Throwable getRootCause(Throwable t) {

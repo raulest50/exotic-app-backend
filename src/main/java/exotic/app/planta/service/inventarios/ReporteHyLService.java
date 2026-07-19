@@ -49,7 +49,7 @@ public class ReporteHyLService {
             for (ReporteHyLRow row : rows) {
                 double costo = request.isCostosEnCero()
                         ? 0d
-                        : terminadosById.get(row.productoId()).getCosto();
+                        : terminadosById.get(row.productoId()).getCosto().doubleValue();
                 escribirFila(sheet.createRow(rowIdx++), row, costo);
             }
 

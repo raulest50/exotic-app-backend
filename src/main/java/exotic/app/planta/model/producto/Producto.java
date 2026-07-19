@@ -2,15 +2,21 @@ package exotic.app.planta.model.producto;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import lombok.AllArgsConstructor;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name="productos")
@@ -42,8 +48,28 @@ public abstract class Producto {
 
     private String observaciones;
 
-    @Min(value=0, message = "El costo no puede ser negativo") // validacion en db engine
-    private double costo;
+    @DecimalMin(value = "0.0", inclusive = true, message = "El costo no puede ser negativo")
+    @Digits(integer = 13, fraction = 6, message = "El costo excede la precisión permitida")
+    @Column(nullable = false, precision = 19, scale = 6)
+    @Setter(AccessLevel.NONE)
+    @JsonProperty(access = JsonProperty.Access.READ_WRITE)
+    private BigDecimal costo = BigDecimal.ZERO;
+
+    @Column(name = "costo_version", nullable = false)
+    @JsonIgnore
+    @Setter(AccessLevel.NONE)
+    private long costoVersion = 0L;
+
+    /**
+     * Permite asignar el costo antes del primer guardado. Los productos ya
+     * versionados solo pueden cambiar de costo mediante ProductoCostoService.
+     */
+    public void asignarCostoInicial(BigDecimal costoInicial) {
+        if (costoVersion != 0L) {
+            throw new IllegalStateException("El costo de un producto versionado no puede asignarse directamente");
+        }
+        this.costo = costoInicial == null ? BigDecimal.ZERO : costoInicial;
+    }
 
     /**
      * valores vigentes: 0%, 5% y 19%

@@ -36,6 +36,8 @@ import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
 import exotic.app.planta.service.produccion.ProduccionService;
+import exotic.app.planta.service.productos.ProductoCostoService;
+import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -51,6 +53,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -94,6 +97,7 @@ public class MovimientosService {
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final Clock applicationClock;
+    private final ProductoCostoService productoCostoService;
 
 
 
@@ -520,6 +524,7 @@ public class MovimientosService {
     public ResponseEntity<?> createDocIngreso(IngresoOCM_DTA ingresoOCM_dta, MultipartFile file) {
         log.info("Iniciando creacion de documento de ingreso OCM. userId: {}",
                 ingresoOCM_dta != null ? ingresoOCM_dta.getUserId() : null);
+        Path createdSupportPath = null;
         try {
             if (ingresoOCM_dta == null || ingresoOCM_dta.getOrdenCompraMateriales() == null) {
                 return ResponseEntity.badRequest().body("La orden de compra de materiales es requerida para registrar el ingreso.");
@@ -583,6 +588,7 @@ public class MovimientosService {
                 Path filePath = folderPath.resolve(newFilename);
 
                 Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+                createdSupportPath = filePath;
                 ingresoOCM.setUrlDocSoporte(filePath.toString());
             }
 
@@ -666,7 +672,8 @@ public class MovimientosService {
                 // Calcular el monto total para el asiento contable
                 BigDecimal montoTotal = BigDecimal.ZERO;
                 for (ItemOrdenCompra itemOrdenCompra : oc.getItemsOrdenCompra()) {
-                    BigDecimal valorItem = BigDecimal.valueOf(itemOrdenCompra.getPrecioUnitario() * itemOrdenCompra.getCantidad());
+                    BigDecimal valorItem = BigDecimal.valueOf(itemOrdenCompra.getPrecioUnitario())
+                            .multiply(BigDecimal.valueOf(itemOrdenCompra.getCantidad()));
                     montoTotal = montoTotal.add(valorItem);
                 }
 
@@ -696,13 +703,21 @@ public class MovimientosService {
 
                 // Retrieve current stock
                 Double currentStockOpt = transaccionAlmacenRepo.findTotalCantidadByProductoId(material.getProductoId());
-                double nuevoCosto = getNuevoCosto(itemOrdenCompra, currentStockOpt, material);
+                BigDecimal nuevoCosto = getNuevoCosto(itemOrdenCompra, currentStockOpt, material);
 
                 // Update MateriaPrima's costo
-                material.setCosto(nuevoCosto);
-
-                // Save the updated MateriaPrima
-                materialRepo.save(material);
+                User actorCosto = ingresoOCM.getUsuarioAprobador();
+                var cambioCosto = productoCostoService.actualizarCosto(
+                        material.getProductoId(),
+                        nuevoCosto,
+                        new ProductoCostoService.ContextoCambio(
+                                actorCosto,
+                                actorCosto != null ? actorCosto.getUsername() : "system",
+                                ProductoCostoOrigen.RECEPCION_OCM,
+                                ingresoOCM_dta.getObservaciones(),
+                                "OCM:" + ordenCompraId,
+                                null));
+                material = (Material) cambioCosto.producto();
 
                 // Update costs of dependent products if necessary
                 Set<String> updatedProductIds = new HashSet<>();
@@ -712,8 +727,17 @@ public class MovimientosService {
             return ResponseEntity.ok(ingresoOCM);
         } catch(Exception e) {
             log.error("Error saving DocIngresoAlmacenOC", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error saving document: " + e.getMessage());
+            if (createdSupportPath != null) {
+                try {
+                    Files.deleteIfExists(createdSupportPath);
+                } catch (IOException cleanupError) {
+                    log.error("No fue posible eliminar el soporte huerfano {}", createdSupportPath, cleanupError);
+                }
+            }
+            if (e instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Error saving document: " + e.getMessage(), e);
         }
     }
 
@@ -847,34 +871,34 @@ public class MovimientosService {
             SemiTerminado semiTerminado = (SemiTerminado) producto;
 
             // Recalculate cost
-            double newCosto = 0;
+            BigDecimal newCosto = BigDecimal.ZERO;
             for (Insumo insumo : semiTerminado.getInsumos()) {
                 Producto insumoProducto = insumo.getProducto();
-                double insumoCosto = insumoProducto.getCosto();
-                double cantidadRequerida = insumo.getCantidadRequerida();
-                newCosto += insumoCosto * cantidadRequerida;
+                BigDecimal subtotal = insumoProducto.getCosto()
+                        .multiply(BigDecimal.valueOf(insumo.getCantidadRequerida()));
+                newCosto = newCosto.add(subtotal);
             }
-            semiTerminado.setCosto(newCosto);
-
-            // Save updated SemiTerminado
-            semiTerminadoRepo.save(semiTerminado);
+            productoCostoService.actualizarCosto(
+                    semiTerminado.getProductoId(),
+                    newCosto,
+                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CASCADA_RECETA));
             log.debug("[CARGA_MASIVA-Cascada] SemiTerminado actualizado: {}", semiTerminado.getProductoId());
 
         } else if (producto instanceof Terminado) {
             Terminado terminado = (Terminado) producto;
 
             // Recalculate cost
-            double newCosto = 0;
+            BigDecimal newCosto = BigDecimal.ZERO;
             for (Insumo insumo : terminado.getInsumos()) {
                 Producto insumoProducto = insumo.getProducto();
-                double insumoCosto = insumoProducto.getCosto();
-                double cantidadRequerida = insumo.getCantidadRequerida();
-                newCosto += insumoCosto * cantidadRequerida;
+                BigDecimal subtotal = insumoProducto.getCosto()
+                        .multiply(BigDecimal.valueOf(insumo.getCantidadRequerida()));
+                newCosto = newCosto.add(subtotal);
             }
-            terminado.setCosto(newCosto);
-
-            // Save updated Terminado
-            terminadoRepo.save(terminado);
+            productoCostoService.actualizarCosto(
+                    terminado.getProductoId(),
+                    newCosto,
+                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CASCADA_RECETA));
             log.debug("[CARGA_MASIVA-Cascada] Terminado actualizado: {}", terminado.getProductoId());
         }
 
@@ -897,23 +921,24 @@ public class MovimientosService {
     }
 
 
-    private static double getNuevoCosto(ItemOrdenCompra itemOrdenCompra, Double currentStockOpt, Material material) {
-        double currentStock = (currentStockOpt != null) ? currentStockOpt : 0;
-
-        // Retrieve current costo
-        double currentCosto = material.getCosto();
-
-        // Incoming units and precioCompra from ItemCompra
-        double incomingUnits = itemOrdenCompra.getCantidad();
-        double incomingPrecio = itemOrdenCompra.getPrecioUnitarioFinal();
-
-        // Calculate nuevo_costo
-        if (currentStock + incomingUnits == 0) {
+    private static BigDecimal getNuevoCosto(
+            ItemOrdenCompra itemOrdenCompra,
+            Double currentStockOpt,
+            Material material
+    ) {
+        BigDecimal currentStock = BigDecimal.valueOf(currentStockOpt != null ? currentStockOpt : 0d);
+        BigDecimal incomingUnits = BigDecimal.valueOf(itemOrdenCompra.getCantidad());
+        BigDecimal denominator = currentStock.add(incomingUnits);
+        if (denominator.signum() == 0) {
             throw new RuntimeException("Total stock cannot be zero after the compra for MateriaPrima ID: " + material.getProductoId());
         }
-
-        double nuevoCosto = ((currentCosto * currentStock) + (incomingPrecio * incomingUnits)) / (currentStock + incomingUnits);
-        return Math.ceil(nuevoCosto);
+        BigDecimal weightedCurrent = material.getCosto().multiply(currentStock);
+        BigDecimal weightedIncoming = BigDecimal.valueOf(itemOrdenCompra.getPrecioUnitarioFinal())
+                .multiply(incomingUnits);
+        BigDecimal average = weightedCurrent.add(weightedIncoming)
+                .divide(denominator, ProductoCostoService.COST_SCALE, RoundingMode.HALF_UP);
+        return average.setScale(0, RoundingMode.CEILING)
+                .setScale(ProductoCostoService.COST_SCALE, RoundingMode.UNNECESSARY);
     }
 
 

@@ -22,6 +22,10 @@ import java.util.Optional;
 
 public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Integer> {
 
+    @EntityGraph(attributePaths = {"producto"})
+    @Query("SELECT o FROM OrdenProduccion o WHERE o.estadoOrden <> 2 AND o.estadoOrden <> -1")
+    List<OrdenProduccion> findAllOpenForBi();
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT orden FROM OrdenProduccion orden JOIN FETCH orden.producto WHERE orden.ordenId = :ordenId")
     Optional<OrdenProduccion> findByIdForUpdate(@Param("ordenId") int ordenId);

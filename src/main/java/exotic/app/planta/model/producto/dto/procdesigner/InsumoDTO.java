@@ -24,7 +24,7 @@ public class InsumoDTO {
         prodDto.setNombre(insumo.getProducto().getNombre());
         prodDto.setTipo_producto(insumo.getProducto().getTipo_producto());
         prodDto.setObservaciones(insumo.getProducto().getObservaciones());
-        prodDto.setCosto(insumo.getProducto().getCosto());
+        prodDto.setCosto(insumo.getProducto().getCosto().doubleValue());
         prodDto.setTipoUnidades(insumo.getProducto().getTipoUnidades());
         prodDto.setCantidadUnidad(insumo.getProducto().getCantidadUnidad());
         prodDto.setFechaCreacion(insumo.getProducto().getFechaCreacion().toString());

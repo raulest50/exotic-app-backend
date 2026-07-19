@@ -10,6 +10,15 @@ import java.util.Collection;
 import java.util.List;
 
 public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Integer> {
+    @Query("""
+            SELECT item FROM ItemOrdenCompra item
+            JOIN FETCH item.ordenCompraMateriales orden
+            JOIN FETCH orden.proveedor
+            JOIN FETCH item.material
+            WHERE orden.estado = :estado
+            ORDER BY orden.fechaEmision DESC, orden.ordenCompraId DESC, item.itemOrdenId
+            """)
+    List<ItemOrdenCompra> findAllByOrdenEstadoForBi(@Param("estado") int estado);
     boolean existsByMaterial_ProductoId(String productoId);
 
     @Query("""
