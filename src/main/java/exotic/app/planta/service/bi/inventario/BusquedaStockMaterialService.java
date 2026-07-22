@@ -1,14 +1,20 @@
 package exotic.app.planta.service.bi.inventario;
 
 import exotic.app.planta.model.bi.dto.BusquedaStockMaterialDTO;
+import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
+import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
+import exotic.app.planta.repo.producto.MaterialRepo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -17,17 +23,25 @@ public class BusquedaStockMaterialService {
     private static final int MAX_RESULTS = 10;
     private static final int MAX_SEARCH_LENGTH = 100;
 
-    private final InventarioStockReader stockReader;
+    private final MaterialRepo materialRepo;
+    private final TransaccionAlmacenRepo movementRepo;
 
     public BusquedaStockMaterialDTO search(String rawSearch) {
         String search = normalizeAndValidate(rawSearch);
         String normalizedSearch = search.toLowerCase(Locale.ROOT);
 
-        var results = stockReader.readGeneralStock().stream()
-                .filter(snapshot -> snapshot.producto() instanceof Material)
-                .filter(snapshot -> matches(snapshot.producto(), normalizedSearch))
-                .sorted(byRelevance(normalizedSearch))
+        List<Material> candidates = materialRepo.findInventariablesForStockSearch(
+                        normalizedSearch,
+                        PageRequest.of(0, MAX_RESULTS))
+                .stream()
                 .limit(MAX_RESULTS)
+                .toList();
+        Map<String, Double> stockByProduct = loadGeneralStock(candidates);
+
+        var results = candidates.stream()
+                .map(material -> new ProductoStockSnapshot(
+                        material,
+                        stockByProduct.getOrDefault(material.getProductoId(), 0d)))
                 .map(this::toResult)
                 .toList();
 
@@ -45,25 +59,20 @@ public class BusquedaStockMaterialService {
         return search;
     }
 
-    private boolean matches(Producto producto, String search) {
-        return normalize(producto.getProductoId()).contains(search)
-                || normalize(producto.getNombre()).contains(search);
-    }
+    private Map<String, Double> loadGeneralStock(List<Material> candidates) {
+        if (candidates.isEmpty()) return Map.of();
 
-    private Comparator<ProductoStockSnapshot> byRelevance(String search) {
-        return Comparator
-                .comparingInt((ProductoStockSnapshot snapshot) -> relevance(snapshot.producto(), search))
-                .thenComparing(
-                        snapshot -> normalize(snapshot.producto().getProductoId()),
-                        String.CASE_INSENSITIVE_ORDER);
-    }
-
-    private int relevance(Producto producto, String search) {
-        String productId = normalize(producto.getProductoId());
-        if (productId.equals(search)) return 0;
-        if (productId.startsWith(search)) return 1;
-        if (productId.contains(search)) return 2;
-        return 3;
+        List<String> productIds = candidates.stream()
+                .map(Material::getProductoId)
+                .toList();
+        Map<String, Double> stockByProduct = new HashMap<>();
+        movementRepo.findStockByAlmacenAndProductoIds(
+                        Movimiento.Almacen.GENERAL,
+                        productIds)
+                .forEach(row -> stockByProduct.put(
+                        String.valueOf(row[0]),
+                        InventarioBiUtils.numberValue(row[1])));
+        return stockByProduct;
     }
 
     private BusquedaStockMaterialDTO.ResultadoStockMaterialDTO toResult(
@@ -79,9 +88,5 @@ public class BusquedaStockMaterialService {
                 .costoDisponible(InventarioBiUtils.hasValidCost(producto))
                 .valorEstimado(InventarioBiUtils.estimatedValue(snapshot))
                 .build();
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 }

@@ -1,16 +1,14 @@
 package exotic.app.planta.service.bi.inventario;
 
-import exotic.app.planta.model.compras.ItemOrdenCompra;
-import exotic.app.planta.model.compras.OrdenCompraMateriales;
-import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
-import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,34 +35,50 @@ class PendientesInventarioAssemblerTest {
     }
 
     @Test
-    void calculatesPendingQuantityAndValueWithoutIva() {
-        ItemOrdenCompra item = purchaseItem(10, 100);
-        when(purchaseItemRepo.findAllByOrdenEstadoForBi(2)).thenReturn(List.of(item));
-        when(movementRepo.findRecepcionesPorCausanteYEntidades(
+    void calculatesSummaryAndPagedDetailWithoutHydratingEntities() {
+        var item = purchaseItem(10, 100);
+        var receipt = receipt(4);
+        when(purchaseItemRepo.findPendingRowsForBi(2)).thenReturn(List.of(item));
+        when(movementRepo.findReceiptTotalsByCauseAndEntities(
                 eq(Movimiento.Almacen.GENERAL),
                 eq(Movimiento.TipoMovimiento.COMPRA),
                 eq(TransaccionAlmacen.TipoEntidadCausante.OCM),
                 anyCollection()))
-                .thenReturn(List.of(receipt(item.getMaterial(), 4)));
+                .thenReturn(List.of(receipt));
 
-        var report = assembler.buildPendingPurchaseOrders();
+        var summary = assembler.buildPendingPurchaseOrders();
 
-        assertEquals(1, report.ordenes());
-        assertEquals(6, report.cantidadesPorUnidad().get(0).cantidad(), 0.000001);
-        assertEquals(600, report.valorPendienteSinIva(), 0.000001);
-        assertEquals(4, report.items().get(0).lineas().get(0).recibidoAplicado(), 0.000001);
+        assertEquals(1, summary.ordenes());
+        assertEquals(6, summary.cantidadesPorUnidad().get(0).cantidad(), 0.000001);
+        assertEquals(600, summary.valorPendienteSinIva(), 0.000001);
+
+        var pageable = PageRequest.of(0, 10);
+        when(purchaseItemRepo.findPendingOrderIdsForBi(
+                eq(2),
+                eq(Movimiento.Almacen.GENERAL),
+                eq(Movimiento.TipoMovimiento.COMPRA),
+                eq(TransaccionAlmacen.TipoEntidadCausante.OCM),
+                eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(123), pageable, 1));
+        when(purchaseItemRepo.findPendingRowsForBiByOrderIds(eq(2), anyCollection()))
+                .thenReturn(List.of(item));
+
+        var detail = assembler.getPendingPurchaseOrdersPage(0, 10);
+
+        assertEquals(1, detail.totalElements());
+        assertEquals(4, detail.items().get(0).lineas().get(0).recibidoAplicado(), 0.000001);
     }
 
     @Test
     void omitsAnOrderWhenItsLinesAreCompletelyReceived() {
-        ItemOrdenCompra item = purchaseItem(10, 100);
-        when(purchaseItemRepo.findAllByOrdenEstadoForBi(2)).thenReturn(List.of(item));
-        when(movementRepo.findRecepcionesPorCausanteYEntidades(
+        when(purchaseItemRepo.findPendingRowsForBi(2))
+                .thenReturn(List.of(purchaseItem(10, 100)));
+        when(movementRepo.findReceiptTotalsByCauseAndEntities(
                 eq(Movimiento.Almacen.GENERAL),
                 eq(Movimiento.TipoMovimiento.COMPRA),
                 eq(TransaccionAlmacen.TipoEntidadCausante.OCM),
                 anyCollection()))
-                .thenReturn(List.of(receipt(item.getMaterial(), 12)));
+                .thenReturn(List.of(receipt(12)));
 
         var report = assembler.buildPendingPurchaseOrders();
 
@@ -72,40 +86,28 @@ class PendientesInventarioAssemblerTest {
         assertEquals(0, report.valorPendienteSinIva(), 0.000001);
     }
 
-    private ItemOrdenCompra purchaseItem(int quantity, int unitPrice) {
-        Material material = new Material();
-        material.setProductoId("MP-1");
-        material.setNombre("Aceite");
-        material.setTipoUnidades("KG");
-
-        Proveedor supplier = new Proveedor();
-        supplier.setNombre("Proveedor");
-
-        OrdenCompraMateriales order = new OrdenCompraMateriales();
-        order.setOrdenCompraId(123);
-        order.setFechaEmision(LocalDateTime.of(2026, 7, 1, 8, 0));
-        order.setProveedor(supplier);
-
-        ItemOrdenCompra item = new ItemOrdenCompra();
-        item.setItemOrdenId(1);
-        item.setOrdenCompraMateriales(order);
-        item.setMaterial(material);
-        item.setCantidad(quantity);
-        item.setPrecioUnitario(unitPrice);
+    private ItemOrdenCompraRepo.PendingPurchaseItemProjection purchaseItem(
+            double quantity,
+            double unitPrice
+    ) {
+        var item = mock(ItemOrdenCompraRepo.PendingPurchaseItemProjection.class);
+        when(item.getItemId()).thenReturn(1);
+        when(item.getOcmId()).thenReturn(123);
+        when(item.getFechaEmision()).thenReturn(LocalDateTime.of(2026, 7, 1, 8, 0));
+        when(item.getProveedor()).thenReturn("Proveedor");
+        when(item.getProductoId()).thenReturn("MP-1");
+        when(item.getProductoNombre()).thenReturn("Aceite");
+        when(item.getUnidadMedida()).thenReturn("KG");
+        when(item.getCantidad()).thenReturn(quantity);
+        when(item.getPrecioUnitario()).thenReturn(unitPrice);
         return item;
     }
 
-    private Movimiento receipt(Material material, double quantity) {
-        TransaccionAlmacen transaction = new TransaccionAlmacen();
-        transaction.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.OCM);
-        transaction.setIdEntidadCausante(123);
-
-        Movimiento movement = new Movimiento();
-        movement.setProducto(material);
-        movement.setCantidad(quantity);
-        movement.setTipoMovimiento(Movimiento.TipoMovimiento.COMPRA);
-        movement.setAlmacen(Movimiento.Almacen.GENERAL);
-        movement.setTransaccionAlmacen(transaction);
-        return movement;
+    private TransaccionAlmacenRepo.EntityProductQuantityProjection receipt(double quantity) {
+        var receipt = mock(TransaccionAlmacenRepo.EntityProductQuantityProjection.class);
+        when(receipt.getEntityId()).thenReturn(123);
+        when(receipt.getProductId()).thenReturn("MP-1");
+        when(receipt.getQuantity()).thenReturn(quantity);
+        return receipt;
     }
 }

@@ -6,6 +6,7 @@ import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
+import exotic.app.planta.model.produccion.MasterProductionScheduleSemanal;
 import exotic.app.planta.model.produccion.MpsSemanalDia;
 import exotic.app.planta.model.produccion.MpsSemanalItem;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
@@ -96,15 +97,33 @@ public class InformeProduccionService {
             LocalDate endDate,
             Map<String, ProductionReference> references
     ) {
+        List<MasterProductionScheduleSemanal> candidates =
+                mpsRepo.findAllOverlappingRange(startDate, endDate);
         Set<Integer> mpsIds = new LinkedHashSet<>();
+        Map<LocalDate, Integer> effectiveMpsByDate = new LinkedHashMap<>();
+
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            LocalDate queryDate = date;
-            mpsRepo.findAllContainingDate(queryDate).stream().findFirst()
+            LocalDate currentDate = date;
+            candidates.stream()
+                    .filter(mps -> !mps.getWeekStartDate().isAfter(currentDate)
+                            && !mps.getWeekEndDate().isBefore(currentDate))
+                    .findFirst()
                     .ifPresent(mps -> {
                         mpsIds.add(mps.getMpsId());
-                        mpsDayRepo.findByMpsIdAndFecha(mps.getMpsId(), queryDate)
-                                .ifPresent(day -> addPlannedDay(day, references));
+                        effectiveMpsByDate.put(currentDate, mps.getMpsId());
                     });
+        }
+
+        if (!mpsIds.isEmpty()) {
+            mpsDayRepo.findAllByMpsIdsAndDateRange(
+                            new ArrayList<>(mpsIds),
+                            startDate,
+                            endDate)
+                    .stream()
+                    .filter(day -> Objects.equals(
+                            effectiveMpsByDate.get(day.getFecha()),
+                            day.getMpsSemanal().getMpsId()))
+                    .forEach(day -> addPlannedDay(day, references));
         }
         return mpsIds;
     }
@@ -296,9 +315,14 @@ public class InformeProduccionService {
     }
 
     private double totalProduced(LocalDate startDate, LocalDate endDate) {
-        return findFinishedProductReceipts(startDate, endDate).stream()
-                .mapToDouble(Movimiento::getCantidad)
-                .sum();
+        DateTimeRange range = toDateTimeRange(startDate, endDate);
+        Double total = movementRepo.sumIngresosTerminadoPorFechaEfectiva(
+                startDate,
+                endDate,
+                range.start(),
+                range.end(),
+                Movimiento.TipoMovimiento.BACKFLUSH);
+        return total == null ? 0d : total;
     }
 
     private FinishedProductData productData(Producto product) {

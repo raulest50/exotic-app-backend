@@ -38,4 +38,22 @@ public interface MpsSemanalDiaRepo extends JpaRepository<MpsSemanalDia, Long> {
     Optional<MpsSemanalDia> findByMpsIdAndFecha(
             @Param("mpsId") Integer mpsId,
             @Param("fecha") LocalDate fecha);
+
+    @EntityGraph(attributePaths = {
+            "items",
+            "items.terminado",
+            "items.terminado.categoria"
+    })
+    @Query("""
+            SELECT DISTINCT dia
+            FROM MpsSemanalDia dia
+            WHERE dia.mpsSemanal.mpsId IN :mpsIds
+              AND dia.fecha >= :fechaDesde
+              AND dia.fecha <= :fechaHasta
+            ORDER BY dia.fecha ASC, dia.dayIndex ASC
+            """)
+    List<MpsSemanalDia> findAllByMpsIdsAndDateRange(
+            @Param("mpsIds") List<Integer> mpsIds,
+            @Param("fechaDesde") LocalDate fechaDesde,
+            @Param("fechaHasta") LocalDate fechaHasta);
 }

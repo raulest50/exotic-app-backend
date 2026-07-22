@@ -15,10 +15,28 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 
 public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Integer> {
+    interface EntityProductQuantityProjection {
+        int getEntityId();
+        String getProductId();
+        double getQuantity();
+    }
+
+    interface OpenProductionMaterialProjection {
+        int getOpId();
+        String getLote();
+        int getEstado();
+        LocalDateTime getFechaReferencia();
+        String getProductoId();
+        String getUnidadMedida();
+        BigDecimal getCosto();
+        double getCantidad();
+    }
+
 
     @Query("""
             SELECT p, COALESCE(SUM(m.cantidad), 0)
@@ -28,6 +46,17 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             GROUP BY p
             """)
     List<Object[]> findInventariablesWithStockByAlmacen(@Param("almacen") Movimiento.Almacen almacen);
+
+    @Query("""
+            SELECT m.producto.productoId, COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.almacen = :almacen
+              AND m.producto.productoId IN :productoIds
+            GROUP BY m.producto.productoId
+            """)
+    List<Object[]> findStockByAlmacenAndProductoIds(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("productoIds") Collection<String> productoIds);
 
     @Query("""
             SELECT DISTINCT m FROM Movimiento m
@@ -59,6 +88,25 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("entidadIds") Collection<Integer> entidadIds);
 
     @Query("""
+            SELECT t.idEntidadCausante AS entityId,
+                   m.producto.productoId AS productId,
+                   COALESCE(SUM(m.cantidad), 0) AS quantity
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            WHERE m.almacen = :almacen
+              AND m.cantidad > 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante = :causante
+              AND t.idEntidadCausante IN :entidadIds
+            GROUP BY t.idEntidadCausante, m.producto.productoId
+            """)
+    List<EntityProductQuantityProjection> findReceiptTotalsByCauseAndEntities(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causante") TransaccionAlmacen.TipoEntidadCausante causante,
+            @Param("entidadIds") Collection<Integer> entidadIds);
+
+    @Query("""
             SELECT DISTINCT m FROM Movimiento m
             JOIN FETCH m.transaccionAlmacen t
             JOIN FETCH m.producto p
@@ -73,6 +121,70 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
             @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes,
             @Param("entidadIds") Collection<Integer> entidadIds);
+
+    @Query("""
+            SELECT orden.ordenId AS opId,
+                   orden.loteAsignado AS lote,
+                   orden.estadoOrden AS estado,
+                   COALESCE(orden.fechaInicio, orden.fechaCreacion) AS fechaReferencia,
+                   producto.productoId AS productoId,
+                   producto.tipoUnidades AS unidadMedida,
+                   producto.costo AS costo,
+                   COALESCE(SUM(ABS(m.cantidad)), 0) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            JOIN m.producto producto,
+                 OrdenProduccion orden
+            WHERE orden.ordenId = t.idEntidadCausante
+              AND orden.estadoOrden <> 2
+              AND orden.estadoOrden <> -1
+              AND m.almacen = :almacen
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante IN :causantes
+            GROUP BY orden.ordenId, orden.loteAsignado, orden.estadoOrden,
+                     orden.fechaInicio, orden.fechaCreacion,
+                     producto.productoId, producto.tipoUnidades, producto.costo
+            ORDER BY COALESCE(orden.fechaInicio, orden.fechaCreacion) ASC,
+                     orden.ordenId ASC, producto.productoId ASC
+            """)
+    List<OpenProductionMaterialProjection> findOpenProductionMaterialTotals(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes);
+
+    @Query("""
+            SELECT orden.ordenId AS opId,
+                   orden.loteAsignado AS lote,
+                   orden.estadoOrden AS estado,
+                   COALESCE(orden.fechaInicio, orden.fechaCreacion) AS fechaReferencia,
+                   producto.productoId AS productoId,
+                   producto.tipoUnidades AS unidadMedida,
+                   producto.costo AS costo,
+                   COALESCE(SUM(ABS(m.cantidad)), 0) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            JOIN m.producto producto,
+                 OrdenProduccion orden
+            WHERE orden.ordenId = t.idEntidadCausante
+              AND orden.ordenId IN :opIds
+              AND orden.estadoOrden <> 2
+              AND orden.estadoOrden <> -1
+              AND m.almacen = :almacen
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante IN :causantes
+            GROUP BY orden.ordenId, orden.loteAsignado, orden.estadoOrden,
+                     orden.fechaInicio, orden.fechaCreacion,
+                     producto.productoId, producto.tipoUnidades, producto.costo
+            ORDER BY COALESCE(orden.fechaInicio, orden.fechaCreacion) ASC,
+                     orden.ordenId ASC, producto.productoId ASC
+            """)
+    List<OpenProductionMaterialProjection> findOpenProductionMaterialTotalsByOrderIds(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes,
+            @Param("opIds") Collection<Integer> opIds);
 
     @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId")
     Double findTotalCantidadByProductoId(@Param("productoId") String productoId);
@@ -373,6 +485,30 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
             """)
     List<Movimiento> findIngresosTerminadoPorFechaEfectiva(
+            @Param("fechaDesde") LocalDate fechaDesde,
+            @Param("fechaHasta") LocalDate fechaHasta,
+            @Param("fallbackStart") LocalDateTime fallbackStart,
+            @Param("fallbackEnd") LocalDateTime fallbackEnd,
+            @Param("tipoBackflush") Movimiento.TipoMovimiento tipoBackflush);
+
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            LEFT JOIN m.lote l
+            WHERE TYPE(m.producto) = Terminado
+              AND (
+                    (l.productionDate IS NOT NULL
+                     AND l.productionDate >= :fechaDesde
+                     AND l.productionDate <= :fechaHasta)
+                    OR
+                    (l.productionDate IS NULL
+                     AND m.fechaMovimiento >= :fallbackStart
+                     AND m.fechaMovimiento <= :fallbackEnd)
+                  )
+              AND m.cantidad > 0
+              AND m.tipoMovimiento = :tipoBackflush
+            """)
+    Double sumIngresosTerminadoPorFechaEfectiva(
             @Param("fechaDesde") LocalDate fechaDesde,
             @Param("fechaHasta") LocalDate fechaHasta,
             @Param("fallbackStart") LocalDateTime fallbackStart,

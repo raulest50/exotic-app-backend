@@ -27,4 +27,15 @@ public interface MasterProductionScheduleSemanalRepo extends JpaRepository<Maste
             ORDER BY mps.revisionNumero DESC, mps.mpsId DESC
             """)
     List<MasterProductionScheduleSemanal> findAllContainingDate(@Param("fecha") LocalDate fecha);
+
+    @Query("""
+            SELECT mps
+            FROM MasterProductionScheduleSemanal mps
+            WHERE mps.weekEndDate >= :fechaDesde
+              AND mps.weekStartDate <= :fechaHasta
+            ORDER BY mps.revisionNumero DESC, mps.mpsId DESC
+            """)
+    List<MasterProductionScheduleSemanal> findAllOverlappingRange(
+            @Param("fechaDesde") LocalDate fechaDesde,
+            @Param("fechaHasta") LocalDate fechaHasta);
 }

@@ -13,14 +13,12 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class InformeInventarioService {
-    private static final int CONTRACT_VERSION = 2;
-    private static final Set<Integer> VALID_TREND_WINDOWS = Set.of(7, 30, 90);
+    private static final int CONTRACT_VERSION = 3;
 
     private final TransaccionAlmacenRepo movementRepo;
     private final InventarioStockReader stockReader;
@@ -31,38 +29,25 @@ public class InformeInventarioService {
 
     public InformeInventarioDTO getReport(
             LocalDate startDate,
-            LocalDate endDate,
-            int trendWindowDays
+            LocalDate endDate
     ) {
         validateDates(startDate, endDate);
-        validateTrendWindow(trendWindowDays);
 
         boolean singleDate = startDate.equals(endDate);
-        LocalDate trendStartDate = singleDate
-                ? endDate.minusDays(trendWindowDays - 1L)
-                : startDate;
-        LocalDate queryStartDate = startDate.isBefore(trendStartDate)
-                ? startDate
-                : trendStartDate;
         List<ProductoStockSnapshot> stock = stockReader.readGeneralStock();
-        List<Movimiento> loadedMovements = loadMovements(queryStartDate, endDate);
-        List<Movimiento> periodMovements = loadedMovements.stream()
-                .filter(movement -> isWithinPeriod(movement, startDate, endDate))
-                .toList();
-        List<Movimiento> trendMovements = loadedMovements.stream()
-                .filter(movement -> isWithinPeriod(movement, trendStartDate, endDate))
-                .toList();
+        List<Movimiento> periodMovements = loadMovements(startDate, endDate);
+        List<Movimiento> seriesMovements = singleDate ? List.of() : periodMovements;
 
         return InformeInventarioDTO.builder()
                 .versionContrato(CONTRACT_VERSION)
                 .periodo(toPeriod(startDate, endDate))
-                .periodoTendencia(toPeriod(trendStartDate, endDate))
+                .periodoTendencia(toPeriod(startDate, endDate))
                 .fechaHoraCorteStock(LocalDateTime.now(applicationClock))
                 .stock(stockAssembler.assemble(stock))
                 .movimientos(movementAssembler.assemble(
                         periodMovements,
-                        trendMovements,
-                        trendStartDate,
+                        seriesMovements,
+                        startDate,
                         endDate))
                 .ocmPendientes(pendingAssembler.buildPendingPurchaseOrders())
                 .materialDirectoOp(pendingAssembler.buildOpenProductionOrderMaterial())
@@ -75,16 +60,6 @@ public class InformeInventarioService {
                 Movimiento.Almacen.GENERAL,
                 startDate.atStartOfDay(),
                 endDate.atTime(LocalTime.MAX));
-    }
-
-    private boolean isWithinPeriod(
-            Movimiento movement,
-            LocalDate startDate,
-            LocalDate endDate
-    ) {
-        if (movement.getFechaMovimiento() == null) return false;
-        LocalDate movementDate = movement.getFechaMovimiento().toLocalDate();
-        return !movementDate.isBefore(startDate) && !movementDate.isAfter(endDate);
     }
 
     private InformeInventarioDTO.PeriodoDTO toPeriod(
@@ -127,9 +102,4 @@ public class InformeInventarioService {
         }
     }
 
-    private void validateTrendWindow(int trendWindowDays) {
-        if (!VALID_TREND_WINDOWS.contains(trendWindowDays)) {
-            throw new IllegalArgumentException("La ventana debe ser 7, 30 o 90 dias.");
-        }
-    }
 }

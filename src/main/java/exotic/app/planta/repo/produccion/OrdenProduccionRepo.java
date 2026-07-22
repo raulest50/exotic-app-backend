@@ -26,6 +26,47 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
     @Query("SELECT o FROM OrdenProduccion o WHERE o.estadoOrden <> 2 AND o.estadoOrden <> -1")
     List<OrdenProduccion> findAllOpenForBi();
 
+    @Query(
+            value = """
+                    SELECT orden.ordenId
+                    FROM OrdenProduccion orden
+                    WHERE orden.estadoOrden <> 2
+                      AND orden.estadoOrden <> -1
+                      AND EXISTS (
+                          SELECT movimiento.movimientoId
+                          FROM Movimiento movimiento
+                          JOIN movimiento.transaccionAlmacen transaccion
+                          WHERE transaccion.idEntidadCausante = orden.ordenId
+                            AND transaccion.tipoEntidadCausante IN :causantes
+                            AND movimiento.almacen = :almacen
+                            AND movimiento.tipoMovimiento = :tipoMovimiento
+                            AND movimiento.cantidad < 0
+                      )
+                    ORDER BY COALESCE(orden.fechaInicio, orden.fechaCreacion) ASC,
+                             orden.ordenId ASC
+                    """,
+            countQuery = """
+                    SELECT COUNT(orden.ordenId)
+                    FROM OrdenProduccion orden
+                    WHERE orden.estadoOrden <> 2
+                      AND orden.estadoOrden <> -1
+                      AND EXISTS (
+                          SELECT movimiento.movimientoId
+                          FROM Movimiento movimiento
+                          JOIN movimiento.transaccionAlmacen transaccion
+                          WHERE transaccion.idEntidadCausante = orden.ordenId
+                            AND transaccion.tipoEntidadCausante IN :causantes
+                            AND movimiento.almacen = :almacen
+                            AND movimiento.tipoMovimiento = :tipoMovimiento
+                            AND movimiento.cantidad < 0
+                      )
+                    """)
+    Page<Integer> findOpenOrderIdsWithDispensationsForBi(
+            @Param("almacen") exotic.app.planta.model.inventarios.Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") exotic.app.planta.model.inventarios.Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causantes") Collection<exotic.app.planta.model.inventarios.TransaccionAlmacen.TipoEntidadCausante> causantes,
+            Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT orden FROM OrdenProduccion orden JOIN FETCH orden.producto WHERE orden.ordenId = :ordenId")
     Optional<OrdenProduccion> findByIdForUpdate(@Param("ordenId") int ordenId);

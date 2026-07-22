@@ -160,8 +160,7 @@ public record InformeInventarioDTO(
             int ordenes,
             int referencias,
             List<CantidadUnidadDTO> cantidadesPorUnidad,
-            double valorPendienteSinIva,
-            List<OcmDTO> items
+            double valorPendienteSinIva
     ) {
     }
 
@@ -203,8 +202,7 @@ public record InformeInventarioDTO(
             int ordenes,
             int referencias,
             List<CantidadUnidadDTO> cantidadesPorUnidad,
-            double valorEstimado,
-            List<OpMaterialDTO> items
+            double valorEstimado
     ) {
     }
 
@@ -213,6 +211,7 @@ public record InformeInventarioDTO(
             int opId,
             String lote,
             int estado,
+            LocalDateTime fechaReferencia,
             int referencias,
             List<CantidadUnidadDTO> cantidadesPorUnidad,
             double valorEstimado

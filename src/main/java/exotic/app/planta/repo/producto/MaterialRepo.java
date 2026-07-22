@@ -16,6 +16,27 @@ public interface MaterialRepo extends JpaRepository<Material, String>, JpaSpecif
 
     List<Material> findByInventareableTrue();
 
+    @Query("""
+            SELECT material
+            FROM Material material
+            WHERE material.inventareable = true
+              AND (
+                    LOCATE(:buscar, LOWER(material.productoId)) > 0
+                    OR LOCATE(:buscar, LOWER(material.nombre)) > 0
+                  )
+            ORDER BY CASE
+                         WHEN LOWER(material.productoId) = :buscar THEN 0
+                         WHEN LOCATE(:buscar, LOWER(material.productoId)) = 1 THEN 1
+                         WHEN LOCATE(:buscar, LOWER(material.productoId)) > 0 THEN 2
+                         ELSE 3
+                     END,
+                     LOWER(material.productoId),
+                     material.productoId
+            """)
+    List<Material> findInventariablesForStockSearch(
+            @Param("buscar") String buscar,
+            Pageable pageable);
+
     @Query(value = """
             SELECT * FROM productos p
             WHERE p.tipo_producto = 'M'

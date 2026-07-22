@@ -3,9 +3,11 @@ package exotic.app.planta.resource.bi;
 import exotic.app.planta.model.bi.dto.BusquedaStockMaterialDTO;
 import exotic.app.planta.model.bi.dto.CoberturaMaterialesDTO;
 import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
+import exotic.app.planta.model.bi.dto.PaginaInformeInventarioDTO;
 import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
+import exotic.app.planta.service.bi.inventario.InformeInventarioDetalleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -32,16 +34,19 @@ class InformeInventarioResourceTest {
     private InformeInventarioService reportService;
 
     @MockBean
+    private InformeInventarioDetalleService detailService;
+
+    @MockBean
     private BusquedaStockMaterialService searchService;
 
     @MockBean
     private CoberturaMaterialesService coverageService;
 
     @Test
-    void reportAcceptsSingleDateAndTrendWindow() throws Exception {
+    void reportAcceptsSingleDateAndIgnoresLegacyTrendWindow() throws Exception {
         LocalDate date = LocalDate.of(2026, 6, 15);
         InformeInventarioDTO report = InformeInventarioDTO.builder()
-                .versionContrato(2)
+                .versionContrato(3)
                 .periodo(InformeInventarioDTO.PeriodoDTO.builder()
                         .fechaDesde(date)
                         .fechaHasta(date)
@@ -50,16 +55,16 @@ class InformeInventarioResourceTest {
                         .build())
                 .notas(List.of())
                 .build();
-        when(reportService.getReport(date, date, 90)).thenReturn(report);
+        when(reportService.getReport(date, date)).thenReturn(report);
 
         mockMvc.perform(get("/bi/informes-globales/almacen")
                         .param("fecha", "2026-06-15")
                         .param("ventanaTendenciaDias", "90"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.versionContrato").value(2))
+                .andExpect(jsonPath("$.versionContrato").value(3))
                 .andExpect(jsonPath("$.periodo.modoFecha").value("FECHA_UNICA"));
 
-        verify(reportService).getReport(date, date, 90);
+        verify(reportService).getReport(date, date);
     }
 
     @Test
@@ -101,5 +106,21 @@ class InformeInventarioResourceTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ventanaDias").value(90))
                 .andExpect(jsonPath("$.estado").value("SIN_CONSUMO"));
+    }
+
+    @Test
+    void pendingPurchaseOrdersUsesIndependentPagination() throws Exception {
+        when(detailService.getPendingPurchaseOrders(1, 10))
+                .thenReturn(new PaginaInformeInventarioDTO<>(
+                        List.of(), 1, 10, 12, 2, false, true));
+
+        mockMvc.perform(get("/bi/informes-globales/almacen/ocm-pendientes")
+                        .param("page", "1")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalElements").value(12));
+
+        verify(detailService).getPendingPurchaseOrders(1, 10);
     }
 }

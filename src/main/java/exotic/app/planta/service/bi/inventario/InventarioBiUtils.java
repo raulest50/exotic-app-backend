@@ -29,7 +29,10 @@ final class InventarioBiUtils {
     }
 
     static String unitOf(Producto producto) {
-        String unit = producto.getTipoUnidades();
+        return normalizeUnit(producto.getTipoUnidades());
+    }
+
+    static String normalizeUnit(String unit) {
         return unit == null || unit.isBlank()
                 ? "SIN UNIDAD"
                 : unit.trim().toUpperCase(Locale.ROOT);
