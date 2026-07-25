@@ -1,11 +1,13 @@
 package exotic.app.planta.service.bi.inventario;
 
+import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,9 +32,10 @@ class StockInventarioAssemblerTest {
         assertEquals(1, report.resumen().referenciasValorizadas());
         assertEquals(50, report.resumen().coberturaCostosPct(), 0.000001);
         assertEquals(1, report.resumen().referenciasNegativas());
-        assertEquals(2, report.alertas().total());
-        assertEquals("STOCK_NEGATIVO", report.alertas().items().get(0).tipo());
-        assertEquals("SIN_COSTO", report.alertas().items().get(1).tipo());
+        assertEquals(1, report.alertas().total());
+        assertEquals(0, report.alertas().negativas());
+        assertEquals("SIN_COSTO", report.alertas().items().get(0).tipo());
+        assertEquals("MP-2", report.alertas().items().get(0).productoId());
     }
 
     @Test
@@ -60,6 +63,53 @@ class StockInventarioAssemblerTest {
         assertEquals(66.666666, report.resumen().coberturaCostosDetalle().globalPct(), 0.000001);
         assertEquals(66.666666, report.resumen().coberturaCostosDetalle().materialesPct(), 0.000001);
         assertEquals(50, report.resumen().coberturaCostosDetalle().terminadosPct(), 0.000001);
+        assertEquals(1, report.alertas().total());
+        assertEquals("ME-2", report.alertas().items().get(0).productoId());
+        assertEquals("SIN_COSTO", report.alertas().items().get(0).tipo());
+    }
+
+    @Test
+    void excludesNonMaterialsBeforeApplyingTheAlertLimitWithoutChangingAnalytics() {
+        List<ProductoStockSnapshot> snapshots = new ArrayList<>();
+        for (int index = 0; index < 10; index++) {
+            snapshots.add(new ProductoStockSnapshot(
+                    finishedProduct("T-" + index, "Terminado " + index, "U", "500"),
+                    -1));
+        }
+        snapshots.add(new ProductoStockSnapshot(
+                semiFinishedProduct("S-1", "Semiterminado", "KG", "200"),
+                0));
+        snapshots.add(new ProductoStockSnapshot(
+                material("MP-1", "Material agotado", "KG", 1, "1000", 0, 0),
+                0));
+        snapshots.add(new ProductoStockSnapshot(
+                finishedProduct("T-VALUED", "Terminado valorizado", "U", "500"),
+                3));
+
+        var report = assembler.assemble(snapshots);
+
+        assertEquals(10, report.resumen().referenciasNegativas());
+        assertEquals(1, report.alertas().total());
+        assertEquals(0, report.alertas().negativas());
+        assertEquals(1, report.alertas().bajoUmbral());
+        assertEquals(1, report.alertas().items().size());
+        assertEquals("MP-1", report.alertas().items().get(0).productoId());
+        assertEquals("AGOTADO", report.alertas().items().get(0).tipo());
+        assertEquals(1_500, report.resumen().valorizacion().terminados(), 0.000001);
+        assertEquals(100, report.resumen().coberturaCostosDetalle().terminadosPct(), 0.000001);
+        assertEquals(
+                1_500,
+                report.composicion().stream()
+                        .filter(item -> "TERMINADO".equals(item.tipo()))
+                        .mapToDouble(InformeInventarioDTO.ComposicionDTO::valorEstimado)
+                        .sum(),
+                0.000001);
+        assertEquals(
+                1_500,
+                report.abc().clases().stream()
+                        .mapToDouble(InformeInventarioDTO.ClaseAbcDTO::valorEstimado)
+                        .sum(),
+                0.000001);
     }
 
     @Test

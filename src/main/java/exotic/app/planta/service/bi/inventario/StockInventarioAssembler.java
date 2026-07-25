@@ -2,7 +2,6 @@ package exotic.app.planta.service.bi.inventario;
 
 import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
 import exotic.app.planta.model.producto.Material;
-import exotic.app.planta.model.producto.Producto;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -255,7 +254,8 @@ class StockInventarioAssembler {
             List<ProductoStockSnapshot> snapshots
     ) {
         List<InformeInventarioDTO.AlertaStockDTO> alerts = snapshots.stream()
-                .map(this::highestPriorityAlert)
+                .filter(snapshot -> snapshot.producto() instanceof Material)
+                .map(this::highestPriorityMaterialAlert)
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparingInt(InformeInventarioDTO.AlertaStockDTO::prioridad)
@@ -276,21 +276,29 @@ class StockInventarioAssembler {
                 .build();
     }
 
-    private InformeInventarioDTO.AlertaStockDTO highestPriorityAlert(
+    private InformeInventarioDTO.AlertaStockDTO highestPriorityMaterialAlert(
             ProductoStockSnapshot snapshot
     ) {
+        Material material = (Material) snapshot.producto();
         if (snapshot.stockGeneral() < -STOCK_EPSILON) {
-            return toAlert(snapshot, "STOCK_NEGATIVO", 1, null, List.of());
+            return toMaterialAlert(
+                    snapshot,
+                    material,
+                    "STOCK_NEGATIVO",
+                    1,
+                    null,
+                    List.of());
         }
 
-        ProductThreshold threshold = thresholdFor(snapshot.producto());
+        ProductThreshold threshold = thresholdFor(material);
         if (Math.abs(snapshot.stockGeneral()) <= STOCK_EPSILON
                 || threshold.isConfiguredAndReachedBy(snapshot.stockGeneral())) {
             String type = Math.abs(snapshot.stockGeneral()) <= STOCK_EPSILON
                     ? "AGOTADO"
                     : "BAJO_UMBRAL";
-            return toAlert(
+            return toMaterialAlert(
                     snapshot,
+                    material,
                     type,
                     2,
                     threshold.effectiveValue(),
@@ -298,34 +306,38 @@ class StockInventarioAssembler {
         }
 
         if (snapshot.stockGeneral() > STOCK_EPSILON
-                && !InventarioBiUtils.hasValidCost(snapshot.producto())) {
-            return toAlert(snapshot, "SIN_COSTO", 3, null, List.of());
+                && !InventarioBiUtils.hasValidCost(material)) {
+            return toMaterialAlert(
+                    snapshot,
+                    material,
+                    "SIN_COSTO",
+                    3,
+                    null,
+                    List.of());
         }
         return null;
     }
 
-    private ProductThreshold thresholdFor(Producto producto) {
-        double minimumStock = Math.max(producto.getStockMinimo(), 0);
-        double reorderPoint = producto instanceof Material material
-                ? Math.max(material.getPuntoReorden(), 0)
-                : 0;
+    private ProductThreshold thresholdFor(Material material) {
+        double minimumStock = Math.max(material.getStockMinimo(), 0);
+        double reorderPoint = Math.max(material.getPuntoReorden(), 0);
         return new ProductThreshold(minimumStock, reorderPoint);
     }
 
-    private InformeInventarioDTO.AlertaStockDTO toAlert(
+    private InformeInventarioDTO.AlertaStockDTO toMaterialAlert(
             ProductoStockSnapshot snapshot,
+            Material material,
             String type,
             int priority,
             Double threshold,
             List<String> reachedThresholds
     ) {
-        Producto product = snapshot.producto();
         return InformeInventarioDTO.AlertaStockDTO.builder()
                 .tipo(type)
                 .prioridad(priority)
-                .productoId(product.getProductoId())
-                .productoNombre(product.getNombre())
-                .unidadMedida(InventarioBiUtils.unitOf(product))
+                .productoId(material.getProductoId())
+                .productoNombre(material.getNombre())
+                .unidadMedida(InventarioBiUtils.unitOf(material))
                 .stock(snapshot.stockGeneral())
                 .umbral(threshold)
                 .umbralesIncumplidos(reachedThresholds)
