@@ -4,7 +4,6 @@ import exotic.app.planta.config.AppTime;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -21,7 +20,6 @@ import java.util.Date;
 import java.util.stream.Collectors;
 
 @Component
-@Slf4j
 public class JwtTokenProvider {
 
     @Value("${jwt.secret:defaultSecretKeyThatShouldBeOverriddenInProduction}")
@@ -67,15 +65,24 @@ public class JwtTokenProvider {
         return claims.getSubject();
     }
 
-    public Authentication getAuthentication(String token) {
-        Claims claims = Jwts.parserBuilder()
+    public Claims parseClaims(String token) {
+        return Jwts.parserBuilder()
                 .setSigningKey(key)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+
+    public Authentication getAuthentication(String token, Claims claims) {
+        if (claims.getSubject() == null || claims.getSubject().isBlank()) {
+            throw new MalformedJwtException("JWT subject is missing");
+        }
+
+        Object accesosClaim = claims.get("accesos");
+        String accesos = accesosClaim == null ? "" : accesosClaim.toString();
 
         Collection<? extends GrantedAuthority> authorities =
-                Arrays.stream(claims.get("accesos").toString().split(","))
+                Arrays.stream(accesos.split(","))
                         .filter(auth -> !auth.trim().isEmpty())
                         .map(auth -> "ACCESO_" + auth) // Add the prefix back
                         .map(SimpleGrantedAuthority::new)
@@ -84,15 +91,5 @@ public class JwtTokenProvider {
         UserDetails principal = new User(claims.getSubject(), "", authorities);
 
         return new UsernamePasswordAuthenticationToken(principal, token, authorities);
-    }
-
-    public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            log.error("Invalid JWT token: {}", e.getMessage());
-            return false;
-        }
     }
 }

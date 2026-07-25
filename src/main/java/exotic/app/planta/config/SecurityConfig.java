@@ -4,6 +4,8 @@ import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import exotic.app.planta.security.JwtAuthenticationFilter;
 import exotic.app.planta.security.JwtTokenProvider;
 import exotic.app.planta.security.MigrationAuthenticationProvider;
+import exotic.app.planta.security.RestAccessDeniedHandler;
+import exotic.app.planta.security.RestAuthenticationEntryPoint;
 import exotic.app.planta.service.users.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -27,13 +29,15 @@ public class SecurityConfig {
     private final CorsFilter corsFilter;
     private final JwtTokenProvider jwtTokenProvider;
     private final MigrationAuthenticationProvider migrationAuthenticationProvider;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
     private final UserDetailsServiceImpl userDetailsService;
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter(jwtTokenProvider);
+        return new JwtAuthenticationFilter(jwtTokenProvider, restAuthenticationEntryPoint);
     }
 
     @Bean
@@ -44,6 +48,10 @@ public class SecurityConfig {
                 .cors(withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(restAuthenticationEntryPoint)
+                        .accessDeniedHandler(restAccessDeniedHandler)
+                )
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll();
                     auth.requestMatchers("/api/auth/**").permitAll();
