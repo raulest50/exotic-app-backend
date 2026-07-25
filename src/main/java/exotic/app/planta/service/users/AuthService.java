@@ -2,6 +2,7 @@ package exotic.app.planta.service.users;
 
 import jakarta.mail.MessagingException;
 import exotic.app.planta.config.PasswordConfig;
+import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.auth.PasswordResetToken;
 import exotic.app.planta.repo.usuarios.PasswordResetTokenRepository;
@@ -37,6 +38,11 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
+    private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
+
+    private static final String LOCAL_FRONTEND_URL = "http://localhost:5173";
+    private static final String STAGING_FRONTEND_URL = "https://exotic-app-frontend-staging.onrender.com";
+    private static final String PRODUCTION_FRONTEND_URL = "https://lac-manufacture-frontend.onrender.com";
 
     /**
      * Authenticates a user and returns a JWT token
@@ -139,19 +145,15 @@ public class AuthService {
     }
 
     /**
-     * Determina la URL base dependiendo de si la aplicación está corriendo
-     * en entorno local o de producción.
+     * Determina la URL base del frontend según el entorno de ejecución.
      * @return La URL base para construir enlaces
      */
     public String getDomain() {
-        // Verificar si estamos en producción usando la variable de entorno
-        if (System.getenv("PRODUCTION") != null && System.getenv("PRODUCTION").equals("TRUE")) {
-            // Entorno de producción
-            return "https://lac-manufacture-frontend.onrender.com";
-        } else {
-            // Entorno local/desarrollo
-            return "http://localhost:5173";
-        }
+        return switch (applicationRuntimeEnvironmentResolver.getCurrentEnvironment()) {
+            case LOCAL -> LOCAL_FRONTEND_URL;
+            case STAGING -> STAGING_FRONTEND_URL;
+            case PRODUCTION -> PRODUCTION_FRONTEND_URL;
+        };
     }
 
     /**

@@ -90,8 +90,12 @@ public class ComprasService {
      * Ordenes de Compra
      *
      */
-    public OrdenCompraMateriales saveOrdenCompra(OrdenCompraMateriales ordenCompraMateriales) {
+    public OrdenCompraMateriales saveOrdenCompra(
+            OrdenCompraMateriales ordenCompraMateriales,
+            User usuarioCreador
+    ) {
         logProveedorPayloadAnomaly("saveOrdenCompra", ordenCompraMateriales);
+        validateAuditUser(usuarioCreador);
 
         if (ordenCompraMateriales == null || ordenCompraMateriales.getProveedor() == null || isBlank(ordenCompraMateriales.getProveedor().getId())) {
             throw new IllegalArgumentException("La orden de compra debe incluir un proveedor valido.");
@@ -103,6 +107,12 @@ public class ComprasService {
             throw new RuntimeException("Proveedor not found with ID: " + ordenCompraMateriales.getProveedor().getId());
         }
         ordenCompraMateriales.setProveedor(optProveedor.get());
+        ordenCompraMateriales.setEstado(0);
+        ordenCompraMateriales.setUsuarioCreador(usuarioCreador);
+        ordenCompraMateriales.setUsuarioCreadorUsername(usuarioCreador.getUsername());
+        ordenCompraMateriales.setUsuarioLiberador(null);
+        ordenCompraMateriales.setUsuarioLiberadorUsername(null);
+        ordenCompraMateriales.setFechaLiberacion(null);
         ordenCompraMateriales.setEmpresaIdentidadLegalVersion(null);
         ordenCompraMateriales.setEmpresaLogoDocumentalVersion(null);
 
@@ -316,11 +326,24 @@ public class ComprasService {
     }
 
     @Transactional
-    public OrdenCompraMateriales updateEstadoOrdenCompra(int ordenCompraId, UpdateEstadoOrdenCompraRequest ue) {
+    public OrdenCompraMateriales updateEstadoOrdenCompra(
+            int ordenCompraId,
+            UpdateEstadoOrdenCompraRequest ue,
+            User usuarioActor
+    ) {
         log.info("Iniciando actualización de estado para orden de compra ID: {}, nuevo estado: {}", ordenCompraId, ue.getNewEstado());
+        validateAuditUser(usuarioActor);
 
         OrdenCompraMateriales orden = ordenCompraRepo.findById(ordenCompraId)
                 .orElseThrow(() -> new RuntimeException("OrdenCompraMateriales not found with id: " + ordenCompraId));
+
+        validateEstadoTransition(orden.getEstado(), ue.getNewEstado());
+
+        if (ue.getNewEstado() == 1) {
+            orden.setUsuarioLiberador(usuarioActor);
+            orden.setUsuarioLiberadorUsername(usuarioActor.getUsername());
+            orden.setFechaLiberacion(AppTime.now());
+        }
 
         log.info("Orden encontrada. Estado actual: {}, Proveedor ID: {}, Nombre: {}", 
                  orden.getEstado(), orden.getProveedor().getId(), orden.getProveedor().getNombre());
@@ -412,6 +435,26 @@ public class ComprasService {
         // Actualizar el estado solo después de que todo el proceso haya sido exitoso
         orden.setEstado(ue.getNewEstado());
         return ordenCompraRepo.save(orden);
+    }
+
+    private void validateAuditUser(User user) {
+        if (user == null || user.getId() == null || isBlank(user.getUsername())) {
+            throw new IllegalArgumentException("Se requiere un usuario autenticado válido para registrar la OCM.");
+        }
+    }
+
+    private void validateEstadoTransition(int estadoActual, int nuevoEstado) {
+        if (nuevoEstado == 1 && estadoActual != 0) {
+            throw new IllegalStateException(
+                    "Solo se puede liberar una orden de compra que esté pendiente de liberación."
+            );
+        }
+
+        if (estadoActual == 0 && (nuevoEstado == 2 || nuevoEstado == 3)) {
+            throw new IllegalStateException(
+                    "Una orden pendiente de liberación debe pasar primero al estado liberado."
+            );
+        }
     }
 
 

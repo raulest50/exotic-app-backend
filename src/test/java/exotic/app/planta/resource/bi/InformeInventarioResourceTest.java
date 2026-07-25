@@ -53,6 +53,23 @@ class InformeInventarioResourceTest {
                         .modoFecha("FECHA_UNICA")
                         .dias(1)
                         .build())
+                .stock(InformeInventarioDTO.StockDTO.builder()
+                        .resumen(InformeInventarioDTO.ResumenStockDTO.builder()
+                                .valorizacion(InformeInventarioDTO.ValorizacionInventarioDTO.builder()
+                                        .materiales(InformeInventarioDTO.ValorizacionMaterialesDTO.builder()
+                                                .total(850_000_000)
+                                                .materiaPrima(275_000_000)
+                                                .empaque(575_000_000)
+                                                .build())
+                                        .terminados(22_000_000_000d)
+                                        .build())
+                                .coberturaCostosDetalle(InformeInventarioDTO.CoberturaCostosDetalleDTO.builder()
+                                        .globalPct(98d)
+                                        .materialesPct(97d)
+                                        .terminadosPct(100d)
+                                        .build())
+                                .build())
+                        .build())
                 .notas(List.of())
                 .build();
         when(reportService.getReport(date, date)).thenReturn(report);
@@ -62,7 +79,17 @@ class InformeInventarioResourceTest {
                         .param("ventanaTendenciaDias", "90"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.versionContrato").value(3))
-                .andExpect(jsonPath("$.periodo.modoFecha").value("FECHA_UNICA"));
+                .andExpect(jsonPath("$.periodo.modoFecha").value("FECHA_UNICA"))
+                .andExpect(jsonPath("$.stock.resumen.valorizacion.materiales.total")
+                        .value(850_000_000))
+                .andExpect(jsonPath("$.stock.resumen.valorizacion.terminados")
+                        .value(22_000_000_000d))
+                .andExpect(jsonPath("$.stock.resumen.coberturaCostosDetalle.globalPct")
+                        .value(98d))
+                .andExpect(jsonPath("$.stock.resumen.coberturaCostosDetalle.materialesPct")
+                        .value(97d))
+                .andExpect(jsonPath("$.stock.resumen.coberturaCostosDetalle.terminadosPct")
+                        .value(100d));
 
         verify(reportService).getReport(date, date);
     }

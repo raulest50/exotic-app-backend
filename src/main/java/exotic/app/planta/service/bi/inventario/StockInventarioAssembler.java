@@ -40,6 +40,7 @@ class StockInventarioAssembler {
 
         return InformeInventarioDTO.StockDTO.builder()
                 .resumen(buildSummary(
+                        snapshots,
                         totalValue,
                         positiveStockReferences,
                         valuedReferences,
@@ -52,6 +53,7 @@ class StockInventarioAssembler {
     }
 
     private InformeInventarioDTO.ResumenStockDTO buildSummary(
+            List<ProductoStockSnapshot> snapshots,
             double totalValue,
             long positiveStockReferences,
             long valuedReferences,
@@ -66,8 +68,96 @@ class StockInventarioAssembler {
                 .referenciasConStock(Math.toIntExact(positiveStockReferences))
                 .referenciasValorizadas(Math.toIntExact(valuedReferences))
                 .coberturaCostosPct(costCoverage)
+                .valorizacion(buildValuation(snapshots))
+                .coberturaCostosDetalle(buildCostCoverageDetail(
+                        snapshots,
+                        positiveStockReferences,
+                        valuedReferences))
                 .referenciasNegativas(Math.toIntExact(negativeStockReferences))
                 .build();
+    }
+
+    private InformeInventarioDTO.ValorizacionInventarioDTO buildValuation(
+            List<ProductoStockSnapshot> snapshots
+    ) {
+        Map<String, Double> valuesByType = new LinkedHashMap<>();
+        INVENTORY_TYPES.forEach(type -> valuesByType.put(type, 0d));
+
+        for (ProductoStockSnapshot snapshot : snapshots) {
+            double value = InventarioBiUtils.estimatedValue(snapshot);
+            if (value <= 0) continue;
+            String type = InventarioBiUtils.inventoryTypeOf(snapshot.producto());
+            valuesByType.computeIfPresent(type, (ignored, current) -> current + value);
+        }
+
+        double rawMaterialValue = valuesByType.get("MATERIA_PRIMA");
+        double packagingValue = valuesByType.get("EMPAQUE");
+
+        return InformeInventarioDTO.ValorizacionInventarioDTO.builder()
+                .materiales(InformeInventarioDTO.ValorizacionMaterialesDTO.builder()
+                        .total(rawMaterialValue + packagingValue)
+                        .materiaPrima(rawMaterialValue)
+                        .empaque(packagingValue)
+                        .build())
+                .terminados(valuesByType.get("TERMINADO"))
+                .build();
+    }
+
+    private InformeInventarioDTO.CoberturaCostosDetalleDTO buildCostCoverageDetail(
+            List<ProductoStockSnapshot> snapshots,
+            long positiveStockReferences,
+            long valuedReferences
+    ) {
+        long positiveMaterialReferences = countPositiveReferences(
+                snapshots,
+                List.of("MATERIA_PRIMA", "EMPAQUE"));
+        long valuedMaterialReferences = countValuedReferences(
+                snapshots,
+                List.of("MATERIA_PRIMA", "EMPAQUE"));
+        long positiveFinishedReferences = countPositiveReferences(
+                snapshots,
+                List.of("TERMINADO"));
+        long valuedFinishedReferences = countValuedReferences(
+                snapshots,
+                List.of("TERMINADO"));
+
+        return InformeInventarioDTO.CoberturaCostosDetalleDTO.builder()
+                .globalPct(coveragePercentage(valuedReferences, positiveStockReferences))
+                .materialesPct(coveragePercentage(
+                        valuedMaterialReferences,
+                        positiveMaterialReferences))
+                .terminadosPct(coveragePercentage(
+                        valuedFinishedReferences,
+                        positiveFinishedReferences))
+                .build();
+    }
+
+    private long countPositiveReferences(
+            List<ProductoStockSnapshot> snapshots,
+            List<String> includedTypes
+    ) {
+        return snapshots.stream()
+                .filter(snapshot -> snapshot.stockGeneral() > STOCK_EPSILON)
+                .filter(snapshot -> includedTypes.contains(
+                        InventarioBiUtils.inventoryTypeOf(snapshot.producto())))
+                .count();
+    }
+
+    private long countValuedReferences(
+            List<ProductoStockSnapshot> snapshots,
+            List<String> includedTypes
+    ) {
+        return snapshots.stream()
+                .filter(this::isValuedReference)
+                .filter(snapshot -> includedTypes.contains(
+                        InventarioBiUtils.inventoryTypeOf(snapshot.producto())))
+                .count();
+    }
+
+    private Double coveragePercentage(long valuedReferences, long positiveStockReferences) {
+        return positiveStockReferences == 0
+                ? null
+                : InventarioBiUtils.percentage(valuedReferences, positiveStockReferences);
     }
 
     private List<InformeInventarioDTO.StockUnidadDTO> buildStockByUnit(

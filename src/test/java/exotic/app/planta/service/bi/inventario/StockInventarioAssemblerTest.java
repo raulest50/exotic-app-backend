@@ -1,6 +1,7 @@
 package exotic.app.planta.service.bi.inventario;
 
 import exotic.app.planta.model.producto.Material;
+import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +36,33 @@ class StockInventarioAssemblerTest {
     }
 
     @Test
+    void separatesValuationAndCostCoverageByInventoryGroup() {
+        Material rawMaterial = material("MP-1", "Aceite", "KG", 1, "1000", 0, 0);
+        Material valuedPackaging = material("ME-1", "Envase", "U", 2, "100", 0, 0);
+        Material packagingWithoutCost = material("ME-2", "Tapa", "U", 2, "0", 0, 0);
+        Terminado valuedFinished = finishedProduct("T-1", "Terminado 1", "U", "500");
+        Terminado finishedWithoutCost = finishedProduct("T-2", "Terminado 2", "U", "0");
+        SemiTerminado other = semiFinishedProduct("S-1", "Semiterminado", "KG", "200");
+
+        var report = assembler.assemble(List.of(
+                new ProductoStockSnapshot(rawMaterial, 10),
+                new ProductoStockSnapshot(valuedPackaging, 4),
+                new ProductoStockSnapshot(packagingWithoutCost, 1),
+                new ProductoStockSnapshot(valuedFinished, 3),
+                new ProductoStockSnapshot(finishedWithoutCost, 2),
+                new ProductoStockSnapshot(other, 5)));
+
+        assertEquals(12_900, report.resumen().valorEstimado(), 0.000001);
+        assertEquals(10_400, report.resumen().valorizacion().materiales().total(), 0.000001);
+        assertEquals(10_000, report.resumen().valorizacion().materiales().materiaPrima(), 0.000001);
+        assertEquals(400, report.resumen().valorizacion().materiales().empaque(), 0.000001);
+        assertEquals(1_500, report.resumen().valorizacion().terminados(), 0.000001);
+        assertEquals(66.666666, report.resumen().coberturaCostosDetalle().globalPct(), 0.000001);
+        assertEquals(66.666666, report.resumen().coberturaCostosDetalle().materialesPct(), 0.000001);
+        assertEquals(50, report.resumen().coberturaCostosDetalle().terminadosPct(), 0.000001);
+    }
+
+    @Test
     void usesTheHighestConfiguredThresholdAndReportsEveryReachedThreshold() {
         Material material = material("MP-1", "Aceite", "KG", 1, "1000", 6, 10);
 
@@ -56,6 +84,9 @@ class StockInventarioAssemblerTest {
         assertEquals("KG", report.porUnidad().get(0).unidadMedida());
         assertEquals(-5, report.porUnidad().get(0).cantidadNeta(), 0.000001);
         assertNull(report.resumen().coberturaCostosPct());
+        assertNull(report.resumen().coberturaCostosDetalle().globalPct());
+        assertNull(report.resumen().coberturaCostosDetalle().materialesPct());
+        assertNull(report.resumen().coberturaCostosDetalle().terminadosPct());
     }
 
     private Material material(
@@ -80,6 +111,15 @@ class StockInventarioAssemblerTest {
 
     private Terminado finishedProduct(String id, String name, String unit, String cost) {
         Terminado product = new Terminado();
+        product.setProductoId(id);
+        product.setNombre(name);
+        product.setTipoUnidades(unit);
+        product.asignarCostoInicial(new BigDecimal(cost));
+        return product;
+    }
+
+    private SemiTerminado semiFinishedProduct(String id, String name, String unit, String cost) {
+        SemiTerminado product = new SemiTerminado();
         product.setProductoId(id);
         product.setNombre(name);
         product.setTipoUnidades(unit);

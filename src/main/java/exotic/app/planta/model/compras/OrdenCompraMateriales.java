@@ -1,8 +1,11 @@
 package exotic.app.planta.model.compras;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
 import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
+import exotic.app.planta.model.users.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.persistence.*;
@@ -32,6 +35,28 @@ public class OrdenCompraMateriales {
 
     @CreationTimestamp
     private LocalDateTime fechaEmision;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_creador_id")
+    @JsonIgnore
+    private User usuarioCreador;
+
+    @Column(name = "usuario_creador_username", length = 120)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String usuarioCreadorUsername;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_liberador_id")
+    @JsonIgnore
+    private User usuarioLiberador;
+
+    @Column(name = "usuario_liberador_username", length = 120)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String usuarioLiberadorUsername;
+
+    @Column(name = "fecha_liberacion")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime fechaLiberacion;
 
     /**
      * Fecha en que la OCM fue marcada como enviada al proveedor.

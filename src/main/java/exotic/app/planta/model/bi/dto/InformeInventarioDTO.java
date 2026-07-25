@@ -43,7 +43,32 @@ public record InformeInventarioDTO(
             int referenciasConStock,
             int referenciasValorizadas,
             Double coberturaCostosPct,
+            ValorizacionInventarioDTO valorizacion,
+            CoberturaCostosDetalleDTO coberturaCostosDetalle,
             int referenciasNegativas
+    ) {
+    }
+
+    @Builder
+    public record ValorizacionInventarioDTO(
+            ValorizacionMaterialesDTO materiales,
+            double terminados
+    ) {
+    }
+
+    @Builder
+    public record ValorizacionMaterialesDTO(
+            double total,
+            double materiaPrima,
+            double empaque
+    ) {
+    }
+
+    @Builder
+    public record CoberturaCostosDetalleDTO(
+            Double globalPct,
+            Double materialesPct,
+            Double terminadosPct
     ) {
     }
 

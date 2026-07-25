@@ -5,19 +5,28 @@ import exotic.app.planta.model.compras.ItemFacturaCompra;
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.compras.dto.UpdateEstadoOrdenCompraRequest;
 import exotic.app.planta.model.compras.dto.search.SearchOrdenCompraRequest;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.UserAccessEvaluator;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.compras.ComprasService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import jakarta.validation.Valid;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestController
 @RequestMapping("/compras")
@@ -25,10 +34,13 @@ import jakarta.validation.Valid;
 @Slf4j
 public class ComprasResource {
 
+    private static final String TAB_REPORTES_ORDENES_COMPRA = "REPORTES_ORDENES_COMPRA";
+
     /**
      * Compras
      */
     private final ComprasService compraService;
+    private final UserRepository userRepository;
 
 
     @GetMapping("/byProveedorAndDate")
@@ -54,8 +66,15 @@ public class ComprasResource {
      * Ordenes de Compra
      */
     @PostMapping("/save_orden_compra")
-    public ResponseEntity<OrdenCompraMateriales> saveOrdenCompra(@Valid @RequestBody OrdenCompraMateriales ordenCompraMateriales) {
-        OrdenCompraMateriales savedOrdenCompraMateriales = compraService.saveOrdenCompra(ordenCompraMateriales);
+    public ResponseEntity<OrdenCompraMateriales> saveOrdenCompra(
+            @Valid @RequestBody OrdenCompraMateriales ordenCompraMateriales,
+            Authentication authentication
+    ) {
+        User usuarioCreador = requireAuthenticatedUser(authentication);
+        OrdenCompraMateriales savedOrdenCompraMateriales = compraService.saveOrdenCompra(
+                ordenCompraMateriales,
+                usuarioCreador
+        );
         return ResponseEntity.created(URI.create("/compras/save_orden_compra/" + savedOrdenCompraMateriales.getOrdenCompraId()))
                 .body(savedOrdenCompraMateriales);
     }
@@ -89,20 +108,59 @@ public class ComprasResource {
     public ResponseEntity<?> updateEstadoOrdenCompra(
             @PathVariable int ordenCompraId,
             @RequestPart("request") UpdateEstadoOrdenCompraRequest request,
-            @RequestPart(value = "OCMpdf", required = false) MultipartFile pdfAttachment
+            @RequestPart(value = "OCMpdf", required = false) MultipartFile pdfAttachment,
+            Authentication authentication
     ) {
+        User usuarioActor = requireAuthenticatedUser(authentication);
+        if (request.getNewEstado() == 1) {
+            requireReleaseAccess(usuarioActor);
+        }
+
         try {
             // Si se proporciona un archivo, asignarlo al request
             if (pdfAttachment != null) {
                 request.setOCMpdf(pdfAttachment);
             }
 
-            OrdenCompraMateriales updated = compraService.updateEstadoOrdenCompra(ordenCompraId, request);
+            OrdenCompraMateriales updated = compraService.updateEstadoOrdenCompra(
+                    ordenCompraId,
+                    request,
+                    usuarioActor
+            );
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             // Devolver un error con el mensaje específico
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private User requireAuthenticatedUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(UNAUTHORIZED, "No autenticado");
+        }
+
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no encontrado"));
+    }
+
+    private void requireReleaseAccess(User user) {
+        if (isMasterLike(user.getUsername())) {
+            return;
+        }
+
+        int nivel = UserAccessEvaluator
+                .tabNivel(user, ModuloSistema.COMPRAS, TAB_REPORTES_ORDENES_COMPRA)
+                .orElse(0);
+        if (nivel < 2) {
+            throw new ResponseStatusException(
+                    FORBIDDEN,
+                    "Se requiere nivel 2 o superior en Reportes Ordenes de Compra para liberar la orden."
+            );
+        }
+    }
+
+    private static boolean isMasterLike(String username) {
+        return "master".equalsIgnoreCase(username) || "super_master".equalsIgnoreCase(username);
     }
 
 
