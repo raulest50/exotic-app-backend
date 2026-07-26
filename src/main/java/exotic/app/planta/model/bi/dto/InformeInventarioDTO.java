@@ -31,6 +31,7 @@ public record InformeInventarioDTO(
     public record StockDTO(
             ResumenStockDTO resumen,
             List<StockUnidadDTO> porUnidad,
+            MaterialesPorTipoDTO materialesPorTipo,
             List<ComposicionDTO> composicion,
             AbcDTO abc,
             AlertasDTO alertas
@@ -79,6 +80,13 @@ public record InformeInventarioDTO(
             double cantidadPositiva,
             double cantidadNegativa,
             int referenciasConStock
+    ) {
+    }
+
+    @Builder
+    public record MaterialesPorTipoDTO(
+            List<StockUnidadDTO> materiaPrima,
+            List<StockUnidadDTO> empaque
     ) {
     }
 

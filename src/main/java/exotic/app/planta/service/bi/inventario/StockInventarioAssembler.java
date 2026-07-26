@@ -44,7 +44,8 @@ class StockInventarioAssembler {
                         positiveStockReferences,
                         valuedReferences,
                         negativeStockReferences))
-                .porUnidad(buildStockByUnit(snapshots))
+                .porUnidad(aggregateStockByUnit(snapshots))
+                .materialesPorTipo(buildMaterialStockByType(snapshots))
                 .composicion(buildComposition(snapshots, totalValue))
                 .abc(buildAbc(snapshots, totalValue, positiveStockReferences, valuedReferences))
                 .alertas(buildAlerts(snapshots))
@@ -159,7 +160,25 @@ class StockInventarioAssembler {
                 : InventarioBiUtils.percentage(valuedReferences, positiveStockReferences);
     }
 
-    private List<InformeInventarioDTO.StockUnidadDTO> buildStockByUnit(
+    private InformeInventarioDTO.MaterialesPorTipoDTO buildMaterialStockByType(
+            List<ProductoStockSnapshot> snapshots
+    ) {
+        List<ProductoStockSnapshot> rawMaterials = snapshots.stream()
+                .filter(snapshot -> snapshot.producto() instanceof Material material
+                        && material.getTipoMaterial() == 1)
+                .toList();
+        List<ProductoStockSnapshot> packagingMaterials = snapshots.stream()
+                .filter(snapshot -> snapshot.producto() instanceof Material material
+                        && material.getTipoMaterial() == 2)
+                .toList();
+
+        return InformeInventarioDTO.MaterialesPorTipoDTO.builder()
+                .materiaPrima(aggregateStockByUnit(rawMaterials))
+                .empaque(aggregateStockByUnit(packagingMaterials))
+                .build();
+    }
+
+    private List<InformeInventarioDTO.StockUnidadDTO> aggregateStockByUnit(
             List<ProductoStockSnapshot> snapshots
     ) {
         Map<String, UnitStockAccumulator> byUnit = new LinkedHashMap<>();

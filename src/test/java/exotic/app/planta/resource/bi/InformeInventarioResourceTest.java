@@ -69,6 +69,22 @@ class InformeInventarioResourceTest {
                                         .terminadosPct(100d)
                                         .build())
                                 .build())
+                        .materialesPorTipo(InformeInventarioDTO.MaterialesPorTipoDTO.builder()
+                                .materiaPrima(List.of(InformeInventarioDTO.StockUnidadDTO.builder()
+                                        .unidadMedida("KG")
+                                        .cantidadNeta(125)
+                                        .cantidadPositiva(130)
+                                        .cantidadNegativa(-5)
+                                        .referenciasConStock(8)
+                                        .build()))
+                                .empaque(List.of(InformeInventarioDTO.StockUnidadDTO.builder()
+                                        .unidadMedida("U")
+                                        .cantidadNeta(2_500)
+                                        .cantidadPositiva(2_500)
+                                        .cantidadNegativa(0)
+                                        .referenciasConStock(12)
+                                        .build()))
+                                .build())
                         .build())
                 .notas(List.of())
                 .build();
@@ -89,7 +105,15 @@ class InformeInventarioResourceTest {
                 .andExpect(jsonPath("$.stock.resumen.coberturaCostosDetalle.materialesPct")
                         .value(97d))
                 .andExpect(jsonPath("$.stock.resumen.coberturaCostosDetalle.terminadosPct")
-                        .value(100d));
+                        .value(100d))
+                .andExpect(jsonPath("$.stock.materialesPorTipo.materiaPrima[0].unidadMedida")
+                        .value("KG"))
+                .andExpect(jsonPath("$.stock.materialesPorTipo.materiaPrima[0].cantidadNeta")
+                        .value(125))
+                .andExpect(jsonPath("$.stock.materialesPorTipo.empaque[0].unidadMedida")
+                        .value("U"))
+                .andExpect(jsonPath("$.stock.materialesPorTipo.empaque[0].cantidadNeta")
+                        .value(2_500));
 
         verify(reportService).getReport(date, date);
     }

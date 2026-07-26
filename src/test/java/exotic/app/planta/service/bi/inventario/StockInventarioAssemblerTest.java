@@ -113,6 +113,58 @@ class StockInventarioAssemblerTest {
     }
 
     @Test
+    void groupsMaterialStockByTypeAndUnitWithoutMixingFinishedProducts() {
+        var report = assembler.assemble(List.of(
+                new ProductoStockSnapshot(
+                        material("MP-KG-1", "Materia prima KG", "KG", 1, "100", 0, 0),
+                        10),
+                new ProductoStockSnapshot(
+                        material("MP-KG-2", "Materia prima KG negativa", "KG", 1, "100", 0, 0),
+                        -3),
+                new ProductoStockSnapshot(
+                        material("MP-L", "Materia prima L", "L", 1, "100", 0, 0),
+                        2),
+                new ProductoStockSnapshot(
+                        material("MP-SIN-U", "Materia prima sin unidad", "", 1, "100", 0, 0),
+                        1),
+                new ProductoStockSnapshot(
+                        material("ME-U", "Empaque U", "U", 2, "100", 0, 0),
+                        100),
+                new ProductoStockSnapshot(
+                        material("ME-KG", "Empaque KG", "KG", 2, "100", 0, 0),
+                        5),
+                new ProductoStockSnapshot(
+                        material("ME-G", "Empaque G", "G", 2, "100", 0, 0),
+                        50),
+                new ProductoStockSnapshot(
+                        finishedProduct("T-U", "Terminado U", "U", "500"),
+                        200),
+                new ProductoStockSnapshot(
+                        semiFinishedProduct("S-KG", "Semiterminado KG", "KG", "200"),
+                        300)));
+
+        var rawMaterialKg = unit(report.materialesPorTipo().materiaPrima(), "KG");
+        assertEquals(7, rawMaterialKg.cantidadNeta(), 0.000001);
+        assertEquals(10, rawMaterialKg.cantidadPositiva(), 0.000001);
+        assertEquals(-3, rawMaterialKg.cantidadNegativa(), 0.000001);
+        assertEquals(1, rawMaterialKg.referenciasConStock());
+        assertEquals(2, unit(report.materialesPorTipo().materiaPrima(), "L")
+                .cantidadNeta(), 0.000001);
+        assertEquals(1, unit(report.materialesPorTipo().materiaPrima(), "SIN UNIDAD")
+                .cantidadNeta(), 0.000001);
+
+        assertEquals(100, unit(report.materialesPorTipo().empaque(), "U")
+                .cantidadNeta(), 0.000001);
+        assertEquals(5, unit(report.materialesPorTipo().empaque(), "KG")
+                .cantidadNeta(), 0.000001);
+        assertEquals(50, unit(report.materialesPorTipo().empaque(), "G")
+                .cantidadNeta(), 0.000001);
+
+        assertEquals(300, unit(report.porUnidad(), "U").cantidadNeta(), 0.000001);
+        assertEquals(2, unit(report.porUnidad(), "U").referenciasConStock());
+    }
+
+    @Test
     void usesTheHighestConfiguredThresholdAndReportsEveryReachedThreshold() {
         Material material = material("MP-1", "Aceite", "KG", 1, "1000", 6, 10);
 
@@ -175,5 +227,15 @@ class StockInventarioAssemblerTest {
         product.setTipoUnidades(unit);
         product.asignarCostoInicial(new BigDecimal(cost));
         return product;
+    }
+
+    private InformeInventarioDTO.StockUnidadDTO unit(
+            List<InformeInventarioDTO.StockUnidadDTO> units,
+            String unit
+    ) {
+        return units.stream()
+                .filter(item -> unit.equals(item.unidadMedida()))
+                .findFirst()
+                .orElseThrow();
     }
 }
