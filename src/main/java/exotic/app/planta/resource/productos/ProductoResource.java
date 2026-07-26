@@ -415,7 +415,13 @@ public class ProductoResource {
             if (dto == null || dto.getInventareable() == null) {
                 throw new IllegalArgumentException("El campo inventareable es requerido.");
             }
-            Material updatedMaterial = productoService.updateMaterialInventareable(productoId, dto.getInventareable());
+            Material updatedMaterial = dto.getConsumoDirecto() == null
+                    ? productoService.updateMaterialInventareable(productoId, dto.getInventareable())
+                    : productoService.updateMaterialInventareable(
+                            productoId,
+                            dto.getInventareable(),
+                            dto.getConsumoDirecto()
+                    );
             return ResponseEntity.ok(updatedMaterial);
         } catch (NoSuchElementException e) {
             log.error("Producto no encontrado al actualizar inventareable: {}", e.getMessage());

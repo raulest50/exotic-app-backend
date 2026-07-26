@@ -45,7 +45,8 @@ public class CargaCostosLifecycleService {
                 List.of(
                         CargaCostosLote.Estado.EXPIRADO,
                         CargaCostosLote.Estado.BLOQUEADO,
-                        CargaCostosLote.Estado.CANCELADO),
+                        CargaCostosLote.Estado.CANCELADO,
+                        CargaCostosLote.Estado.INVALIDADO),
                 now.minusDays(RETENTION_DAYS));
         if (expired > 0 || deleted > 0) {
             log.info("[CARGA_COSTOS] Mantenimiento: expirados={}, eliminados={}", expired, deleted);

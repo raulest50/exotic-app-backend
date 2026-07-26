@@ -37,11 +37,36 @@ public final class CargaCostosDTOs {
             int totalActualizadas,
             int totalSinCambio,
             int totalOmitidas,
+            int totalDependencias,
+            int totalSemiterminados,
+            int totalTerminados,
+            int totalDependenciasActualizadas,
+            int totalDependenciasSinCambio,
             List<String> advertencias
     ) {}
 
     public record ItemsPageResponse(
             List<ItemPreview> items,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages
+    ) {}
+
+    public record DependenciaPreview(
+            String productoId,
+            String nombreProducto,
+            String tipoProducto,
+            int nivel,
+            BigDecimal costoActual,
+            BigDecimal costoNuevo,
+            BigDecimal diferencia,
+            BigDecimal porcentajeCambio,
+            boolean cambia
+    ) {}
+
+    public record DependenciasPageResponse(
+            List<DependenciaPreview> items,
             int page,
             int size,
             long totalElements,
@@ -80,6 +105,8 @@ public final class CargaCostosDTOs {
             String mensaje,
             OffsetDateTime ejecutadoEn,
             int totalActualizadas,
-            int totalSinCambio
+            int totalSinCambio,
+            int totalDependenciasActualizadas,
+            int totalDependenciasSinCambio
     ) {}
 }

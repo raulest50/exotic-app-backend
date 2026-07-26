@@ -304,6 +304,7 @@ public class IngresoAlmacenService {
                     dto.setTipoMovimiento(movimiento.getTipoMovimiento() != null
                             ? movimiento.getTipoMovimiento().name()
                             : null);
+                    dto.setAfectaInventario(movimiento.isAfectaInventario());
                     dto.setAlmacen(movimiento.getAlmacen() != null
                             ? movimiento.getAlmacen().name()
                             : null);

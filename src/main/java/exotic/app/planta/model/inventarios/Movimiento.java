@@ -55,6 +55,14 @@ public class Movimiento {
     private TipoMovimiento tipoMovimiento;
 
     /**
+     * Congela el efecto contable del evento sobre las existencias. Los consumos
+     * directos de produccion se registran para trazabilidad, pero no modifican
+     * saldos de inventario.
+     */
+    @Column(name = "afecta_inventario", nullable = false)
+    private boolean afectaInventario = true;
+
+    /**
      * Almacén donde se realiza este movimiento específico.
      *
      * <p><strong>Nota importante:</strong> Este campo es individual por movimiento. Una misma

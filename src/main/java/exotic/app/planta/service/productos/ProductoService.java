@@ -85,6 +85,9 @@ public class ProductoService {
     @Transactional
     public Producto saveProducto(Producto producto){
         java.math.BigDecimal requestedCosto = producto.getCosto();
+        if (producto instanceof Material material) {
+            validateMaterialInventoryConfiguration(material.isInventareable(), material.isConsumoDirecto());
+        }
         Optional<Producto> existing = producto.getProductoId() == null
                 ? Optional.empty()
                 : productoRepo.findById(producto.getProductoId());
@@ -93,14 +96,36 @@ public class ProductoService {
             if (!managed.getTipo_producto().equals(producto.getTipo_producto())) {
                 throw new IllegalArgumentException("No se puede cambiar el tipo de un producto existente");
             }
-            BeanUtils.copyProperties(
-                    producto,
-                    managed,
-                    "productoId", "costo", "costoVersion", "fechaCreacion");
+            if (managed instanceof Material) {
+                // La configuración de inventario de un material existente se cambia
+                // exclusivamente mediante updateMaterialInventareable, que valida
+                // stock físico y órdenes de compra abiertas.
+                BeanUtils.copyProperties(
+                        producto,
+                        managed,
+                        "productoId", "costo", "costoVersion", "fechaCreacion",
+                        "inventareable", "consumoDirecto", "puntoReorden",
+                        "prefijoLote", "stockMinimo");
+            } else {
+                BeanUtils.copyProperties(
+                        producto,
+                        managed,
+                        "productoId", "costo", "costoVersion", "fechaCreacion");
+            }
+            if (managed instanceof Material managedMaterial) {
+                validateMaterialInventoryConfiguration(
+                        managedMaterial.isInventareable(),
+                        managedMaterial.isConsumoDirecto()
+                );
+                normalizeNonInventareableFields(managedMaterial);
+            }
             Producto saved = productoRepo.save(managed);
             return productoCostoService.actualizarCosto(
                     saved.getProductoId(), requestedCosto,
                     ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.EDICION_PRODUCTO)).producto();
+        }
+        if (producto instanceof Material material) {
+            normalizeNonInventareableFields(material);
         }
         producto.asignarCostoInicial(requestedCosto);
         Producto saved = productoRepo.save(producto);
@@ -123,6 +148,8 @@ public class ProductoService {
             throw new IllegalArgumentException("El codigo: " + material.getProductoId() +
                     " ya esta asignado a otro Material");
         }
+        validateMaterialInventoryConfiguration(material.isInventareable(), material.isConsumoDirecto());
+        normalizeNonInventareableFields(material);
         validatePuntoReorden(material.getPuntoReorden());
         String prefijoLote = normalizeOptionalPrefijoLote(material.getPrefijoLote());
         validatePrefijoLoteDisponibleForProduct(prefijoLote, material.getProductoId());
@@ -406,6 +433,9 @@ public class ProductoService {
             dto.setStockActual(stockActual);
             dto.setTipoUnidades(insumoProducto.getTipoUnidades());
             dto.setInventareable(insumoProducto.isInventareable());
+            dto.setConsumoDirecto(
+                    insumoProducto instanceof Material material && material.isConsumoDirecto()
+            );
 
             // Establecer el tipo de producto basado en la instancia
             if (insumoProducto instanceof Material) {
@@ -494,6 +524,7 @@ public class ProductoService {
                     mp.setTipoMaterial(tipoMateria);
                     // Set inventareable to true by default for all materials created through bulk upload
                     mp.setInventareable(true);
+                    mp.setConsumoDirecto(false);
                     // fechaCreacion is automatically set by @CreationTimestamp
 
                     materialRepo.save(mp);
@@ -621,11 +652,13 @@ public class ProductoService {
             if (dto.getTipoMaterial() != null) {
                 materialOriginal.setTipoMaterial(dto.getTipoMaterial());
             }
-            if (dto.getPuntoReorden() != null) {
+            if (!materialOriginal.isInventareable()) {
+                normalizeNonInventareableFields(materialOriginal);
+            } else if (dto.getPuntoReorden() != null) {
                 validatePuntoReorden(dto.getPuntoReorden());
                 materialOriginal.setPuntoReorden(dto.getPuntoReorden());
             }
-            if (dto.getPrefijoLote() != null) {
+            if (materialOriginal.isInventareable() && dto.getPrefijoLote() != null) {
                 String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
                 validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
                 materialOriginal.setPrefijoLote(prefijoLote);
@@ -675,6 +708,15 @@ public class ProductoService {
 
     @Transactional
     public Material updateMaterialInventareable(String productoId, Boolean inventareable) {
+        return updateMaterialInventareable(productoId, inventareable, null);
+    }
+
+    @Transactional
+    public Material updateMaterialInventareable(
+            String productoId,
+            Boolean inventareable,
+            Boolean consumoDirecto
+    ) {
         if (inventareable == null) {
             throw new IllegalArgumentException("El campo inventareable es requerido.");
         }
@@ -686,17 +728,54 @@ public class ProductoService {
             throw new IllegalArgumentException("Solo los materiales pueden cambiar el estado inventareable.");
         }
 
-        if (materialOriginal.isInventareable() == inventareable) {
+        if (inventareable && Boolean.TRUE.equals(consumoDirecto)) {
+            validateMaterialInventoryConfiguration(true, true);
+        }
+        boolean targetConsumoDirecto = inventareable
+                ? false
+                : consumoDirecto != null ? consumoDirecto : materialOriginal.isConsumoDirecto();
+        validateMaterialInventoryConfiguration(inventareable, targetConsumoDirecto);
+
+        if (materialOriginal.isInventareable() == inventareable
+                && materialOriginal.isConsumoDirecto() == targetConsumoDirecto) {
             return materialOriginal;
         }
 
-        if (!inventareable) {
+        if (!inventareable
+                && (materialOriginal.isInventareable()
+                || (!materialOriginal.isConsumoDirecto() && targetConsumoDirecto))) {
             validateMaterialCanBecomeNonInventareable(materialOriginal);
         }
 
         materialOriginal.setInventareable(inventareable);
-        log.info("Actualizando inventareable de material {} a {}", productoId, inventareable);
+        materialOriginal.setConsumoDirecto(targetConsumoDirecto);
+        if (!inventareable) {
+            normalizeNonInventareableFields(materialOriginal);
+        }
+        log.info(
+                "Actualizando configuracion de inventario del material {}: inventareable={}, consumoDirecto={}",
+                productoId,
+                inventareable,
+                targetConsumoDirecto
+        );
         return materialRepo.save(materialOriginal);
+    }
+
+    private void validateMaterialInventoryConfiguration(boolean inventareable, boolean consumoDirecto) {
+        if (inventareable && consumoDirecto) {
+            throw new IllegalArgumentException(
+                    "Un material inventariable no puede configurarse para consumo directo."
+            );
+        }
+    }
+
+    private void normalizeNonInventareableFields(Material material) {
+        if (material.isInventareable()) {
+            return;
+        }
+        material.setPuntoReorden(-1);
+        material.setPrefijoLote(null);
+        material.setStockMinimo(0);
     }
 
     private void validateMaterialCanBecomeNonInventareable(Material material) {
@@ -776,14 +855,18 @@ public class ProductoService {
             // Solo actualizamos tipoMaterial si el producto enviado también es Material
             if (producto instanceof Material) {
                 Material materialNuevo = (Material) producto;
-                validatePuntoReorden(materialNuevo.getPuntoReorden());
                 materialOriginal.setTipoMaterial(materialNuevo.getTipoMaterial());
-                materialOriginal.setPuntoReorden(materialNuevo.getPuntoReorden());
-                String prefijoLote = normalizeOptionalPrefijoLote(materialNuevo.getPrefijoLote());
-                validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
-                materialOriginal.setPrefijoLote(prefijoLote);
+                if (materialOriginal.isInventareable()) {
+                    validatePuntoReorden(materialNuevo.getPuntoReorden());
+                    materialOriginal.setPuntoReorden(materialNuevo.getPuntoReorden());
+                    String prefijoLote = normalizeOptionalPrefijoLote(materialNuevo.getPrefijoLote());
+                    validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
+                    materialOriginal.setPrefijoLote(prefijoLote);
+                } else {
+                    normalizeNonInventareableFields(materialOriginal);
+                }
                 log.info("Actualizando tipo de material: {}, puntoReorden: {}",
-                        materialNuevo.getTipoMaterial(), materialNuevo.getPuntoReorden());
+                        materialNuevo.getTipoMaterial(), materialOriginal.getPuntoReorden());
             } else {
                 log.warn("El frontend envió un tipo de producto incorrecto. Se mantiene el tipo original: Material");
             }

@@ -18,12 +18,13 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class InformeInventarioService {
-    private static final int CONTRACT_VERSION = 3;
+    private static final int CONTRACT_VERSION = 4;
 
     private final TransaccionAlmacenRepo movementRepo;
     private final InventarioStockReader stockReader;
     private final StockInventarioAssembler stockAssembler;
     private final MovimientosInventarioAssembler movementAssembler;
+    private final AjustesInventarioAssembler adjustmentAssembler;
     private final PendientesInventarioAssembler pendingAssembler;
     private final Clock applicationClock;
 
@@ -45,6 +46,11 @@ public class InformeInventarioService {
                 .fechaHoraCorteStock(LocalDateTime.now(applicationClock))
                 .stock(stockAssembler.assemble(stock))
                 .movimientos(movementAssembler.assemble(
+                        periodMovements,
+                        seriesMovements,
+                        startDate,
+                        endDate))
+                .ajustesInventario(adjustmentAssembler.assemble(
                         periodMovements,
                         seriesMovements,
                         startDate,

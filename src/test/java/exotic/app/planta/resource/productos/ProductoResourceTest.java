@@ -37,6 +37,23 @@ class ProductoResourceTest {
     }
 
     @Test
+    void updateMaterialInventareableForwardsDirectConsumptionConfiguration() {
+        ProductoService service = mock(ProductoService.class);
+        ProductoResource resource = new ProductoResource(service);
+        Material material = material("M-DIRECT", false);
+        material.setConsumoDirecto(true);
+        when(service.updateMaterialInventareable("M-DIRECT", false, true)).thenReturn(material);
+
+        ResponseEntity<Object> response = resource.updateMaterialInventareable(
+                "M-DIRECT",
+                new ProductoInventareableUpdateDTO(false, true)
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertSame(material, response.getBody());
+    }
+
+    @Test
     void updateMaterialInventareableReturnsBadRequestWhenPayloadIsInvalid() {
         ProductoService service = mock(ProductoService.class);
         ProductoResource resource = new ProductoResource(service);

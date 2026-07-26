@@ -180,6 +180,7 @@ public class MovimientosService {
 
         List<Movimiento> movimientos = transaccionAlmacenRepo.findByProducto_ProductoId(producto_id);
         double productoStock = movimientos.stream()
+                .filter(Movimiento::isAfectaInventario)
                 .mapToDouble(Movimiento::getCantidad)
                 .sum();
 

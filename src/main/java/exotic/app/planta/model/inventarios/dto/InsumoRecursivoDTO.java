@@ -20,6 +20,6 @@ public class InsumoRecursivoDTO {
     private String tipoUnidades;
     private String tipoProducto;
     private Boolean inventareable;
+    private Boolean consumoDirecto;
     private List<InsumoRecursivoDTO> subInsumos = new ArrayList<>();
 }
-

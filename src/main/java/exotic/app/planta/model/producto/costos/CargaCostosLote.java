@@ -79,9 +79,43 @@ public class CargaCostosLote {
     @Column(name = "total_omitidas", nullable = false)
     private int totalOmitidas;
 
+    @Column(name = "receta_revision")
+    private Long recetaRevision;
+
+    @Column(name = "algoritmo_version", length = 40)
+    private String algoritmoVersion;
+
+    @Column(name = "propagacion_sha256", length = 64)
+    private String propagacionSha256;
+
+    @Column(name = "invalidado_en")
+    private LocalDateTime invalidadoEn;
+
+    @Column(name = "invalidacion_codigo", length = 60)
+    private String invalidacionCodigo;
+
+    @Column(name = "total_dependencias", nullable = false)
+    private int totalDependencias;
+
+    @Column(name = "total_semiterminados", nullable = false)
+    private int totalSemiterminados;
+
+    @Column(name = "total_terminados", nullable = false)
+    private int totalTerminados;
+
+    @Column(name = "total_dependencias_actualizadas", nullable = false)
+    private int totalDependenciasActualizadas;
+
+    @Column(name = "total_dependencias_sin_cambio", nullable = false)
+    private int totalDependenciasSinCambio;
+
     @OneToMany(mappedBy = "lote", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("filaExcel ASC")
     private List<CargaCostosItem> items = new ArrayList<>();
 
-    public enum Estado { PREPARADO, EJECUTADO, EXPIRADO, BLOQUEADO, CANCELADO }
+    @OneToMany(mappedBy = "lote", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("nivel ASC, productoId ASC")
+    private List<CargaCostosPropagacionItem> propagacionItems = new ArrayList<>();
+
+    public enum Estado { PREPARADO, EJECUTADO, EXPIRADO, BLOQUEADO, CANCELADO, INVALIDADO }
 }

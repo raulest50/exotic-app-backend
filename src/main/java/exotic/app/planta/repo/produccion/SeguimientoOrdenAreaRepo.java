@@ -195,6 +195,23 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH s.ordenProduccion op
         JOIN FETCH op.producto p
         JOIN FETCH s.areaOperativa a
+        WHERE a.areaId <> :excludedAreaId
+        AND op.estadoOrden <> -1
+        AND COALESCE(s.fechaCreacion, s.fechaEstadoActual) <= :cutoff
+        AND (s.fechaCompletado IS NULL OR s.fechaCompletado >= :horizonStart)
+        ORDER BY a.areaId ASC, s.id ASC
+        """)
+    List<SeguimientoOrdenArea> findAnaliticaAreasByHorizon(
+            @Param("excludedAreaId") int excludedAreaId,
+            @Param("horizonStart") LocalDateTime horizonStart,
+            @Param("cutoff") LocalDateTime cutoff
+    );
+
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH op.producto p
+        JOIN FETCH s.areaOperativa a
         JOIN FETCH s.rutaProcesoNode n
         WHERE op.ordenId = :ordenId
         ORDER BY s.posicionSecuencia ASC

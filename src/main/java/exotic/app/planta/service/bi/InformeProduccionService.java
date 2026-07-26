@@ -14,6 +14,8 @@ import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.produccion.MasterProductionScheduleSemanalRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,11 +38,15 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class InformeProduccionService {
     private final TransaccionAlmacenRepo movementRepo;
     private final MasterProductionScheduleSemanalRepo mpsRepo;
     private final MpsSemanalDiaRepo mpsDayRepo;
     private final CategoriaRepo categoryRepo;
+
+    @Autowired(required = false)
+    private InformeProduccionAreasAssembler areasAssembler;
 
     public InformeGlobalProduccionDTO obtenerReporte(LocalDate startDate, LocalDate endDate) {
         validateDates(startDate, endDate);
@@ -70,6 +76,8 @@ public class InformeProduccionService {
                 categorySummaries.values(),
                 previousProduction,
                 productionMovements.size());
+        InformeGlobalProduccionDTO.AnaliticaAreasDTO areaAnalytics =
+                buildAreaAnalyticsSafely(startDate, endDate);
 
         return InformeGlobalProduccionDTO.builder()
                 .fechaDesde(startDate)
@@ -88,7 +96,44 @@ public class InformeProduccionService {
                                 .thenComparing(ProductionReference::productDisplayName))
                         .map(ProductionReference::toDto)
                         .toList())
+                .analiticaAreas(areaAnalytics)
                 .notas(buildNotes(mpsIds, summary))
+                .build();
+    }
+
+    private InformeGlobalProduccionDTO.AnaliticaAreasDTO buildAreaAnalyticsSafely(
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        int rangeDays = Math.toIntExact(ChronoUnit.DAYS.between(startDate, endDate) + 1);
+        LocalDate previousEnd = startDate.minusDays(1);
+        LocalDate previousStart = startDate.minusDays(rangeDays);
+        if (areasAssembler == null) {
+            return unavailableAreaAnalytics(previousStart, previousEnd);
+        }
+        try {
+            return areasAssembler.construir(startDate, endDate);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "No se pudo construir la analitica de areas para el informe de produccion {} a {}",
+                    startDate,
+                    endDate,
+                    ex
+            );
+            return unavailableAreaAnalytics(previousStart, previousEnd);
+        }
+    }
+
+    private InformeGlobalProduccionDTO.AnaliticaAreasDTO unavailableAreaAnalytics(
+            LocalDate previousStart,
+            LocalDate previousEnd
+    ) {
+        return InformeGlobalProduccionDTO.AnaliticaAreasDTO.builder()
+                .disponible(false)
+                .mensaje("La analitica por areas no esta disponible temporalmente.")
+                .fechaDesdePeriodoAnterior(previousStart)
+                .fechaHastaPeriodoAnterior(previousEnd)
+                .areas(List.of())
                 .build();
     }
 

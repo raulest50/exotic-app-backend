@@ -49,6 +49,17 @@ public class CargaMasivaCostosResource {
                 loteId, requireAccess(authentication), page, size));
     }
 
+    @GetMapping("/{loteId}/dependencias")
+    public ResponseEntity<CargaCostosDTOs.DependenciasPageResponse> listarDependencias(
+            @PathVariable UUID loteId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(service.listarDependencias(
+                loteId, requireAccess(authentication), page, size));
+    }
+
     @PostMapping("/{loteId}/token")
     public ResponseEntity<CargaCostosDTOs.TokenResponse> generarToken(
             @PathVariable UUID loteId,

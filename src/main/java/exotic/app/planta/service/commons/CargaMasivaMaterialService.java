@@ -222,6 +222,7 @@ public class CargaMasivaMaterialService {
                     double puntoReorden = getCellValueAsDouble(row, 10);
                     material.setPuntoReorden(puntoReorden == 0 && getCellValueAsString(row, 10) == null ? -1 : puntoReorden);
                     material.setInventareable(true);
+                    material.setConsumoDirecto(false);
 
                     materialRepo.save(material);
                     productoCostoService.registrarCostoInicial(

@@ -22,6 +22,7 @@ public class InformeGlobalProduccionDTO {
     private ResumenDTO resumen;
     private List<ConsolidadoCategoriaDTO> consolidadoCategorias;
     private List<DetalleReferenciaDTO> detalleReferencias;
+    private AnaliticaAreasDTO analiticaAreas;
     private List<NotaDTO> notas;
 
     @Data
@@ -80,6 +81,80 @@ public class InformeGlobalProduccionDTO {
         private boolean planeado;
         private boolean producido;
         private boolean noPlaneado;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AnaliticaAreasDTO {
+        private boolean disponible;
+        private String mensaje;
+        private LocalDate fechaDesdePeriodoAnterior;
+        private LocalDate fechaHastaPeriodoAnterior;
+        private List<AreaOperativaAnaliticaDTO> areas;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AreaOperativaAnaliticaDTO {
+        private Integer areaId;
+        private String areaNombre;
+        private String estado;
+        private String confiabilidad;
+        private List<String> motivos;
+        private boolean comparacionDisponible;
+        private Double coberturaUnidadPct;
+        private List<ProduccionUnidadAreaDTO> produccion;
+        private MetricasFlujoAreaDTO actual;
+        private MetricasFlujoAreaDTO anterior;
+        private List<SerieFlujoAreaDTO> serieActual;
+        private List<SerieFlujoAreaDTO> serieAnterior;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProduccionUnidadAreaDTO {
+        private String fuente;
+        private String unidad;
+        private double cantidadActual;
+        private double cantidadAnterior;
+        private Double variacionPct;
+        private Double cantidadEquivalenteActual;
+        private Double cantidadEquivalenteAnterior;
+        private String unidadEquivalente;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MetricasFlujoAreaDTO {
+        private int entradas;
+        private int salidas;
+        private int trabajoListo;
+        private double ritmoSalidaDiario;
+        private Double diasBacklog;
+        private Double medianaMinutosEspera;
+        private Double medianaMinutosProceso;
+        private int muestrasEspera;
+        private int muestrasProceso;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SerieFlujoAreaDTO {
+        private LocalDate fecha;
+        private int indiceDia;
+        private int entradas;
+        private int salidas;
+        private int backlogCierre;
     }
 
     @Data

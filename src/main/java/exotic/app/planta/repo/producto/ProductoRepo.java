@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 
 @Repository
 public interface ProductoRepo extends JpaRepository<Producto, String>, JpaSpecificationExecutor<Producto> {
@@ -21,6 +23,10 @@ public interface ProductoRepo extends JpaRepository<Producto, String>, JpaSpecif
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Producto p where p.productoId = :id")
     Optional<Producto> findByProductoIdForUpdate(@Param("id") String id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Producto p where p.productoId in :ids order by p.productoId")
+    List<Producto> findAllByProductoIdInForUpdate(@Param("ids") Collection<String> ids);
 
     @Modifying(flushAutomatically = true)
     @Query("""

@@ -14,6 +14,7 @@ import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DispensacionV2MpsService {
 
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
@@ -34,16 +36,43 @@ public class DispensacionV2MpsService {
 
     @Transactional(readOnly = true)
     public MpsSemanalDraftDTO getMpsSemanalFiltradoPorArea(LocalDate weekStartDate, int areaId) {
+        log.info(
+                "[DISP_V2][MPS_START] weekStartDate={} areaId={}",
+                weekStartDate,
+                areaId
+        );
         validateArea(areaId);
 
         MpsSemanalDraftDTO mps;
         try {
             mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
         } catch (MpsSemanalNotFoundException e) {
+            log.warn(
+                    "[DISP_V2][MPS_NOT_FOUND] weekStartDate={} areaId={} message={}",
+                    weekStartDate,
+                    areaId,
+                    e.getMessage()
+            );
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         }
 
+        log.info(
+                "[DISP_V2][MPS_LOADED] mpsId={} estado={} weekStartDate={} weekEndDate={} totalItems={} totalLotes={} totalOdps={}",
+                mps.getMpsId(),
+                mps.getEstado(),
+                mps.getWeekStartDate(),
+                mps.getWeekEndDate(),
+                mps.getTotalItems(),
+                mps.getTotalLotesPlanificados(),
+                mps.getTotalOdpsGeneradas()
+        );
+
         if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
+            log.warn(
+                    "[DISP_V2][MPS_INVALID_STATE] mpsId={} estado={} requiredEstados=[APROBADO,CERRADO]",
+                    mps.getMpsId(),
+                    mps.getEstado()
+            );
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "El MPS de la semana solicitada aun no esta aprobado para consulta operativa."
@@ -51,6 +80,11 @@ public class DispensacionV2MpsService {
         }
 
         if (mps.getTotalOdpsGeneradas() <= 0) {
+            log.warn(
+                    "[DISP_V2][MPS_WITHOUT_ODPS] mpsId={} totalOdps={}",
+                    mps.getMpsId(),
+                    mps.getTotalOdpsGeneradas()
+            );
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "El MPS de la semana solicitada aun no tiene ODPs generadas."
@@ -69,18 +103,47 @@ public class DispensacionV2MpsService {
                 .map(SeguimientoOrdenAreaRepo.MpsIntervencionAreaProjection::getMpsLotePlanificadoId)
                 .collect(Collectors.toSet());
 
-        return filterMpsByLotes(mps, loteIds);
+        log.info(
+                "[DISP_V2][MPS_AREA_INTERVENTIONS] mpsId={} areaId={} interventionCount={} loteIds={}",
+                mps.getMpsId(),
+                areaId,
+                intervenciones.size(),
+                loteIds
+        );
+
+        MpsSemanalDraftDTO filtered = filterMpsByLotes(mps, loteIds);
+        log.info(
+                "[DISP_V2][MPS_FILTERED] mpsId={} areaId={} totalItems={} totalLotes={} totalOdps={}",
+                filtered.getMpsId(),
+                areaId,
+                filtered.getTotalItems(),
+                filtered.getTotalLotesPlanificados(),
+                filtered.getTotalOdpsGeneradas()
+        );
+        return filtered;
     }
 
     private void validateArea(int areaId) {
+        log.debug("[DISP_V2][MPS_VALIDATE_AREA] areaId={}", areaId);
         if (areaId == AreaOperativaInitializer.ALMACEN_GENERAL_ID) {
+            log.warn("[DISP_V2][MPS_INVALID_AREA] areaId={} reason=ALMACEN_GENERAL", areaId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Almacen General no es un area destino valida para Dispensacion v2.");
         }
 
         AreaOperativa area = areaProduccionRepo.findById(areaId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Area operativa no encontrada."));
 
+        log.debug(
+                "[DISP_V2][MPS_AREA_FOUND] areaId={} areaNombre={}",
+                area.getAreaId(),
+                area.getNombre()
+        );
         if (area.getAreaId() == AreaOperativaInitializer.ALMACEN_GENERAL_ID) {
+            log.warn(
+                    "[DISP_V2][MPS_INVALID_AREA] areaId={} areaNombre={} reason=ALMACEN_GENERAL",
+                    area.getAreaId(),
+                    area.getNombre()
+            );
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Almacen General no es un area destino valida para Dispensacion v2.");
         }
     }

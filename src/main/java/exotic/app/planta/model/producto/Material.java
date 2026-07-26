@@ -12,6 +12,15 @@ import lombok.Setter;
 public class Material extends Producto { // (ROH)
 
     /**
+     * Indica si el material debe registrarse como consumo de produccion sin
+     * afectar existencias, almacen ni lote.
+     *
+     * Solo es valido cuando el material no es inventariable.
+     */
+    @Column(name = "consumo_directo", nullable = false)
+    private boolean consumoDirecto = false;
+
+    /**
      * para guardar la ruta en data/fichas_tecnicas_mp/
      * del pdf con la ficha tecnica de la materia prima en cuestion
      */

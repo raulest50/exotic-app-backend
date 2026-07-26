@@ -28,7 +28,7 @@ public class MovimientoDetalleDTO {
     private LocalDate productionDate; // del lote
     private LocalDate expirationDate; // del lote
     private String tipoMovimiento;
+    private boolean afectaInventario;
     private String almacen;
     private LocalDateTime fechaMovimiento;
 }
-

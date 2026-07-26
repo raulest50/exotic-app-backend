@@ -41,7 +41,9 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
     @Query("""
             SELECT p, COALESCE(SUM(m.cantidad), 0)
             FROM Producto p
-            LEFT JOIN Movimiento m ON m.producto = p AND m.almacen = :almacen
+            LEFT JOIN Movimiento m ON m.producto = p
+                AND m.almacen = :almacen
+                AND m.afectaInventario = true
             WHERE p.inventareable = true
             GROUP BY p
             """)
@@ -51,6 +53,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             SELECT m.producto.productoId, COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.producto.productoId IN :productoIds
             GROUP BY m.producto.productoId
             """)
@@ -63,6 +66,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             LEFT JOIN FETCH m.transaccionAlmacen t
             JOIN FETCH m.producto p
             WHERE m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.fechaMovimiento >= :start AND m.fechaMovimiento <= :end
             ORDER BY m.fechaMovimiento, m.movimientoId
             """)
@@ -73,9 +77,27 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
 
     @Query("""
             SELECT DISTINCT m FROM Movimiento m
+            LEFT JOIN FETCH m.transaccionAlmacen t
+            JOIN FETCH m.producto p
+            WHERE m.almacen = :almacen
+              AND m.afectaInventario = true
+              AND TYPE(m.producto) = Material
+              AND m.tipoMovimiento IN :tiposMovimiento
+              AND m.fechaMovimiento >= :start AND m.fechaMovimiento <= :end
+            ORDER BY m.fechaMovimiento, m.movimientoId
+            """)
+    List<Movimiento> findAjustesMaterialesBiByAlmacenAndRango(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tiposMovimiento") Collection<Movimiento.TipoMovimiento> tiposMovimiento,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    @Query("""
+            SELECT DISTINCT m FROM Movimiento m
             JOIN FETCH m.transaccionAlmacen t
             JOIN FETCH m.producto p
             WHERE m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.cantidad > 0
               AND m.tipoMovimiento = :tipoMovimiento
               AND t.tipoEntidadCausante = :causante
@@ -94,6 +116,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             FROM Movimiento m
             JOIN m.transaccionAlmacen t
             WHERE m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.cantidad > 0
               AND m.tipoMovimiento = :tipoMovimiento
               AND t.tipoEntidadCausante = :causante
@@ -111,6 +134,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.transaccionAlmacen t
             JOIN FETCH m.producto p
             WHERE m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.cantidad < 0
               AND m.tipoMovimiento = :tipoMovimiento
               AND t.tipoEntidadCausante IN :causantes
@@ -139,6 +163,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
               AND orden.estadoOrden <> 2
               AND orden.estadoOrden <> -1
               AND m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.cantidad < 0
               AND m.tipoMovimiento = :tipoMovimiento
               AND t.tipoEntidadCausante IN :causantes
@@ -171,6 +196,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
               AND orden.estadoOrden <> 2
               AND orden.estadoOrden <> -1
               AND m.almacen = :almacen
+              AND m.afectaInventario = true
               AND m.cantidad < 0
               AND m.tipoMovimiento = :tipoMovimiento
               AND t.tipoEntidadCausante IN :causantes
@@ -186,7 +212,12 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes,
             @Param("opIds") Collection<Integer> opIds);
 
-    @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId")
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
+            """)
     Double findTotalCantidadByProductoId(@Param("productoId") String productoId);
 
     @Query("""
@@ -194,6 +225,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             FROM Movimiento m
             LEFT JOIN m.lote lote
             WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
             GROUP BY m.almacen, lote.id
             HAVING ABS(COALESCE(SUM(m.cantidad), 0)) > :tolerance
             """)
@@ -205,31 +237,47 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             SELECT m.producto.productoId, COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.producto.productoId IN :productoIds
+              AND m.afectaInventario = true
             GROUP BY m.producto.productoId
             """)
     List<Object[]> findTotalCantidadByProductoIds(@Param("productoIds") Collection<String> productoIds);
 
     /**
-     * Todos los materiales con stock agregado (suma de movimientos). Una fila por material.
+     * Materiales inventariables con stock físico agregado. Una fila por material.
      */
     @Query("""
             SELECT m, COALESCE(SUM(mov.cantidad), 0.0)
             FROM Material m
-            LEFT JOIN Movimiento mov ON mov.producto = m
+            LEFT JOIN Movimiento mov ON mov.producto = m AND mov.afectaInventario = true
+            WHERE m.inventareable = true
             GROUP BY m
             """)
     List<Object[]> findAllMaterialsWithStock();
 
-    @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId AND m.fechaMovimiento < :fecha")
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
+              AND m.fechaMovimiento < :fecha
+            """)
     Double findTotalCantidadByProductoIdAndFechaMovimientoBefore(@Param("productoId") String productoId, @Param("fecha") LocalDateTime fecha);
 
-    @Query("SELECT COALESCE(SUM(m.cantidad), 0) FROM Movimiento m WHERE m.producto.productoId = :productoId AND m.almacen = :almacen AND m.fechaMovimiento < :fecha")
+    @Query("""
+            SELECT COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
+              AND m.almacen = :almacen
+              AND m.fechaMovimiento < :fecha
+            """)
     Double findTotalCantidadByProductoIdAndAlmacenAndFechaMovimientoBefore(@Param("productoId") String productoId, @Param("almacen") Movimiento.Almacen almacen, @Param("fecha") LocalDateTime fecha);
 
     @Query("""
             SELECT COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
               AND m.lote.id = :loteId
               AND m.almacen = :almacen
             """)
@@ -258,11 +306,21 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             Pageable pageable
     );
 
+    @Query("""
+            SELECT m
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
+              AND m.almacen = :almacen
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
     Page<Movimiento> findByProducto_ProductoIdAndAlmacenAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
-            String productoId,
-            Movimiento.Almacen almacen,
-            LocalDateTime start,
-            LocalDateTime end,
+            @Param("productoId") String productoId,
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
             Pageable pageable
     );
 
@@ -272,11 +330,21 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             LocalDateTime end
     );
 
+    @Query("""
+            SELECT m
+            FROM Movimiento m
+            WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
+              AND m.almacen = :almacen
+              AND m.fechaMovimiento >= :start
+              AND m.fechaMovimiento <= :end
+            ORDER BY m.fechaMovimiento ASC, m.movimientoId ASC
+            """)
     List<Movimiento> findByProducto_ProductoIdAndAlmacenAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
-            String productoId,
-            Movimiento.Almacen almacen,
-            LocalDateTime start,
-            LocalDateTime end
+            @Param("productoId") String productoId,
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
     );
 
     /**
@@ -287,6 +355,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             SELECT COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
               AND m.fechaMovimiento >= :start
               AND m.fechaMovimiento <= :end
               AND (
@@ -306,6 +375,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             SELECT COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
               AND m.almacen = :almacen
               AND m.fechaMovimiento >= :start
               AND m.fechaMovimiento <= :end
@@ -334,6 +404,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
                    "FROM Movimiento m " +
                    "JOIN m.lote l " +
                    "WHERE m.producto.productoId = :productoId " +
+                   "AND m.afectaInventario = true " +
                    "AND m.lote IS NOT NULL " +
                    "GROUP BY l " +
                    "HAVING SUM(m.cantidad) > 0 " +
@@ -352,6 +423,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
                    "FROM lote l " +
                    "JOIN movimientos m ON m.lote_id = l.id " +
                    "WHERE m.producto_id = :productoId " +
+                   "AND m.afecta_inventario = TRUE " +
                    "GROUP BY l.id, l.expiration_date, l.production_date " +
                    "HAVING SUM(m.cantidad) > 0 " +
                    "ORDER BY l.expiration_date ASC NULLS LAST", 
@@ -363,6 +435,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             FROM Movimiento m
             JOIN m.lote l
             WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
               AND m.lote IS NOT NULL
               AND m.almacen = :almacen
             GROUP BY l
@@ -379,6 +452,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             FROM Movimiento m
             JOIN m.lote l
             WHERE m.producto.productoId = :productoId
+              AND m.afectaInventario = true
               AND m.lote IS NOT NULL
             ORDER BY l.expirationDate ASC NULLS LAST, l.id ASC
             """)
@@ -392,6 +466,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
            "m.lote.id, m.lote.batchNumber, SUM(m.cantidad) " +
            "FROM Movimiento m " +
            "WHERE TYPE(m.producto) = Material " +
+           "AND m.afectaInventario = true " +
            "AND m.lote IS NOT NULL " +
            "AND m.almacen = :almacen " +
            "AND LOWER(m.lote.batchNumber) LIKE LOWER(CONCAT('%', :batchNumber, '%')) " +
@@ -413,6 +488,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE TYPE(m.producto) = Material
+              AND m.afectaInventario = true
               AND m.fechaMovimiento >= :start
               AND m.fechaMovimiento <= :end
               AND m.cantidad > 0
@@ -433,6 +509,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE TYPE(m.producto) = Material
+              AND m.afectaInventario = true
               AND m.fechaMovimiento >= :start
               AND m.fechaMovimiento <= :end
               AND m.cantidad < 0
@@ -454,6 +531,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE TYPE(m.producto) = Terminado
+              AND m.afectaInventario = true
               AND m.fechaMovimiento >= :start
               AND m.fechaMovimiento <= :end
               AND m.cantidad > 0
@@ -471,6 +549,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE TYPE(m.producto) = Terminado
+              AND m.afectaInventario = true
               AND (
                     (l.productionDate IS NOT NULL
                      AND l.productionDate >= :fechaDesde
@@ -496,6 +575,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             FROM Movimiento m
             LEFT JOIN m.lote l
             WHERE TYPE(m.producto) = Terminado
+              AND m.afectaInventario = true
               AND (
                     (l.productionDate IS NOT NULL
                      AND l.productionDate >= :fechaDesde
@@ -525,6 +605,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE m.fechaMovimiento >= :start
+              AND m.afectaInventario = true
               AND m.fechaMovimiento <= :end
               AND m.cantidad > 0
               AND m.tipoMovimiento = :tipoAjustePositivo
@@ -544,6 +625,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE m.fechaMovimiento >= :start
+              AND m.afectaInventario = true
               AND m.fechaMovimiento <= :end
               AND m.cantidad < 0
               AND m.tipoMovimiento = :tipoAjusteNegativo
@@ -563,6 +645,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN FETCH m.producto p
             LEFT JOIN FETCH m.lote l
             WHERE m.fechaMovimiento >= :start
+              AND m.afectaInventario = true
               AND m.fechaMovimiento <= :end
               AND (
                 (m.cantidad > 0 AND m.tipoMovimiento = :tipoAjustePositivo)
@@ -607,6 +690,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN oc.proveedor prov
             WHERE oc.ordenCompraId = t.idEntidadCausante
               AND TYPE(m.producto) = Material
+              AND m.afectaInventario = true
               AND t.tipoEntidadCausante = :tipoEntidadCausante
               AND m.tipoMovimiento = :tipoMovimientoCompra
               AND m.fechaMovimiento >= :start
@@ -639,6 +723,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             WHERE oc.ordenCompraId = t.idEntidadCausante
               AND t.tipoEntidadCausante = :tipoEntidadCausante
               AND m.producto.productoId = :materialId
+              AND m.afectaInventario = true
               AND m.tipoMovimiento = :tipoMovimientoCompra
               AND m.cantidad > 0
               AND COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) >= :start
@@ -674,6 +759,7 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             JOIN oc.proveedor prov
             WHERE oc.ordenCompraId = t.idEntidadCausante
               AND t.tipoEntidadCausante = :tipoEntidadCausante
+              AND m.afectaInventario = true
               AND m.tipoMovimiento = :tipoMovimientoCompra
               AND m.cantidad > 0
               AND COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) >= :start

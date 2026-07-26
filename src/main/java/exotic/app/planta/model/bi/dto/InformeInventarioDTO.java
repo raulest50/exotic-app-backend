@@ -14,6 +14,7 @@ public record InformeInventarioDTO(
         LocalDateTime fechaHoraCorteStock,
         StockDTO stock,
         MovimientosDTO movimientos,
+        AjustesInventarioDTO ajustesInventario,
         OcmPendientesDTO ocmPendientes,
         MaterialDirectoOpDTO materialDirectoOp,
         List<NotaDTO> notas
@@ -185,6 +186,86 @@ public record InformeInventarioDTO(
             double valorDispensaciones,
             double valorProductoTerminado,
             double valorOtrosIngresos
+    ) {
+    }
+
+    @Builder
+    public record AjustesInventarioDTO(
+            ResumenAjustesDTO resumen,
+            ComparativoAjustesDTO comparativo,
+            List<SerieAjusteDTO> serieDiaria,
+            MayorImpactoAjustesDTO mayorImpacto
+    ) {
+    }
+
+    @Builder
+    public record ResumenAjustesDTO(
+            FlujoDTO positivos,
+            FlujoDTO negativos,
+            double balanceNeto,
+            int transacciones,
+            int movimientos,
+            int referencias
+    ) {
+    }
+
+    @Builder
+    public record ComparativoAjustesDTO(
+            GrupoAjustesDTO materiaPrima,
+            GrupoAjustesDTO empaque,
+            GrupoAjustesDTO otros
+    ) {
+    }
+
+    @Builder
+    public record GrupoAjustesDTO(
+            String grupo,
+            FlujoDTO positivos,
+            FlujoDTO negativos,
+            double balanceNeto,
+            int transacciones,
+            int movimientos,
+            int referencias,
+            double participacionValorAjustadoPct
+    ) {
+    }
+
+    @Builder
+    public record SerieAjusteDTO(
+            LocalDate fecha,
+            String grupo,
+            String unidadMedida,
+            double cantidadPositiva,
+            double cantidadNegativa,
+            double valorPositivo,
+            double valorNegativo
+    ) {
+    }
+
+    @Builder
+    public record MayorImpactoAjustesDTO(
+            int limite,
+            List<MaterialImpactoAjusteDTO> materiaPrima,
+            List<MaterialImpactoAjusteDTO> empaque
+    ) {
+    }
+
+    @Builder
+    public record MaterialImpactoAjusteDTO(
+            String productoId,
+            String productoNombre,
+            String unidadMedida,
+            double cantidadPositiva,
+            double cantidadNegativa,
+            double balanceCantidad,
+            double valorPositivo,
+            double valorNegativo,
+            double balanceValor,
+            double impactoEstimado,
+            int movimientos,
+            int transacciones,
+            LocalDateTime ultimoAjuste,
+            boolean costoVigente
     ) {
     }
 

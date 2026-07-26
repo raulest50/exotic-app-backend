@@ -11,4 +11,9 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductoInventareableUpdateDTO {
     private Boolean inventareable;
+    private Boolean consumoDirecto;
+
+    public ProductoInventareableUpdateDTO(Boolean inventareable) {
+        this.inventareable = inventareable;
+    }
 }

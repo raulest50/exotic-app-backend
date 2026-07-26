@@ -16,5 +16,5 @@ public class InsumoDesglosadoDTO {
     private String tipoUnidades;
     private String tipoProducto; // "MATERIAL" o "SEMITERMINADO"
     private Boolean inventareable; // Indica si el producto es inventariable (true) o no (false, como el agua)
+    private Boolean consumoDirecto;
 }
-

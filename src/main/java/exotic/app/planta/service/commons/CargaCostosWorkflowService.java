@@ -5,19 +5,22 @@ import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.costos.CargaCostosItem;
 import exotic.app.planta.model.producto.costos.CargaCostosLote;
+import exotic.app.planta.model.producto.costos.CargaCostosPropagacionItem;
 import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.costos.CargaCostosItemRepo;
 import exotic.app.planta.repo.producto.costos.CargaCostosLoteRepo;
-import exotic.app.planta.service.productos.CostoVersionConflictException;
+import exotic.app.planta.repo.producto.costos.CargaCostosPropagacionItemRepo;
 import exotic.app.planta.service.productos.ProductoCostoService;
+import exotic.app.planta.service.productos.ProductoCostoPropagacionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -41,12 +44,14 @@ public class CargaCostosWorkflowService {
     private final ProductoRepo productoRepo;
     private final CargaCostosLoteRepo loteRepo;
     private final CargaCostosItemRepo itemRepo;
+    private final CargaCostosPropagacionItemRepo propagacionItemRepo;
     private final ProductoCostoService productoCostoService;
+    private final ProductoCostoPropagacionService propagacionService;
     private final Clock applicationClock;
     private final SecureRandom secureRandom = new SecureRandom();
     private final BCryptPasswordEncoder tokenEncoder = new BCryptPasswordEncoder();
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public CargaCostosDTOs.PreparacionResponse crearPreparacion(
             CargaCostosExcelParser.ParsedWorkbook parsed,
             String filename,
@@ -118,6 +123,44 @@ public class CargaCostosWorkflowService {
 
         lote.setTotalActualizadas(changes);
         lote.setTotalSinCambio(unchanged);
+
+        List<ProductoCostoPropagacionService.CambioCostoRaiz> cambiosRaiz =
+                lote.getItems().stream().map(this::toCambioRaiz).toList();
+        ProductoCostoPropagacionService.PlanPropagacion plan =
+                propagacionService.calcularPlan(cambiosRaiz);
+        lote.setRecetaRevision(plan.recetaRevision());
+        lote.setAlgoritmoVersion(plan.algoritmoVersion());
+        lote.setPropagacionSha256(plan.sha256());
+
+        int semiterminados = 0;
+        int terminados = 0;
+        int dependenciasActualizadas = 0;
+        int dependenciasSinCambio = 0;
+        for (ProductoCostoPropagacionService.ItemPlan planItem : plan.items()) {
+            CargaCostosPropagacionItem item = new CargaCostosPropagacionItem();
+            item.setLote(lote);
+            item.setProductoId(planItem.productoId());
+            item.setProductoNombre(planItem.productoNombre());
+            item.setTipoProducto(planItem.tipoProducto());
+            item.setNivel(planItem.nivel());
+            item.setCostoAnterior(planItem.costoAnterior());
+            item.setCostoNuevo(planItem.costoNuevo());
+            item.setCostoVersionAnterior(planItem.costoVersionAnterior());
+            lote.getPropagacionItems().add(item);
+
+            if ("S".equals(planItem.tipoProducto())) semiterminados++;
+            if ("T".equals(planItem.tipoProducto())) terminados++;
+            if (planItem.costoAnterior().compareTo(planItem.costoNuevo()) != 0) {
+                dependenciasActualizadas++;
+            } else {
+                dependenciasSinCambio++;
+            }
+        }
+        lote.setTotalDependencias(plan.items().size());
+        lote.setTotalSemiterminados(semiterminados);
+        lote.setTotalTerminados(terminados);
+        lote.setTotalDependenciasActualizadas(dependenciasActualizadas);
+        lote.setTotalDependenciasSinCambio(dependenciasSinCambio);
         loteRepo.save(lote);
 
         List<String> warnings = new ArrayList<>(parsed.advertencias());
@@ -138,6 +181,28 @@ public class CargaCostosWorkflowService {
                 loteId, PageRequest.of(safePage, safeSize));
         return new CargaCostosDTOs.ItemsPageResponse(
                 result.getContent().stream().map(this::toPreview).toList(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public CargaCostosDTOs.DependenciasPageResponse listarDependencias(
+            UUID loteId,
+            User usuario,
+            int page,
+            int size
+    ) {
+        CargaCostosLote lote = requireOwnedLote(loteId, usuario, false);
+        requirePrepared(lote);
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(100, Math.max(1, size));
+        Page<CargaCostosPropagacionItem> result =
+                propagacionItemRepo.findByLote_IdOrderByNivelAscProductoIdAsc(
+                        loteId, PageRequest.of(safePage, safeSize));
+        return new CargaCostosDTOs.DependenciasPageResponse(
+                result.getContent().stream().map(this::toDependenciaPreview).toList(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
@@ -179,7 +244,10 @@ public class CargaCostosWorkflowService {
                 MAX_TOKEN_ATTEMPTS);
     }
 
-    @Transactional(noRollbackFor = CargaCostosTokenException.class)
+    @Transactional(noRollbackFor = {
+            CargaCostosTokenException.class,
+            CargaCostosPlanConflictException.class
+    })
     public CargaCostosDTOs.ConfirmacionResponse confirmar(UUID loteId, String token, User usuario) {
         CargaCostosLote lote = requireOwnedLote(loteId, usuario, true);
         if (lote.getEstado() == CargaCostosLote.Estado.EJECUTADO) {
@@ -211,41 +279,47 @@ public class CargaCostosWorkflowService {
         }
 
         List<CargaCostosItem> items = itemRepo.findByLote_IdOrderByProductoIdAsc(loteId);
-        Map<String, Producto> lockedProducts = new LinkedHashMap<>();
-        for (CargaCostosItem item : items) {
-            Producto producto = productoRepo.findByProductoIdForUpdate(item.getProductoId())
-                    .orElseThrow(() -> new CostoVersionConflictException(item.getProductoId()));
-            BigDecimal current = productoCostoService.normalizar(producto.getCosto());
-            if (!(producto instanceof Material)
-                    || producto.getCostoVersion() != item.getCostoVersionAnterior()
-                    || current.compareTo(item.getCostoAnterior()) != 0) {
-                throw new CostoVersionConflictException(item.getProductoId());
-            }
-            lockedProducts.put(item.getProductoId(), producto);
-        }
+        List<CargaCostosPropagacionItem> propagacionItems =
+                propagacionItemRepo.findByLote_IdOrderByNivelAscProductoIdAsc(loteId);
 
-        int updated = 0;
-        int unchanged = 0;
-        for (CargaCostosItem item : items) {
-            ProductoCostoService.ResultadoCambio result = productoCostoService.actualizarProductoBloqueado(
-                    lockedProducts.get(item.getProductoId()),
-                    item.getCostoVersionAnterior(),
-                    item.getCostoAnterior(),
-                    item.getCostoNuevo(),
+        ProductoCostoPropagacionService.ResultadoPropagacion resultado;
+        try {
+            resultado = propagacionService.validarYAplicar(
+                    lote.getAlgoritmoVersion(),
+                    lote.getPropagacionSha256(),
+                    items.stream().map(this::toCambioRaiz).toList(),
+                    propagacionItems.stream().map(this::toItemEsperado).toList(),
                     new ProductoCostoService.ContextoCambio(
                             usuario,
                             usuario.getUsername(),
                             ProductoCostoOrigen.CARGA_MASIVA_COSTOS,
                             lote.getMotivo(),
                             lote.getNombreArchivo(),
+                            lote),
+                    new ProductoCostoService.ContextoCambio(
+                            usuario,
+                            usuario.getUsername(),
+                            ProductoCostoOrigen.CASCADA_RECETA,
+                            lote.getMotivo(),
+                            lote.getNombreArchivo(),
                             lote));
-            if (result.actualizado()) updated++; else unchanged++;
+        } catch (ProductoCostoPropagacionService.PlanPropagacionModificadoException ex) {
+            lote.setEstado(CargaCostosLote.Estado.INVALIDADO);
+            lote.setInvalidadoEn(now);
+            lote.setInvalidacionCodigo("PREPARACION_DESACTUALIZADA");
+            lote.setTokenHash(null);
+            lote.setTokenExpiraEn(null);
+            loteRepo.save(lote);
+            throw new CargaCostosPlanConflictException(
+                    "La receta o alguno de sus costos relacionados cambio. Prepare nuevamente el archivo");
         }
 
         lote.setEstado(CargaCostosLote.Estado.EJECUTADO);
         lote.setEjecutadoEn(now);
-        lote.setTotalActualizadas(updated);
-        lote.setTotalSinCambio(unchanged);
+        lote.setTotalActualizadas(resultado.materialesActualizados());
+        lote.setTotalSinCambio(resultado.materialesSinCambio());
+        lote.setTotalDependenciasActualizadas(resultado.dependenciasActualizadas());
+        lote.setTotalDependenciasSinCambio(resultado.dependenciasSinCambio());
         lote.setTokenHash(null);
         lote.setTokenExpiraEn(null);
         loteRepo.save(lote);
@@ -296,6 +370,11 @@ public class CargaCostosWorkflowService {
                 lote.getTotalActualizadas(),
                 lote.getTotalSinCambio(),
                 lote.getTotalOmitidas(),
+                lote.getTotalDependencias(),
+                lote.getTotalSemiterminados(),
+                lote.getTotalTerminados(),
+                lote.getTotalDependenciasActualizadas(),
+                lote.getTotalDependenciasSinCambio(),
                 List.copyOf(warnings));
     }
 
@@ -318,6 +397,26 @@ public class CargaCostosWorkflowService {
                 difference.signum() != 0);
     }
 
+    private CargaCostosDTOs.DependenciaPreview toDependenciaPreview(
+            CargaCostosPropagacionItem item
+    ) {
+        BigDecimal difference = item.getCostoNuevo().subtract(item.getCostoAnterior());
+        BigDecimal percentage = item.getCostoAnterior().signum() == 0
+                ? null
+                : difference.multiply(BigDecimal.valueOf(100))
+                        .divide(item.getCostoAnterior(), 2, RoundingMode.HALF_UP);
+        return new CargaCostosDTOs.DependenciaPreview(
+                item.getProductoId(),
+                item.getProductoNombre(),
+                item.getTipoProducto(),
+                item.getNivel(),
+                item.getCostoAnterior(),
+                item.getCostoNuevo(),
+                difference,
+                percentage,
+                difference.signum() != 0);
+    }
+
     private CargaCostosDTOs.ConfirmacionResponse successResponse(CargaCostosLote lote, String message) {
         return new CargaCostosDTOs.ConfirmacionResponse(
                 lote.getId(),
@@ -326,7 +425,32 @@ public class CargaCostosWorkflowService {
                 message,
                 toOffset(lote.getEjecutadoEn()),
                 lote.getTotalActualizadas(),
-                lote.getTotalSinCambio());
+                lote.getTotalSinCambio(),
+                lote.getTotalDependenciasActualizadas(),
+                lote.getTotalDependenciasSinCambio());
+    }
+
+    private ProductoCostoPropagacionService.CambioCostoRaiz toCambioRaiz(
+            CargaCostosItem item
+    ) {
+        return new ProductoCostoPropagacionService.CambioCostoRaiz(
+                item.getProductoId(),
+                item.getCostoAnterior(),
+                item.getCostoVersionAnterior(),
+                item.getCostoNuevo());
+    }
+
+    private ProductoCostoPropagacionService.ItemPropagacionEsperado toItemEsperado(
+            CargaCostosPropagacionItem item
+    ) {
+        return new ProductoCostoPropagacionService.ItemPropagacionEsperado(
+                item.getProductoId(),
+                item.getProductoNombre(),
+                item.getTipoProducto(),
+                item.getNivel(),
+                item.getCostoAnterior(),
+                item.getCostoNuevo(),
+                item.getCostoVersionAnterior());
     }
 
     private CargaCostosDTOs.ErrorFila error(

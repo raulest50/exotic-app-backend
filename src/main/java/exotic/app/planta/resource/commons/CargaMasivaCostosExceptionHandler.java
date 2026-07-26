@@ -1,10 +1,12 @@
 package exotic.app.planta.resource.commons;
 
 import exotic.app.planta.model.commons.dto.CargaCostosDTOs;
+import exotic.app.planta.service.commons.CargaCostosPlanConflictException;
 import exotic.app.planta.service.commons.CargaCostosStateException;
 import exotic.app.planta.service.commons.CargaCostosTokenException;
 import exotic.app.planta.service.commons.CargaCostosValidationException;
 import exotic.app.planta.service.productos.CostoVersionConflictException;
+import exotic.app.planta.service.productos.ProductoCostoPropagacionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -48,6 +50,27 @@ public class CargaMasivaCostosExceptionHandler {
                 CargaCostosDTOs.ErrorResponse.simple(
                         "COSTO_MODIFICADO",
                         ex.getMessage() + ". Prepare nuevamente el archivo"));
+    }
+
+    @ExceptionHandler(CargaCostosPlanConflictException.class)
+    public ResponseEntity<CargaCostosDTOs.ErrorResponse> handlePlanConflict(
+            CargaCostosPlanConflictException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                CargaCostosDTOs.ErrorResponse.simple(
+                        "PREPARACION_DESACTUALIZADA",
+                        ex.getMessage()));
+    }
+
+    @ExceptionHandler(ProductoCostoPropagacionException.class)
+    public ResponseEntity<CargaCostosDTOs.ErrorResponse> handlePropagationValidation(
+            ProductoCostoPropagacionException ex
+    ) {
+        String message = ex.getProductoId() == null
+                ? ex.getMessage()
+                : "Producto " + ex.getProductoId() + ": " + ex.getMessage();
+        return ResponseEntity.unprocessableEntity().body(
+                CargaCostosDTOs.ErrorResponse.simple("RECETA_INVALIDA", message));
     }
 
     @ExceptionHandler(CargaCostosStateException.class)

@@ -18,6 +18,7 @@ public class DispensacionV2MaterialDTO {
     private String tipoUnidades;
     private String tipoProducto;
     private boolean inventareable;
+    private boolean consumoDirecto;
     private boolean checked;
     private double cantidadReceta;
     private double cantidadADispensar;

@@ -99,6 +99,9 @@ class MovimientosInventarioAssembler {
     }
 
     private FlowType classify(Movimiento movement) {
+        if (movement == null || !movement.isAfectaInventario()) {
+            return null;
+        }
         TransaccionAlmacen transaction = movement.getTransaccionAlmacen();
         Producto product = movement.getProducto();
 
@@ -148,8 +151,7 @@ class MovimientosInventarioAssembler {
     ) {
         if (movement.getCantidad() <= 0) return false;
 
-        if (movement.getTipoMovimiento() == Movimiento.TipoMovimiento.AJUSTE_POSITIVO
-                || movement.getTipoMovimiento() == Movimiento.TipoMovimiento.TRANSFERENCIA) {
+        if (movement.getTipoMovimiento() == Movimiento.TipoMovimiento.TRANSFERENCIA) {
             return true;
         }
         return movement.getTipoMovimiento() == Movimiento.TipoMovimiento.COMPRA

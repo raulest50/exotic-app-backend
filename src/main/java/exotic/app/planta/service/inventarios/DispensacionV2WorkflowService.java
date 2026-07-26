@@ -22,6 +22,7 @@ import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DispensacionV2WorkflowService {
 
     private static final double TOLERANCE = 0.01;
@@ -54,23 +56,57 @@ public class DispensacionV2WorkflowService {
 
     @Transactional(readOnly = true)
     public DispensacionV2PreparacionResponseDTO preparar(DispensacionV2PreparacionRequestDTO request) {
+        log.info(
+                "[DISP_V2][PREPARACION_START] areaId={} ordenCount={}",
+                request != null ? request.getAreaId() : null,
+                request != null && request.getOrdenes() != null ? request.getOrdenes().size() : null
+        );
         AreaOperativa area = requireArea(request != null ? request.getAreaId() : null);
         List<OrdenInput> ordenes = normalizePreparacionOrdenes(request != null ? request.getOrdenes() : null);
-        return buildResponse(area, ordenes, Collections.emptyMap(), false, false);
+        DispensacionV2PreparacionResponseDTO response =
+                buildResponse(area, ordenes, Collections.emptyMap(), false, false);
+        log.info(
+                "[DISP_V2][PREPARACION_COMPLETE] areaId={} ordenCount={} totalMaterialCount={} warningCount={}",
+                area.getAreaId(),
+                response.getOrdenes().size(),
+                response.getTotalesMateriales().size(),
+                response.getWarnings().size()
+        );
+        return response;
     }
 
     @Transactional(readOnly = true)
     public DispensacionV2PreparacionResponseDTO asignarLotes(DispensacionV2AsignacionLotesRequestDTO request) {
+        log.info(
+                "[DISP_V2][ASIGNACION_START] areaId={} ordenCount={}",
+                request != null ? request.getAreaId() : null,
+                request != null && request.getOrdenes() != null ? request.getOrdenes().size() : null
+        );
         AreaOperativa area = requireArea(request != null ? request.getAreaId() : null);
         List<OrdenInput> ordenes = normalizeAsignacionOrdenes(request != null ? request.getOrdenes() : null);
         Map<Integer, Map<String, DispensacionV2MaterialEditableRequestDTO>> overrides = buildOverrides(
                 request != null ? request.getOrdenes() : null
         );
-        return buildResponse(area, ordenes, overrides, true, false);
+        DispensacionV2PreparacionResponseDTO response = buildResponse(area, ordenes, overrides, true, false);
+        log.info(
+                "[DISP_V2][ASIGNACION_COMPLETE] areaId={} ordenCount={} totalMaterialCount={} warningCount={}",
+                area.getAreaId(),
+                response.getOrdenes().size(),
+                response.getTotalesMateriales().size(),
+                response.getWarnings().size()
+        );
+        return response;
     }
 
     @Transactional
     public DispensacionV2FinalizacionResponseDTO finalizar(DispensacionV2FinalizacionRequestDTO request, User currentUser) {
+        log.info(
+                "[DISP_V2][FINALIZACION_START] areaId={} ordenCount={} userId={} username={}",
+                request != null ? request.getAreaId() : null,
+                request != null && request.getOrdenes() != null ? request.getOrdenes().size() : null,
+                currentUser != null ? currentUser.getId() : null,
+                currentUser != null ? currentUser.getUsername() : null
+        );
         AreaOperativa area = requireArea(request != null ? request.getAreaId() : null);
         int currentUserId = requireCurrentUserId(currentUser);
         List<DispensacionV2FinalizacionOrdenRequestDTO> ordenesRequest = normalizeFinalizacionOrdenes(
@@ -82,14 +118,27 @@ public class DispensacionV2WorkflowService {
         int totalItems = 0;
 
         for (DispensacionV2FinalizacionOrdenRequestDTO ordenRequest : ordenesRequest) {
+            log.info(
+                    "[DISP_V2][FINALIZACION_ORDER_START] ordenProduccionId={} mpsItemId={} mpsLotePlanificadoId={} materialCount={}",
+                    ordenRequest.getOrdenProduccionId(),
+                    ordenRequest.getMpsItemId(),
+                    ordenRequest.getMpsLotePlanificadoId(),
+                    ordenRequest.getMateriales() != null ? ordenRequest.getMateriales().size() : null
+            );
             OrdenProduccion orden = requireOrden(ordenRequest.getOrdenProduccionId());
             validateOrden(area, orden);
 
             List<DispensacionItemDTO> items = buildFinalizacionItems(ordenRequest, demandaPorLote);
+            log.info(
+                    "[DISP_V2][FINALIZACION_ORDER_ITEMS] ordenProduccionId={} itemCount={}",
+                    orden.getOrdenId(),
+                    items.size()
+            );
             if (items.isEmpty()) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "La OP " + orden.getOrdenId() + " debe tener al menos un material inventariable para dispensar."
+                        "La OP " + orden.getOrdenId()
+                                + " debe tener al menos un material fisico o de consumo directo seleccionado."
                 );
             }
             totalItems += items.size();
@@ -110,12 +159,28 @@ public class DispensacionV2WorkflowService {
         }
 
         validateStockDisponible(demandaPorLote);
+        log.info(
+                "[DISP_V2][FINALIZACION_STOCK_VALIDATED] demandKeyCount={} totalItems={}",
+                demandaPorLote.size(),
+                totalItems
+        );
 
         List<DispensacionV2FinalizacionOrdenResponseDTO> ordenesResponse = new ArrayList<>();
         for (FinalizacionDraft draft : drafts) {
+            log.info(
+                    "[DISP_V2][FINALIZACION_PERSIST_START] ordenProduccionId={} itemCount={} areaId={}",
+                    draft.orden().getOrdenId(),
+                    draft.dispensacionDTO().getItems() != null ? draft.dispensacionDTO().getItems().size() : null,
+                    area.getAreaId()
+            );
             TransaccionAlmacen transaccion = salidaAlmacenService.createDispensacion(
                     draft.dispensacionDTO(),
                     currentUser.getId()
+            );
+            log.info(
+                    "[DISP_V2][FINALIZACION_PERSIST_COMPLETE] ordenProduccionId={} transaccionId={}",
+                    draft.orden().getOrdenId(),
+                    transaccion.getTransaccionId()
             );
             ordenesResponse.add(new DispensacionV2FinalizacionOrdenResponseDTO(
                     draft.orden().getOrdenId(),
@@ -124,6 +189,12 @@ public class DispensacionV2WorkflowService {
             ));
         }
 
+        log.info(
+                "[DISP_V2][FINALIZACION_COMPLETE] areaId={} ordenCount={} transactionCount={}",
+                area.getAreaId(),
+                ordenesRequest.size(),
+                ordenesResponse.size()
+        );
         return new DispensacionV2FinalizacionResponseDTO(toAreaDTO(area), ordenesResponse, new ArrayList<>());
     }
 
@@ -131,10 +202,20 @@ public class DispensacionV2WorkflowService {
     public DispensacionV2MaterialesRecetaResponseDTO prepararMaterialesReceta(DispensacionV2MaterialesRecetaRequestDTO request) {
         AreaOperativa area = requireArea(request != null ? request.getAreaId() : null);
         String productoId = request != null ? request.getProductoId() : null;
+        double requestedCantidadBase = request != null && request.getCantidadBase() != null
+                ? request.getCantidadBase()
+                : 0;
+        log.info(
+                "[DISP_V2][MATERIALES_RECETA_START] areaId={} productoId={} cantidadBase={} tolerance={}",
+                area.getAreaId(),
+                productoId,
+                requestedCantidadBase,
+                TOLERANCE
+        );
         if (productoId == null || productoId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El productoId es obligatorio.");
         }
-        double cantidadBase = request != null && request.getCantidadBase() != null ? request.getCantidadBase() : 0;
+        double cantidadBase = requestedCantidadBase;
         if (cantidadBase <= TOLERANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidadBase debe ser mayor a cero.");
         }
@@ -157,7 +238,7 @@ public class DispensacionV2WorkflowService {
                 })
                 .toList();
 
-        return new DispensacionV2MaterialesRecetaResponseDTO(
+        DispensacionV2MaterialesRecetaResponseDTO response = new DispensacionV2MaterialesRecetaResponseDTO(
                 toAreaDTO(area),
                 producto.getProductoId(),
                 producto.getNombre(),
@@ -165,10 +246,37 @@ public class DispensacionV2WorkflowService {
                 materiales,
                 warnings
         );
+        log.info(
+                "[DISP_V2][MATERIALES_RECETA_COMPLETE] areaId={} productoId={} cantidadBase={} materialCount={} warningCount={}",
+                area.getAreaId(),
+                productoId,
+                cantidadBase,
+                materiales.size(),
+                warnings.size()
+        );
+        materiales.forEach(material -> log.info(
+                "[DISP_V2][MATERIALES_RECETA_RESULT] productoId={} nombre={} tipo={} unidad={} inventareable={} checked={} cantidadReceta={} cantidadADispensar={} warning={}",
+                material.getProductoId(),
+                material.getProductoNombre(),
+                material.getTipoProducto(),
+                material.getTipoUnidades(),
+                material.isInventareable(),
+                material.isChecked(),
+                material.getCantidadReceta(),
+                material.getCantidadADispensar(),
+                material.getWarning()
+        ));
+        return response;
     }
 
     @Transactional(readOnly = true)
     public LoteDisponiblePageResponseDTO getLotesDisponiblesV2(String productoId, int page, int size) {
+        log.info(
+                "[DISP_V2][LOTES_DISPONIBLES_START] productoId={} requestedPage={} requestedSize={}",
+                productoId,
+                page,
+                size
+        );
         if (productoId == null || productoId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El productoId es obligatorio.");
         }
@@ -197,7 +305,7 @@ public class DispensacionV2WorkflowService {
                 : new ArrayList<>();
         int totalPages = (int) Math.ceil((double) lotes.size() / safeSize);
 
-        return new LoteDisponiblePageResponseDTO(
+        LoteDisponiblePageResponseDTO response = new LoteDisponiblePageResponseDTO(
                 productoId,
                 producto.getNombre(),
                 pageItems,
@@ -206,6 +314,15 @@ public class DispensacionV2WorkflowService {
                 safePage,
                 safeSize
         );
+        log.info(
+                "[DISP_V2][LOTES_DISPONIBLES_COMPLETE] productoId={} totalElements={} returnedElements={} page={} size={}",
+                productoId,
+                lotes.size(),
+                pageItems.size(),
+                safePage,
+                safeSize
+        );
+        return response;
     }
 
     private DispensacionV2PreparacionResponseDTO buildResponse(
@@ -215,6 +332,14 @@ public class DispensacionV2WorkflowService {
             boolean asignarLotes,
             boolean defaultChecked
     ) {
+        log.debug(
+                "[DISP_V2][BUILD_RESPONSE_START] areaId={} ordenCount={} asignarLotes={} defaultChecked={} overrideOrderCount={}",
+                area.getAreaId(),
+                ordenInputs.size(),
+                asignarLotes,
+                defaultChecked,
+                overrides.size()
+        );
         DispensacionV2PreparacionResponseDTO response = new DispensacionV2PreparacionResponseDTO();
         response.setArea(toAreaDTO(area));
 
@@ -259,6 +384,25 @@ public class DispensacionV2WorkflowService {
                 .map(TotalAccumulator::toDTO)
                 .toList());
         response.setWarnings(warnings);
+        response.getTotalesMateriales().forEach(total -> log.info(
+                "[DISP_V2][TOTAL_MATERIAL] productoId={} nombre={} unidad={} cantidadRecetaTotal={} cantidadADispensarTotal={} cantidadHistoricaTotal={} totalConHistorico={} excedeReceta={} warning={}",
+                total.getProductoId(),
+                total.getProductoNombre(),
+                total.getTipoUnidades(),
+                total.getCantidadRecetaTotal(),
+                total.getCantidadADispensarTotal(),
+                total.getCantidadHistoricaTotal(),
+                total.getTotalConHistorico(),
+                total.isExcedeReceta(),
+                total.getWarning()
+        ));
+        log.debug(
+                "[DISP_V2][BUILD_RESPONSE_COMPLETE] areaId={} ordenCount={} totalMaterialCount={} warningCount={}",
+                area.getAreaId(),
+                ordenes.size(),
+                response.getTotalesMateriales().size(),
+                warnings.size()
+        );
         return response;
     }
 
@@ -273,6 +417,16 @@ public class DispensacionV2WorkflowService {
             Map<String, Double> stockRestantePorLote
     ) {
         Producto producto = orden.getProducto();
+        log.info(
+                "[DISP_V2][ORDER_BUILD_START] ordenProduccionId={} estado={} productoTerminadoId={} cantidadProducir={} areaId={} asignarLotes={} overrideCount={}",
+                orden.getOrdenId(),
+                orden.getEstadoOrden(),
+                producto != null ? producto.getProductoId() : null,
+                orden.getCantidadProducir(),
+                area.getAreaId(),
+                asignarLotes,
+                overrides.size()
+        );
         if (!(producto instanceof Terminado terminado)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -292,8 +446,36 @@ public class DispensacionV2WorkflowService {
                     override,
                     defaultChecked
             );
+            log.info(
+                    "[DISP_V2][ORDER_MATERIAL] ordenProduccionId={} productoId={} nombre={} tipo={} unidad={} inventareable={} overridePresent={} checked={} cantidadReceta={} cantidadHistorica={} cantidadADispensar={} totalConHistorico={} excedeReceta={} tolerance={} warning={}",
+                    orden.getOrdenId(),
+                    dto.getProductoId(),
+                    dto.getProductoNombre(),
+                    dto.getTipoProducto(),
+                    dto.getTipoUnidades(),
+                    dto.isInventareable(),
+                    override != null,
+                    dto.isChecked(),
+                    dto.getCantidadReceta(),
+                    dto.getCantidadHistorica(),
+                    dto.getCantidadADispensar(),
+                    dto.getTotalConHistorico(),
+                    dto.isExcedeReceta(),
+                    TOLERANCE,
+                    dto.getWarning()
+            );
             if (asignarLotes && dto.isChecked() && dto.isInventareable() && dto.getCantidadADispensar() > TOLERANCE) {
                 asignarLotesSugeridos(dto, stockCache, stockRestantePorLote);
+            } else if (asignarLotes) {
+                log.debug(
+                        "[DISP_V2][LOT_ASSIGNMENT_SKIPPED] ordenProduccionId={} productoId={} checked={} inventareable={} cantidadADispensar={} tolerance={}",
+                        orden.getOrdenId(),
+                        dto.getProductoId(),
+                        dto.isChecked(),
+                        dto.isInventareable(),
+                        dto.getCantidadADispensar(),
+                        TOLERANCE
+                );
             }
             materialesDTO.add(dto);
         }
@@ -308,6 +490,12 @@ public class DispensacionV2WorkflowService {
         dto.setMpsItemId(input.mpsItemId());
         dto.setArea(toAreaDTO(area));
         dto.setMateriales(materialesDTO);
+        log.info(
+                "[DISP_V2][ORDER_BUILD_COMPLETE] ordenProduccionId={} materialCount={} historicalProductCount={}",
+                orden.getOrdenId(),
+                materialesDTO.size(),
+                historico.size()
+        );
         return dto;
     }
 
@@ -316,8 +504,23 @@ public class DispensacionV2WorkflowService {
         List<InsumoWithStockDTO> insumos = terminado.getInsumos() == null
                 ? Collections.emptyList()
                 : productoService.getInsumosWithStock(terminado.getProductoId());
+        log.info(
+                "[DISP_V2][RECIPE_BUILD_START] terminadoId={} terminadoNombre={} cantidadOrden={} rootInsumoCount={} hasCasePack={}",
+                terminado.getProductoId(),
+                terminado.getNombre(),
+                cantidadOrden,
+                insumos.size(),
+                terminado.getCasePack() != null
+        );
         aplanarInsumos(insumos, materiales, cantidadOrden, 1.0);
         agregarInsumosEmpaque(terminado, materiales, cantidadOrden);
+        log.info(
+                "[DISP_V2][RECIPE_BUILD_COMPLETE] terminadoId={} cantidadOrden={} materialCount={} materialIds={}",
+                terminado.getProductoId(),
+                cantidadOrden,
+                materiales.size(),
+                materiales.keySet()
+        );
         return materiales;
     }
 
@@ -333,7 +536,22 @@ public class DispensacionV2WorkflowService {
 
         for (InsumoWithStockDTO insumo : insumos) {
             double cantidadTotal = insumo.getCantidadRequerida() * cantidadOrden * multiplicadorActual;
-            if (insumo.getSubInsumos() != null && !insumo.getSubInsumos().isEmpty()) {
+            boolean hasSubInsumos = insumo.getSubInsumos() != null && !insumo.getSubInsumos().isEmpty();
+            log.debug(
+                    "[DISP_V2][RECIPE_NODE] productoId={} nombre={} tipoProducto={} unidad={} inventareable={} cantidadRequerida={} cantidadOrden={} multiplicador={} cantidadCalculada={} hasSubInsumos={} subInsumoCount={}",
+                    insumo.getProductoId(),
+                    insumo.getProductoNombre(),
+                    insumo.getTipoProducto(),
+                    insumo.getTipoUnidades(),
+                    insumo.getInventareable(),
+                    insumo.getCantidadRequerida(),
+                    cantidadOrden,
+                    multiplicadorActual,
+                    cantidadTotal,
+                    hasSubInsumos,
+                    insumo.getSubInsumos() != null ? insumo.getSubInsumos().size() : 0
+            );
+            if (hasSubInsumos) {
                 aplanarInsumos(
                         insumo.getSubInsumos(),
                         materiales,
@@ -353,6 +571,7 @@ public class DispensacionV2WorkflowService {
                     normalizeUnidad(insumo.getTipoUnidades(), "KG"),
                     tipoProducto,
                     insumo.getInventareable() == null || insumo.getInventareable(),
+                    Boolean.TRUE.equals(insumo.getConsumoDirecto()),
                     cantidadTotal
             );
         }
@@ -369,9 +588,23 @@ public class DispensacionV2WorkflowService {
         }
 
         boolean hasUnitsPerCase = casePack.getUnitsPerCase() != null && casePack.getUnitsPerCase() > 0;
+        log.info(
+                "[DISP_V2][PACKAGING_START] terminadoId={} cantidadOrden={} unitsPerCase={} hasUnitsPerCase={} packagingMaterialCount={}",
+                terminado.getProductoId(),
+                cantidadOrden,
+                casePack.getUnitsPerCase(),
+                hasUnitsPerCase,
+                casePack.getInsumosEmpaque().size()
+        );
         for (InsumoEmpaque insumoEmpaque : casePack.getInsumosEmpaque()) {
             Material material = insumoEmpaque.getMaterial();
             if (material == null) {
+                log.warn(
+                        "[DISP_V2][PACKAGING_SKIPPED] terminadoId={} reason=MATERIAL_NULL cantidadConfigurada={} unidadConfigurada={}",
+                        terminado.getProductoId(),
+                        insumoEmpaque.getCantidad(),
+                        insumoEmpaque.getUom()
+                );
                 continue;
             }
 
@@ -379,6 +612,19 @@ public class DispensacionV2WorkflowService {
                     ? (cantidadOrden / casePack.getUnitsPerCase()) * insumoEmpaque.getCantidad()
                     : insumoEmpaque.getCantidad() * cantidadOrden;
 
+            log.debug(
+                    "[DISP_V2][PACKAGING_COMPONENT] terminadoId={} productoId={} nombre={} cantidadConfigurada={} cantidadOrden={} unitsPerCase={} cantidadCalculada={} unidadConfigurada={} unidadMaterial={} inventareable={}",
+                    terminado.getProductoId(),
+                    material.getProductoId(),
+                    material.getNombre(),
+                    insumoEmpaque.getCantidad(),
+                    cantidadOrden,
+                    casePack.getUnitsPerCase(),
+                    cantidadTotal,
+                    insumoEmpaque.getUom(),
+                    material.getTipoUnidades(),
+                    material.isInventareable()
+            );
             addMaterial(
                     materiales,
                     material.getProductoId(),
@@ -386,6 +632,7 @@ public class DispensacionV2WorkflowService {
                     normalizeUnidad(insumoEmpaque.getUom(), normalizeUnidad(material.getTipoUnidades(), "U")),
                     "MATERIAL_EMPAQUE",
                     material.isInventareable(),
+                    material.isConsumoDirecto(),
                     cantidadTotal
             );
         }
@@ -398,21 +645,63 @@ public class DispensacionV2WorkflowService {
             String tipoUnidades,
             String tipoProducto,
             boolean inventareable,
+            boolean consumoDirecto,
             double cantidad
     ) {
         if (productoId == null || productoId.isBlank() || cantidad <= TOLERANCE) {
+            log.warn(
+                    "[DISP_V2][MATERIAL_SKIPPED] productoId={} nombre={} tipo={} unidad={} inventareable={} cantidad={} tolerance={} reason={}",
+                    productoId,
+                    productoNombre,
+                    tipoProducto,
+                    tipoUnidades,
+                    inventareable,
+                    cantidad,
+                    TOLERANCE,
+                    productoId == null || productoId.isBlank() ? "PRODUCTO_ID_INVALIDO" : "CANTIDAD_NO_SUPERA_TOLERANCIA"
+            );
             return;
         }
 
-        MaterialAccumulator accumulator = materiales.computeIfAbsent(
-                productoId,
-                ignored -> new MaterialAccumulator(productoId, productoNombre, tipoUnidades, tipoProducto, inventareable)
-        );
+        MaterialAccumulator accumulator = materiales.get(productoId);
+        boolean existing = accumulator != null;
+        if (accumulator == null) {
+            accumulator = new MaterialAccumulator(
+                    productoId,
+                    productoNombre,
+                    tipoUnidades,
+                    tipoProducto,
+                    inventareable,
+                    consumoDirecto
+            );
+            materiales.put(productoId, accumulator);
+        }
+        double previousQuantity = accumulator.cantidadReceta;
+        boolean previousInventareable = accumulator.inventareable;
+        String previousTipoProducto = accumulator.tipoProducto;
         accumulator.addCantidad(cantidad);
         accumulator.inventareable = accumulator.inventareable && inventareable;
+        accumulator.consumoDirecto = accumulator.consumoDirecto || consumoDirecto;
         if ("MATERIAL_EMPAQUE".equals(accumulator.tipoProducto) && !"MATERIAL_EMPAQUE".equals(tipoProducto)) {
             accumulator.tipoProducto = tipoProducto;
         }
+        log.info(
+                "[DISP_V2][MATERIAL_ACCUMULATED] productoId={} nombre={} existing={} incomingTipo={} previousTipo={} resultingTipo={} incomingUnidad={} accumulatorUnidad={} incomingInventareable={} previousInventareable={} resultingInventareable={} previousCantidad={} addedCantidad={} resultingCantidad={}",
+                productoId,
+                productoNombre,
+                existing,
+                tipoProducto,
+                previousTipoProducto,
+                accumulator.tipoProducto,
+                tipoUnidades,
+                accumulator.tipoUnidades,
+                inventareable,
+                previousInventareable,
+                accumulator.inventareable,
+                previousQuantity,
+                cantidad,
+                accumulator.cantidadReceta
+        );
     }
 
     private DispensacionV2MaterialDTO toMaterialDTO(
@@ -421,10 +710,11 @@ public class DispensacionV2WorkflowService {
             DispensacionV2MaterialEditableRequestDTO override,
             boolean defaultChecked
     ) {
+        boolean suministrable = material.inventareable || material.consumoDirecto;
         boolean checked = override != null && override.getChecked() != null
                 ? override.getChecked()
-                : defaultChecked && material.inventareable;
-        if (!material.inventareable) {
+                : material.consumoDirecto || (defaultChecked && material.inventareable);
+        if (!suministrable) {
             checked = false;
         }
 
@@ -441,17 +731,37 @@ public class DispensacionV2WorkflowService {
         dto.setTipoUnidades(material.tipoUnidades);
         dto.setTipoProducto(material.tipoProducto);
         dto.setInventareable(material.inventareable);
+        dto.setConsumoDirecto(material.consumoDirecto);
         dto.setChecked(checked);
         dto.setCantidadReceta(material.cantidadReceta);
         dto.setCantidadADispensar(cantidadADispensar);
         dto.setCantidadHistorica(cantidadHistorica);
         dto.setTotalConHistorico(totalConHistorico);
         dto.setExcedeReceta(excede);
-        if (!material.inventareable) {
-            dto.setWarning("Material no inventariable; no requiere salida de lote.");
+        if (!material.inventareable && !material.consumoDirecto) {
+            dto.setWarning("Material no inventariable sin consumo directo; no participa en la dispensacion.");
         } else if (excede) {
             dto.setWarning("La suma de historico y dispensacion actual excede la receta.");
         }
+        log.debug(
+                "[DISP_V2][MATERIAL_DTO] productoId={} inventareable={} defaultChecked={} overridePresent={} overrideChecked={} overrideCantidad={} checked={} cantidadReceta={} cantidadHistorica={} cantidadADispensar={} cantidadActualEfectiva={} totalConHistorico={} deltaReceta={} tolerance={} excedeReceta={} warning={}",
+                material.productoId,
+                material.inventareable,
+                defaultChecked,
+                override != null,
+                override != null ? override.getChecked() : null,
+                override != null ? override.getCantidadADispensar() : null,
+                checked,
+                material.cantidadReceta,
+                cantidadHistorica,
+                cantidadADispensar,
+                cantidadActualEfectiva,
+                totalConHistorico,
+                totalConHistorico - material.cantidadReceta,
+                TOLERANCE,
+                excede,
+                dto.getWarning()
+        );
         return dto;
     }
 
@@ -463,19 +773,42 @@ public class DispensacionV2WorkflowService {
         double cantidadRestante = material.getCantidadADispensar();
         List<LoteStock> stockLotes = stockCache.computeIfAbsent(material.getProductoId(), this::findStockGeneral);
         List<DispensacionV2LoteOrigenDTO> lotes = new ArrayList<>();
+        log.info(
+                "[DISP_V2][LOT_ASSIGNMENT_START] productoId={} cantidadSolicitada={} candidateCount={} cachedStockProductCount={}",
+                material.getProductoId(),
+                material.getCantidadADispensar(),
+                stockLotes.size(),
+                stockCache.size()
+        );
 
         for (LoteStock stock : stockLotes) {
             if (cantidadRestante <= TOLERANCE) {
+                log.debug(
+                        "[DISP_V2][LOT_ASSIGNMENT_STOP] productoId={} cantidadRestante={} tolerance={} reason=DEMAND_COVERED",
+                        material.getProductoId(),
+                        cantidadRestante,
+                        TOLERANCE
+                );
                 break;
             }
 
             String key = material.getProductoId() + "|" + stock.lote().getId();
             double restanteEnLote = stockRestantePorLote.getOrDefault(key, stock.stockDisponible());
             if (restanteEnLote <= TOLERANCE) {
+                log.debug(
+                        "[DISP_V2][LOT_CANDIDATE_SKIPPED] productoId={} loteId={} batchNumber={} stockOriginal={} stockRestanteCompartido={} tolerance={}",
+                        material.getProductoId(),
+                        stock.lote().getId(),
+                        stock.lote().getBatchNumber(),
+                        stock.stockDisponible(),
+                        restanteEnLote,
+                        TOLERANCE
+                );
                 continue;
             }
 
             double cantidadAsignada = Math.min(cantidadRestante, restanteEnLote);
+            double cantidadRestanteBefore = cantidadRestante;
             lotes.add(new DispensacionV2LoteOrigenDTO(
                     stock.lote().getId(),
                     stock.lote().getBatchNumber(),
@@ -487,28 +820,98 @@ public class DispensacionV2WorkflowService {
             ));
             stockRestantePorLote.put(key, restanteEnLote - cantidadAsignada);
             cantidadRestante -= cantidadAsignada;
+            log.info(
+                    "[DISP_V2][LOT_ASSIGNED] productoId={} loteId={} batchNumber={} expirationDate={} stockOriginal={} stockRestanteBefore={} demandBefore={} cantidadAsignada={} stockRestanteAfter={} demandAfter={}",
+                    material.getProductoId(),
+                    stock.lote().getId(),
+                    stock.lote().getBatchNumber(),
+                    stock.lote().getExpirationDate(),
+                    stock.stockDisponible(),
+                    restanteEnLote,
+                    cantidadRestanteBefore,
+                    cantidadAsignada,
+                    restanteEnLote - cantidadAsignada,
+                    cantidadRestante
+            );
         }
 
         material.setLotesOrigen(lotes);
         if (cantidadRestante > TOLERANCE) {
             appendWarning(material, "Stock insuficiente para cubrir " + round(cantidadRestante) + " " + material.getTipoUnidades() + ".");
+            log.warn(
+                    "[DISP_V2][LOT_ASSIGNMENT_SHORTAGE] productoId={} cantidadSolicitada={} cantidadRestante={} assignedLotCount={} tolerance={} warning={}",
+                    material.getProductoId(),
+                    material.getCantidadADispensar(),
+                    cantidadRestante,
+                    lotes.size(),
+                    TOLERANCE,
+                    material.getWarning()
+            );
+        } else {
+            log.info(
+                    "[DISP_V2][LOT_ASSIGNMENT_COMPLETE] productoId={} cantidadSolicitada={} cantidadRestante={} assignedLotCount={}",
+                    material.getProductoId(),
+                    material.getCantidadADispensar(),
+                    cantidadRestante,
+                    lotes.size()
+            );
         }
     }
 
     private List<LoteStock> findStockGeneral(String productoId) {
-        return transaccionAlmacenRepo
+        log.info(
+                "[DISP_V2][STOCK_QUERY_START] productoId={} almacen={} tolerance={}",
+                productoId,
+                Movimiento.Almacen.GENERAL,
+                TOLERANCE
+        );
+        List<Object[]> rows = transaccionAlmacenRepo
                 .findLotesWithStockByProductoIdAndAlmacenOrderByExpirationDate(
                         productoId,
                         Movimiento.Almacen.GENERAL
-                )
-                .stream()
+                );
+        log.info(
+                "[DISP_V2][STOCK_QUERY_ROWS] productoId={} rowCount={}",
+                productoId,
+                rows.size()
+        );
+
+        List<LoteStock> allStock = rows.stream()
                 .map(this::toLoteStock)
+                .toList();
+        allStock.forEach(stock -> log.info(
+                "[DISP_V2][STOCK_ROW] productoId={} loteId={} batchNumber={} productionDate={} expirationDate={} stockDisponible={} eligible={} tolerance={}",
+                productoId,
+                stock.lote().getId(),
+                stock.lote().getBatchNumber(),
+                stock.lote().getProductionDate(),
+                stock.lote().getExpirationDate(),
+                stock.stockDisponible(),
+                stock.stockDisponible() > TOLERANCE,
+                TOLERANCE
+        ));
+
+        List<LoteStock> eligibleStock = allStock.stream()
                 .filter(stock -> stock.stockDisponible() > TOLERANCE)
                 .toList();
+        log.info(
+                "[DISP_V2][STOCK_QUERY_COMPLETE] productoId={} rowCount={} eligibleCount={}",
+                productoId,
+                allStock.size(),
+                eligibleStock.size()
+        );
+        return eligibleStock;
     }
 
     private LoteStock toLoteStock(Object[] row) {
         if (row == null || row.length < 2 || !(row[0] instanceof Lote lote) || !(row[1] instanceof Number stock)) {
+            log.error(
+                    "[DISP_V2][STOCK_ROW_INVALID] rowNull={} rowLength={} firstType={} secondType={}",
+                    row == null,
+                    row != null ? row.length : null,
+                    row != null && row.length > 0 && row[0] != null ? row[0].getClass().getName() : null,
+                    row != null && row.length > 1 && row[1] != null ? row[1].getClass().getName() : null
+            );
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Respuesta invalida al consultar lotes disponibles.");
         }
         return new LoteStock(lote, stock.doubleValue());
@@ -522,44 +925,104 @@ public class DispensacionV2WorkflowService {
                         ordenProduccionId
                 );
 
+        log.info(
+                "[DISP_V2][HISTORY_QUERY] ordenProduccionId={} transactionCount={}",
+                ordenProduccionId,
+                transacciones.size()
+        );
         for (TransaccionAlmacen transaccion : transacciones) {
             if (transaccion.getMovimientosTransaccion() == null) {
+                log.debug(
+                        "[DISP_V2][HISTORY_TRANSACTION_SKIPPED] ordenProduccionId={} transaccionId={} reason=MOVIMIENTOS_NULL",
+                        ordenProduccionId,
+                        transaccion.getTransaccionId()
+                );
                 continue;
             }
             transaccion.getMovimientosTransaccion().forEach(movimiento -> {
                 if (movimiento.getProducto() == null || movimiento.getProducto().getProductoId() == null) {
+                    log.warn(
+                            "[DISP_V2][HISTORY_MOVEMENT_SKIPPED] ordenProduccionId={} transaccionId={} movimientoId={} reason=PRODUCTO_NULL",
+                            ordenProduccionId,
+                            transaccion.getTransaccionId(),
+                            movimiento.getMovimientoId()
+                    );
                     return;
                 }
-                historico.merge(
+                log.debug(
+                        "[DISP_V2][HISTORY_MOVEMENT] ordenProduccionId={} transaccionId={} movimientoId={} productoId={} cantidad={} absoluteCantidad={} loteId={} almacen={} tipoMovimiento={}",
+                        ordenProduccionId,
+                        transaccion.getTransaccionId(),
+                        movimiento.getMovimientoId(),
                         movimiento.getProducto().getProductoId(),
+                        movimiento.getCantidad(),
                         Math.abs(movimiento.getCantidad()),
-                        Double::sum
+                        movimiento.getLote() != null ? movimiento.getLote().getId() : null,
+                        movimiento.getAlmacen(),
+                        movimiento.getTipoMovimiento()
                 );
+                if (movimiento.getTipoMovimiento() == Movimiento.TipoMovimiento.DISPENSACION
+                        || movimiento.getTipoMovimiento() == Movimiento.TipoMovimiento.CONSUMO) {
+                    historico.merge(
+                            movimiento.getProducto().getProductoId(),
+                            Math.abs(movimiento.getCantidad()),
+                            Double::sum
+                    );
+                }
             });
         }
+        historico.forEach((productoId, cantidad) -> log.info(
+                "[DISP_V2][HISTORY_TOTAL] ordenProduccionId={} productoId={} cantidadHistorica={}",
+                ordenProduccionId,
+                productoId,
+                cantidad
+        ));
         return historico;
     }
 
     private AreaOperativa requireArea(Integer areaId) {
+        log.debug("[DISP_V2][AREA_VALIDATE] areaId={}", areaId);
         if (areaId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El areaId es obligatorio.");
         }
         if (areaId == AreaOperativaInitializer.ALMACEN_GENERAL_ID) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Almacen General no es un area destino valida.");
         }
-        return areaProduccionRepo.findById(areaId)
+        AreaOperativa area = areaProduccionRepo.findById(areaId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Area operativa no encontrada."));
+        log.debug(
+                "[DISP_V2][AREA_FOUND] areaId={} nombre={}",
+                area.getAreaId(),
+                area.getNombre()
+        );
+        return area;
     }
 
     private OrdenProduccion requireOrden(Integer ordenProduccionId) {
+        log.debug("[DISP_V2][ORDER_LOOKUP] ordenProduccionId={}", ordenProduccionId);
         if (ordenProduccionId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cada orden debe tener ordenProduccionId.");
         }
-        return ordenProduccionRepo.findById(ordenProduccionId)
+        OrdenProduccion orden = ordenProduccionRepo.findById(ordenProduccionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden de produccion no encontrada: " + ordenProduccionId));
+        log.debug(
+                "[DISP_V2][ORDER_FOUND] ordenProduccionId={} estado={} loteAsignado={} productoId={} cantidadProducir={}",
+                orden.getOrdenId(),
+                orden.getEstadoOrden(),
+                orden.getLoteAsignado(),
+                orden.getProducto() != null ? orden.getProducto().getProductoId() : null,
+                orden.getCantidadProducir()
+        );
+        return orden;
     }
 
     private void validateOrden(AreaOperativa area, OrdenProduccion orden) {
+        log.debug(
+                "[DISP_V2][ORDER_VALIDATE] ordenProduccionId={} estado={} areaId={}",
+                orden.getOrdenId(),
+                orden.getEstadoOrden(),
+                area.getAreaId()
+        );
         if (orden.getEstadoOrden() == 2 || orden.getEstadoOrden() == -1) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -570,6 +1033,12 @@ public class DispensacionV2WorkflowService {
         boolean areaPerteneceAlSeguimiento = seguimientoOrdenAreaService.tieneAreaOperativaEnSeguimiento(
                 orden.getOrdenId(),
                 area.getAreaId()
+        );
+        log.info(
+                "[DISP_V2][ORDER_AREA_MEMBERSHIP] ordenProduccionId={} areaId={} belongsToTracking={}",
+                orden.getOrdenId(),
+                area.getAreaId(),
+                areaPerteneceAlSeguimiento
         );
         if (!areaPerteneceAlSeguimiento) {
             throw new ResponseStatusException(
@@ -627,12 +1096,34 @@ public class DispensacionV2WorkflowService {
 
         for (DispensacionV2AsignacionOrdenRequestDTO orden : ordenes) {
             if (orden == null || orden.getOrdenProduccionId() == null || orden.getMateriales() == null) {
+                log.debug(
+                        "[DISP_V2][OVERRIDE_ORDER_SKIPPED] ordenNull={} ordenProduccionId={} materialesNull={}",
+                        orden == null,
+                        orden != null ? orden.getOrdenProduccionId() : null,
+                        orden == null || orden.getMateriales() == null
+                );
                 continue;
             }
             Map<String, DispensacionV2MaterialEditableRequestDTO> byProducto = new HashMap<>();
             for (DispensacionV2MaterialEditableRequestDTO material : orden.getMateriales()) {
                 if (material != null && material.getProductoId() != null && !material.getProductoId().isBlank()) {
-                    byProducto.put(material.getProductoId(), material);
+                    DispensacionV2MaterialEditableRequestDTO previous =
+                            byProducto.put(material.getProductoId(), material);
+                    log.info(
+                            "[DISP_V2][OVERRIDE_INPUT] ordenProduccionId={} productoId={} checked={} cantidadADispensar={} duplicateInPayload={}",
+                            orden.getOrdenProduccionId(),
+                            material.getProductoId(),
+                            material.getChecked(),
+                            material.getCantidadADispensar(),
+                            previous != null
+                    );
+                } else {
+                    log.warn(
+                            "[DISP_V2][OVERRIDE_SKIPPED] ordenProduccionId={} materialNull={} productoId={}",
+                            orden.getOrdenProduccionId(),
+                            material == null,
+                            material != null ? material.getProductoId() : null
+                    );
                 }
             }
             overrides.put(orden.getOrdenProduccionId(), byProducto);
@@ -673,26 +1164,65 @@ public class DispensacionV2WorkflowService {
             Map<StockDemandKey, Double> demandaPorLote
     ) {
         List<DispensacionItemDTO> items = new ArrayList<>();
+        log.debug(
+                "[DISP_V2][FINAL_ITEMS_START] ordenProduccionId={} materialCount={}",
+                orden.getOrdenProduccionId(),
+                orden.getMateriales() != null ? orden.getMateriales().size() : null
+        );
         if (orden.getMateriales() == null) {
             return items;
         }
 
         for (DispensacionV2FinalizacionMaterialRequestDTO material : orden.getMateriales()) {
             if (material == null || !Boolean.TRUE.equals(material.getChecked())) {
+                log.debug(
+                        "[DISP_V2][FINAL_MATERIAL_SKIPPED] ordenProduccionId={} productoId={} materialNull={} checked={} reason=NOT_SELECTED",
+                        orden.getOrdenProduccionId(),
+                        material != null ? material.getProductoId() : null,
+                        material == null,
+                        material != null ? material.getChecked() : null
+                );
                 continue;
             }
 
             String productoId = material.getProductoId();
+            log.info(
+                    "[DISP_V2][FINAL_MATERIAL_START] ordenProduccionId={} productoId={} checked={} cantidadADispensar={} loteCount={}",
+                    orden.getOrdenProduccionId(),
+                    productoId,
+                    material.getChecked(),
+                    material.getCantidadADispensar(),
+                    material.getLotesOrigen() != null ? material.getLotesOrigen().size() : null
+            );
             if (productoId == null || productoId.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cada material seleccionado debe tener productoId.");
             }
 
             Producto producto = productoRepo.findById(productoId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado: " + productoId));
-            if (!producto.isInventareable()) {
+            log.info(
+                    "[DISP_V2][FINAL_PRODUCT_FOUND] ordenProduccionId={} productoId={} entityType={} nombre={} inventareable={} unidad={}",
+                    orden.getOrdenProduccionId(),
+                    productoId,
+                    producto.getClass().getSimpleName(),
+                    producto.getNombre(),
+                    producto.isInventareable(),
+                    producto.getTipoUnidades()
+            );
+            boolean consumoDirecto = producto instanceof Material materialProducto
+                    && materialProducto.isConsumoDirecto();
+            if (producto.isInventareable() && consumoDirecto) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "El material " + productoId
+                                + " tiene una configuracion invalida: inventariable y consumo directo."
+                );
+            }
+            if (!producto.isInventareable() && !consumoDirecto) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "El producto " + productoId + " no es inventariable y no puede finalizarse como dispensacion."
+                        "El producto " + productoId
+                                + " no es inventariable ni esta configurado para consumo directo."
                 );
             }
 
@@ -702,6 +1232,17 @@ public class DispensacionV2WorkflowService {
                         HttpStatus.BAD_REQUEST,
                         "La cantidad a dispensar para el producto " + productoId + " debe ser mayor a cero."
                 );
+            }
+
+            if (consumoDirecto) {
+                if (material.getLotesOrigen() != null && !material.getLotesOrigen().isEmpty()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "El consumo directo del producto " + productoId + " no debe incluir lotes origen."
+                    );
+                }
+                items.add(new DispensacionItemDTO(productoId, cantidadADispensar, null));
+                continue;
             }
 
             if (material.getLotesOrigen() == null || material.getLotesOrigen().isEmpty()) {
@@ -726,23 +1267,58 @@ public class DispensacionV2WorkflowService {
 
                 totalLotes += cantidadAsignada;
                 StockDemandKey key = new StockDemandKey(productoId, lote.getLoteId());
+                double previousDemand = demandaPorLote.getOrDefault(key, 0.0);
                 demandaPorLote.merge(key, cantidadAsignada, Double::sum);
                 items.add(new DispensacionItemDTO(productoId, cantidadAsignada, Math.toIntExact(lote.getLoteId())));
+                log.info(
+                        "[DISP_V2][FINAL_LOT_INPUT] ordenProduccionId={} productoId={} loteId={} cantidadAsignada={} runningMaterialLotTotal={} previousAggregateDemand={} resultingAggregateDemand={}",
+                        orden.getOrdenProduccionId(),
+                        productoId,
+                        lote.getLoteId(),
+                        cantidadAsignada,
+                        totalLotes,
+                        previousDemand,
+                        previousDemand + cantidadAsignada
+                );
             }
 
-            if (Math.abs(totalLotes - cantidadADispensar) > TOLERANCE) {
+            double lotDifference = totalLotes - cantidadADispensar;
+            double absoluteLotDifference = Math.abs(lotDifference);
+            boolean matchesWithinTolerance = absoluteLotDifference <= TOLERANCE;
+            log.info(
+                    "[DISP_V2][FINAL_MATERIAL_SUM] ordenProduccionId={} productoId={} cantidadADispensar={} totalLotes={} difference={} absoluteDifference={} tolerance={} matchesWithinTolerance={}",
+                    orden.getOrdenProduccionId(),
+                    productoId,
+                    cantidadADispensar,
+                    totalLotes,
+                    lotDifference,
+                    absoluteLotDifference,
+                    TOLERANCE,
+                    matchesWithinTolerance
+            );
+            if (!matchesWithinTolerance) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "La suma de lotes del producto " + productoId + " (" + round(totalLotes)
-                                + ") no coincide con la cantidad a dispensar (" + round(cantidadADispensar) + ")."
+                        + ") no coincide con la cantidad a dispensar (" + round(cantidadADispensar) + ")."
                 );
             }
         }
 
+        log.debug(
+                "[DISP_V2][FINAL_ITEMS_COMPLETE] ordenProduccionId={} itemCount={}",
+                orden.getOrdenProduccionId(),
+                items.size()
+        );
         return items;
     }
 
     private void validateStockDisponible(Map<StockDemandKey, Double> demandaPorLote) {
+        log.info(
+                "[DISP_V2][FINAL_STOCK_VALIDATION_START] demandKeyCount={} tolerance={}",
+                demandaPorLote.size(),
+                TOLERANCE
+        );
         for (Map.Entry<StockDemandKey, Double> entry : demandaPorLote.entrySet()) {
             StockDemandKey key = entry.getKey();
             double solicitado = entry.getValue();
@@ -752,7 +1328,21 @@ public class DispensacionV2WorkflowService {
                     Movimiento.Almacen.GENERAL
             );
             double stockDisponible = stock != null ? stock : 0;
-            if (solicitado - stockDisponible > TOLERANCE) {
+            double difference = solicitado - stockDisponible;
+            boolean sufficient = difference <= TOLERANCE;
+            log.info(
+                    "[DISP_V2][FINAL_STOCK_CHECK] productoId={} loteId={} almacen={} solicitado={} stockQueryResult={} stockDisponible={} difference={} tolerance={} sufficient={}",
+                    key.productoId(),
+                    key.loteId(),
+                    Movimiento.Almacen.GENERAL,
+                    solicitado,
+                    stock,
+                    stockDisponible,
+                    difference,
+                    TOLERANCE,
+                    sufficient
+            );
+            if (!sufficient) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "Stock insuficiente para producto " + key.productoId()
@@ -820,6 +1410,7 @@ public class DispensacionV2WorkflowService {
         private final String tipoUnidades;
         private String tipoProducto;
         private boolean inventareable;
+        private boolean consumoDirecto;
         private double cantidadReceta;
 
         private MaterialAccumulator(
@@ -827,13 +1418,15 @@ public class DispensacionV2WorkflowService {
                 String productoNombre,
                 String tipoUnidades,
                 String tipoProducto,
-                boolean inventareable
+                boolean inventareable,
+                boolean consumoDirecto
         ) {
             this.productoId = productoId;
             this.productoNombre = productoNombre;
             this.tipoUnidades = tipoUnidades;
             this.tipoProducto = tipoProducto;
             this.inventareable = inventareable;
+            this.consumoDirecto = consumoDirecto;
         }
 
         private void addCantidad(double cantidad) {
@@ -858,7 +1451,7 @@ public class DispensacionV2WorkflowService {
         private void add(DispensacionV2MaterialDTO material) {
             this.cantidadRecetaTotal += material.getCantidadReceta();
             this.cantidadHistoricaTotal += material.getCantidadHistorica();
-            if (material.isChecked() && material.isInventareable()) {
+            if (material.isChecked() && (material.isInventareable() || material.isConsumoDirecto())) {
                 this.cantidadADispensarTotal += material.getCantidadADispensar();
             }
         }

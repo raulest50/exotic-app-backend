@@ -57,19 +57,22 @@ class ProductoServiceTest {
                 transaccionAlmacenRepo,
                 mock(OrdenProduccionRepo.class),
                 itemOrdenCompraRepo,
-                mock(FileStorageService.class)
+                mock(FileStorageService.class),
+                mock(ProductoCostoService.class)
         );
     }
 
     @Test
     void updateMaterialInventareableEnablesMaterialWithoutOperationalChecks() {
         Material material = material("M-1", false);
+        material.setConsumoDirecto(true);
         when(productoRepo.findById("M-1")).thenReturn(Optional.of(material));
         when(materialRepo.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Material updated = service.updateMaterialInventareable("M-1", true);
 
         assertTrue(updated.isInventareable());
+        assertFalse(updated.isConsumoDirecto());
         verify(materialRepo).save(material);
         verifyNoInteractions(transaccionAlmacenRepo, itemOrdenCompraRepo);
     }
@@ -88,6 +91,39 @@ class ProductoServiceTest {
 
         assertFalse(updated.isInventareable());
         verify(materialRepo).save(material);
+    }
+
+    @Test
+    void updateMaterialInventareableCanEnableDirectConsumptionWhenDisablingInventory() {
+        Material material = material("M-DIRECT", true);
+        when(productoRepo.findById("M-DIRECT")).thenReturn(Optional.of(material));
+        when(transaccionAlmacenRepo.findNonZeroStockGroupsByProductoId(eq("M-DIRECT"), eq(0.0001d)))
+                .thenReturn(List.of());
+        when(itemOrdenCompraRepo.existsByMaterialProductoIdAndOrdenCompraEstadoIn(
+                "M-DIRECT",
+                List.of(0, 1, 2)
+        )).thenReturn(false);
+        when(materialRepo.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Material updated = service.updateMaterialInventareable("M-DIRECT", false, true);
+
+        assertFalse(updated.isInventareable());
+        assertTrue(updated.isConsumoDirecto());
+        verify(materialRepo).save(material);
+    }
+
+    @Test
+    void updateMaterialInventareableRejectsInventoryAndDirectConsumptionTogether() {
+        Material material = material("M-INVALID", false);
+        when(productoRepo.findById("M-INVALID")).thenReturn(Optional.of(material));
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updateMaterialInventareable("M-INVALID", true, true)
+        );
+
+        assertTrue(error.getMessage().contains("consumo directo"));
+        verify(materialRepo, never()).save(any(Material.class));
     }
 
     @Test

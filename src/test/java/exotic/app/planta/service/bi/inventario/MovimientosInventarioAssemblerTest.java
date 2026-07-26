@@ -42,16 +42,23 @@ class MovimientosInventarioAssemblerTest {
                 finishedProduct,
                 Movimiento.TipoMovimiento.BACKFLUSH,
                 TransaccionAlmacen.TipoEntidadCausante.OP);
+        Movimiento positiveAdjustment = movement(
+                3,
+                date.plusHours(3),
+                material,
+                Movimiento.TipoMovimiento.AJUSTE_POSITIVO,
+                TransaccionAlmacen.TipoEntidadCausante.OAA);
 
         var report = assembler.assemble(
-                List.of(receipt, dispensation, finishedReceipt),
-                List.of(receipt, dispensation, finishedReceipt),
+                List.of(receipt, dispensation, finishedReceipt, positiveAdjustment),
+                List.of(receipt, dispensation, finishedReceipt, positiveAdjustment),
                 date.toLocalDate().minusDays(1),
                 date.toLocalDate());
 
         assertEquals(10_000, report.resumen().recepcionesOcm().valorEstimado(), 0.000001);
         assertEquals(4_000, report.resumen().dispensaciones().valorEstimado(), 0.000001);
         assertEquals(3_000, report.resumen().productoTerminado().valorEstimado(), 0.000001);
+        assertEquals(0, report.resumen().otrosIngresos().valorEstimado(), 0.000001);
         assertEquals(2, report.porUnidad().size());
         assertEquals(4, report.serieDiaria().size());
         assertTrue(report.serieDiaria().stream()

@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.bi;
 
 import exotic.app.planta.service.bi.InformeGlobalFechaResolver;
+import exotic.app.planta.service.bi.inventario.AjustesInventarioDetalleService;
 import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
@@ -24,6 +25,7 @@ public class InformeInventarioResource {
     private final InformeInventarioDetalleService detailService;
     private final BusquedaStockMaterialService searchService;
     private final CoberturaMaterialesService coverageService;
+    private final AjustesInventarioDetalleService adjustmentDetailService;
 
     @GetMapping
     public ResponseEntity<?> reporte(
@@ -77,6 +79,37 @@ public class InformeInventarioResource {
     public ResponseEntity<?> cobertura(@RequestParam(defaultValue = "90") int ventanaDias) {
         try {
             return ResponseEntity.ok(coverageService.calculate(ventanaDias));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        }
+    }
+
+    @GetMapping("/ajustes-materiales")
+    public ResponseEntity<?> ajustesMateriales(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) String grupo,
+            @RequestParam(defaultValue = "TODOS") String tipo,
+            @RequestParam(defaultValue = "IMPACTO") String orden,
+            @RequestParam(required = false) String buscar,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size
+    ) {
+        try {
+            var rango = InformeGlobalFechaResolver.resolve(fecha, fechaDesde, fechaHasta);
+            return ResponseEntity.ok(adjustmentDetailService.getMaterials(
+                    rango.fechaDesde(),
+                    rango.fechaHasta(),
+                    grupo,
+                    tipo,
+                    orden,
+                    buscar,
+                    page,
+                    size));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         }

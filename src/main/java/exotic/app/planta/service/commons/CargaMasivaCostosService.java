@@ -41,6 +41,16 @@ public class CargaMasivaCostosService {
         return workflow.listarItems(loteId, usuario, page, size);
     }
 
+    public CargaCostosDTOs.DependenciasPageResponse listarDependencias(
+            UUID loteId,
+            User usuario,
+            int page,
+            int size
+    ) {
+        lifecycle.expirarSiCorresponde(loteId, usuario.getId());
+        return workflow.listarDependencias(loteId, usuario, page, size);
+    }
+
     public CargaCostosDTOs.TokenResponse generarToken(UUID loteId, User usuario) {
         lifecycle.expirarSiCorresponde(loteId, usuario.getId());
         return workflow.generarToken(loteId, usuario);

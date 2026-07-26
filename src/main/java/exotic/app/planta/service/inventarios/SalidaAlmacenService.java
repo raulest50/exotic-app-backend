@@ -30,6 +30,7 @@ import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -72,9 +73,33 @@ public class SalidaAlmacenService {
      */
     @Transactional
     public TransaccionAlmacen createDispensacion(DispensacionDTO dispensacionDTO, Long userIdReportaSeguimiento) {
+        boolean dispensacionV2Trace = isDispensacionV2Trace();
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_SERVICE_START] ordenProduccionId={} areaDestinoId={} usuarioId={} usuarioAprobadorId={} usuarioRealizadorIds={} reporterUserId={} itemCount={} observaciones={}",
+                    dispensacionDTO.getOrdenProduccionId(),
+                    dispensacionDTO.getAreaOperativaDestinoId(),
+                    dispensacionDTO.getUsuarioId(),
+                    dispensacionDTO.getUsuarioAprobadorId(),
+                    dispensacionDTO.getUsuarioRealizadorIds(),
+                    userIdReportaSeguimiento,
+                    dispensacionDTO.getItems() != null ? dispensacionDTO.getItems().size() : null,
+                    dispensacionDTO.getObservaciones()
+            );
+        }
         // Obtain the production order
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(dispensacionDTO.getOrdenProduccionId())
                 .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + dispensacionDTO.getOrdenProduccionId()));
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_ORDER_FOUND] ordenProduccionId={} estado={} loteAsignado={} productoTerminadoId={} cantidadProducir={}",
+                    ordenProduccion.getOrdenId(),
+                    ordenProduccion.getEstadoOrden(),
+                    ordenProduccion.getLoteAsignado(),
+                    ordenProduccion.getProducto() != null ? ordenProduccion.getProducto().getProductoId() : null,
+                    ordenProduccion.getCantidadProducir()
+            );
+        }
 
         // Validar que la orden no esté en estado TERMINADA (2) o CANCELADA (-1)
         if (ordenProduccion.getEstadoOrden() == 2 || ordenProduccion.getEstadoOrden() == -1) {
@@ -87,6 +112,14 @@ public class SalidaAlmacenService {
                 ordenProduccion,
                 dispensacionDTO.getAreaOperativaDestinoId()
         );
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_AREA_RESOLVED] ordenProduccionId={} areaId={} areaNombre={}",
+                    ordenProduccion.getOrdenId(),
+                    areaDestino != null ? areaDestino.getAreaId() : null,
+                    areaDestino != null ? areaDestino.getNombre() : null
+            );
+        }
 
         // Create the warehouse transaction
         TransaccionAlmacen transaccion = new TransaccionAlmacen();
@@ -128,6 +161,15 @@ public class SalidaAlmacenService {
         List<Movimiento> movimientos = new ArrayList<>();
         for (DispensacionItemDTO item : dispensacionDTO.getItems()) {
             Producto producto = null;
+            if (dispensacionV2Trace) {
+                log.info(
+                        "[DISP_V2][PERSIST_ITEM_START] ordenProduccionId={} productoId={} loteId={} cantidad={}",
+                        ordenProduccion.getOrdenId(),
+                        item.getProductoId(),
+                        item.getLoteId(),
+                        item.getCantidad()
+                );
+            }
 
             if (item.getProductoId() != null && !item.getProductoId().isEmpty()) {
                 producto = productoRepo.findById(item.getProductoId())
@@ -135,12 +177,52 @@ public class SalidaAlmacenService {
             } else {
                 throw new RuntimeException("Se requiere productoId válido para cada item de dispensación.");
             }
+            if (item.getCantidad() <= 0) {
+                throw new IllegalArgumentException(
+                        "La cantidad de dispensacion debe ser mayor a cero para " + producto.getProductoId() + "."
+                );
+            }
+            boolean consumoDirecto = producto instanceof Material material
+                    && material.isConsumoDirecto();
+            if (producto.isInventareable() && consumoDirecto) {
+                throw new IllegalStateException(
+                        "El material " + producto.getProductoId()
+                                + " tiene una configuracion invalida: inventariable y consumo directo."
+                );
+            }
+            if (!producto.isInventareable() && !consumoDirecto) {
+                throw new IllegalArgumentException(
+                        "El producto " + producto.getProductoId()
+                                + " no es inventariable ni esta configurado para consumo directo."
+                );
+            }
+            if (consumoDirecto && item.getLoteId() != null) {
+                throw new IllegalArgumentException(
+                        "El consumo directo de " + producto.getProductoId() + " no admite lote origen."
+                );
+            }
+            if (dispensacionV2Trace) {
+                log.info(
+                        "[DISP_V2][PERSIST_PRODUCT_FOUND] ordenProduccionId={} productoId={} entityType={} nombre={} inventareable={} unidad={}",
+                        ordenProduccion.getOrdenId(),
+                        producto.getProductoId(),
+                        producto.getClass().getSimpleName(),
+                        producto.getNombre(),
+                        producto.isInventareable(),
+                        producto.getTipoUnidades()
+                );
+            }
 
             Movimiento movimiento = new Movimiento();
             movimiento.setCantidad(-item.getCantidad());
             movimiento.setProducto(producto);
-            movimiento.setTipoMovimiento(Movimiento.TipoMovimiento.DISPENSACION);
-            movimiento.setAlmacen(Movimiento.Almacen.GENERAL);
+            movimiento.setTipoMovimiento(
+                    consumoDirecto
+                            ? Movimiento.TipoMovimiento.CONSUMO
+                            : Movimiento.TipoMovimiento.DISPENSACION
+            );
+            movimiento.setAfectaInventario(!consumoDirecto);
+            movimiento.setAlmacen(consumoDirecto ? null : Movimiento.Almacen.GENERAL);
             movimiento.setTransaccionAlmacen(transaccion);
             movimiento.setAreaOperativa(areaDestino);
 
@@ -148,15 +230,53 @@ public class SalidaAlmacenService {
                 Lote lote = loteRepo.findById(Long.valueOf(item.getLoteId()))
                         .orElseThrow(() -> new RuntimeException("Lote no encontrado con ID: " + item.getLoteId()));
                 movimiento.setLote(lote);
+                if (dispensacionV2Trace) {
+                    log.info(
+                            "[DISP_V2][PERSIST_LOT_FOUND] ordenProduccionId={} productoId={} loteId={} batchNumber={} productionDate={} expirationDate={}",
+                            ordenProduccion.getOrdenId(),
+                            producto.getProductoId(),
+                            lote.getId(),
+                            lote.getBatchNumber(),
+                            lote.getProductionDate(),
+                            lote.getExpirationDate()
+                    );
+                }
             }
 
             movimientos.add(movimiento);
+            if (dispensacionV2Trace) {
+                log.info(
+                        "[DISP_V2][PERSIST_MOVEMENT_DRAFT] ordenProduccionId={} productoId={} loteId={} cantidadMovimiento={} tipoMovimiento={} almacen={} areaId={}",
+                        ordenProduccion.getOrdenId(),
+                        producto.getProductoId(),
+                        movimiento.getLote() != null ? movimiento.getLote().getId() : null,
+                        movimiento.getCantidad(),
+                        movimiento.getTipoMovimiento(),
+                        movimiento.getAlmacen(),
+                        movimiento.getAreaOperativa() != null ? movimiento.getAreaOperativa().getAreaId() : null
+                );
+            }
         }
 
         transaccion.setMovimientosTransaccion(movimientos);
 
         // Save the transaction
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_SAVE_START] ordenProduccionId={} movementCount={}",
+                    ordenProduccion.getOrdenId(),
+                    movimientos.size()
+            );
+        }
         TransaccionAlmacen transaccionGuardada = transaccionAlmacenHeaderRepo.save(transaccion);
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_SAVE_COMPLETE] ordenProduccionId={} transaccionId={} movementCount={}",
+                    ordenProduccion.getOrdenId(),
+                    transaccionGuardada.getTransaccionId(),
+                    movimientos.size()
+            );
+        }
 
         // Logica de cambio de estado por dispensacion de materiales
         int estadoActual = ordenProduccion.getEstadoOrden();
@@ -179,10 +299,25 @@ public class SalidaAlmacenService {
             produccionService.updateEstadoOrdenProduccion(ordenProduccion.getOrdenId(), nuevoEstado);
             log.info("Actualizado estado de orden de producción {} de {} a {}", ordenProduccion.getOrdenId(), estadoActual, nuevoEstado);
         }
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_ORDER_STATE] ordenProduccionId={} previousState={} resultingState={}",
+                    ordenProduccion.getOrdenId(),
+                    estadoActual,
+                    nuevoEstado
+            );
+        }
         ordenProduccionRepo.updateEstadoDispensacionMaterialesById(
                 ordenProduccion.getOrdenId(),
                 EstadoDispensacionMateriales.PARCIAL
         );
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_DISPENSATION_STATE_UPDATED] ordenProduccionId={} estadoDispensacion={}",
+                    ordenProduccion.getOrdenId(),
+                    EstadoDispensacionMateriales.PARCIAL
+            );
+        }
 
         // Logica contable dispensacion
         // Pendiente implementación de lógica contable para dispensaciones
@@ -192,8 +327,26 @@ public class SalidaAlmacenService {
                 userIdReportaSeguimiento,
                 buildObservacionAutoCompletar(dispensacionDTO, areaDestino)
         );
+        if (dispensacionV2Trace) {
+            log.info(
+                    "[DISP_V2][PERSIST_TRACKING_COMPLETE] ordenProduccionId={} transaccionId={} reporterUserId={} areaDestinoId={}",
+                    ordenProduccion.getOrdenId(),
+                    transaccionGuardada.getTransaccionId(),
+                    userIdReportaSeguimiento,
+                    areaDestino != null ? areaDestino.getAreaId() : null
+            );
+            log.info(
+                    "[DISP_V2][PERSIST_SERVICE_COMPLETE] ordenProduccionId={} transaccionId={}",
+                    ordenProduccion.getOrdenId(),
+                    transaccionGuardada.getTransaccionId()
+            );
+        }
 
         return transaccionGuardada;
+    }
+
+    private boolean isDispensacionV2Trace() {
+        return MDC.get("dispensacionV2TraceId") != null;
     }
 
     private AreaOperativa resolveAreaOperativaDestino(OrdenProduccion ordenProduccion, Integer areaOperativaDestinoId) {
@@ -911,6 +1064,7 @@ public class SalidaAlmacenService {
                 : (material.getTipoUnidades() != null ? material.getTipoUnidades() : "U"));
             dto.setTipoProducto("MATERIAL_EMPAQUE"); // Diferenciador para materiales de empaque
             dto.setInventareable(material.isInventareable());
+            dto.setConsumoDirecto(material.isConsumoDirecto());
 
             insumosEmpaque.add(dto);
         }
@@ -943,6 +1097,7 @@ public class SalidaAlmacenService {
                     : (material.getTipoUnidades() != null ? material.getTipoUnidades() : "U"));
             dto.setTipoProducto("MATERIAL_EMPAQUE");
             dto.setInventareable(material.isInventareable());
+            dto.setConsumoDirecto(material.isConsumoDirecto());
             insumosEmpaque.add(dto);
         }
 
@@ -969,6 +1124,7 @@ public class SalidaAlmacenService {
                             : "SEMITERMINADO"
             );
             dto.setInventareable(insumo.getInventareable() != null ? insumo.getInventareable() : true);
+            dto.setConsumoDirecto(Boolean.TRUE.equals(insumo.getConsumoDirecto()));
 
             if (insumo.getSubInsumos() != null && !insumo.getSubInsumos().isEmpty()) {
                 double nuevoMultiplicador = multiplicadorActual * insumo.getCantidadRequerida();
@@ -1009,6 +1165,7 @@ public class SalidaAlmacenService {
                         dto.setTipoMovimiento(movimiento.getTipoMovimiento() != null
                                 ? movimiento.getTipoMovimiento().name()
                                 : null);
+                        dto.setAfectaInventario(movimiento.isAfectaInventario());
                         dto.setAlmacen(movimiento.getAlmacen() != null
                                 ? movimiento.getAlmacen().name()
                                 : null);
@@ -1065,6 +1222,7 @@ public class SalidaAlmacenService {
                             : "SEMITERMINADO"
                     );
                     nuevo.setInventareable(insumo.getInventareable() != null ? insumo.getInventareable() : true);
+                    nuevo.setConsumoDirecto(Boolean.TRUE.equals(insumo.getConsumoDirecto()));
                     consolidado.put(productoId, nuevo);
                 }
             }

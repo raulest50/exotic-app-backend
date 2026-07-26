@@ -4,6 +4,7 @@ import exotic.app.planta.model.bi.dto.BusquedaStockMaterialDTO;
 import exotic.app.planta.model.bi.dto.CoberturaMaterialesDTO;
 import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
 import exotic.app.planta.model.bi.dto.PaginaInformeInventarioDTO;
+import exotic.app.planta.service.bi.inventario.AjustesInventarioDetalleService;
 import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
@@ -41,6 +42,9 @@ class InformeInventarioResourceTest {
 
     @MockBean
     private CoberturaMaterialesService coverageService;
+
+    @MockBean
+    private AjustesInventarioDetalleService adjustmentDetailService;
 
     @Test
     void reportAcceptsSingleDateAndIgnoresLegacyTrendWindow() throws Exception {
@@ -173,5 +177,43 @@ class InformeInventarioResourceTest {
                 .andExpect(jsonPath("$.totalElements").value(12));
 
         verify(detailService).getPendingPurchaseOrders(1, 10);
+    }
+
+    @Test
+    void adjustmentMaterialsUsesReportDatesAndIndependentFilters() throws Exception {
+        LocalDate date = LocalDate.of(2026, 7, 20);
+        when(adjustmentDetailService.getMaterials(
+                date,
+                date,
+                "MATERIA_PRIMA",
+                "NEGATIVO",
+                "MOVIMIENTOS",
+                "alcohol",
+                1,
+                5))
+                .thenReturn(new PaginaInformeInventarioDTO<>(
+                        List.of(), 1, 5, 7, 2, false, true));
+
+        mockMvc.perform(get("/bi/informes-globales/almacen/ajustes-materiales")
+                        .param("fecha", "2026-07-20")
+                        .param("grupo", "MATERIA_PRIMA")
+                        .param("tipo", "NEGATIVO")
+                        .param("orden", "MOVIMIENTOS")
+                        .param("buscar", "alcohol")
+                        .param("page", "1")
+                        .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalElements").value(7));
+
+        verify(adjustmentDetailService).getMaterials(
+                date,
+                date,
+                "MATERIA_PRIMA",
+                "NEGATIVO",
+                "MOVIMIENTOS",
+                "alcohol",
+                1,
+                5);
     }
 }

@@ -1,6 +1,8 @@
 package exotic.app.planta.resource.inventarios;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.inventarios.dto.*;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
@@ -13,6 +15,7 @@ import exotic.app.planta.service.inventarios.DispensacionV2WorkflowService;
 import exotic.app.planta.service.inventarios.SalidaAlmacenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +25,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 @RestController
 @RequestMapping("/salidas_almacen")
@@ -33,6 +39,7 @@ public class SalidaAlmacenResource {
     private final DispensacionV2MpsService dispensacionV2MpsService;
     private final DispensacionV2WorkflowService dispensacionV2WorkflowService;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/dispensacion-v2/mps-semanal")
     public ResponseEntity<MpsSemanalDraftDTO> getDispensacionV2MpsSemanal(
@@ -40,10 +47,18 @@ public class SalidaAlmacenResource {
             @RequestParam LocalDate weekStartDate,
             @RequestParam int areaId
     ) {
-        User currentUser = getCurrentUser(authentication);
-        requireDispensacionV2Access(currentUser);
-        MpsSemanalDraftDTO response = dispensacionV2MpsService.getMpsSemanalFiltradoPorArea(weekStartDate, areaId);
-        return ResponseEntity.ok(response);
+        return executeDispensacionV2Diagnostic(
+                "mps-semanal",
+                authentication,
+                Map.of("weekStartDate", weekStartDate, "areaId", areaId),
+                () -> {
+                    User currentUser = getCurrentUser(authentication);
+                    requireDispensacionV2Access(currentUser);
+                    MpsSemanalDraftDTO response = dispensacionV2MpsService
+                            .getMpsSemanalFiltradoPorArea(weekStartDate, areaId);
+                    return ResponseEntity.ok(response);
+                }
+        );
     }
 
     @PostMapping("/dispensacion-v2/preparacion")
@@ -51,9 +66,16 @@ public class SalidaAlmacenResource {
             Authentication authentication,
             @RequestBody DispensacionV2PreparacionRequestDTO request
     ) {
-        User currentUser = getCurrentUser(authentication);
-        requireDispensacionV2Access(currentUser);
-        return ResponseEntity.ok(dispensacionV2WorkflowService.preparar(request));
+        return executeDispensacionV2Diagnostic(
+                "preparacion",
+                authentication,
+                request,
+                () -> {
+                    User currentUser = getCurrentUser(authentication);
+                    requireDispensacionV2Access(currentUser);
+                    return ResponseEntity.ok(dispensacionV2WorkflowService.preparar(request));
+                }
+        );
     }
 
     @PostMapping("/dispensacion-v2/materiales-receta")
@@ -61,9 +83,16 @@ public class SalidaAlmacenResource {
             Authentication authentication,
             @RequestBody DispensacionV2MaterialesRecetaRequestDTO request
     ) {
-        User currentUser = getCurrentUser(authentication);
-        requireDispensacionV2Access(currentUser);
-        return ResponseEntity.ok(dispensacionV2WorkflowService.prepararMaterialesReceta(request));
+        return executeDispensacionV2Diagnostic(
+                "materiales-receta",
+                authentication,
+                request,
+                () -> {
+                    User currentUser = getCurrentUser(authentication);
+                    requireDispensacionV2Access(currentUser);
+                    return ResponseEntity.ok(dispensacionV2WorkflowService.prepararMaterialesReceta(request));
+                }
+        );
     }
 
     @PostMapping("/dispensacion-v2/asignacion-lotes")
@@ -71,9 +100,16 @@ public class SalidaAlmacenResource {
             Authentication authentication,
             @RequestBody DispensacionV2AsignacionLotesRequestDTO request
     ) {
-        User currentUser = getCurrentUser(authentication);
-        requireDispensacionV2Access(currentUser);
-        return ResponseEntity.ok(dispensacionV2WorkflowService.asignarLotes(request));
+        return executeDispensacionV2Diagnostic(
+                "asignacion-lotes",
+                authentication,
+                request,
+                () -> {
+                    User currentUser = getCurrentUser(authentication);
+                    requireDispensacionV2Access(currentUser);
+                    return ResponseEntity.ok(dispensacionV2WorkflowService.asignarLotes(request));
+                }
+        );
     }
 
     @PostMapping("/dispensacion-v2/finalizar")
@@ -81,9 +117,16 @@ public class SalidaAlmacenResource {
             Authentication authentication,
             @RequestBody DispensacionV2FinalizacionRequestDTO request
     ) {
-        User currentUser = getCurrentUser(authentication);
-        requireDispensacionV2Access(currentUser);
-        return ResponseEntity.ok(dispensacionV2WorkflowService.finalizar(request, currentUser));
+        return executeDispensacionV2Diagnostic(
+                "finalizar",
+                authentication,
+                request,
+                () -> {
+                    User currentUser = getCurrentUser(authentication);
+                    requireDispensacionV2Access(currentUser);
+                    return ResponseEntity.ok(dispensacionV2WorkflowService.finalizar(request, currentUser));
+                }
+        );
     }
 
     @GetMapping("/dispensacion-v2/materiales/{productoId}/lotes-disponibles")
@@ -93,9 +136,18 @@ public class SalidaAlmacenResource {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        User currentUser = getCurrentUser(authentication);
-        requireDispensacionV2Access(currentUser);
-        return ResponseEntity.ok(dispensacionV2WorkflowService.getLotesDisponiblesV2(productoId, page, size));
+        return executeDispensacionV2Diagnostic(
+                "lotes-disponibles",
+                authentication,
+                Map.of("productoId", productoId, "page", page, "size", size),
+                () -> {
+                    User currentUser = getCurrentUser(authentication);
+                    requireDispensacionV2Access(currentUser);
+                    return ResponseEntity.ok(
+                            dispensacionV2WorkflowService.getLotesDisponiblesV2(productoId, page, size)
+                    );
+                }
+        );
     }
 
     /**
@@ -267,6 +319,99 @@ public class SalidaAlmacenResource {
         if (username == null) return false;
         String normalized = username.trim().toLowerCase(Locale.ROOT);
         return "master".equals(normalized) || "super_master".equals(normalized);
+    }
+
+    private <T> ResponseEntity<T> executeDispensacionV2Diagnostic(
+            String step,
+            Authentication authentication,
+            Object payload,
+            Supplier<ResponseEntity<T>> operation
+    ) {
+        if (!log.isErrorEnabled()) {
+            return operation.get();
+        }
+
+        String diagnosticId = UUID.randomUUID().toString();
+        String previousDiagnosticId = MDC.get("dispensacionV2TraceId");
+        long startedAt = System.nanoTime();
+        MDC.put("dispensacionV2TraceId", diagnosticId);
+
+        log.info(
+                "[DISP_V2][REQUEST] diagnosticId={} step={} username={} payload={}",
+                diagnosticId,
+                step,
+                resolveUsername(authentication),
+                toDiagnosticJson(payload)
+        );
+
+        try {
+            ResponseEntity<T> response = operation.get();
+            double durationMs = (System.nanoTime() - startedAt) / 1_000_000.0;
+            log.info(
+                    "[DISP_V2][RESPONSE] diagnosticId={} step={} status={} durationMs={} body={}",
+                    diagnosticId,
+                    step,
+                    response.getStatusCode().value(),
+                    durationMs,
+                    toDiagnosticJson(response.getBody())
+            );
+            return response;
+        } catch (ResponseStatusException exception) {
+            double durationMs = (System.nanoTime() - startedAt) / 1_000_000.0;
+            log.warn(
+                    "[DISP_V2][REJECTED] diagnosticId={} step={} status={} reason={} durationMs={} payload={}",
+                    diagnosticId,
+                    step,
+                    exception.getStatusCode().value(),
+                    exception.getReason(),
+                    durationMs,
+                    toDiagnosticJson(payload),
+                    exception
+            );
+            throw exception;
+        } catch (RuntimeException exception) {
+            double durationMs = (System.nanoTime() - startedAt) / 1_000_000.0;
+            log.error(
+                    "[DISP_V2][ERROR] diagnosticId={} step={} exceptionType={} message={} durationMs={} payload={}",
+                    diagnosticId,
+                    step,
+                    exception.getClass().getName(),
+                    exception.getMessage(),
+                    durationMs,
+                    toDiagnosticJson(payload),
+                    exception
+            );
+            throw exception;
+        } finally {
+            if (previousDiagnosticId == null) {
+                MDC.remove("dispensacionV2TraceId");
+            } else {
+                MDC.put("dispensacionV2TraceId", previousDiagnosticId);
+            }
+        }
+    }
+
+    private String resolveUsername(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            return "anonymous";
+        }
+        return authentication.getName();
+    }
+
+    private String toDiagnosticJson(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            log.warn(
+                    "[DISP_V2][SERIALIZATION_WARNING] type={} message={}",
+                    value.getClass().getName(),
+                    exception.getMessage()
+            );
+            return String.valueOf(value);
+        }
     }
 
 

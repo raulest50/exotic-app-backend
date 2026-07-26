@@ -23,6 +23,7 @@ class InformeInventarioServiceTest {
     private InventarioStockReader stockReader;
     private StockInventarioAssembler stockAssembler;
     private MovimientosInventarioAssembler movementAssembler;
+    private AjustesInventarioAssembler adjustmentAssembler;
     private PendientesInventarioAssembler pendingAssembler;
     private InformeInventarioService service;
 
@@ -32,12 +33,14 @@ class InformeInventarioServiceTest {
         stockReader = mock(InventarioStockReader.class);
         stockAssembler = mock(StockInventarioAssembler.class);
         movementAssembler = mock(MovimientosInventarioAssembler.class);
+        adjustmentAssembler = mock(AjustesInventarioAssembler.class);
         pendingAssembler = mock(PendientesInventarioAssembler.class);
         service = new InformeInventarioService(
                 movementRepo,
                 stockReader,
                 stockAssembler,
                 movementAssembler,
+                adjustmentAssembler,
                 pendingAssembler,
                 Clock.fixed(
                         Instant.parse("2026-07-21T15:00:00Z"),
@@ -50,6 +53,12 @@ class InformeInventarioServiceTest {
                 .thenReturn(InformeInventarioDTO.OcmPendientesDTO.builder().build());
         when(pendingAssembler.buildOpenProductionOrderMaterial())
                 .thenReturn(InformeInventarioDTO.MaterialDirectoOpDTO.builder().build());
+        when(adjustmentAssembler.assemble(
+                org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(InformeInventarioDTO.AjustesInventarioDTO.builder().build());
     }
 
     @Test
@@ -72,7 +81,8 @@ class InformeInventarioServiceTest {
         InformeInventarioDTO report = service.getReport(date, date);
 
         verify(movementAssembler).assemble(movements, List.of(), date, date);
-        assertEquals(3, report.versionContrato());
+        verify(adjustmentAssembler).assemble(movements, List.of(), date, date);
+        assertEquals(4, report.versionContrato());
         assertEquals(report.periodo(), report.periodoTendencia());
         assertEquals(List.of(), report.movimientos().serieDiaria());
     }
@@ -99,6 +109,11 @@ class InformeInventarioServiceTest {
         InformeInventarioDTO report = service.getReport(startDate, endDate);
 
         verify(movementAssembler).assemble(
+                movements,
+                movements,
+                startDate,
+                endDate);
+        verify(adjustmentAssembler).assemble(
                 movements,
                 movements,
                 startDate,
