@@ -1,5 +1,6 @@
 package exotic.app.planta.model.inventarios.dto;
 
+import exotic.app.planta.model.inventarios.CausaAjusteInventario;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -27,4 +28,7 @@ public class AjusteInventarioDTO {
 
     /** Detalle de los ítems ajustados. */
     private List<AjusteItemDTO> items;
+
+    /** Causa operativa común a todos los ítems de la transacción OAA. */
+    private CausaAjusteInventario causaAjuste;
 }

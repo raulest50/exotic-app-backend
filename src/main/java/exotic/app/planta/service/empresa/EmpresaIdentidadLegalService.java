@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -31,11 +32,13 @@ public class EmpresaIdentidadLegalService {
     @Transactional(readOnly = true)
     public EmpresaIdentidadLegalVersion getVersion(Long id) {
         return repo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("No existe la version de identidad legal con id: " + id));
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No existe la version de identidad legal con id: " + id
+                ));
     }
 
     @Transactional(readOnly = true)
-    public EmpresaIdentidadLegalVersion resolveVersionForOcm(Long versionId) {
+    public EmpresaIdentidadLegalVersion resolveVersion(Long versionId) {
         if (versionId == null) {
             return getVigente();
         }

@@ -4,6 +4,7 @@ import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.compras.dto.UpdateEstadoOrdenCompraRequest;
 import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
+import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.compras.FacturaCompraRepo;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
@@ -42,6 +43,7 @@ class ComprasServiceTest {
     private OrdenCompraRepo ordenCompraRepo;
     private ProveedorRepo proveedorRepo;
     private EmpresaIdentidadLegalService empresaIdentidadLegalService;
+    private EmpresaLogoDocumentalService empresaLogoDocumentalService;
     private ComprasService service;
 
     @BeforeEach
@@ -49,6 +51,7 @@ class ComprasServiceTest {
         ordenCompraRepo = mock(OrdenCompraRepo.class);
         proveedorRepo = mock(ProveedorRepo.class);
         empresaIdentidadLegalService = mock(EmpresaIdentidadLegalService.class);
+        empresaLogoDocumentalService = mock(EmpresaLogoDocumentalService.class);
         service = new ComprasService(
                 mock(FacturaCompraRepo.class),
                 mock(TransaccionAlmacenRepo.class),
@@ -61,7 +64,7 @@ class ComprasServiceTest {
                 mock(UserRepository.class),
                 mock(TransaccionAlmacenHeaderRepo.class),
                 empresaIdentidadLegalService,
-                mock(EmpresaLogoDocumentalService.class)
+                empresaLogoDocumentalService
         );
     }
 
@@ -168,8 +171,10 @@ class ComprasServiceTest {
         orden.setUsuarioLiberadorUsername(originalReleaser.getUsername());
         orden.setFechaLiberacion(releaseDate);
         EmpresaIdentidadLegalVersion identidad = identidadLegal(5L);
+        EmpresaLogoDocumentalVersion logo = logoDocumental(8L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
-        when(empresaIdentidadLegalService.resolveVersionForOcm(null)).thenReturn(identidad);
+        when(empresaIdentidadLegalService.resolveVersion(null)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(null)).thenReturn(logo);
         when(ordenCompraRepo.save(any(OrdenCompraMateriales.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
@@ -181,6 +186,7 @@ class ComprasServiceTest {
         assertEquals(2, updated.getEstado());
         assertNotNull(updated.getFechaEnvioProveedor());
         assertEquals(identidad, updated.getEmpresaIdentidadLegalVersion());
+        assertEquals(logo, updated.getEmpresaLogoDocumentalVersion());
         assertSame(originalReleaser, updated.getUsuarioLiberador());
         assertEquals("liberador.original", updated.getUsuarioLiberadorUsername());
         assertEquals(releaseDate, updated.getFechaLiberacion());
@@ -192,8 +198,10 @@ class ComprasServiceTest {
         LocalDateTime existing = LocalDateTime.of(2026, 1, 2, 9, 30);
         OrdenCompraMateriales orden = orden(1, existing);
         EmpresaIdentidadLegalVersion identidad = identidadLegal(5L);
+        EmpresaLogoDocumentalVersion logo = logoDocumental(8L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
-        when(empresaIdentidadLegalService.resolveVersionForOcm(null)).thenReturn(identidad);
+        when(empresaIdentidadLegalService.resolveVersion(null)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(null)).thenReturn(logo);
         when(ordenCompraRepo.save(any(OrdenCompraMateriales.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
@@ -210,10 +218,13 @@ class ComprasServiceTest {
     void updateEstadoOrdenCompra_manualSendUsesExplicitLegalIdentityVersion() {
         OrdenCompraMateriales orden = orden(1, null);
         EmpresaIdentidadLegalVersion identidad = identidadLegal(7L);
+        EmpresaLogoDocumentalVersion logo = logoDocumental(11L);
         UpdateEstadoOrdenCompraRequest request = request(2, UpdateEstadoOrdenCompraRequest.TipoEnvio.MANUAL);
         request.setEmpresaIdentidadLegalVersionId(7L);
+        request.setEmpresaLogoDocumentalVersionId(11L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
-        when(empresaIdentidadLegalService.resolveVersionForOcm(7L)).thenReturn(identidad);
+        when(empresaIdentidadLegalService.resolveVersion(7L)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(11L)).thenReturn(logo);
         when(ordenCompraRepo.save(any(OrdenCompraMateriales.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
@@ -223,7 +234,32 @@ class ComprasServiceTest {
         );
 
         assertEquals(identidad, updated.getEmpresaIdentidadLegalVersion());
-        verify(empresaIdentidadLegalService).resolveVersionForOcm(7L);
+        assertEquals(logo, updated.getEmpresaLogoDocumentalVersion());
+        verify(empresaIdentidadLegalService).resolveVersion(7L);
+        verify(empresaLogoDocumentalService).resolveVersion(11L);
+    }
+
+    @Test
+    void updateEstadoOrdenCompra_manualSendPreservesExistingDocumentVersions() {
+        OrdenCompraMateriales orden = orden(1, null);
+        EmpresaIdentidadLegalVersion identidadHistorica = identidadLegal(3L);
+        EmpresaLogoDocumentalVersion logoHistorico = logoDocumental(4L);
+        orden.setEmpresaIdentidadLegalVersion(identidadHistorica);
+        orden.setEmpresaLogoDocumentalVersion(logoHistorico);
+        when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
+        when(ordenCompraRepo.save(any(OrdenCompraMateriales.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
+                101,
+                request(2, UpdateEstadoOrdenCompraRequest.TipoEnvio.MANUAL),
+                user(30L, "usuario.envio")
+        );
+
+        assertSame(identidadHistorica, updated.getEmpresaIdentidadLegalVersion());
+        assertSame(logoHistorico, updated.getEmpresaLogoDocumentalVersion());
+        verify(empresaIdentidadLegalService, never()).resolveVersion(any());
+        verify(empresaLogoDocumentalService, never()).resolveVersion(any());
     }
 
     @Test
@@ -241,7 +277,8 @@ class ComprasServiceTest {
         assertNull(orden.getFechaEnvioProveedor());
         assertNull(orden.getEmpresaIdentidadLegalVersion());
         assertEquals(1, orden.getEstado());
-        verify(empresaIdentidadLegalService, never()).resolveVersionForOcm(any());
+        verify(empresaIdentidadLegalService, never()).resolveVersion(any());
+        verify(empresaLogoDocumentalService, never()).resolveVersion(any());
         verify(ordenCompraRepo, never()).save(any());
     }
 
@@ -260,7 +297,8 @@ class ComprasServiceTest {
         assertNull(orden.getFechaEnvioProveedor());
         assertNull(orden.getEmpresaIdentidadLegalVersion());
         assertEquals(1, orden.getEstado());
-        verify(empresaIdentidadLegalService, never()).resolveVersionForOcm(any());
+        verify(empresaIdentidadLegalService, never()).resolveVersion(any());
+        verify(empresaLogoDocumentalService, never()).resolveVersion(any());
         verify(ordenCompraRepo, never()).save(any());
     }
 
@@ -297,6 +335,16 @@ class ComprasServiceTest {
         identidad.setTelefonoPrincipal("301 711 51 81");
         identidad.setEmailPrincipal("produccion.exotic@gmail.com");
         return identidad;
+    }
+
+    private static EmpresaLogoDocumentalVersion logoDocumental(Long id) {
+        EmpresaLogoDocumentalVersion logo = new EmpresaLogoDocumentalVersion();
+        logo.setId(id);
+        logo.setVersion(1);
+        logo.setEstado(EmpresaLogoDocumentalVersion.Estado.VIGENTE);
+        logo.setContentType("image/png");
+        logo.setSha256("abc");
+        return logo;
     }
 
     private static UpdateEstadoOrdenCompraRequest request(

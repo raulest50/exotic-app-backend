@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.NoSuchElementException;
+
 /**
  * Resource for PDF document generation and download.
  */
@@ -38,6 +40,10 @@ public class DocumentPdfResource {
             headers.setCacheControl("must-revalidate, post-check=0, pre-check=0");
             
             return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }

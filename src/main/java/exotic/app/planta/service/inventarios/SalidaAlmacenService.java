@@ -1319,6 +1319,9 @@ public class SalidaAlmacenService {
                 ? transaccion.getTipoEntidadCausante().name() 
                 : null);
         dto.setObservaciones(transaccion.getObservaciones());
+        dto.setCausaAjuste(transaccion.getCausaAjuste() != null
+                ? transaccion.getCausaAjuste().name()
+                : null);
         dto.setEstadoContable(transaccion.getEstadoContable() != null 
                 ? transaccion.getEstadoContable().name() 
                 : null);

@@ -2,6 +2,8 @@ package exotic.app.planta.service.empresa;
 
 import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
+import exotic.app.planta.model.empresa.dto.EmpresaLogoDocumentalMetadata;
+import exotic.app.planta.model.empresa.dto.EmpresaLogoDocumentalVersionResponse;
 import exotic.app.planta.repo.empresa.EmpresaLogoDocumentalVersionRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -38,18 +41,31 @@ public class EmpresaLogoDocumentalService {
     }
 
     @Transactional(readOnly = true)
-    public List<EmpresaLogoDocumentalVersion> getVersiones() {
-        return repo.findAllByOrderByVersionDesc();
+    public EmpresaLogoDocumentalMetadata getVigenteMetadata() {
+        return repo.findMetadataByEstadoOrderByVersionDesc(EmpresaLogoDocumentalVersion.Estado.VIGENTE)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No existe un logo documental vigente configurado."));
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmpresaLogoDocumentalVersionResponse> getVersionesMetadata() {
+        return repo.findAllMetadataByOrderByVersionDesc()
+                .stream()
+                .map(EmpresaLogoDocumentalVersionResponse::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public EmpresaLogoDocumentalVersion getVersion(Long id) {
         return repo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("No existe la version de logo documental con id: " + id));
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No existe la version de logo documental con id: " + id
+                ));
     }
 
     @Transactional(readOnly = true)
-    public EmpresaLogoDocumentalVersion resolveVersionForOcm(Long versionId) {
+    public EmpresaLogoDocumentalVersion resolveVersion(Long versionId) {
         if (versionId == null) {
             return getVigente();
         }

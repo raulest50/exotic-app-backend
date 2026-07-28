@@ -1,5 +1,6 @@
 package exotic.app.planta.resource.bi;
 
+import exotic.app.planta.model.bi.dto.FuenteDemandaCobertura;
 import exotic.app.planta.service.bi.InformeGlobalFechaResolver;
 import exotic.app.planta.service.bi.inventario.AjustesInventarioDetalleService;
 import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
@@ -76,9 +77,15 @@ public class InformeInventarioResource {
     }
 
     @GetMapping("/cobertura")
-    public ResponseEntity<?> cobertura(@RequestParam(defaultValue = "90") int ventanaDias) {
+    public ResponseEntity<?> cobertura(
+            @RequestParam(defaultValue = "90") int ventanaDias,
+            @RequestParam(defaultValue = "SOLO_DISPENSACIONES")
+            FuenteDemandaCobertura fuenteDemanda
+    ) {
         try {
-            return ResponseEntity.ok(coverageService.calculate(ventanaDias));
+            return ResponseEntity.ok(coverageService.calculate(
+                    ventanaDias,
+                    fuenteDemanda));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         }

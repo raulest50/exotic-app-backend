@@ -1,7 +1,10 @@
 package exotic.app.planta.service.bi.inventario;
 
 import exotic.app.planta.model.bi.dto.CoberturaMaterialesDTO;
+import exotic.app.planta.model.bi.dto.FuenteDemandaCobertura;
+import exotic.app.planta.model.inventarios.CausaAjusteInventario;
 import exotic.app.planta.model.inventarios.Movimiento;
+import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import lombok.RequiredArgsConstructor;
@@ -39,25 +42,66 @@ public class CoberturaMaterialesService {
     private final Clock applicationClock;
 
     public CoberturaMaterialesDTO calculate(int windowDays) {
+        return calculate(windowDays, FuenteDemandaCobertura.SOLO_DISPENSACIONES);
+    }
+
+    public CoberturaMaterialesDTO calculate(
+            int windowDays,
+            FuenteDemandaCobertura demandSource
+    ) {
         validateWindow(windowDays);
+        validateDemandSource(demandSource);
         LocalDate cutoffDate = LocalDate.now(applicationClock);
         LocalDate startDate = cutoffDate.minusDays(windowDays - 1L);
 
         List<ProductoStockSnapshot> materialStock = stockReader.readGeneralStock().stream()
                 .filter(snapshot -> snapshot.producto() instanceof Material)
                 .toList();
-        List<Movimiento> dispensations = loadDispensations(startDate, cutoffDate);
-        Map<String, double[]> demandByMaterial = groupDailyDemand(
+        List<Movimiento> movements = loadMovements(startDate, cutoffDate);
+        List<Movimiento> dispensations = movements.stream()
+                .filter(this::isMaterialDispensation)
+                .toList();
+        List<Movimiento> contingencyAdjustments = movements.stream()
+                .filter(this::isMaterialNegativeAdjustment)
+                .filter(this::isContingencyAdjustment)
+                .toList();
+        long unclassifiedNegativeAdjustments = movements.stream()
+                .filter(this::isMaterialNegativeAdjustment)
+                .filter(this::isUnclassifiedAdjustment)
+                .count();
+
+        Map<String, double[]> operativeDemandByMaterial = groupDailyDemand(
                 dispensations,
                 startDate,
                 windowDays);
+        Map<String, double[]> contingencyDemandByMaterial = groupDailyDemand(
+                contingencyAdjustments,
+                startDate,
+                windowDays);
+        Map<String, Integer> contingencyMovementsByMaterial = groupMovementCount(
+                contingencyAdjustments);
+        boolean includeContingencies = demandSource.incluyeContingencias();
+        List<Movimiento> includedDemandMovements = new ArrayList<>(dispensations);
+        if (includeContingencies) {
+            includedDemandMovements.addAll(contingencyAdjustments);
+        }
 
         List<CoberturaMaterialesDTO.EstimacionMaterialDTO> estimates = materialStock.stream()
                 .map(snapshot -> estimateMaterial(
                         snapshot,
-                        demandByMaterial.getOrDefault(
+                        operativeDemandByMaterial.getOrDefault(
                                 snapshot.producto().getProductoId(),
                                 new double[windowDays]),
+                        includeContingencies
+                                ? contingencyDemandByMaterial.getOrDefault(
+                                        snapshot.producto().getProductoId(),
+                                        new double[windowDays])
+                                : new double[windowDays],
+                        includeContingencies
+                                ? contingencyMovementsByMaterial.getOrDefault(
+                                        snapshot.producto().getProductoId(),
+                                        0)
+                                : 0,
                         cutoffDate,
                         windowDays))
                 .filter(Objects::nonNull)
@@ -77,6 +121,8 @@ public class CoberturaMaterialesService {
                 .fechaDesde(startDate)
                 .fechaHasta(cutoffDate)
                 .fechaHoraCorteStock(LocalDateTime.now(applicationClock))
+                .fuenteDemanda(demandSource)
+                .escenarioExploratorio(includeContingencies)
                 .estado(criticalEstimate == null
                         ? CoberturaMaterialesDTO.EstadoCobertura.SIN_CONSUMO
                         : CoberturaMaterialesDTO.EstadoCobertura.ESTIMADO)
@@ -99,26 +145,59 @@ public class CoberturaMaterialesService {
                 .motivosConfianzaBaja(lowConfidenceReasons)
                 .diasObservados(windowDays)
                 .diasConDispensacion(distinctDispensationDays(dispensations))
+                .diasConDemanda(distinctMovementDays(includedDemandMovements))
                 .materialesAnalizados(materialStock.size())
                 .materialesConDemanda(estimates.size())
+                .resumenFuentesDemanda(
+                        CoberturaMaterialesDTO.ResumenFuentesDemandaDTO.builder()
+                                .movimientosDispensacionIncluidos(dispensations.size())
+                                .ajustesContingenciaDisponibles(
+                                        contingencyAdjustments.size())
+                                .ajustesContingenciaIncluidos(
+                                        includeContingencies
+                                                ? contingencyAdjustments.size()
+                                                : 0)
+                                .ajustesNegativosSinClasificarExcluidos(
+                                        Math.toIntExact(unclassifiedNegativeAdjustments))
+                                .build())
                 .estimaciones(estimates.stream().limit(MAX_ESTIMATES).toList())
                 .build();
     }
 
-    private List<Movimiento> loadDispensations(LocalDate startDate, LocalDate cutoffDate) {
+    private List<Movimiento> loadMovements(LocalDate startDate, LocalDate cutoffDate) {
         return movementRepo.findMovimientosBiByAlmacenAndRango(
                         Movimiento.Almacen.GENERAL,
                         startDate.atStartOfDay(),
-                        cutoffDate.atTime(LocalTime.MAX))
-                .stream()
-                .filter(this::isMaterialDispensation)
-                .toList();
+                        cutoffDate.atTime(LocalTime.MAX));
     }
 
     private boolean isMaterialDispensation(Movimiento movement) {
         return movement.getProducto() instanceof Material
                 && movement.getCantidad() < 0
                 && movement.getTipoMovimiento() == Movimiento.TipoMovimiento.DISPENSACION;
+    }
+
+    private boolean isMaterialNegativeAdjustment(Movimiento movement) {
+        return movement.getProducto() instanceof Material
+                && movement.getCantidad() < 0
+                && movement.getTipoMovimiento() == Movimiento.TipoMovimiento.AJUSTE_NEGATIVO;
+    }
+
+    private boolean isContingencyAdjustment(Movimiento movement) {
+        if (movement.getTransaccionAlmacen() == null) return false;
+        if (movement.getTransaccionAlmacen().getTipoEntidadCausante()
+                != TransaccionAlmacen.TipoEntidadCausante.OAA) {
+            return false;
+        }
+        CausaAjusteInventario cause = movement.getTransaccionAlmacen().getCausaAjuste();
+        return cause != null && cause.isElegibleComoDemanda();
+    }
+
+    private boolean isUnclassifiedAdjustment(Movimiento movement) {
+        if (movement.getTransaccionAlmacen() == null) return true;
+        return movement.getTransaccionAlmacen().getTipoEntidadCausante()
+                == TransaccionAlmacen.TipoEntidadCausante.OAA
+                && movement.getTransaccionAlmacen().getCausaAjuste() == null;
     }
 
     private Map<String, double[]> groupDailyDemand(
@@ -143,16 +222,41 @@ public class CoberturaMaterialesService {
         return demandByMaterial;
     }
 
+    private Map<String, Integer> groupMovementCount(List<Movimiento> movements) {
+        Map<String, Integer> countByMaterial = new HashMap<>();
+        for (Movimiento movement : movements) {
+            countByMaterial.merge(
+                    movement.getProducto().getProductoId(),
+                    1,
+                    Integer::sum);
+        }
+        return countByMaterial;
+    }
+
     private CoberturaMaterialesDTO.EstimacionMaterialDTO estimateMaterial(
             ProductoStockSnapshot snapshot,
-            double[] dailyDemand,
+            double[] operativeDailyDemand,
+            double[] contingencyDailyDemand,
+            int includedContingencyMovements,
             LocalDate cutoffDate,
             int windowDays
     ) {
+        double[] dailyDemand = combineDailyDemand(
+                operativeDailyDemand,
+                contingencyDailyDemand);
         double meanDemand = Arrays.stream(dailyDemand).average().orElse(0);
         if (meanDemand <= 0) return null;
 
+        double operativeMeanDemand = Arrays.stream(operativeDailyDemand)
+                .average()
+                .orElse(0);
+        double contingencyMeanDemand = Arrays.stream(contingencyDailyDemand)
+                .average()
+                .orElse(0);
         int activeDays = Math.toIntExact(Arrays.stream(dailyDemand)
+                .filter(demand -> demand > 0)
+                .count());
+        int dispensationDays = Math.toIntExact(Arrays.stream(operativeDailyDemand)
                 .filter(demand -> demand > 0)
                 .count());
         ExhaustionEstimate exhaustion = snapshot.stockGeneral() <= 0
@@ -170,12 +274,24 @@ public class CoberturaMaterialesService {
                 .unidadMedida(InventarioBiUtils.unitOf(snapshot.producto()))
                 .stockActual(snapshot.stockGeneral())
                 .demandaMediaDiaria(meanDemand)
-                .diasConDispensacion(activeDays)
+                .demandaMediaDiariaOperativa(operativeMeanDemand)
+                .demandaMediaDiariaContingencia(contingencyMeanDemand)
+                .diasConDispensacion(dispensationDays)
+                .diasConDemanda(activeDays)
+                .ajustesContingenciaIncluidos(includedContingencyMovements)
                 .diasHastaAgotamiento(exhaustion.daysUntilExhaustion())
                 .fechaAgotamiento(exhaustion.estimatedDate())
                 .intervaloFechaMin(exhaustion.earliestDate())
                 .intervaloFechaMax(exhaustion.latestDate())
                 .build();
+    }
+
+    private double[] combineDailyDemand(double[] operative, double[] contingency) {
+        double[] combined = Arrays.copyOf(operative, operative.length);
+        for (int i = 0; i < combined.length; i++) {
+            combined[i] += contingency[i];
+        }
+        return combined;
     }
 
     private ExhaustionEstimate estimatePositiveStock(
@@ -221,8 +337,12 @@ public class CoberturaMaterialesService {
         if (windowDays < MIN_OBSERVED_DAYS) {
             reasons.add("Se observaron menos de 30 días.");
         }
-        if (criticalEstimate.diasConDispensacion() < MIN_ACTIVE_DAYS) {
-            reasons.add("El material crítico tuvo menos de 5 días con dispensación.");
+        if (criticalEstimate.diasConDemanda() < MIN_ACTIVE_DAYS) {
+            reasons.add("El material crítico tuvo menos de 5 días con demanda.");
+        }
+        if (criticalEstimate.ajustesContingenciaIncluidos() > 0) {
+            reasons.add(
+                    "El material crítico incluye salidas de producción registradas como contingencia.");
         }
         if (criticalEstimate.intervaloFechaMax() == null) {
             reasons.add("El límite máximo del intervalo no es estimable.");
@@ -236,7 +356,11 @@ public class CoberturaMaterialesService {
     }
 
     private int distinctDispensationDays(List<Movimiento> dispensations) {
-        return Math.toIntExact(dispensations.stream()
+        return distinctMovementDays(dispensations);
+    }
+
+    private int distinctMovementDays(List<Movimiento> movements) {
+        return Math.toIntExact(movements.stream()
                 .map(Movimiento::getFechaMovimiento)
                 .filter(Objects::nonNull)
                 .map(LocalDateTime::toLocalDate)
@@ -255,6 +379,12 @@ public class CoberturaMaterialesService {
     private void validateWindow(int windowDays) {
         if (!VALID_WINDOWS.contains(windowDays)) {
             throw new IllegalArgumentException("La ventana debe ser 7, 30 o 90 dias.");
+        }
+    }
+
+    private void validateDemandSource(FuenteDemandaCobertura demandSource) {
+        if (demandSource == null) {
+            throw new IllegalArgumentException("La fuente de demanda es obligatoria.");
         }
     }
 

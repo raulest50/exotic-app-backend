@@ -3,6 +3,8 @@ package exotic.app.planta.model.activos.fijos.compras;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import exotic.app.planta.model.commons.divisas.Divisas.DIVISAS;
+import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
+import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -72,6 +74,18 @@ public class OrdenCompraActivo {
      *  3: cerrada con éxito
      */
     private int estado;
+
+    /**
+     * Snapshot de la identidad documental usada al enviar la OCA al proveedor.
+     * Ambas asociaciones se fijan juntas durante la transición 1 -> 2.
+     */
+    @ManyToOne
+    @JoinColumn(name = "empresa_identidad_legal_version_id")
+    private EmpresaIdentidadLegalVersion empresaIdentidadLegalVersion;
+
+    @ManyToOne
+    @JoinColumn(name = "empresa_logo_documental_version_id")
+    private EmpresaLogoDocumentalVersion empresaLogoDocumentalVersion;
 
     /**
      * para soportar ordenes de compra en dolares.

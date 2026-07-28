@@ -2,21 +2,23 @@ package exotic.app.planta.service.commons;
 
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
-import exotic.app.planta.config.StorageProperties;
 import exotic.app.planta.model.compras.ItemOrdenCompra;
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
+import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
+import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
+import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
+import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
-import java.util.Optional;
+import java.util.NoSuchElementException;
 
 @Service
 @Slf4j
@@ -24,7 +26,8 @@ import java.util.Optional;
 public class DocumentPdfService {
 
     private final OrdenCompraRepo ordenCompraRepo;
-    private final StorageProperties storageProperties;
+    private final EmpresaIdentidadLegalService empresaIdentidadLegalService;
+    private final EmpresaLogoDocumentalService empresaLogoDocumentalService;
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     
@@ -35,14 +38,14 @@ public class DocumentPdfService {
      * @return a byte array containing the PDF file that can be used as an email attachment
      * @throws RuntimeException if the purchase order is not found or if there's an error generating the PDF
      */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public byte[] generateOrdenCompraPdf(int ordenCompraId) {
-        // Retrieve the purchase order
-        Optional<OrdenCompraMateriales> ordenOpt = ordenCompraRepo.findById(ordenCompraId);
-        if (ordenOpt.isEmpty()) {
-            throw new RuntimeException("OrdenCompraMateriales not found with id: " + ordenCompraId);
-        }
-        
-        OrdenCompraMateriales orden = ordenOpt.get();
+        OrdenCompraMateriales orden = ordenCompraRepo.findById(ordenCompraId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No existe la orden de compra de materiales con id: " + ordenCompraId
+                ));
+        EmpresaIdentidadLegalVersion identidadLegal = resolveIdentidadLegal(orden);
+        EmpresaLogoDocumentalVersion logoDocumental = resolveLogoDocumental(orden);
         
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             // Create a new document
@@ -51,7 +54,7 @@ public class DocumentPdfService {
             document.open();
             
             // Add logo
-            addLogo(document);
+            addLogo(document, logoDocumental, identidadLegal);
             
             // Add title
             addTitle(document, "ORDEN DE COMPRA");
@@ -63,7 +66,7 @@ public class DocumentPdfService {
             addSupplierInfo(document, orden);
             
             // Add delivery and payment information
-            addDeliveryAndPaymentInfo(document, orden);
+            addDeliveryAndPaymentInfo(document, orden, identidadLegal);
             
             // Add items table
             addItemsTable(document, orden);
@@ -83,23 +86,19 @@ public class DocumentPdfService {
         }
     }
     
-    private void addLogo(Document document) throws DocumentException, IOException {
-        // Try to load the logo from the assets/logos directory
-        Path logoPath = Paths.get(storageProperties.getUPLOAD_DIR(), "assets/logos", "logo_exotic.png");
-        
-        if (!Files.exists(logoPath)) {
-            // Try other formats if PNG doesn't exist
-            logoPath = Paths.get(storageProperties.getUPLOAD_DIR(), "assets/logos", "logo_exotic.jpg");
-            if (!Files.exists(logoPath)) {
-                logoPath = Paths.get(storageProperties.getUPLOAD_DIR(), "assets/logos", "logo_exotic.svg");
-                if (!Files.exists(logoPath)) {
-                    log.warn("Logo file not found in any format");
-                    return;
-                }
-            }
+    private void addLogo(
+            Document document,
+            EmpresaLogoDocumentalVersion logoDocumental,
+            EmpresaIdentidadLegalVersion identidadLegal
+    ) throws DocumentException, IOException {
+        byte[] contenido = logoDocumental.getContenido();
+        if (contenido == null || contenido.length == 0) {
+            throw new IllegalStateException(
+                    "La version de logo documental " + logoDocumental.getId() + " no contiene una imagen."
+            );
         }
-        
-        Image logo = Image.getInstance(logoPath.toAbsolutePath().toString());
+
+        Image logo = Image.getInstance(contenido);
         logo.scaleToFit(170, 130);
         logo.setAlignment(Element.ALIGN_LEFT);
         document.add(logo);
@@ -110,10 +109,10 @@ public class DocumentPdfService {
         
         Font companyFont = new Font(Font.FontFamily.HELVETICA, 9);
         
-        companyInfo.add(new Chunk("Napolitana J.P S.A.S.\n", companyFont));
-        companyInfo.add(new Chunk("Nit: 901751897-1\n", companyFont));
-        companyInfo.add(new Chunk("Tel: 301 711 51 81\n", companyFont));
-        companyInfo.add(new Chunk("jorgerafaelpereiraosorio1@gmail.com", companyFont));
+        companyInfo.add(new Chunk(identidadLegal.getRazonSocial() + "\n", companyFont));
+        companyInfo.add(new Chunk(formatIdentificacion(identidadLegal) + "\n", companyFont));
+        companyInfo.add(new Chunk("Tel: " + identidadLegal.getTelefonoPrincipal() + "\n", companyFont));
+        companyInfo.add(new Chunk(identidadLegal.getEmailPrincipal(), companyFont));
         
         document.add(companyInfo);
         document.add(Chunk.NEWLINE);
@@ -200,7 +199,11 @@ public class DocumentPdfService {
         document.add(Chunk.NEWLINE);
     }
     
-    private void addDeliveryAndPaymentInfo(Document document, OrdenCompraMateriales orden) throws DocumentException {
+    private void addDeliveryAndPaymentInfo(
+            Document document,
+            OrdenCompraMateriales orden,
+            EmpresaIdentidadLegalVersion identidadLegal
+    ) throws DocumentException {
         Font headerFont = new Font(Font.FontFamily.HELVETICA, 14, Font.NORMAL, new BaseColor(242, 220, 219));
         Font normalFont = new Font(Font.FontFamily.HELVETICA, 11);
         
@@ -211,10 +214,13 @@ public class DocumentPdfService {
         PdfPTable table = new PdfPTable(1);
         table.setWidthPercentage(50);
         
-        table.addCell(createValueCell("Empresa: Napolitana JP S.A.S - EXOTIC EXPERT", normalFont));
+        table.addCell(createValueCell(
+                "Empresa: " + identidadLegal.getRazonSocial() + " - " + identidadLegal.getNombreComercial(),
+                normalFont
+        ));
         table.addCell(createValueCell("Direccion : vía 11, Juan Mina #4 100", normalFont));
         table.addCell(createValueCell("Barranquilla, Atlántico", normalFont));
-        table.addCell(createValueCell("[TELEFONO PLANTA EXOTIC]", normalFont));
+        table.addCell(createValueCell(identidadLegal.getTelefonoPrincipal(), normalFont));
         table.addCell(createValueCell(getCondicionPagoText(orden.getCondicionPago()), normalFont));
         table.addCell(createValueCell("PLAZO PAGO " + orden.getPlazoPago() + " DIAS", normalFont));
         table.addCell(createValueCell("PLAZO ENTREGA " + orden.getTiempoEntrega() + " DIAS", normalFont));
@@ -343,5 +349,27 @@ public class DocumentPdfService {
             default:
                 return String.valueOf(regimenTributario);
         }
+    }
+
+    private EmpresaIdentidadLegalVersion resolveIdentidadLegal(OrdenCompraMateriales orden) {
+        if (orden.getEmpresaIdentidadLegalVersion() != null) {
+            return orden.getEmpresaIdentidadLegalVersion();
+        }
+        return empresaIdentidadLegalService.getVigente();
+    }
+
+    private EmpresaLogoDocumentalVersion resolveLogoDocumental(OrdenCompraMateriales orden) {
+        if (orden.getEmpresaLogoDocumentalVersion() != null) {
+            return orden.getEmpresaLogoDocumentalVersion();
+        }
+        return empresaLogoDocumentalService.getVigente();
+    }
+
+    private String formatIdentificacion(EmpresaIdentidadLegalVersion identidadLegal) {
+        String digitoVerificacion = identidadLegal.getDigitoVerificacion();
+        String numero = digitoVerificacion == null || digitoVerificacion.isBlank()
+                ? identidadLegal.getNumeroIdentificacion()
+                : identidadLegal.getNumeroIdentificacion() + "-" + digitoVerificacion;
+        return identidadLegal.getTipoIdentificacion() + ": " + numero;
     }
 }

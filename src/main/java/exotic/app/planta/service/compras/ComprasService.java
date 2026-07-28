@@ -418,13 +418,13 @@ public class ComprasService {
 
         if (transicionEnvioProveedor && orden.getEmpresaIdentidadLegalVersion() == null) {
             orden.setEmpresaIdentidadLegalVersion(
-                    empresaIdentidadLegalService.resolveVersionForOcm(ue.getEmpresaIdentidadLegalVersionId())
+                    empresaIdentidadLegalService.resolveVersion(ue.getEmpresaIdentidadLegalVersionId())
             );
         }
 
         if (transicionEnvioProveedor && orden.getEmpresaLogoDocumentalVersion() == null) {
             orden.setEmpresaLogoDocumentalVersion(
-                    empresaLogoDocumentalService.resolveVersionForOcm(ue.getEmpresaLogoDocumentalVersionId())
+                    empresaLogoDocumentalService.resolveVersion(ue.getEmpresaLogoDocumentalVersionId())
             );
         }
 

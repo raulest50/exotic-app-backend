@@ -7,6 +7,8 @@ import exotic.app.planta.model.activos.fijos.compras.OrdenCompraActivo;
 import exotic.app.planta.model.activos.fijos.dto.UpdateEstadoOrdenCompraAFRequest;
 import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.Proveedor;
+import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
+import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.model.users.User;
@@ -15,6 +17,9 @@ import exotic.app.planta.repo.activos.fijos.OrdenCompraActivoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.commons.EmailService;
 import exotic.app.planta.service.commons.FileStorageService;
+import exotic.app.planta.service.empresa.EmpresaIdentidadDocumentalService;
+import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
+import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -45,6 +50,9 @@ public class OCAFService {
     private final FileStorageService fileStorageService;
     private final EmailService emailService;
     private final UserRepository userRepository;
+    private final EmpresaIdentidadDocumentalService empresaIdentidadDocumentalService;
+    private final EmpresaIdentidadLegalService empresaIdentidadLegalService;
+    private final EmpresaLogoDocumentalService empresaLogoDocumentalService;
 
     /**
      * Guarda una nueva orden de compra de activos fijos con un archivo de cotización opcional.
@@ -84,11 +92,8 @@ public class OCAFService {
             throw new IllegalArgumentException("La fecha de vencimiento es requerida");
         }
 
-        // Establecer valores por defecto si no están presentes
-        if (ordenCompraActivo.getEstado() == 0) {
-            // Estado 0: pendiente liberación (por defecto)
-            ordenCompraActivo.setEstado(0);
-        }
+        // Toda OCA nueva inicia pendiente de liberación.
+        ordenCompraActivo.setEstado(0);
 
         // Procesar los ítems de la orden
         if (ordenCompraActivo.getItemsOrdenCompra() != null && !ordenCompraActivo.getItemsOrdenCompra().isEmpty()) {
@@ -124,6 +129,9 @@ public class OCAFService {
 
         // Set cotizacionUrl to empty string by default
         ordenCompraActivo.setCotizacionUrl("");
+        // El snapshot documental solo puede fijarse durante la transición 1 -> 2.
+        ordenCompraActivo.setEmpresaIdentidadLegalVersion(null);
+        ordenCompraActivo.setEmpresaLogoDocumentalVersion(null);
 
         // Save the entity first to get the ID
         OrdenCompraActivo savedOrden = ordenCompraActivoRepo.save(ordenCompraActivo);
@@ -274,6 +282,9 @@ public class OCAFService {
 
         // Mantener la fecha de emisión original
         ordenCompraActivo.setFechaEmision(existingOrden.getFechaEmision());
+        // Estos campos no son editables desde el payload general de la OCA.
+        ordenCompraActivo.setEmpresaIdentidadLegalVersion(existingOrden.getEmpresaIdentidadLegalVersion());
+        ordenCompraActivo.setEmpresaLogoDocumentalVersion(existingOrden.getEmpresaLogoDocumentalVersion());
 
         // Mantener la URL de cotización original si no se proporciona un nuevo archivo
         if (cotizacionFile == null || cotizacionFile.isEmpty()) {
@@ -378,16 +389,8 @@ public class OCAFService {
             throw new RuntimeException("No se encontró email para el proveedor con ID: " + proveedor.getId());
         }
 
-        // Preparar el asunto y cuerpo del correo
-        String subject = "No Reply - Orden de Compra de Activo Fijo Exotic Expert #" + orden.getOrdenCompraActivoId();
-        String text = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n" +
-                "Por medio de la presente le hacemos llegar la orden de compra de activo fijo #" + orden.getOrdenCompraActivoId() +
-                "correspondiente a los productos/servicios detallados en el documento adjunto.\n" +
-                "Le agradeceremos confirmar la recepción de esta orden y, en caso de ser necesario," +
-                "informarnos sobre el tiempo estimado de entrega o cualquier observación relevante.\n\n" +
-                "Quedamos atentos a su confirmación y agradecemos de antemano su atención y colaboración.\n\n" +
-                "Saludos cordiales,\n" +
-                "Exotic Expert - Departamento de Compras";
+        String subject = buildEmailSubject(orden);
+        String text = buildEmailBody(orden);
 
         // Enviar el correo con el PDF adjunto
         emailService.sendEmailWithAttachment(
@@ -435,15 +438,8 @@ public class OCAFService {
             throw new RuntimeException("No se encontró email para el proveedor con ID: " + proveedor.getId());
         }
 
-        String subject = "No Reply - Orden de Compra de Activo Fijo Exotic Expert #" + orden.getOrdenCompraActivoId();
-        String text = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n" +
-                "Por medio de la presente le hacemos llegar la orden de compra de activo fijo #" + orden.getOrdenCompraActivoId() +
-                "correspondiente a los productos/servicios detallados en el documento adjunto.\n" +
-                "Le agradeceremos confirmar la recepción de esta orden y, en caso de ser necesario," +
-                "informarnos sobre el tiempo estimado de entrega o cualquier observación relevante.\n\n" +
-                "Quedamos atentos a su confirmación y agradecemos de antemano su atención y colaboración.\n\n" +
-                "Saludos cordiales,\n" +
-                "Exotic Expert - Departamento de Compras";
+        String subject = buildEmailSubject(orden);
+        String text = buildEmailBody(orden);
 
         emailService.sendEmailWithAttachmentAndCC(
                 emailProveedor,
@@ -485,70 +481,143 @@ public class OCAFService {
         OrdenCompraActivo orden = ordenCompraActivoRepo.findById(ordenCompraActivoId)
                 .orElseThrow(() -> new RuntimeException("Orden de compra de activo fijo no encontrada con id: " + ordenCompraActivoId));
 
-        // Si el nuevo estado es 2 y estamos cambiando desde estado 1, manejar según el tipo de envío
-        if (request.getNewEstado() == 2 && orden.getEstado() == 1) {
-            // Verificar el tipo de envío seleccionado
-            if (request.getTipoEnvio() != null) {
-                switch (request.getTipoEnvio()) {
-                    case MANUAL:
-                        // Para envío manual, solo se actualiza el estado sin procesar el PDF
-                        log.info("Orden de compra de activo fijo {} actualizada manualmente a estado 2", ordenCompraActivoId);
-                        break;
+        validateEstadoTransition(orden.getEstado(), request.getNewEstado());
+        boolean transicionEnvioProveedor = request.getNewEstado() == 2 && orden.getEstado() == 1;
+        if (transicionEnvioProveedor) {
+            if (request.getTipoEnvio() == null) {
+                throw new IllegalArgumentException("Debe seleccionar el tipo de envío de la OCA.");
+            }
 
-                    case EMAIL:
-                        // Para envío por email, verificar que exista el PDF y enviarlo
-                        try {
-                            List<String> ccEmails = getEmailsUsuariosProduccionNivel2();
-                            if (ccEmails.isEmpty()) {
-                                enviarCorreoOrdenCompraActivoProveedor(orden, request.getOCAFpdf());
-                            } else {
-                                enviarCorreoOrdenCompraActivoProveedor_wCC(orden, request.getOCAFpdf(), ccEmails);
-                            }
-                        } catch (MessagingException | IOException e) {
-                            // Lanzar una excepción para que la transacción se revierta
-                            log.error("Error al enviar correo al proveedor: {}", e.getMessage(), e);
-                            throw new RuntimeException("Error al enviar correo al proveedor: " + e.getMessage(), e);
-                        } catch (RuntimeException e) {
-                            // Propagar la excepción para que la transacción se revierta
-                            log.error(e.getMessage());
-                            throw e;
+            resolveDocumentalSnapshot(orden, request);
+
+            switch (request.getTipoEnvio()) {
+                case MANUAL:
+                    log.info("Orden de compra de activo fijo {} actualizada manualmente a estado 2", ordenCompraActivoId);
+                    break;
+
+                case EMAIL:
+                    try {
+                        List<String> ccEmails = getEmailsUsuariosProduccionNivel2();
+                        if (ccEmails.isEmpty()) {
+                            enviarCorreoOrdenCompraActivoProveedor(orden, request.getOCAFpdf());
+                        } else {
+                            enviarCorreoOrdenCompraActivoProveedor_wCC(orden, request.getOCAFpdf(), ccEmails);
                         }
-                        break;
-
-                    case WHATSAPP:
-                        // TODO: Implementar envío por WhatsApp en el futuro
-                        log.info("Envío por WhatsApp seleccionado para orden {}, esta funcionalidad será implementada próximamente", ordenCompraActivoId);
-                        throw new UnsupportedOperationException("El envío por WhatsApp aún no está implementado");
-
-                    default:
-                        log.warn("Tipo de envío no reconocido para la orden: {}", ordenCompraActivoId);
-                        throw new RuntimeException("Tipo de envío no reconocido para la orden: " + ordenCompraActivoId);
-                }
-            } else {
-                // Si no se especificó tipo de envío, usar el comportamiento predeterminado (email)
-                log.warn("No se especificó tipo de envío para la orden: {}, usando email por defecto", ordenCompraActivoId);
-
-                try {
-                    List<String> ccEmails = getEmailsUsuariosProduccionNivel2();
-                    if (ccEmails.isEmpty()) {
-                        enviarCorreoOrdenCompraActivoProveedor(orden, request.getOCAFpdf());
-                    } else {
-                        enviarCorreoOrdenCompraActivoProveedor_wCC(orden, request.getOCAFpdf(), ccEmails);
+                    } catch (MessagingException | IOException e) {
+                        log.error("Error al enviar correo al proveedor: {}", e.getMessage(), e);
+                        throw new RuntimeException("Error al enviar correo al proveedor: " + e.getMessage(), e);
+                    } catch (RuntimeException e) {
+                        log.error(e.getMessage());
+                        throw e;
                     }
-                } catch (MessagingException | IOException e) {
-                    // Lanzar una excepción para que la transacción se revierta
-                    log.error("Error al enviar correo al proveedor: {}", e.getMessage(), e);
-                    throw new RuntimeException("Error al enviar correo al proveedor: " + e.getMessage(), e);
-                } catch (RuntimeException e) {
-                    // Propagar la excepción para que la transacción se revierta
-                    log.error(e.getMessage());
-                    throw e;
-                }
+                    break;
+
+                case WHATSAPP:
+                    log.info("Envío por WhatsApp seleccionado para orden {}, esta funcionalidad será implementada próximamente", ordenCompraActivoId);
+                    throw new UnsupportedOperationException("El envío por WhatsApp aún no está implementado");
+
+                default:
+                    throw new IllegalArgumentException("Tipo de envío no reconocido para la orden: " + ordenCompraActivoId);
             }
         }
 
         // Actualizar el estado solo después de que todo el proceso haya sido exitoso
         orden.setEstado(request.getNewEstado());
         return ordenCompraActivoRepo.save(orden);
+    }
+
+    private void validateEstadoTransition(int estadoActual, int nuevoEstado) {
+        if (nuevoEstado == 1 && estadoActual != 0) {
+            throw new IllegalStateException(
+                    "Solo se puede liberar una OCA que esté pendiente de liberación."
+            );
+        }
+        if (nuevoEstado == 2 && estadoActual != 1) {
+            throw new IllegalStateException(
+                    "Solo se puede enviar una OCA que esté pendiente de envío al proveedor."
+            );
+        }
+        if (nuevoEstado != 1 && nuevoEstado != 2) {
+            throw new IllegalArgumentException("El cambio de estado solicitado no está permitido para la OCA.");
+        }
+    }
+
+    private void resolveDocumentalSnapshot(
+            OrdenCompraActivo orden,
+            UpdateEstadoOrdenCompraAFRequest request
+    ) {
+        EmpresaIdentidadLegalVersion identidadExistente = orden.getEmpresaIdentidadLegalVersion();
+        EmpresaLogoDocumentalVersion logoExistente = orden.getEmpresaLogoDocumentalVersion();
+
+        if (identidadExistente != null || logoExistente != null) {
+            if (identidadExistente == null || logoExistente == null) {
+                throw new IllegalStateException("La OCA tiene una asociación documental histórica incompleta.");
+            }
+            validateRequestedSnapshotMatchesExisting(identidadExistente, logoExistente, request);
+            return;
+        }
+
+        Long identidadId = request.getEmpresaIdentidadLegalVersionId();
+        Long logoId = request.getEmpresaLogoDocumentalVersionId();
+        if ((identidadId == null) != (logoId == null)) {
+            throw new IllegalArgumentException(
+                    "Las versiones de identidad legal y logo documental deben enviarse juntas."
+            );
+        }
+
+        if (identidadId == null) {
+            var vigente = empresaIdentidadDocumentalService.getVigente();
+            identidadId = vigente.identidadLegal().id();
+            logoId = vigente.logo().id();
+        }
+
+        orden.setEmpresaIdentidadLegalVersion(empresaIdentidadLegalService.resolveVersion(identidadId));
+        orden.setEmpresaLogoDocumentalVersion(empresaLogoDocumentalService.resolveVersion(logoId));
+    }
+
+    private void validateRequestedSnapshotMatchesExisting(
+            EmpresaIdentidadLegalVersion identidadExistente,
+            EmpresaLogoDocumentalVersion logoExistente,
+            UpdateEstadoOrdenCompraAFRequest request
+    ) {
+        Long identidadId = request.getEmpresaIdentidadLegalVersionId();
+        Long logoId = request.getEmpresaLogoDocumentalVersionId();
+        if ((identidadId == null) != (logoId == null)) {
+            throw new IllegalArgumentException(
+                    "Las versiones de identidad legal y logo documental deben enviarse juntas."
+            );
+        }
+        if (identidadId != null
+                && (!identidadExistente.getId().equals(identidadId) || !logoExistente.getId().equals(logoId))) {
+            throw new IllegalArgumentException("La OCA ya tiene una identidad documental diferente asociada.");
+        }
+    }
+
+    private String buildEmailSubject(OrdenCompraActivo orden) {
+        return "No Reply - Orden de Compra de Activo Fijo "
+                + getNombreComercialDocumento(orden)
+                + " #"
+                + orden.getOrdenCompraActivoId();
+    }
+
+    private String buildEmailBody(OrdenCompraActivo orden) {
+        return "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n"
+                + "Por medio de la presente le hacemos llegar la orden de compra de activo fijo #"
+                + orden.getOrdenCompraActivoId()
+                + " correspondiente a los productos/servicios detallados en el documento adjunto.\n"
+                + "Le agradeceremos confirmar la recepción de esta orden y, en caso de ser necesario, "
+                + "informarnos sobre el tiempo estimado de entrega o cualquier observación relevante.\n\n"
+                + "Quedamos atentos a su confirmación y agradecemos de antemano su atención y colaboración.\n\n"
+                + "Saludos cordiales,\n"
+                + getNombreComercialDocumento(orden)
+                + " - Departamento de Compras";
+    }
+
+    private String getNombreComercialDocumento(OrdenCompraActivo orden) {
+        EmpresaIdentidadLegalVersion identidad = orden.getEmpresaIdentidadLegalVersion();
+        if (identidad == null || identidad.getNombreComercial() == null || identidad.getNombreComercial().isBlank()) {
+            throw new IllegalStateException("La OCA no tiene una identidad legal válida asociada.");
+        }
+        return identidad.getNombreComercial().trim();
     }
 }

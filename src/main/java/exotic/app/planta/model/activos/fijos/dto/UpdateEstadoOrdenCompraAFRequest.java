@@ -22,6 +22,15 @@ public class UpdateEstadoOrdenCompraAFRequest {
     private TipoEnvio tipoEnvio;
 
     /**
+     * Pareja de versiones documentales usada para generar y fijar el PDF OCAF.
+     * Los dos ids deben informarse juntos; si ambos faltan, backend usa la pareja
+     * vigente para mantener compatibilidad con clientes anteriores.
+     */
+    private Long empresaIdentidadLegalVersionId;
+
+    private Long empresaLogoDocumentalVersionId;
+
+    /**
      * solo se usa si se la orden esta en estado 1. de lo contrario
      * este atributo nunca se usa, al igaul que sucede con el atributo anterior.
      */

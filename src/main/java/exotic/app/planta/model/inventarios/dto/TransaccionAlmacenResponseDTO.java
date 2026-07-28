@@ -21,6 +21,7 @@ public class TransaccionAlmacenResponseDTO {
     private int idEntidadCausante;
     private String tipoEntidadCausante;
     private String observaciones;
+    private String causaAjuste;
     private String estadoContable;
     private String loteAsignado;
     private UsuarioAprobadorDTO usuarioAprobador;
@@ -37,5 +38,4 @@ public class TransaccionAlmacenResponseDTO {
         private String nombre;
     }
 }
-
 

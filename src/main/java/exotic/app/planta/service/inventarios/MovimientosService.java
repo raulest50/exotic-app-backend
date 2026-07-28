@@ -7,6 +7,7 @@ import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.compras.ItemOrdenCompra;
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.contabilidad.AsientoContable;
+import exotic.app.planta.model.inventarios.CausaAjusteInventario;
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
 import exotic.app.planta.model.inventarios.dto.AjusteItemDTO;
 import exotic.app.planta.model.inventarios.dto.FiltroHistorialTransaccionesDTO;
@@ -303,6 +304,7 @@ public class MovimientosService {
         }
 
         if (tipoEntidadCausante == TransaccionAlmacen.TipoEntidadCausante.OAA) {
+            validarCausaAjusteInventario(ajusteInventarioDTO);
             validarItemsAjusteInventario(ajusteInventarioDTO.getItems());
         }
 
@@ -311,6 +313,9 @@ public class MovimientosService {
         transaccion.setIdEntidadCausante(0);
         transaccion.setObservaciones(ajusteInventarioDTO.getObservaciones());
         transaccion.setUrlDocSoporte(ajusteInventarioDTO.getUrlDocSoporte());
+        if (tipoEntidadCausante == TransaccionAlmacen.TipoEntidadCausante.OAA) {
+            transaccion.setCausaAjuste(ajusteInventarioDTO.getCausaAjuste());
+        }
 
         if (ajusteInventarioDTO.getUsername() != null && !ajusteInventarioDTO.getUsername().isEmpty()) {
             Optional<User> userOpt = userRepository.findByUsername(ajusteInventarioDTO.getUsername());
@@ -372,6 +377,28 @@ public class MovimientosService {
                     saved.getTransaccionId(), movimientos.size());
         }
         return saved;
+    }
+
+    private void validarCausaAjusteInventario(AjusteInventarioDTO ajusteInventarioDTO) {
+        CausaAjusteInventario causa = ajusteInventarioDTO.getCausaAjuste();
+        if (causa == null) {
+            throw new IllegalArgumentException("La causa del ajuste es obligatoria.");
+        }
+
+        if (causa.isSoloSalida()
+                && ajusteInventarioDTO.getItems().stream()
+                .anyMatch(item -> item.getCantidad() > 0)) {
+            throw new IllegalArgumentException(
+                    "La causa '" + causa.getEtiqueta() + "' solo permite cantidades negativas.");
+        }
+
+        if (causa.isRequiereObservaciones()
+                && (ajusteInventarioDTO.getObservaciones() == null
+                || ajusteInventarioDTO.getObservaciones().isBlank())) {
+            throw new IllegalArgumentException(
+                    "Las observaciones son obligatorias para la causa '"
+                            + causa.getEtiqueta() + "'.");
+        }
     }
 
     private void validarItemsAjusteInventario(List<AjusteItemDTO> items) {
@@ -1223,6 +1250,9 @@ public class MovimientosService {
                 ? transaccion.getTipoEntidadCausante().name()
                 : null);
         dto.setObservaciones(transaccion.getObservaciones());
+        dto.setCausaAjuste(transaccion.getCausaAjuste() != null
+                ? transaccion.getCausaAjuste().name()
+                : null);
         dto.setEstadoContable(transaccion.getEstadoContable() != null
                 ? transaccion.getEstadoContable().name()
                 : null);

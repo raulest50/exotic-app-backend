@@ -63,22 +63,22 @@ class EmpresaIdentidadLegalServiceTest {
     }
 
     @Test
-    void resolveVersionForOcm_usesCurrentWhenIdIsNull() {
+    void resolveVersion_usesCurrentWhenIdIsNull() {
         EmpresaIdentidadLegalVersion vigente = new EmpresaIdentidadLegalVersion();
         vigente.setId(1L);
         when(repo.findFirstByEstadoOrderByVersionDesc(EmpresaIdentidadLegalVersion.Estado.VIGENTE))
                 .thenReturn(Optional.of(vigente));
 
-        assertEquals(vigente, service.resolveVersionForOcm(null));
+        assertEquals(vigente, service.resolveVersion(null));
     }
 
     @Test
-    void resolveVersionForOcm_usesExplicitVersionWhenIdIsProvided() {
+    void resolveVersion_usesExplicitVersionWhenIdIsProvided() {
         EmpresaIdentidadLegalVersion historica = new EmpresaIdentidadLegalVersion();
         historica.setId(9L);
         when(repo.findById(9L)).thenReturn(Optional.of(historica));
 
-        assertEquals(historica, service.resolveVersionForOcm(9L));
+        assertEquals(historica, service.resolveVersion(9L));
     }
 
     private static EmpresaIdentidadLegalVersionRequest validRequest() {

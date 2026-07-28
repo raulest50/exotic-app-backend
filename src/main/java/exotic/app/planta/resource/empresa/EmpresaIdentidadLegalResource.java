@@ -9,6 +9,7 @@ import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,7 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 public class EmpresaIdentidadLegalResource {
 
     private static final String TAB_IDENTIDAD_LEGAL = "IDENTIDAD_LEGAL";
+    private static final CacheControl METADATA_CACHE_CONTROL = CacheControl.noCache().cachePrivate();
 
     private final EmpresaIdentidadLegalService service;
     private final UserRepository userRepository;
@@ -37,13 +39,17 @@ public class EmpresaIdentidadLegalResource {
     @GetMapping("/vigente")
     public ResponseEntity<EmpresaIdentidadLegalVersion> getVigente(Authentication authentication) {
         requireAuthenticatedUser(authentication);
-        return ResponseEntity.ok(service.getVigente());
+        return ResponseEntity.ok()
+                .cacheControl(METADATA_CACHE_CONTROL)
+                .body(service.getVigente());
     }
 
     @GetMapping("/versiones")
     public ResponseEntity<List<EmpresaIdentidadLegalVersion>> getVersiones(Authentication authentication) {
         requireTabAccess(authentication, 1);
-        return ResponseEntity.ok(service.getVersiones());
+        return ResponseEntity.ok()
+                .cacheControl(METADATA_CACHE_CONTROL)
+                .body(service.getVersiones());
     }
 
     @PostMapping("/versiones")

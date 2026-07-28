@@ -12,6 +12,8 @@ public record CoberturaMaterialesDTO(
         LocalDate fechaDesde,
         LocalDate fechaHasta,
         LocalDateTime fechaHoraCorteStock,
+        FuenteDemandaCobertura fuenteDemanda,
+        boolean escenarioExploratorio,
         EstadoCobertura estado,
         LocalDate fechaPrimerAgotamiento,
         String materialCriticoId,
@@ -22,13 +24,24 @@ public record CoberturaMaterialesDTO(
         List<String> motivosConfianzaBaja,
         int diasObservados,
         int diasConDispensacion,
+        int diasConDemanda,
         int materialesAnalizados,
         int materialesConDemanda,
+        ResumenFuentesDemandaDTO resumenFuentesDemanda,
         List<EstimacionMaterialDTO> estimaciones
 ) {
     public enum EstadoCobertura {
         ESTIMADO,
         SIN_CONSUMO
+    }
+
+    @Builder
+    public record ResumenFuentesDemandaDTO(
+            int movimientosDispensacionIncluidos,
+            int ajustesContingenciaDisponibles,
+            int ajustesContingenciaIncluidos,
+            int ajustesNegativosSinClasificarExcluidos
+    ) {
     }
 
     @Builder
@@ -38,7 +51,11 @@ public record CoberturaMaterialesDTO(
             String unidadMedida,
             double stockActual,
             double demandaMediaDiaria,
+            double demandaMediaDiariaOperativa,
+            double demandaMediaDiariaContingencia,
             int diasConDispensacion,
+            int diasConDemanda,
+            int ajustesContingenciaIncluidos,
             Double diasHastaAgotamiento,
             LocalDate fechaAgotamiento,
             LocalDate intervaloFechaMin,

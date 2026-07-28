@@ -72,6 +72,22 @@ public class InformesDiariosService {
             "Lote (batch)"
     };
 
+    private static final String[] HEADERS_AJUSTE_ALMACEN = {
+            "Fecha movimiento",
+            "ID producto",
+            "Nombre",
+            "Cantidad",
+            "Unidad",
+            "Tipo movimiento",
+            "Almacén",
+            "ID transacción",
+            "Tipo entidad causante",
+            "ID entidad causante",
+            "Causa ajuste",
+            "Observaciones",
+            "Lote (batch)"
+    };
+
     private static final String[] HEADERS_INFORME_COMPRAS = {
             "Fecha ingreso",
             "ID transacción",
@@ -392,13 +408,15 @@ public class InformesDiariosService {
                             start, end, Movimiento.TipoMovimiento.AJUSTE_POSITIVO),
                     "Ajustes almacén entradas",
                     "ajustes almacén entradas",
-                    options);
+                    options,
+                    true);
             case SALIDAS -> generarExcelMovimientosAlmacen(
                     transaccionAlmacenRepo.findAjustesAlmacenSalidasPorRango(
                             start, end, Movimiento.TipoMovimiento.AJUSTE_NEGATIVO),
                     "Ajustes almacén salidas",
                     "ajustes almacén salidas",
-                    options);
+                    options,
+                    true);
             case MIXTA -> generarExcelMovimientosAlmacen(
                     transaccionAlmacenRepo.findAjustesAlmacenMixtaPorRango(
                             start,
@@ -407,7 +425,8 @@ public class InformesDiariosService {
                             Movimiento.TipoMovimiento.AJUSTE_NEGATIVO),
                     "Ajustes almacén mixto",
                     "ajustes almacén mixto",
-                    options);
+                    options,
+                    true);
         };
     }
 
@@ -885,21 +904,42 @@ public class InformesDiariosService {
             String nombreHoja,
             String contextoLog,
             BiExcelExportOptions options) {
+        return generarExcelMovimientosAlmacen(
+                movimientos,
+                nombreHoja,
+                contextoLog,
+                options,
+                false);
+    }
+
+    private byte[] generarExcelMovimientosAlmacen(
+            List<Movimiento> movimientos,
+            String nombreHoja,
+            String contextoLog,
+            BiExcelExportOptions options,
+            boolean incluirCausaAjuste) {
+        String[] headers = incluirCausaAjuste
+                ? HEADERS_AJUSTE_ALMACEN
+                : HEADERS_MOVIMIENTO_ALMACEN;
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ExcelStyles styles = createExcelStyles(workbook, options);
             Sheet sheet = workbook.createSheet(nombreHoja);
             Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < HEADERS_MOVIMIENTO_ALMACEN.length; i++) {
-                headerRow.createCell(i).setCellValue(HEADERS_MOVIMIENTO_ALMACEN[i]);
+            for (int i = 0; i < headers.length; i++) {
+                headerRow.createCell(i).setCellValue(headers[i]);
             }
 
             int rowIdx = 1;
             for (Movimiento mov : movimientos) {
-                escribirFilaMovimiento(mov, sheet.createRow(rowIdx++), styles);
+                escribirFilaMovimiento(
+                        mov,
+                        sheet.createRow(rowIdx++),
+                        styles,
+                        incluirCausaAjuste);
             }
 
-            for (int i = 0; i < HEADERS_MOVIMIENTO_ALMACEN.length; i++) {
+            for (int i = 0; i < headers.length; i++) {
                 sheet.autoSizeColumn(i);
             }
 
@@ -942,7 +982,12 @@ public class InformesDiariosService {
         }
     }
 
-    private static void escribirFilaMovimiento(Movimiento mov, Row row, ExcelStyles styles) {
+    private static void escribirFilaMovimiento(
+            Movimiento mov,
+            Row row,
+            ExcelStyles styles,
+            boolean incluirCausaAjuste
+    ) {
         int c = 0;
         row.createCell(c++).setCellValue(
                 mov.getFechaMovimiento() != null ? mov.getFechaMovimiento().toString() : "");
@@ -967,12 +1012,21 @@ public class InformesDiariosService {
             row.createCell(c++).setCellValue(
                     tx.getTipoEntidadCausante() != null ? tx.getTipoEntidadCausante().name() : "");
             row.createCell(c++).setCellValue(tx.getIdEntidadCausante());
+            if (incluirCausaAjuste) {
+                row.createCell(c++).setCellValue(
+                        tx.getCausaAjuste() != null
+                                ? tx.getCausaAjuste().getEtiqueta()
+                                : "Sin clasificar");
+            }
             row.createCell(c++).setCellValue(
                     tx.getObservaciones() != null ? tx.getObservaciones() : "");
         } else {
             row.createCell(c++).setCellValue("");
             row.createCell(c++).setCellValue("");
             row.createCell(c++).setCellValue("");
+            if (incluirCausaAjuste) {
+                row.createCell(c++).setCellValue("Sin clasificar");
+            }
             row.createCell(c++).setCellValue("");
         }
 

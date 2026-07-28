@@ -2,6 +2,7 @@ package exotic.app.planta.resource.bi;
 
 import exotic.app.planta.model.bi.dto.BusquedaStockMaterialDTO;
 import exotic.app.planta.model.bi.dto.CoberturaMaterialesDTO;
+import exotic.app.planta.model.bi.dto.FuenteDemandaCobertura;
 import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
 import exotic.app.planta.model.bi.dto.PaginaInformeInventarioDTO;
 import exotic.app.planta.service.bi.inventario.AjustesInventarioDetalleService;
@@ -149,9 +150,12 @@ class InformeInventarioResourceTest {
 
     @Test
     void coverageUses90DaysByDefault() throws Exception {
-        when(coverageService.calculate(90))
+        when(coverageService.calculate(
+                90,
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES))
                 .thenReturn(CoberturaMaterialesDTO.builder()
                         .ventanaDias(90)
+                        .fuenteDemanda(FuenteDemandaCobertura.SOLO_DISPENSACIONES)
                         .estado(CoberturaMaterialesDTO.EstadoCobertura.SIN_CONSUMO)
                         .motivosConfianzaBaja(List.of())
                         .estimaciones(List.of())
@@ -160,7 +164,34 @@ class InformeInventarioResourceTest {
         mockMvc.perform(get("/bi/informes-globales/almacen/cobertura"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ventanaDias").value(90))
+                .andExpect(jsonPath("$.fuenteDemanda").value("SOLO_DISPENSACIONES"))
                 .andExpect(jsonPath("$.estado").value("SIN_CONSUMO"));
+    }
+
+    @Test
+    void coverageAcceptsExpandedDemandSource() throws Exception {
+        when(coverageService.calculate(
+                30,
+                FuenteDemandaCobertura.DISPENSACIONES_MAS_CONTINGENCIAS))
+                .thenReturn(CoberturaMaterialesDTO.builder()
+                        .ventanaDias(30)
+                        .fuenteDemanda(
+                                FuenteDemandaCobertura.DISPENSACIONES_MAS_CONTINGENCIAS)
+                        .escenarioExploratorio(true)
+                        .estado(CoberturaMaterialesDTO.EstadoCobertura.ESTIMADO)
+                        .motivosConfianzaBaja(List.of())
+                        .estimaciones(List.of())
+                        .build());
+
+        mockMvc.perform(get("/bi/informes-globales/almacen/cobertura")
+                        .param("ventanaDias", "30")
+                        .param(
+                                "fuenteDemanda",
+                                "DISPENSACIONES_MAS_CONTINGENCIAS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fuenteDemanda")
+                        .value("DISPENSACIONES_MAS_CONTINGENCIAS"))
+                .andExpect(jsonPath("$.escenarioExploratorio").value(true));
     }
 
     @Test

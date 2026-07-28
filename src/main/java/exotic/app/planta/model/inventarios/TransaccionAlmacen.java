@@ -145,6 +145,14 @@
         private String observaciones;
 
         /**
+         * Causa operativa declarada para una orden de ajuste de almacén (OAA).
+         * Permanece nula para transacciones históricas y para otros tipos de transacción.
+         */
+        @Enumerated(EnumType.STRING)
+        @Column(name = "causa_ajuste", length = 64)
+        private CausaAjusteInventario causaAjuste;
+
+        /**
          * Lista de usuarios responsables de realizar la dispensación.
          * Puede ser null si no hay usuarios asignados.
          * Se usa principalmente para dispensaciones donde múltiples usuarios participan.

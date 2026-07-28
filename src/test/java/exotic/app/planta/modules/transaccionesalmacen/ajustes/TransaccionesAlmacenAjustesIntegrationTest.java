@@ -1,5 +1,6 @@
 package exotic.app.planta.modules.transaccionesalmacen.ajustes;
 
+import exotic.app.planta.model.inventarios.CausaAjusteInventario;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.dto.AjusteInventarioDTO;
 import exotic.app.planta.model.inventarios.dto.AjusteItemDTO;
@@ -59,7 +60,8 @@ class TransaccionesAlmacenAjustesIntegrationTest extends AbstractTransaccionesAl
                         Movimiento.Almacen.GENERAL,
                         fixture.loteMateriaPrima().getId().intValue(),
                         "AJUSTE_NEGATIVO"
-                ))
+                )),
+                CausaAjusteInventario.CORRECCION_REGISTRO
         );
 
         mockMvc.perform(post("/movimientos/ajustes")
@@ -68,6 +70,87 @@ class TransaccionesAlmacenAjustesIntegrationTest extends AbstractTransaccionesAl
                         .content(objectMapper.writeValueAsBytes(payload)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.tipoEntidadCausante").value("OAA"))
+                .andExpect(jsonPath("$.causaAjuste").value("CORRECCION_REGISTRO"))
                 .andExpect(jsonPath("$.movimientosTransaccion[0].tipoMovimiento").value("AJUSTE_NEGATIVO"));
+    }
+
+    @Test
+    void saveAjusteInventario_rejectsMissingCause() throws Exception {
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+
+        AjusteInventarioDTO payload = new AjusteInventarioDTO(
+                "master",
+                "Ajuste sin causa",
+                null,
+                List.of(new AjusteItemDTO(
+                        fixture.materialPrincipal().getProductoId(),
+                        -1.0,
+                        Movimiento.Almacen.GENERAL,
+                        fixture.loteMateriaPrima().getId().intValue(),
+                        null
+                )),
+                null
+        );
+
+        mockMvc.perform(post("/movimientos/ajustes")
+                        .with(bearerToken())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("La causa del ajuste es obligatoria."));
+    }
+
+    @Test
+    void saveAjusteInventario_rejectsPositiveProductionContingency() throws Exception {
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+
+        AjusteInventarioDTO payload = new AjusteInventarioDTO(
+                "master",
+                "Contingencia inválida",
+                null,
+                List.of(new AjusteItemDTO(
+                        fixture.materialPrincipal().getProductoId(),
+                        1.0,
+                        Movimiento.Almacen.GENERAL,
+                        fixture.loteMateriaPrima().getId().intValue(),
+                        null
+                )),
+                CausaAjusteInventario.PRODUCCION_CONTINGENCIA
+        );
+
+        mockMvc.perform(post("/movimientos/ajustes")
+                        .with(bearerToken())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "La causa 'Salida de producción por contingencia' solo permite cantidades negativas."));
+    }
+
+    @Test
+    void saveAjusteInventario_requiresObservationsForOtherRegularization() throws Exception {
+        ModuleFixture fixture = fixtureFactory.seedModuleFixture();
+
+        AjusteInventarioDTO payload = new AjusteInventarioDTO(
+                "master",
+                " ",
+                null,
+                List.of(new AjusteItemDTO(
+                        fixture.materialPrincipal().getProductoId(),
+                        -1.0,
+                        Movimiento.Almacen.GENERAL,
+                        fixture.loteMateriaPrima().getId().intValue(),
+                        null
+                )),
+                CausaAjusteInventario.OTRA_REGULARIZACION
+        );
+
+        mockMvc.perform(post("/movimientos/ajustes")
+                        .with(bearerToken())
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Las observaciones son obligatorias para la causa 'Otra regularización excepcional'."));
     }
 }
