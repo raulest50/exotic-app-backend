@@ -2,16 +2,16 @@ package exotic.app.planta.service.bi.inventario;
 
 import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
 import exotic.app.planta.model.producto.Material;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Component
+@RequiredArgsConstructor
 class StockInventarioAssembler {
     private static final double STOCK_EPSILON = 1e-6;
     private static final int MAX_ALERTS = 10;
@@ -22,6 +22,8 @@ class StockInventarioAssembler {
             "OTROS"
     );
     private static final List<String> ABC_CLASSES = List.of("A", "B", "C");
+
+    private final AlertasInventarioClassifier alertClassifier;
 
     InformeInventarioDTO.StockDTO assemble(List<ProductoStockSnapshot> snapshots) {
         double totalValue = snapshots.stream()
@@ -272,95 +274,9 @@ class StockInventarioAssembler {
     private InformeInventarioDTO.AlertasDTO buildAlerts(
             List<ProductoStockSnapshot> snapshots
     ) {
-        List<InformeInventarioDTO.AlertaStockDTO> alerts = snapshots.stream()
-                .filter(snapshot -> snapshot.producto() instanceof Material)
-                .map(this::highestPriorityMaterialAlert)
-                .filter(Objects::nonNull)
-                .sorted(Comparator
-                        .comparingInt(InformeInventarioDTO.AlertaStockDTO::prioridad)
-                        .thenComparingDouble(InformeInventarioDTO.AlertaStockDTO::stock)
-                        .thenComparing(InformeInventarioDTO.AlertaStockDTO::productoId))
-                .toList();
-
-        int negative = countAlerts(alerts, 1);
-        int belowThreshold = countAlerts(alerts, 2);
-        int withoutCost = countAlerts(alerts, 3);
-
-        return InformeInventarioDTO.AlertasDTO.builder()
-                .total(alerts.size())
-                .negativas(negative)
-                .bajoUmbral(belowThreshold)
-                .sinCosto(withoutCost)
-                .items(alerts.stream().limit(MAX_ALERTS).toList())
-                .build();
-    }
-
-    private InformeInventarioDTO.AlertaStockDTO highestPriorityMaterialAlert(
-            ProductoStockSnapshot snapshot
-    ) {
-        Material material = (Material) snapshot.producto();
-        if (snapshot.stockGeneral() < -STOCK_EPSILON) {
-            return toMaterialAlert(
-                    snapshot,
-                    material,
-                    "STOCK_NEGATIVO",
-                    1,
-                    null,
-                    List.of());
-        }
-
-        ProductThreshold threshold = thresholdFor(material);
-        if (Math.abs(snapshot.stockGeneral()) <= STOCK_EPSILON
-                || threshold.isConfiguredAndReachedBy(snapshot.stockGeneral())) {
-            String type = Math.abs(snapshot.stockGeneral()) <= STOCK_EPSILON
-                    ? "AGOTADO"
-                    : "BAJO_UMBRAL";
-            return toMaterialAlert(
-                    snapshot,
-                    material,
-                    type,
-                    2,
-                    threshold.effectiveValue(),
-                    threshold.reachedThresholds(snapshot.stockGeneral()));
-        }
-
-        if (snapshot.stockGeneral() > STOCK_EPSILON
-                && !InventarioBiUtils.hasValidCost(material)) {
-            return toMaterialAlert(
-                    snapshot,
-                    material,
-                    "SIN_COSTO",
-                    3,
-                    null,
-                    List.of());
-        }
-        return null;
-    }
-
-    private ProductThreshold thresholdFor(Material material) {
-        double minimumStock = Math.max(material.getStockMinimo(), 0);
-        double reorderPoint = Math.max(material.getPuntoReorden(), 0);
-        return new ProductThreshold(minimumStock, reorderPoint);
-    }
-
-    private InformeInventarioDTO.AlertaStockDTO toMaterialAlert(
-            ProductoStockSnapshot snapshot,
-            Material material,
-            String type,
-            int priority,
-            Double threshold,
-            List<String> reachedThresholds
-    ) {
-        return InformeInventarioDTO.AlertaStockDTO.builder()
-                .tipo(type)
-                .prioridad(priority)
-                .productoId(material.getProductoId())
-                .productoNombre(material.getNombre())
-                .unidadMedida(InventarioBiUtils.unitOf(material))
-                .stock(snapshot.stockGeneral())
-                .umbral(threshold)
-                .umbralesIncumplidos(reachedThresholds)
-                .build();
+        return alertClassifier.summarize(
+                alertClassifier.classify(snapshots),
+                MAX_ALERTS);
     }
 
     private boolean isValuedReference(ProductoStockSnapshot snapshot) {
@@ -370,12 +286,6 @@ class StockInventarioAssembler {
 
     private String valueOrEmpty(String value) {
         return value == null ? "" : value;
-    }
-
-    private int countAlerts(List<InformeInventarioDTO.AlertaStockDTO> alerts, int priority) {
-        return Math.toIntExact(alerts.stream()
-                .filter(alert -> alert.prioridad() == priority)
-                .count());
     }
 
     private Map<String, ValueAccumulator> initializedValueMap(List<String> keys) {
@@ -444,22 +354,4 @@ class StockInventarioAssembler {
         }
     }
 
-    private record ProductThreshold(double minimumStock, double reorderPoint) {
-        Double effectiveValue() {
-            double effective = Math.max(minimumStock, reorderPoint);
-            return effective > 0 ? effective : null;
-        }
-
-        boolean isConfiguredAndReachedBy(double stock) {
-            Double effective = effectiveValue();
-            return effective != null && stock <= effective;
-        }
-
-        List<String> reachedThresholds(double stock) {
-            List<String> reached = new ArrayList<>();
-            if (minimumStock > 0 && stock <= minimumStock) reached.add("STOCK_MINIMO");
-            if (reorderPoint > 0 && stock <= reorderPoint) reached.add("PUNTO_REORDEN");
-            return List.copyOf(reached);
-        }
-    }
 }

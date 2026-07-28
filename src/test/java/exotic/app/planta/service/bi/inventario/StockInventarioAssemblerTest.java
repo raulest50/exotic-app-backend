@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class StockInventarioAssemblerTest {
-    private final StockInventarioAssembler assembler = new StockInventarioAssembler();
+    private final StockInventarioAssembler assembler = new StockInventarioAssembler(
+            new AlertasInventarioClassifier());
 
     @Test
     void valuesOnlyPositiveStockWithAValidCurrentMasterCost() {
@@ -91,7 +92,8 @@ class StockInventarioAssemblerTest {
         assertEquals(10, report.resumen().referenciasNegativas());
         assertEquals(1, report.alertas().total());
         assertEquals(0, report.alertas().negativas());
-        assertEquals(1, report.alertas().bajoUmbral());
+        assertEquals(1, report.alertas().agotadas());
+        assertEquals(0, report.alertas().bajoUmbral());
         assertEquals(1, report.alertas().items().size());
         assertEquals("MP-1", report.alertas().items().get(0).productoId());
         assertEquals("AGOTADO", report.alertas().items().get(0).tipo());

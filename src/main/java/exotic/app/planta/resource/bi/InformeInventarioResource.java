@@ -3,6 +3,7 @@ package exotic.app.planta.resource.bi;
 import exotic.app.planta.model.bi.dto.FuenteDemandaCobertura;
 import exotic.app.planta.service.bi.InformeGlobalFechaResolver;
 import exotic.app.planta.service.bi.inventario.AjustesInventarioDetalleService;
+import exotic.app.planta.service.bi.inventario.AlertasInventarioDetalleService;
 import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
@@ -27,6 +28,7 @@ public class InformeInventarioResource {
     private final BusquedaStockMaterialService searchService;
     private final CoberturaMaterialesService coverageService;
     private final AjustesInventarioDetalleService adjustmentDetailService;
+    private final AlertasInventarioDetalleService alertDetailService;
 
     @GetMapping
     public ResponseEntity<?> reporte(
@@ -113,6 +115,30 @@ public class InformeInventarioResource {
                     rango.fechaHasta(),
                     grupo,
                     tipo,
+                    orden,
+                    buscar,
+                    page,
+                    size));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        }
+    }
+
+    @GetMapping("/alertas-materiales")
+    public ResponseEntity<?> alertasMateriales(
+            @RequestParam(defaultValue = "TODAS") String tipo,
+            @RequestParam(defaultValue = "TODOS") String grupo,
+            @RequestParam(required = false) String unidad,
+            @RequestParam(defaultValue = "PRIORIDAD") String orden,
+            @RequestParam(required = false) String buscar,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        try {
+            return ResponseEntity.ok(alertDetailService.getAlerts(
+                    tipo,
+                    grupo,
+                    unidad,
                     orden,
                     buscar,
                     page,

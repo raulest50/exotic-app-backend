@@ -1,11 +1,13 @@
 package exotic.app.planta.resource.bi;
 
+import exotic.app.planta.model.bi.dto.AlertasMaterialesExploracionDTO;
 import exotic.app.planta.model.bi.dto.BusquedaStockMaterialDTO;
 import exotic.app.planta.model.bi.dto.CoberturaMaterialesDTO;
 import exotic.app.planta.model.bi.dto.FuenteDemandaCobertura;
 import exotic.app.planta.model.bi.dto.InformeInventarioDTO;
 import exotic.app.planta.model.bi.dto.PaginaInformeInventarioDTO;
 import exotic.app.planta.service.bi.inventario.AjustesInventarioDetalleService;
+import exotic.app.planta.service.bi.inventario.AlertasInventarioDetalleService;
 import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
@@ -46,6 +48,9 @@ class InformeInventarioResourceTest {
 
     @MockBean
     private AjustesInventarioDetalleService adjustmentDetailService;
+
+    @MockBean
+    private AlertasInventarioDetalleService alertDetailService;
 
     @Test
     void reportAcceptsSingleDateAndIgnoresLegacyTrendWindow() throws Exception {
@@ -246,5 +251,53 @@ class InformeInventarioResourceTest {
                 "alcohol",
                 1,
                 5);
+    }
+
+    @Test
+    void materialAlertsAcceptExplorationFilters() throws Exception {
+        when(alertDetailService.getAlerts(
+                "AGOTADO",
+                "EMPAQUE",
+                "U",
+                "STOCK_ASC",
+                "envase",
+                1,
+                20))
+                .thenReturn(AlertasMaterialesExploracionDTO.builder()
+                        .resumen(AlertasMaterialesExploracionDTO.ResumenAlertasDTO
+                                .builder()
+                                .total(12)
+                                .agotadas(8)
+                                .build())
+                        .prioritarios(List.of())
+                        .facetas(AlertasMaterialesExploracionDTO.FacetasAlertasDTO
+                                .builder()
+                                .gruposDisponibles(List.of("EMPAQUE"))
+                                .unidadesDisponibles(List.of("U"))
+                                .build())
+                        .pagina(new PaginaInformeInventarioDTO<>(
+                                List.of(), 0, 20, 8, 1, true, true))
+                        .build());
+
+        mockMvc.perform(get("/bi/informes-globales/almacen/alertas-materiales")
+                        .param("tipo", "AGOTADO")
+                        .param("grupo", "EMPAQUE")
+                        .param("unidad", "U")
+                        .param("orden", "STOCK_ASC")
+                        .param("buscar", "envase")
+                        .param("page", "1")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumen.agotadas").value(8))
+                .andExpect(jsonPath("$.pagina.totalElements").value(8));
+
+        verify(alertDetailService).getAlerts(
+                "AGOTADO",
+                "EMPAQUE",
+                "U",
+                "STOCK_ASC",
+                "envase",
+                1,
+                20);
     }
 }

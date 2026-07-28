@@ -120,6 +120,7 @@ public record InformeInventarioDTO(
     public record AlertasDTO(
             int total,
             int negativas,
+            int agotadas,
             int bajoUmbral,
             int sinCosto,
             List<AlertaStockDTO> items
@@ -132,9 +133,15 @@ public record InformeInventarioDTO(
             int prioridad,
             String productoId,
             String productoNombre,
+            String grupo,
             String unidadMedida,
             double stock,
             Double umbral,
+            double stockMinimo,
+            double puntoReorden,
+            Double brechaUmbral,
+            Double brechaPct,
+            boolean costoVigente,
             List<String> umbralesIncumplidos
     ) {
     }
