@@ -19,7 +19,6 @@ import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.service.commons.FileStorageService;
-import exotic.app.planta.service.commons.notificaciones.PuntoReordenEvaluacionService;
 import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import lombok.RequiredArgsConstructor;
@@ -991,17 +990,12 @@ public class ProductoService {
     }
 
     /**
-     * -1: no participar en alertas de punto de reorden ({@link PuntoReordenEvaluacionService#PUNTO_REORDEN_IGNORAR}).
+     * -1: no participar en alertas de punto de reorden
+     * ({@link PuntoReordenPolicy#IGNORAR_ALERTAS}).
      * &gt;= 0: umbral válido (0 = sin umbral definido en evaluación).
      */
     private static void validatePuntoReorden(double pr) {
-        if (Double.isNaN(pr) || Double.isInfinite(pr)) {
-            throw new IllegalArgumentException("puntoReorden debe ser un número finito");
-        }
-        if (pr != PuntoReordenEvaluacionService.PUNTO_REORDEN_IGNORAR && pr < 0) {
-            throw new IllegalArgumentException(
-                    "puntoReorden debe ser -1 (ignorar alertas) o mayor o igual a 0");
-        }
+        PuntoReordenPolicy.validate(pr);
     }
 
     private long countBlockingOrdenesProduccion(String productoId) {

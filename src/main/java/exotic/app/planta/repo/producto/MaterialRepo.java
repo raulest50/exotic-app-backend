@@ -1,20 +1,35 @@
 package exotic.app.planta.repo.producto;
 
 import exotic.app.planta.model.producto.Material;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
 public interface MaterialRepo extends JpaRepository<Material, String>, JpaSpecificationExecutor<Material> {
 
     List<Material> findByInventareableTrue();
+
+    List<Material> findByInventareableTrueOrderByProductoIdAsc();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT material
+            FROM Material material
+            WHERE material.productoId IN :productoIds
+            ORDER BY material.productoId
+            """)
+    List<Material> findAllByProductoIdInForUpdate(
+            @Param("productoIds") Collection<String> productoIds);
 
     @Query("""
             SELECT material

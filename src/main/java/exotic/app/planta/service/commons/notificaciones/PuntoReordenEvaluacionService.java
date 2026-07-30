@@ -9,6 +9,7 @@ import exotic.app.planta.model.compras.ItemOrdenCompra;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
+import exotic.app.planta.service.productos.PuntoReordenPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +30,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PuntoReordenEvaluacionService {
 
-    public static final double PUNTO_REORDEN_IGNORAR = -1.0;
+    public static final double PUNTO_REORDEN_IGNORAR = PuntoReordenPolicy.IGNORAR_ALERTAS;
     private static final int ESTADO_OCM_PENDIENTE_INGRESO = 2;
 
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
