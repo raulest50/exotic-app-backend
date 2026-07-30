@@ -3,7 +3,6 @@ package exotic.app.planta.service.inventarios;
 
 import org.springframework.transaction.annotation.Transactional;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
-import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
 import exotic.app.planta.model.compras.ItemOrdenCompra;
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.contabilidad.AsientoContable;
@@ -22,8 +21,6 @@ import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
-import exotic.app.planta.model.producto.SemiTerminado;
-import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
@@ -32,13 +29,9 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
-import exotic.app.planta.repo.producto.SemiTerminadoRepo;
-import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
 import exotic.app.planta.service.produccion.ProduccionService;
-import exotic.app.planta.service.productos.ProductoCostoService;
-import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -54,7 +47,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -87,8 +79,6 @@ public class MovimientosService {
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
 
     private final OrdenCompraRepo ordenCompraRepo;
-    private final SemiTerminadoRepo semiTerminadoRepo;
-    private final TerminadoRepo terminadoRepo;
     private final MaterialRepo materialRepo;
     private final LoteRepo loteRepo;
     private final UserRepository userRepository;
@@ -98,7 +88,6 @@ public class MovimientosService {
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final Clock applicationClock;
-    private final ProductoCostoService productoCostoService;
 
 
 
@@ -540,10 +529,9 @@ public class MovimientosService {
 
 
     /**
-     * El registro de esta entidad en el sistema implica el ingreso de mercancia al almacen. por tanto
-     * esto se debe ver reflejado inmediatamente en la tabla de movimientos, y actualizar los precios de cada
-     * materia prima y de las recetas dependientes de cada materia prima. tambien el estado de la orden de compra
-     * debe cambiar automaticamente a 3, que es cerrada exitosamente
+     * Registra el ingreso físico de mercancía asociado a una OCM, incluyendo movimientos,
+     * lotes y soporte documental. La recepción no modifica costos de productos; esa
+     * responsabilidad pertenece al flujo dedicado y auditable de actualización de costos.
      * @param ingresoOCM_dta
      * @param file
      * @return
@@ -717,40 +705,10 @@ public class MovimientosService {
                 }
             }
 
-            // se actualizan los precios de todos las materias primas
-            for (ItemOrdenCompra itemOrdenCompra : oc.getItemsOrdenCompra()) {
-                itemOrdenCompra.setOrdenCompraMateriales(oc);
-
-                // Verify that the MateriaPrima exists
-                Optional<Material> optionalMateriaPrima = materialRepo.findById(itemOrdenCompra.getMaterial().getProductoId());
-                if (!optionalMateriaPrima.isPresent()) {
-                    throw new RuntimeException("MateriaPrima not found with ID: " + itemOrdenCompra.getMaterial().getProductoId());
-                }
-                Material material = optionalMateriaPrima.get();
-                itemOrdenCompra.setMaterial(material);
-
-                // Retrieve current stock
-                Double currentStockOpt = transaccionAlmacenRepo.findTotalCantidadByProductoId(material.getProductoId());
-                BigDecimal nuevoCosto = getNuevoCosto(itemOrdenCompra, currentStockOpt, material);
-
-                // Update MateriaPrima's costo
-                User actorCosto = ingresoOCM.getUsuarioAprobador();
-                var cambioCosto = productoCostoService.actualizarCosto(
-                        material.getProductoId(),
-                        nuevoCosto,
-                        new ProductoCostoService.ContextoCambio(
-                                actorCosto,
-                                actorCosto != null ? actorCosto.getUsername() : "system",
-                                ProductoCostoOrigen.RECEPCION_OCM,
-                                ingresoOCM_dta.getObservaciones(),
-                                "OCM:" + ordenCompraId,
-                                null));
-                material = (Material) cambioCosto.producto();
-
-                // Update costs of dependent products if necessary
-                Set<String> updatedProductIds = new HashSet<>();
-                updateCostoCascade(material, updatedProductIds);
-            }
+            log.info(
+                    "Recepción OCM {} registrada sin actualización automática de costos de productos",
+                    ordenCompraId
+            );
 
             return ResponseEntity.ok(ingresoOCM);
         } catch(Exception e) {
@@ -882,93 +840,6 @@ public class MovimientosService {
         }
         return false;
     }
-
-
-    public void updateCostoCascade(Producto producto, Set<String> updatedProductIds) {
-        // If we've already updated this product, return to prevent infinite recursion
-        if (updatedProductIds.contains(producto.getProductoId())) {
-            return;
-        }
-        updatedProductIds.add(producto.getProductoId());
-
-        log.info("[CARGA_MASIVA-Cascada] Iniciando para producto={}", producto.getProductoId());
-        int semiCount = 0, termiCount = 0;
-
-        // Recalculate cost of the product if it's a SemiTerminado or Terminado
-        if (producto instanceof SemiTerminado) {
-            SemiTerminado semiTerminado = (SemiTerminado) producto;
-
-            // Recalculate cost
-            BigDecimal newCosto = BigDecimal.ZERO;
-            for (Insumo insumo : semiTerminado.getInsumos()) {
-                Producto insumoProducto = insumo.getProducto();
-                BigDecimal subtotal = insumoProducto.getCosto()
-                        .multiply(BigDecimal.valueOf(insumo.getCantidadRequerida()));
-                newCosto = newCosto.add(subtotal);
-            }
-            productoCostoService.actualizarCosto(
-                    semiTerminado.getProductoId(),
-                    newCosto,
-                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CASCADA_RECETA));
-            log.debug("[CARGA_MASIVA-Cascada] SemiTerminado actualizado: {}", semiTerminado.getProductoId());
-
-        } else if (producto instanceof Terminado) {
-            Terminado terminado = (Terminado) producto;
-
-            // Recalculate cost
-            BigDecimal newCosto = BigDecimal.ZERO;
-            for (Insumo insumo : terminado.getInsumos()) {
-                Producto insumoProducto = insumo.getProducto();
-                BigDecimal subtotal = insumoProducto.getCosto()
-                        .multiply(BigDecimal.valueOf(insumo.getCantidadRequerida()));
-                newCosto = newCosto.add(subtotal);
-            }
-            productoCostoService.actualizarCosto(
-                    terminado.getProductoId(),
-                    newCosto,
-                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CASCADA_RECETA));
-            log.debug("[CARGA_MASIVA-Cascada] Terminado actualizado: {}", terminado.getProductoId());
-        }
-
-        // Now find any SemiTerminados that use this product as an Insumo
-        List<SemiTerminado> semiTerminados = semiTerminadoRepo.findByInsumos_Producto(producto);
-        for (SemiTerminado st : semiTerminados) {
-            updateCostoCascade(st, updatedProductIds);
-            semiCount++;
-        }
-
-        // And find any Terminados that use this product as an Insumo
-        List<Terminado> terminados = terminadoRepo.findByInsumos_Producto(producto);
-        for (Terminado t : terminados) {
-            updateCostoCascade(t, updatedProductIds);
-            termiCount++;
-        }
-
-        log.info("[CARGA_MASIVA-Cascada] Completado para producto={}. SemiTerminados={}, Terminados={}",
-                producto.getProductoId(), semiCount, termiCount);
-    }
-
-
-    private static BigDecimal getNuevoCosto(
-            ItemOrdenCompra itemOrdenCompra,
-            Double currentStockOpt,
-            Material material
-    ) {
-        BigDecimal currentStock = BigDecimal.valueOf(currentStockOpt != null ? currentStockOpt : 0d);
-        BigDecimal incomingUnits = BigDecimal.valueOf(itemOrdenCompra.getCantidad());
-        BigDecimal denominator = currentStock.add(incomingUnits);
-        if (denominator.signum() == 0) {
-            throw new RuntimeException("Total stock cannot be zero after the compra for MateriaPrima ID: " + material.getProductoId());
-        }
-        BigDecimal weightedCurrent = material.getCosto().multiply(currentStock);
-        BigDecimal weightedIncoming = BigDecimal.valueOf(itemOrdenCompra.getPrecioUnitarioFinal())
-                .multiply(incomingUnits);
-        BigDecimal average = weightedCurrent.add(weightedIncoming)
-                .divide(denominator, ProductoCostoService.COST_SCALE, RoundingMode.HALF_UP);
-        return average.setScale(0, RoundingMode.CEILING)
-                .setScale(ProductoCostoService.COST_SCALE, RoundingMode.UNNECESSARY);
-    }
-
 
     private Movimiento.TipoMovimiento resolveTipoMovimiento(
             AjusteItemDTO item,

@@ -82,12 +82,26 @@ public class InformeInventarioResource {
     public ResponseEntity<?> cobertura(
             @RequestParam(defaultValue = "90") int ventanaDias,
             @RequestParam(defaultValue = "SOLO_DISPENSACIONES")
-            FuenteDemandaCobertura fuenteDemanda
+            FuenteDemandaCobertura fuenteDemanda,
+            @RequestParam(defaultValue = "TODOS") String horizonte,
+            @RequestParam(defaultValue = "TODOS") String grupo,
+            @RequestParam(required = false) String unidad,
+            @RequestParam(defaultValue = "AGOTAMIENTO") String orden,
+            @RequestParam(required = false) String buscar,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
     ) {
         try {
             return ResponseEntity.ok(coverageService.calculate(
                     ventanaDias,
-                    fuenteDemanda));
+                    fuenteDemanda,
+                    horizonte,
+                    grupo,
+                    unidad,
+                    orden,
+                    buscar,
+                    page,
+                    size));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         }

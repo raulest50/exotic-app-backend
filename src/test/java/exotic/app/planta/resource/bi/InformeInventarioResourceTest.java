@@ -157,7 +157,14 @@ class InformeInventarioResourceTest {
     void coverageUses90DaysByDefault() throws Exception {
         when(coverageService.calculate(
                 90,
-                FuenteDemandaCobertura.SOLO_DISPENSACIONES))
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                "TODOS",
+                "TODOS",
+                null,
+                "AGOTAMIENTO",
+                null,
+                0,
+                10))
                 .thenReturn(CoberturaMaterialesDTO.builder()
                         .ventanaDias(90)
                         .fuenteDemanda(FuenteDemandaCobertura.SOLO_DISPENSACIONES)
@@ -177,7 +184,14 @@ class InformeInventarioResourceTest {
     void coverageAcceptsExpandedDemandSource() throws Exception {
         when(coverageService.calculate(
                 30,
-                FuenteDemandaCobertura.DISPENSACIONES_MAS_CONTINGENCIAS))
+                FuenteDemandaCobertura.DISPENSACIONES_MAS_CONTINGENCIAS,
+                "TODOS",
+                "TODOS",
+                null,
+                "AGOTAMIENTO",
+                null,
+                0,
+                10))
                 .thenReturn(CoberturaMaterialesDTO.builder()
                         .ventanaDias(30)
                         .fuenteDemanda(
@@ -197,6 +211,58 @@ class InformeInventarioResourceTest {
                 .andExpect(jsonPath("$.fuenteDemanda")
                         .value("DISPENSACIONES_MAS_CONTINGENCIAS"))
                 .andExpect(jsonPath("$.escenarioExploratorio").value(true));
+    }
+
+    @Test
+    void coverageAcceptsExplorationFilters() throws Exception {
+        when(coverageService.calculate(
+                30,
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                "HASTA_7_DIAS",
+                "EMPAQUE",
+                "U",
+                "MAYOR_DEMANDA",
+                "envase",
+                1,
+                20))
+                .thenReturn(CoberturaMaterialesDTO.builder()
+                        .ventanaDias(30)
+                        .fuenteDemanda(FuenteDemandaCobertura.SOLO_DISPENSACIONES)
+                        .estado(CoberturaMaterialesDTO.EstadoCobertura.ESTIMADO)
+                        .motivosConfianzaBaja(List.of())
+                        .estimaciones(List.of())
+                        .facetas(CoberturaMaterialesDTO.FacetasCoberturaDTO.builder()
+                                .gruposDisponibles(List.of("EMPAQUE"))
+                                .unidadesDisponibles(List.of("U"))
+                                .build())
+                        .pagina(new PaginaInformeInventarioDTO<>(
+                                List.of(), 0, 20, 8, 1, true, true))
+                        .build());
+
+        mockMvc.perform(get("/bi/informes-globales/almacen/cobertura")
+                        .param("ventanaDias", "30")
+                        .param("horizonte", "HASTA_7_DIAS")
+                        .param("grupo", "EMPAQUE")
+                        .param("unidad", "U")
+                        .param("orden", "MAYOR_DEMANDA")
+                        .param("buscar", "envase")
+                        .param("page", "1")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina.totalElements").value(8))
+                .andExpect(jsonPath("$.facetas.unidadesDisponibles[0]")
+                        .value("U"));
+
+        verify(coverageService).calculate(
+                30,
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                "HASTA_7_DIAS",
+                "EMPAQUE",
+                "U",
+                "MAYOR_DEMANDA",
+                "envase",
+                1,
+                20);
     }
 
     @Test

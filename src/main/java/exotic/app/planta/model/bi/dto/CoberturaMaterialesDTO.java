@@ -28,7 +28,9 @@ public record CoberturaMaterialesDTO(
         int materialesAnalizados,
         int materialesConDemanda,
         ResumenFuentesDemandaDTO resumenFuentesDemanda,
-        List<EstimacionMaterialDTO> estimaciones
+        List<EstimacionMaterialDTO> estimaciones,
+        FacetasCoberturaDTO facetas,
+        PaginaInformeInventarioDTO<EstimacionMaterialDTO> pagina
 ) {
     public enum EstadoCobertura {
         ESTIMADO,
@@ -45,9 +47,17 @@ public record CoberturaMaterialesDTO(
     }
 
     @Builder
+    public record FacetasCoberturaDTO(
+            List<String> gruposDisponibles,
+            List<String> unidadesDisponibles
+    ) {
+    }
+
+    @Builder
     public record EstimacionMaterialDTO(
             String productoId,
             String nombre,
+            String grupo,
             String unidadMedida,
             double stockActual,
             double demandaMediaDiaria,
@@ -59,7 +69,9 @@ public record CoberturaMaterialesDTO(
             Double diasHastaAgotamiento,
             LocalDate fechaAgotamiento,
             LocalDate intervaloFechaMin,
-            LocalDate intervaloFechaMax
+            LocalDate intervaloFechaMax,
+            boolean confianzaBaja,
+            List<String> motivosConfianzaBaja
     ) {
     }
 }

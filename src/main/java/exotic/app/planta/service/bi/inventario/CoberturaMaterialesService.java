@@ -2,6 +2,7 @@ package exotic.app.planta.service.bi.inventario;
 
 import exotic.app.planta.model.bi.dto.CoberturaMaterialesDTO;
 import exotic.app.planta.model.bi.dto.FuenteDemandaCobertura;
+import exotic.app.planta.model.bi.dto.PaginaInformeInventarioDTO;
 import exotic.app.planta.model.inventarios.CausaAjusteInventario;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
@@ -21,6 +22,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -35,6 +37,8 @@ public class CoberturaMaterialesService {
     private static final int MIN_ACTIVE_DAYS = 5;
     private static final int MAX_INTERVAL_WIDTH_DAYS = 30;
     private static final int MAX_ESTIMATES = 10;
+    private static final int MAX_SEARCH_LENGTH = 100;
+    private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(10, 20);
 
     private final TransaccionAlmacenRepo movementRepo;
     private final InventarioStockReader stockReader;
@@ -49,8 +53,41 @@ public class CoberturaMaterialesService {
             int windowDays,
             FuenteDemandaCobertura demandSource
     ) {
+        return calculate(
+                windowDays,
+                demandSource,
+                "TODOS",
+                "TODOS",
+                null,
+                "AGOTAMIENTO",
+                null,
+                0,
+                10);
+    }
+
+    public CoberturaMaterialesDTO calculate(
+            int windowDays,
+            FuenteDemandaCobertura demandSource,
+            String rawHorizon,
+            String rawGroup,
+            String rawUnit,
+            String rawOrder,
+            String rawSearch,
+            int page,
+            int size
+    ) {
         validateWindow(windowDays);
         validateDemandSource(demandSource);
+        validatePage(page, size);
+        CoverageHorizon horizon = CoverageHorizon.parse(rawHorizon);
+        MaterialGroup group = MaterialGroup.parse(rawGroup);
+        CoverageOrder order = CoverageOrder.parse(rawOrder);
+        String unit = normalizeOptional(rawUnit);
+        String search = normalizeSearch(rawSearch);
+        if (order == CoverageOrder.MAYOR_DEMANDA && unit.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Debe seleccionar una unidad para ordenar por demanda.");
+        }
         LocalDate cutoffDate = LocalDate.now(applicationClock);
         LocalDate startDate = cutoffDate.minusDays(windowDays - 1L);
 
@@ -105,16 +142,25 @@ public class CoberturaMaterialesService {
                         cutoffDate,
                         windowDays))
                 .filter(Objects::nonNull)
-                .sorted(Comparator
-                        .comparing(CoberturaMaterialesDTO.EstimacionMaterialDTO::fechaAgotamiento)
-                        .thenComparing(CoberturaMaterialesDTO.EstimacionMaterialDTO::productoId))
+                .sorted(coverageComparator())
                 .toList();
 
         CoberturaMaterialesDTO.EstimacionMaterialDTO criticalEstimate =
                 estimates.isEmpty() ? null : estimates.get(0);
-        List<String> lowConfidenceReasons = lowConfidenceReasons(
-                windowDays,
-                criticalEstimate);
+        List<String> lowConfidenceReasons = criticalEstimate == null
+                ? List.of()
+                : criticalEstimate.motivosConfianzaBaja();
+        List<CoberturaMaterialesDTO.EstimacionMaterialDTO> filtered =
+                estimates.stream()
+                        .filter(estimate -> horizon.matches(
+                                estimate.diasHastaAgotamiento()))
+                        .filter(estimate -> group.matches(estimate.grupo()))
+                        .filter(estimate -> unit.isBlank()
+                                || unit.equals(normalizeOptional(
+                                        estimate.unidadMedida())))
+                        .filter(estimate -> matchesSearch(estimate, search))
+                        .sorted(comparator(order))
+                        .toList();
 
         return CoberturaMaterialesDTO.builder()
                 .ventanaDias(windowDays)
@@ -161,6 +207,19 @@ public class CoberturaMaterialesService {
                                         Math.toIntExact(unclassifiedNegativeAdjustments))
                                 .build())
                 .estimaciones(estimates.stream().limit(MAX_ESTIMATES).toList())
+                .facetas(CoberturaMaterialesDTO.FacetasCoberturaDTO.builder()
+                        .gruposDisponibles(estimates.stream()
+                                .map(CoberturaMaterialesDTO.EstimacionMaterialDTO::grupo)
+                                .distinct()
+                                .sorted()
+                                .toList())
+                        .unidadesDisponibles(estimates.stream()
+                                .map(CoberturaMaterialesDTO.EstimacionMaterialDTO::unidadMedida)
+                                .distinct()
+                                .sorted()
+                                .toList())
+                        .build())
+                .pagina(toPage(filtered, page, size))
                 .build();
     }
 
@@ -267,10 +326,17 @@ public class CoberturaMaterialesService {
                         meanDemand,
                         cutoffDate,
                         windowDays);
+        List<String> confidenceReasons = lowConfidenceReasons(
+                windowDays,
+                activeDays,
+                includedContingencyMovements,
+                exhaustion.earliestDate(),
+                exhaustion.latestDate());
 
         return CoberturaMaterialesDTO.EstimacionMaterialDTO.builder()
                 .productoId(snapshot.producto().getProductoId())
                 .nombre(snapshot.producto().getNombre())
+                .grupo(InventarioBiUtils.inventoryTypeOf(snapshot.producto()))
                 .unidadMedida(InventarioBiUtils.unitOf(snapshot.producto()))
                 .stockActual(snapshot.stockGeneral())
                 .demandaMediaDiaria(meanDemand)
@@ -283,6 +349,8 @@ public class CoberturaMaterialesService {
                 .fechaAgotamiento(exhaustion.estimatedDate())
                 .intervaloFechaMin(exhaustion.earliestDate())
                 .intervaloFechaMax(exhaustion.latestDate())
+                .confianzaBaja(!confidenceReasons.isEmpty())
+                .motivosConfianzaBaja(confidenceReasons)
                 .build();
     }
 
@@ -329,30 +397,123 @@ public class CoberturaMaterialesService {
 
     private List<String> lowConfidenceReasons(
             int windowDays,
-            CoberturaMaterialesDTO.EstimacionMaterialDTO criticalEstimate
+            int activeDays,
+            int includedContingencyMovements,
+            LocalDate earliestDate,
+            LocalDate latestDate
     ) {
-        if (criticalEstimate == null) return List.of();
-
         List<String> reasons = new ArrayList<>();
         if (windowDays < MIN_OBSERVED_DAYS) {
             reasons.add("Se observaron menos de 30 días.");
         }
-        if (criticalEstimate.diasConDemanda() < MIN_ACTIVE_DAYS) {
-            reasons.add("El material crítico tuvo menos de 5 días con demanda.");
+        if (activeDays < MIN_ACTIVE_DAYS) {
+            reasons.add("El material tuvo menos de 5 días con demanda.");
         }
-        if (criticalEstimate.ajustesContingenciaIncluidos() > 0) {
+        if (includedContingencyMovements > 0) {
             reasons.add(
-                    "El material crítico incluye salidas de producción registradas como contingencia.");
+                    "El material incluye salidas de producción registradas como contingencia.");
         }
-        if (criticalEstimate.intervaloFechaMax() == null) {
+        if (latestDate == null) {
             reasons.add("El límite máximo del intervalo no es estimable.");
-        } else if (criticalEstimate.intervaloFechaMin() != null
+        } else if (earliestDate != null
                 && ChronoUnit.DAYS.between(
-                        criticalEstimate.intervaloFechaMin(),
-                        criticalEstimate.intervaloFechaMax()) > MAX_INTERVAL_WIDTH_DAYS) {
+                        earliestDate,
+                        latestDate) > MAX_INTERVAL_WIDTH_DAYS) {
             reasons.add("El intervalo de fechas supera 30 días.");
         }
         return List.copyOf(reasons);
+    }
+
+    private Comparator<CoberturaMaterialesDTO.EstimacionMaterialDTO>
+    comparator(CoverageOrder order) {
+        return switch (order) {
+            case AGOTAMIENTO -> coverageComparator();
+            case MAYOR_DEMANDA -> Comparator
+                    .comparingDouble(
+                            CoberturaMaterialesDTO.EstimacionMaterialDTO::demandaMediaDiaria)
+                    .reversed()
+                    .thenComparing(coverageComparator());
+            case NOMBRE -> Comparator
+                    .comparing(
+                            (CoberturaMaterialesDTO.EstimacionMaterialDTO estimate) ->
+                                    normalizeOptional(estimate.nombre()),
+                            String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(
+                            CoberturaMaterialesDTO.EstimacionMaterialDTO::productoId,
+                            String.CASE_INSENSITIVE_ORDER);
+        };
+    }
+
+    private Comparator<CoberturaMaterialesDTO.EstimacionMaterialDTO>
+    coverageComparator() {
+        return Comparator
+                .comparing(
+                        CoberturaMaterialesDTO.EstimacionMaterialDTO::fechaAgotamiento,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(
+                        CoberturaMaterialesDTO.EstimacionMaterialDTO::diasHastaAgotamiento,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(
+                        CoberturaMaterialesDTO.EstimacionMaterialDTO::productoId,
+                        String.CASE_INSENSITIVE_ORDER);
+    }
+
+    private boolean matchesSearch(
+            CoberturaMaterialesDTO.EstimacionMaterialDTO estimate,
+            String search
+    ) {
+        if (search.isBlank()) return true;
+        return normalizeOptional(estimate.productoId()).contains(search)
+                || normalizeOptional(estimate.nombre()).contains(search);
+    }
+
+    private String normalizeSearch(String value) {
+        String search = normalizeOptional(value);
+        if (search.length() > MAX_SEARCH_LENGTH) {
+            throw new IllegalArgumentException(
+                    "La busqueda no puede superar 100 caracteres.");
+        }
+        return search;
+    }
+
+    private String normalizeOptional(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void validatePage(int page, int size) {
+        if (page < 0) {
+            throw new IllegalArgumentException("La pagina no puede ser negativa.");
+        }
+        if (!ALLOWED_PAGE_SIZES.contains(size)) {
+            throw new IllegalArgumentException(
+                    "El tamaño de pagina debe ser 10 o 20.");
+        }
+    }
+
+    private PaginaInformeInventarioDTO<
+            CoberturaMaterialesDTO.EstimacionMaterialDTO> toPage(
+            List<CoberturaMaterialesDTO.EstimacionMaterialDTO> items,
+            int requestedPage,
+            int size
+    ) {
+        int totalElements = items.size();
+        int totalPages = totalElements == 0
+                ? 0
+                : (int) Math.ceil(totalElements / (double) size);
+        int page = totalPages == 0
+                ? 0
+                : Math.min(requestedPage, totalPages - 1);
+        int from = Math.min(page * size, totalElements);
+        int to = Math.min(from + size, totalElements);
+
+        return new PaginaInformeInventarioDTO<>(
+                items.subList(from, to),
+                page,
+                size,
+                totalElements,
+                totalPages,
+                page == 0,
+                totalPages == 0 || page >= totalPages - 1);
     }
 
     private int distinctDispensationDays(List<Movimiento> dispensations) {
@@ -386,6 +547,78 @@ public class CoberturaMaterialesService {
         if (demandSource == null) {
             throw new IllegalArgumentException("La fuente de demanda es obligatoria.");
         }
+    }
+
+    private enum CoverageHorizon {
+        TODOS,
+        AGOTADO,
+        HASTA_7_DIAS,
+        DE_8_A_30_DIAS,
+        MAS_DE_30_DIAS;
+
+        boolean matches(Double rawDays) {
+            if (this == TODOS) return true;
+            if (rawDays == null) return false;
+            double days = rawDays;
+            return switch (this) {
+                case TODOS -> true;
+                case AGOTADO -> days <= 0;
+                case HASTA_7_DIAS -> days > 0 && days <= 7;
+                case DE_8_A_30_DIAS -> days > 7 && days <= 30;
+                case MAS_DE_30_DIAS -> days > 30;
+            };
+        }
+
+        static CoverageHorizon parse(String rawValue) {
+            try {
+                return valueOf(normalizeEnum(rawValue));
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "El horizonte de cobertura no es valido.");
+            }
+        }
+    }
+
+    private enum MaterialGroup {
+        TODOS,
+        MATERIA_PRIMA,
+        EMPAQUE,
+        OTROS;
+
+        boolean matches(String value) {
+            return this == TODOS || name().equals(value);
+        }
+
+        static MaterialGroup parse(String rawValue) {
+            try {
+                return valueOf(normalizeEnum(rawValue));
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "El grupo de material no es valido.");
+            }
+        }
+    }
+
+    private enum CoverageOrder {
+        AGOTAMIENTO,
+        MAYOR_DEMANDA,
+        NOMBRE;
+
+        static CoverageOrder parse(String rawValue) {
+            try {
+                return valueOf(normalizeEnum(rawValue));
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "El orden de cobertura no es valido.");
+            }
+        }
+    }
+
+    private static String normalizeEnum(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            throw new IllegalArgumentException("El filtro es obligatorio.");
+        }
+        return rawValue.trim().toUpperCase(Locale.ROOT);
     }
 
     private <T> T valueOrNull(
