@@ -1,6 +1,8 @@
 package exotic.app.planta.service.inventarios;
 
 import exotic.app.planta.model.inventarios.Movimiento;
+import exotic.app.planta.model.inventarios.dto.AlcanceInventario;
+import exotic.app.planta.model.inventarios.dto.InventarioConsolidadoPageDTO;
 import exotic.app.planta.model.inventarios.dto.InventarioExcelRequestDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientoRowDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientosPageDTO;
@@ -18,14 +20,22 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -34,23 +44,98 @@ public class InventarioService {
     private final ProductoService productoService;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final MovimientosService movimientosService;
+    private final Clock applicationClock;
 
+    @Transactional(readOnly = true)
+    public InventarioConsolidadoPageDTO getInventarioConsolidado(
+            String searchTerm,
+            String tipoBusqueda,
+            int page,
+            int size,
+            AlcanceInventario alcance,
+            List<Movimiento.Almacen> almacenesPersonalizados
+    ) {
+        String tipoNormalizado = normalizeTipoBusqueda(tipoBusqueda);
+        int paginaNormalizada = Math.max(page, 0);
+        if (size <= 0 || size > 100) {
+            throw new IllegalArgumentException("size debe estar entre 1 y 100");
+        }
+
+        AlcanceInventario alcanceNormalizado = alcance != null
+                ? alcance
+                : AlcanceInventario.FISICO_TOTAL;
+        List<Movimiento.Almacen> almacenes = resolveAlmacenes(
+                alcanceNormalizado,
+                almacenesPersonalizados
+        );
+        OffsetDateTime fechaHoraCorte = OffsetDateTime.now(applicationClock);
+
+        Page<ProductoStockDTO> productos = movimientosService.searchProductsWithStockByAlmacenes(
+                normalizeSearchTerm(searchTerm),
+                tipoNormalizado,
+                paginaNormalizada,
+                size,
+                almacenes,
+                fechaHoraCorte.toLocalDateTime()
+        );
+
+        return new InventarioConsolidadoPageDTO(
+                productos.getContent(),
+                productos.getNumber(),
+                productos.getSize(),
+                productos.getTotalElements(),
+                productos.getTotalPages(),
+                alcanceNormalizado,
+                almacenes,
+                fechaHoraCorte
+        );
+    }
+
+    @Transactional(readOnly = true)
     public byte[] generateInventoryExcel(InventarioExcelRequestDTO dto) {
-        List<ProductoStockDTO> productos = movimientosService.findProductsWithStockForExport(
-                dto.getSearchTerm(),
-                dto.getTipoBusqueda()
+        if (dto == null) {
+            throw new IllegalArgumentException("DTO requerido");
+        }
+
+        AlcanceInventario alcance = dto.getAlcance() != null
+                ? dto.getAlcance()
+                : AlcanceInventario.FISICO_TOTAL;
+        List<Movimiento.Almacen> almacenes = resolveAlmacenes(alcance, dto.getAlmacenes());
+        OffsetDateTime fechaHoraCorte = OffsetDateTime.now(applicationClock);
+        List<ProductoStockDTO> productos = movimientosService.findProductsWithStockForExportByAlmacenes(
+                normalizeSearchTerm(dto.getSearchTerm()),
+                normalizeTipoBusqueda(dto.getTipoBusqueda()),
+                almacenes,
+                fechaHoraCorte.toLocalDateTime()
         );
 
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Inventario");
 
-            Row headerRow = sheet.createRow(0);
+            int rowIdx = 0;
+            Row alcanceRow = sheet.createRow(rowIdx++);
+            alcanceRow.createCell(0).setCellValue("Alcance del stock");
+            alcanceRow.createCell(1).setCellValue(getAlcanceLabel(alcance));
+
+            Row almacenesRow = sheet.createRow(rowIdx++);
+            almacenesRow.createCell(0).setCellValue("Almacenes incluidos");
+            almacenesRow.createCell(1).setCellValue(
+                    String.join(", ", almacenes.stream().map(Enum::name).toList())
+            );
+
+            Row corteRow = sheet.createRow(rowIdx++);
+            corteRow.createCell(0).setCellValue("Fecha y hora de corte");
+            corteRow.createCell(1).setCellValue(
+                    fechaHoraCorte.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss XXX"))
+            );
+
+            rowIdx++;
+            Row headerRow = sheet.createRow(rowIdx++);
             headerRow.createCell(0).setCellValue("ID");
             headerRow.createCell(1).setCellValue("Nombre");
             headerRow.createCell(2).setCellValue("Stock");
             headerRow.createCell(3).setCellValue("Unidades");
 
-            int rowIdx = 1;
             for (ProductoStockDTO productoStock : productos) {
                 Producto producto = productoStock.getProducto();
                 Row row = sheet.createRow(rowIdx++);
@@ -71,6 +156,67 @@ public class InventarioService {
         } catch (IOException e) {
             throw new RuntimeException("Error generating inventory Excel", e);
         }
+    }
+
+    private String normalizeSearchTerm(String searchTerm) {
+        return searchTerm != null ? searchTerm.trim() : "";
+    }
+
+    private String normalizeTipoBusqueda(String tipoBusqueda) {
+        String normalized = tipoBusqueda != null
+                ? tipoBusqueda.trim().toUpperCase(Locale.ROOT)
+                : "NOMBRE";
+        if (!"NOMBRE".equals(normalized) && !"ID".equals(normalized)) {
+            throw new IllegalArgumentException("tipoBusqueda debe ser NOMBRE o ID");
+        }
+        return normalized;
+    }
+
+    private List<Movimiento.Almacen> resolveAlmacenes(
+            AlcanceInventario alcance,
+            List<Movimiento.Almacen> almacenesPersonalizados
+    ) {
+        return switch (alcance) {
+            case FISICO_TOTAL -> List.copyOf(Arrays.asList(Movimiento.Almacen.values()));
+            case DISPONIBLE_OPERATIVO -> List.of(Movimiento.Almacen.GENERAL);
+            case RESTRINGIDO -> List.of(
+                    Movimiento.Almacen.AVERIAS,
+                    Movimiento.Almacen.CALIDAD,
+                    Movimiento.Almacen.DEVOLUCIONES
+            );
+            case PERSONALIZADO -> normalizeAlmacenesPersonalizados(almacenesPersonalizados);
+        };
+    }
+
+    private List<Movimiento.Almacen> normalizeAlmacenesPersonalizados(
+            List<Movimiento.Almacen> almacenesPersonalizados
+    ) {
+        if (almacenesPersonalizados == null
+                || almacenesPersonalizados.isEmpty()
+                || almacenesPersonalizados.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException(
+                    "PERSONALIZADO requiere al menos un almacén válido"
+            );
+        }
+
+        Set<Movimiento.Almacen> seleccion = new HashSet<>(almacenesPersonalizados);
+        if (seleccion.size() != almacenesPersonalizados.size()) {
+            throw new IllegalArgumentException(
+                    "PERSONALIZADO no admite almacenes duplicados"
+            );
+        }
+        return Arrays.stream(Movimiento.Almacen.values())
+                .filter(seleccion::contains)
+                .toList();
+    }
+
+    private String getAlcanceLabel(AlcanceInventario alcance) {
+        return switch (alcance) {
+            case FISICO_TOTAL -> "Inventario físico total";
+            case DISPONIBLE_OPERATIVO -> "Disponible operativo";
+            case RESTRINGIDO -> "Stock restringido/no disponible";
+            case PERSONALIZADO -> "Personalizado";
+        };
     }
 
     public KardexMovimientosPageDTO getKardexMovimientosPage(KardexMovimientosRequestDTO dto) {

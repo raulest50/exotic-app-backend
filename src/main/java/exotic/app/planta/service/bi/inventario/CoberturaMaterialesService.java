@@ -9,9 +9,23 @@ import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,6 +45,7 @@ import java.util.function.Function;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class CoberturaMaterialesService {
     private static final Set<Integer> VALID_WINDOWS = Set.of(7, 30, 90);
     private static final int MIN_OBSERVED_DAYS = 30;
@@ -39,6 +54,21 @@ public class CoberturaMaterialesService {
     private static final int MAX_ESTIMATES = 10;
     private static final int MAX_SEARCH_LENGTH = 100;
     private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(10, 20);
+    private static final String[] EXCEL_HEADERS = {
+            "HORIZONTE",
+            "GRUPO",
+            "CÓDIGO",
+            "MATERIAL",
+            "UNIDAD",
+            "STOCK ACTUAL",
+            "DEMANDA DIARIA",
+            "DEMANDA DIARIA OPERATIVA",
+            "DEMANDA DIARIA CONTINGENCIA",
+            "DÍAS RESTANTES",
+            "FECHA ESTIMADA",
+            "CONFIANZA BAJA"
+    };
+    private static final int EXCEL_HEADER_ROW_INDEX = 3;
 
     private final TransaccionAlmacenRepo movementRepo;
     private final InventarioStockReader stockReader;
@@ -76,9 +106,54 @@ public class CoberturaMaterialesService {
             int page,
             int size
     ) {
+        validatePage(page, size);
+        CoverageAnalysis analysis = calculateAnalysis(
+                windowDays,
+                demandSource,
+                rawHorizon,
+                rawGroup,
+                rawUnit,
+                rawOrder,
+                rawSearch);
+        return analysis.report()
+                .toBuilder()
+                .pagina(toPage(analysis.filteredEstimates(), page, size))
+                .build();
+    }
+
+    public ExcelExport exportExcel(
+            int windowDays,
+            FuenteDemandaCobertura demandSource,
+            String rawHorizon,
+            String rawGroup,
+            String rawUnit,
+            String rawOrder,
+            String rawSearch
+    ) {
+        CoverageAnalysis analysis = calculateAnalysis(
+                windowDays,
+                demandSource,
+                rawHorizon,
+                rawGroup,
+                rawUnit,
+                rawOrder,
+                rawSearch);
+        return new ExcelExport(
+                generateExcel(analysis),
+                analysis.report().fechaHoraCorteStock());
+    }
+
+    private CoverageAnalysis calculateAnalysis(
+            int windowDays,
+            FuenteDemandaCobertura demandSource,
+            String rawHorizon,
+            String rawGroup,
+            String rawUnit,
+            String rawOrder,
+            String rawSearch
+    ) {
         validateWindow(windowDays);
         validateDemandSource(demandSource);
-        validatePage(page, size);
         CoverageHorizon horizon = CoverageHorizon.parse(rawHorizon);
         MaterialGroup group = MaterialGroup.parse(rawGroup);
         CoverageOrder order = CoverageOrder.parse(rawOrder);
@@ -88,7 +163,8 @@ public class CoberturaMaterialesService {
             throw new IllegalArgumentException(
                     "Debe seleccionar una unidad para ordenar por demanda.");
         }
-        LocalDate cutoffDate = LocalDate.now(applicationClock);
+        LocalDateTime cutoffDateTime = LocalDateTime.now(applicationClock);
+        LocalDate cutoffDate = cutoffDateTime.toLocalDate();
         LocalDate startDate = cutoffDate.minusDays(windowDays - 1L);
 
         List<ProductoStockSnapshot> materialStock = stockReader.readGeneralStock().stream()
@@ -162,11 +238,11 @@ public class CoberturaMaterialesService {
                         .sorted(comparator(order))
                         .toList();
 
-        return CoberturaMaterialesDTO.builder()
+        CoberturaMaterialesDTO report = CoberturaMaterialesDTO.builder()
                 .ventanaDias(windowDays)
                 .fechaDesde(startDate)
                 .fechaHasta(cutoffDate)
-                .fechaHoraCorteStock(LocalDateTime.now(applicationClock))
+                .fechaHoraCorteStock(cutoffDateTime)
                 .fuenteDemanda(demandSource)
                 .escenarioExploratorio(includeContingencies)
                 .estado(criticalEstimate == null
@@ -219,8 +295,199 @@ public class CoberturaMaterialesService {
                                 .sorted()
                                 .toList())
                         .build())
-                .pagina(toPage(filtered, page, size))
                 .build();
+        return new CoverageAnalysis(report, filtered);
+    }
+
+    private byte[] generateExcel(CoverageAnalysis analysis) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Cobertura");
+            ExcelStyles styles = createExcelStyles(workbook);
+
+            Row titleRow = sheet.createRow(0);
+            Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue("Cobertura de materiales");
+            titleCell.setCellStyle(styles.title());
+            sheet.addMergedRegion(new CellRangeAddress(
+                    0, 0, 0, EXCEL_HEADERS.length - 1));
+
+            Row noticeRow = sheet.createRow(1);
+            Cell noticeCell = noticeRow.createCell(0);
+            noticeCell.setCellValue(
+                    "Informe actualizado al momento de la descarga.");
+            noticeCell.setCellStyle(styles.notice());
+            sheet.addMergedRegion(new CellRangeAddress(
+                    1, 1, 0, EXCEL_HEADERS.length - 1));
+
+            Row cutoffRow = sheet.createRow(2);
+            Cell cutoffLabelCell = cutoffRow.createCell(0);
+            cutoffLabelCell.setCellValue(
+                    "Fecha y hora de corte (hora Colombia)");
+            cutoffLabelCell.setCellStyle(styles.metadataLabel());
+            sheet.addMergedRegion(new CellRangeAddress(2, 2, 0, 2));
+            Cell cutoffValueCell = cutoffRow.createCell(3);
+            cutoffValueCell.setCellValue(
+                    analysis.report().fechaHoraCorteStock());
+            cutoffValueCell.setCellStyle(styles.dateTime());
+
+            Row headerRow = sheet.createRow(EXCEL_HEADER_ROW_INDEX);
+            headerRow.setHeightInPoints(32);
+            for (int index = 0; index < EXCEL_HEADERS.length; index++) {
+                Cell cell = headerRow.createCell(index);
+                cell.setCellValue(EXCEL_HEADERS[index]);
+                cell.setCellStyle(styles.header());
+            }
+
+            int rowIndex = EXCEL_HEADER_ROW_INDEX + 1;
+            for (CoberturaMaterialesDTO.EstimacionMaterialDTO estimate
+                    : analysis.filteredEstimates()) {
+                Row row = sheet.createRow(rowIndex++);
+                writeEstimateRow(row, estimate, styles);
+            }
+
+            int lastRow = Math.max(EXCEL_HEADER_ROW_INDEX, rowIndex - 1);
+            sheet.setAutoFilter(new CellRangeAddress(
+                    EXCEL_HEADER_ROW_INDEX,
+                    lastRow,
+                    0,
+                    EXCEL_HEADERS.length - 1));
+            sheet.createFreezePane(0, EXCEL_HEADER_ROW_INDEX + 1);
+            setExcelColumnWidths(sheet);
+
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            log.error("Error generando Excel de cobertura de materiales", ex);
+            throw new RuntimeException(
+                    "Error generando Excel de cobertura de materiales", ex);
+        }
+    }
+
+    private void writeEstimateRow(
+            Row row,
+            CoberturaMaterialesDTO.EstimacionMaterialDTO estimate,
+            ExcelStyles styles
+    ) {
+        int column = 0;
+        row.createCell(column++).setCellValue(
+                horizonLabel(estimate.diasHastaAgotamiento()));
+        row.createCell(column++).setCellValue(groupLabel(estimate.grupo()));
+        row.createCell(column++).setCellValue(estimate.productoId());
+        row.createCell(column++).setCellValue(estimate.nombre());
+        row.createCell(column++).setCellValue(estimate.unidadMedida());
+        writeNumberCell(row.createCell(column++), estimate.stockActual(), styles);
+        writeNumberCell(
+                row.createCell(column++),
+                estimate.demandaMediaDiaria(),
+                styles);
+        writeNumberCell(
+                row.createCell(column++),
+                estimate.demandaMediaDiariaOperativa(),
+                styles);
+        writeNumberCell(
+                row.createCell(column++),
+                estimate.demandaMediaDiariaContingencia(),
+                styles);
+
+        Cell remainingDaysCell = row.createCell(column++);
+        if (estimate.diasHastaAgotamiento() != null) {
+            remainingDaysCell.setCellValue(estimate.diasHastaAgotamiento());
+            remainingDaysCell.setCellStyle(styles.number());
+        }
+
+        Cell estimatedDateCell = row.createCell(column++);
+        if (estimate.fechaAgotamiento() != null) {
+            estimatedDateCell.setCellValue(estimate.fechaAgotamiento());
+            estimatedDateCell.setCellStyle(styles.date());
+        }
+        row.createCell(column).setCellValue(
+                estimate.confianzaBaja() ? "Sí" : "No");
+    }
+
+    private void writeNumberCell(
+            Cell cell,
+            double value,
+            ExcelStyles styles
+    ) {
+        cell.setCellValue(value);
+        cell.setCellStyle(styles.number());
+    }
+
+    private ExcelStyles createExcelStyles(XSSFWorkbook workbook) {
+        Font titleFont = workbook.createFont();
+        titleFont.setBold(true);
+        titleFont.setFontHeightInPoints((short) 14);
+        CellStyle title = workbook.createCellStyle();
+        title.setFont(titleFont);
+
+        Font noticeFont = workbook.createFont();
+        noticeFont.setItalic(true);
+        noticeFont.setColor(IndexedColors.GREY_50_PERCENT.getIndex());
+        CellStyle notice = workbook.createCellStyle();
+        notice.setFont(noticeFont);
+
+        Font metadataFont = workbook.createFont();
+        metadataFont.setBold(true);
+        CellStyle metadataLabel = workbook.createCellStyle();
+        metadataLabel.setFont(metadataFont);
+
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerFont.setColor(IndexedColors.WHITE.getIndex());
+        CellStyle header = workbook.createCellStyle();
+        header.setFont(headerFont);
+        header.setFillForegroundColor(IndexedColors.DARK_GREEN.getIndex());
+        header.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        header.setAlignment(HorizontalAlignment.CENTER);
+        header.setWrapText(true);
+        header.setBorderTop(BorderStyle.THIN);
+        header.setBorderRight(BorderStyle.THIN);
+        header.setBorderBottom(BorderStyle.THIN);
+        header.setBorderLeft(BorderStyle.THIN);
+
+        CellStyle number = workbook.createCellStyle();
+        number.setDataFormat(
+                workbook.createDataFormat().getFormat("#,##0.00##"));
+        CellStyle date = workbook.createCellStyle();
+        date.setDataFormat(workbook.createDataFormat().getFormat("dd/mm/yyyy"));
+        CellStyle dateTime = workbook.createCellStyle();
+        dateTime.setDataFormat(
+                workbook.createDataFormat().getFormat("dd/mm/yyyy hh:mm"));
+
+        return new ExcelStyles(
+                title,
+                notice,
+                metadataLabel,
+                header,
+                number,
+                date,
+                dateTime);
+    }
+
+    private void setExcelColumnWidths(Sheet sheet) {
+        int[] widths = {
+                18, 20, 18, 40, 12, 16, 20, 25, 27, 18, 18, 20
+        };
+        for (int index = 0; index < widths.length; index++) {
+            sheet.setColumnWidth(index, widths[index] * 256);
+        }
+    }
+
+    private String horizonLabel(Double rawDays) {
+        if (rawDays == null) return "No estimable";
+        if (rawDays <= 0) return "Agotado";
+        if (rawDays <= 7) return "Hasta 7 días";
+        if (rawDays <= 30) return "8–30 días";
+        return "Más de 30 días";
+    }
+
+    private String groupLabel(String group) {
+        return switch (group) {
+            case "MATERIA_PRIMA" -> "Materia prima";
+            case "EMPAQUE" -> "Material de empaque";
+            default -> "Otros materiales";
+        };
     }
 
     private List<Movimiento> loadMovements(LocalDate startDate, LocalDate cutoffDate) {
@@ -626,6 +893,29 @@ public class CoberturaMaterialesService {
             Function<CoberturaMaterialesDTO.EstimacionMaterialDTO, T> getter
     ) {
         return estimate == null ? null : getter.apply(estimate);
+    }
+
+    public record ExcelExport(
+            byte[] content,
+            LocalDateTime cutoff
+    ) {
+    }
+
+    private record CoverageAnalysis(
+            CoberturaMaterialesDTO report,
+            List<CoberturaMaterialesDTO.EstimacionMaterialDTO> filteredEstimates
+    ) {
+    }
+
+    private record ExcelStyles(
+            CellStyle title,
+            CellStyle notice,
+            CellStyle metadataLabel,
+            CellStyle header,
+            CellStyle number,
+            CellStyle date,
+            CellStyle dateTime
+    ) {
     }
 
     private record ExhaustionEstimate(

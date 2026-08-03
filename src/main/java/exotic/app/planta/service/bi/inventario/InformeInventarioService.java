@@ -18,7 +18,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class InformeInventarioService {
-    private static final int CONTRACT_VERSION = 4;
+    private static final int CONTRACT_VERSION = 5;
 
     private final TransaccionAlmacenRepo movementRepo;
     private final InventarioStockReader stockReader;
@@ -57,6 +57,7 @@ public class InformeInventarioService {
                         endDate))
                 .ocmPendientes(pendingAssembler.buildPendingPurchaseOrders())
                 .materialDirectoOp(pendingAssembler.buildOpenProductionOrderMaterial())
+                .wipMaterialEstimado(pendingAssembler.buildWipMaterialEstimate())
                 .notas(buildNotes())
                 .build();
     }

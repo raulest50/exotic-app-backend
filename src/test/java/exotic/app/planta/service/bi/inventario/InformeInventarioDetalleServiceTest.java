@@ -26,6 +26,12 @@ class InformeInventarioDetalleServiceTest {
 
         assertEquals(expected, service.getPendingPurchaseOrders(1, 10));
         verify(assembler).getPendingPurchaseOrdersPage(1, 10);
+        PaginaInformeInventarioDTO<InformeInventarioDTO.OpWipMaterialDTO> wip =
+                new PaginaInformeInventarioDTO<>(
+                        List.of(), 0, 10, 0, 0, true, true);
+        when(assembler.getWipMaterialEstimatePage(0, 10)).thenReturn(wip);
+        assertEquals(wip, service.getWipMaterialEstimate(0, 10));
+        verify(assembler).getWipMaterialEstimatePage(0, 10);
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.getPendingPurchaseOrders(-1, 10));

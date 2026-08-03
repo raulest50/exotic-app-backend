@@ -1,6 +1,9 @@
 package exotic.app.planta.resource.inventarios;
 
+import exotic.app.planta.model.inventarios.Movimiento;
+import exotic.app.planta.model.inventarios.dto.AlcanceInventario;
 import exotic.app.planta.model.inventarios.dto.InventarioExcelRequestDTO;
+import exotic.app.planta.model.inventarios.dto.InventarioConsolidadoPageDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientosPageDTO;
 import exotic.app.planta.model.inventarios.dto.KardexMovimientosRequestDTO;
 import exotic.app.planta.service.inventarios.InventarioService;
@@ -9,10 +12,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/inventario")
@@ -21,13 +28,41 @@ public class InventarioResource {
 
     private final InventarioService inventarioService;
 
+    @GetMapping("/consolidado")
+    public ResponseEntity<?> getInventarioConsolidado(
+            @RequestParam(defaultValue = "") String searchTerm,
+            @RequestParam(defaultValue = "NOMBRE") String tipoBusqueda,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "FISICO_TOTAL") AlcanceInventario alcance,
+            @RequestParam(required = false) List<Movimiento.Almacen> almacenes
+    ) {
+        try {
+            InventarioConsolidadoPageDTO response = inventarioService.getInventarioConsolidado(
+                    searchTerm,
+                    tipoBusqueda,
+                    page,
+                    size,
+                    alcance,
+                    almacenes
+            );
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
+
     @PostMapping("/exportar-excel")
-    public ResponseEntity<byte[]> exportarExcel(@RequestBody InventarioExcelRequestDTO dto) {
-        byte[] excel = inventarioService.generateInventoryExcel(dto);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"inventario.xlsx\"")
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .body(excel);
+    public ResponseEntity<?> exportarExcel(@RequestBody InventarioExcelRequestDTO dto) {
+        try {
+            byte[] excel = inventarioService.generateInventoryExcel(dto);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"inventario.xlsx\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(excel);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
     }
 
     @PostMapping("/kardex/movimientos")

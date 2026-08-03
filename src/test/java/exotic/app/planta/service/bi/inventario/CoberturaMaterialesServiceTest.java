@@ -6,8 +6,11 @@ import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CoberturaMaterialesServiceTest {
@@ -228,6 +233,103 @@ class CoberturaMaterialesServiceTest {
     }
 
     @Test
+    void exportsEveryFilteredEstimateWithOneInventoryCalculation()
+            throws Exception {
+        LocalDate cutoffDate = LocalDate.of(2026, 7, 18);
+        LocalDate startDate = cutoffDate.minusDays(29);
+        List<ProductoStockSnapshot> snapshots = new ArrayList<>();
+        List<Movimiento> movements = new ArrayList<>();
+        for (int index = 1; index <= 12; index++) {
+            Material material = material(
+                    "MP-" + index,
+                    "Material " + index,
+                    "KG",
+                    1);
+            snapshots.add(new ProductoStockSnapshot(material, index * 10));
+            movements.add(dispensation(
+                    material,
+                    -30,
+                    cutoffDate.atTime(8, index)));
+        }
+
+        TransaccionAlmacenRepo movementRepo =
+                mock(TransaccionAlmacenRepo.class);
+        InventarioStockReader stockReader = mock(InventarioStockReader.class);
+        when(stockReader.readGeneralStock()).thenReturn(snapshots);
+        when(movementRepo.findMovimientosBiByAlmacenAndRango(
+                Movimiento.Almacen.GENERAL,
+                startDate.atStartOfDay(),
+                cutoffDate.atTime(LocalTime.MAX)))
+                .thenReturn(movements);
+        var service = new CoberturaMaterialesService(
+                movementRepo,
+                stockReader,
+                new BootstrapDemandIntervalCalculator(),
+                CLOCK);
+
+        var export = service.exportExcel(
+                30,
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                "TODOS",
+                "MATERIA_PRIMA",
+                "KG",
+                "AGOTAMIENTO",
+                "material");
+
+        assertEquals(
+                LocalDateTime.of(2026, 7, 18, 10, 0),
+                export.cutoff());
+        try (var workbook = WorkbookFactory.create(
+                new ByteArrayInputStream(export.content()))) {
+            assertEquals(1, workbook.getNumberOfSheets());
+            var sheet = workbook.getSheet("Cobertura");
+            assertEquals("Cobertura de materiales",
+                    sheet.getRow(0).getCell(0).getStringCellValue());
+            assertEquals("Fecha y hora de corte (hora Colombia)",
+                    sheet.getRow(2).getCell(0).getStringCellValue());
+            assertEquals(CellType.NUMERIC,
+                    sheet.getRow(2).getCell(3).getCellType());
+            assertEquals("HORIZONTE",
+                    sheet.getRow(3).getCell(0).getStringCellValue());
+            assertEquals("CÓDIGO",
+                    sheet.getRow(3).getCell(2).getStringCellValue());
+            assertEquals(12, sheet.getLastRowNum() - 3);
+            assertEquals(CellType.NUMERIC,
+                    sheet.getRow(4).getCell(5).getCellType());
+            assertEquals(CellType.NUMERIC,
+                    sheet.getRow(4).getCell(10).getCellType());
+        }
+
+        verify(stockReader, times(1)).readGeneralStock();
+        verify(movementRepo, times(1))
+                .findMovimientosBiByAlmacenAndRango(
+                        Movimiento.Almacen.GENERAL,
+                        startDate.atStartOfDay(),
+                        cutoffDate.atTime(LocalTime.MAX));
+    }
+
+    @Test
+    void exportsAValidHeaderOnlyWorkbookWhenNoMaterialHasDemand()
+            throws Exception {
+        var export = serviceFor(30, List.of(), List.of()).exportExcel(
+                30,
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                "TODOS",
+                "TODOS",
+                null,
+                "AGOTAMIENTO",
+                null);
+
+        try (var workbook = WorkbookFactory.create(
+                new ByteArrayInputStream(export.content()))) {
+            var sheet = workbook.getSheet("Cobertura");
+            assertEquals(3, sheet.getLastRowNum());
+            assertEquals("CONFIANZA BAJA",
+                    sheet.getRow(3).getCell(11).getStringCellValue());
+        }
+    }
+
+    @Test
     void rejectsIncompatibleDemandOrderAndUnsupportedPageSize() {
         var service = serviceFor(30, List.of(), List.of());
 
@@ -255,6 +357,16 @@ class CoberturaMaterialesServiceTest {
                         null,
                         0,
                         50));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.exportExcel(
+                        30,
+                        FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                        "TODOS",
+                        "TODOS",
+                        null,
+                        "MAYOR_DEMANDA",
+                        null));
     }
 
     private Material material(String id, String name, String unit) {

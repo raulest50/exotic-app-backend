@@ -53,6 +53,8 @@ class InformeInventarioServiceTest {
                 .thenReturn(InformeInventarioDTO.OcmPendientesDTO.builder().build());
         when(pendingAssembler.buildOpenProductionOrderMaterial())
                 .thenReturn(InformeInventarioDTO.MaterialDirectoOpDTO.builder().build());
+        when(pendingAssembler.buildWipMaterialEstimate())
+                .thenReturn(InformeInventarioDTO.WipMaterialEstimadoDTO.builder().build());
         when(adjustmentAssembler.assemble(
                 org.mockito.ArgumentMatchers.anyList(),
                 org.mockito.ArgumentMatchers.anyList(),
@@ -82,7 +84,7 @@ class InformeInventarioServiceTest {
 
         verify(movementAssembler).assemble(movements, List.of(), date, date);
         verify(adjustmentAssembler).assemble(movements, List.of(), date, date);
-        assertEquals(4, report.versionContrato());
+        assertEquals(5, report.versionContrato());
         assertEquals(report.periodo(), report.periodoTendencia());
         assertEquals(List.of(), report.movimientos().serieDiaria());
     }

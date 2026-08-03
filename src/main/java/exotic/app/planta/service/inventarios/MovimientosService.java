@@ -225,6 +225,99 @@ public class MovimientosService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Busca productos y consolida su stock para un conjunto explicito de almacenes.
+     * La consulta de cantidades se realiza en bloque y queda limitada al corte recibido.
+     */
+    @Transactional(readOnly = true)
+    public Page<ProductoStockDTO> searchProductsWithStockByAlmacenes(
+            String searchTerm,
+            String tipoBusqueda,
+            int page,
+            int size,
+            Collection<Movimiento.Almacen> almacenes,
+            LocalDateTime fechaHoraCorte
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Producto> productosPage = productoRepo.findAll(
+                buildInventarioConsolidadoSpecification(searchTerm, tipoBusqueda),
+                pageable
+        );
+
+        List<ProductoStockDTO> resultados = attachStockByAlmacenes(
+                productosPage.getContent(),
+                almacenes,
+                fechaHoraCorte
+        );
+
+        return new PageImpl<>(resultados, pageable, productosPage.getTotalElements());
+    }
+
+    /**
+     * Obtiene todas las filas del reporte de inventario usando el mismo alcance
+     * y el mismo instante de corte para todo el archivo.
+     */
+    @Transactional(readOnly = true)
+    public List<ProductoStockDTO> findProductsWithStockForExportByAlmacenes(
+            String searchTerm,
+            String tipoBusqueda,
+            Collection<Movimiento.Almacen> almacenes,
+            LocalDateTime fechaHoraCorte
+    ) {
+        List<Producto> productos = productoRepo.findAll(
+                buildInventarioConsolidadoSpecification(searchTerm, tipoBusqueda)
+        );
+        return attachStockByAlmacenes(productos, almacenes, fechaHoraCorte);
+    }
+
+    private Specification<Producto> buildInventarioConsolidadoSpecification(
+            String searchTerm,
+            String tipoBusqueda
+    ) {
+        String normalizedSearchTerm = searchTerm != null ? searchTerm.trim() : "";
+        return (root, query, criteriaBuilder) -> {
+            if ("ID".equalsIgnoreCase(tipoBusqueda)) {
+                return criteriaBuilder.equal(root.get("productoId"), normalizedSearchTerm);
+            }
+            return criteriaBuilder.like(
+                    criteriaBuilder.lower(root.get("nombre")),
+                    "%" + normalizedSearchTerm.toLowerCase(Locale.ROOT) + "%"
+            );
+        };
+    }
+
+    private List<ProductoStockDTO> attachStockByAlmacenes(
+            List<Producto> productos,
+            Collection<Movimiento.Almacen> almacenes,
+            LocalDateTime fechaHoraCorte
+    ) {
+        if (productos.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> productoIds = productos.stream()
+                .map(Producto::getProductoId)
+                .toList();
+        Map<String, Double> stockPorProducto = transaccionAlmacenRepo
+                .findStockByAlmacenesAndProductoIdsAtCutoff(
+                        almacenes,
+                        productoIds,
+                        fechaHoraCorte
+                )
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> String.valueOf(row[0]),
+                        row -> row[1] instanceof Number ? ((Number) row[1]).doubleValue() : 0.0
+                ));
+
+        return productos.stream()
+                .map(producto -> new ProductoStockDTO(
+                        producto,
+                        stockPorProducto.getOrDefault(producto.getProductoId(), 0.0)
+                ))
+                .toList();
+    }
+
 
     // Method to get movimientos for a product
     public Page<Movimiento> getMovimientosByProductoId(String productoId, int page, int size) {

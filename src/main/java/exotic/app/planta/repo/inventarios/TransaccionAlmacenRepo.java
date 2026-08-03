@@ -37,6 +37,21 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
         double getCantidad();
     }
 
+    interface OpenProductionMaterialDetailProjection {
+        int getOpId();
+        String getLote();
+        int getEstado();
+        LocalDateTime getFechaReferencia();
+        LocalDateTime getFechaPrimerMovimiento();
+        String getProductoId();
+        String getProductoNombre();
+        String getUnidadMedida();
+        BigDecimal getCosto();
+        TransaccionAlmacen.TipoEntidadCausante getCausa();
+        Movimiento.TipoMovimiento getTipoMovimiento();
+        double getCantidad();
+    }
+
 
     @Query("""
             SELECT p, COALESCE(SUM(m.cantidad), 0)
@@ -213,6 +228,192 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("opIds") Collection<Integer> opIds);
 
     @Query("""
+            SELECT orden.ordenId AS opId,
+                   orden.loteAsignado AS lote,
+                   orden.estadoOrden AS estado,
+                   COALESCE(orden.fechaInicio, orden.fechaCreacion) AS fechaReferencia,
+                   MIN(m.fechaMovimiento) AS fechaPrimerMovimiento,
+                   producto.productoId AS productoId,
+                   producto.nombre AS productoNombre,
+                   producto.tipoUnidades AS unidadMedida,
+                   producto.costo AS costo,
+                   t.tipoEntidadCausante AS causa,
+                   m.tipoMovimiento AS tipoMovimiento,
+                   COALESCE(SUM(ABS(m.cantidad)), 0) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            JOIN m.producto producto,
+                 OrdenProduccion orden
+            WHERE orden.ordenId = t.idEntidadCausante
+              AND orden.estadoOrden <> 2
+              AND orden.estadoOrden <> -1
+              AND m.almacen = :almacen
+              AND m.afectaInventario = true
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante IN :causantes
+            GROUP BY orden.ordenId, orden.loteAsignado, orden.estadoOrden,
+                     orden.fechaInicio, orden.fechaCreacion,
+                     producto.productoId, producto.nombre,
+                     producto.tipoUnidades, producto.costo,
+                     t.tipoEntidadCausante, m.tipoMovimiento
+            ORDER BY COALESCE(orden.fechaInicio, orden.fechaCreacion) ASC,
+                     orden.ordenId ASC, producto.productoId ASC,
+                     t.tipoEntidadCausante ASC
+            """)
+    List<OpenProductionMaterialDetailProjection> findOpenProductionMaterialDetails(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes);
+
+    @Query("""
+            SELECT orden.ordenId AS opId,
+                   orden.loteAsignado AS lote,
+                   orden.estadoOrden AS estado,
+                   COALESCE(orden.fechaInicio, orden.fechaCreacion) AS fechaReferencia,
+                   MIN(m.fechaMovimiento) AS fechaPrimerMovimiento,
+                   producto.productoId AS productoId,
+                   producto.nombre AS productoNombre,
+                   producto.tipoUnidades AS unidadMedida,
+                   producto.costo AS costo,
+                   t.tipoEntidadCausante AS causa,
+                   m.tipoMovimiento AS tipoMovimiento,
+                   COALESCE(SUM(ABS(m.cantidad)), 0) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            JOIN m.producto producto,
+                 OrdenProduccion orden
+            WHERE orden.ordenId = t.idEntidadCausante
+              AND orden.ordenId IN :opIds
+              AND orden.estadoOrden <> 2
+              AND orden.estadoOrden <> -1
+              AND m.almacen = :almacen
+              AND m.afectaInventario = true
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipoMovimiento
+              AND t.tipoEntidadCausante IN :causantes
+            GROUP BY orden.ordenId, orden.loteAsignado, orden.estadoOrden,
+                     orden.fechaInicio, orden.fechaCreacion,
+                     producto.productoId, producto.nombre,
+                     producto.tipoUnidades, producto.costo,
+                     t.tipoEntidadCausante, m.tipoMovimiento
+            ORDER BY COALESCE(orden.fechaInicio, orden.fechaCreacion) ASC,
+                     orden.ordenId ASC, producto.productoId ASC,
+                     t.tipoEntidadCausante ASC
+            """)
+    List<OpenProductionMaterialDetailProjection> findOpenProductionMaterialDetailsByOrderIds(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoMovimiento") Movimiento.TipoMovimiento tipoMovimiento,
+            @Param("causantes") Collection<TransaccionAlmacen.TipoEntidadCausante> causantes,
+            @Param("opIds") Collection<Integer> opIds);
+
+    @Query("""
+            SELECT orden.ordenId AS opId,
+                   orden.loteAsignado AS lote,
+                   orden.estadoOrden AS estado,
+                   COALESCE(orden.fechaInicio, orden.fechaCreacion) AS fechaReferencia,
+                   MIN(m.fechaMovimiento) AS fechaPrimerMovimiento,
+                   producto.productoId AS productoId,
+                   producto.nombre AS productoNombre,
+                   producto.tipoUnidades AS unidadMedida,
+                   producto.costo AS costo,
+                   t.tipoEntidadCausante AS causa,
+                   m.tipoMovimiento AS tipoMovimiento,
+                   COALESCE(SUM(ABS(m.cantidad)), 0) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            JOIN m.producto producto,
+                 OrdenProduccion orden
+            WHERE orden.ordenId = t.idEntidadCausante
+              AND orden.estadoOrden <> 2
+              AND orden.estadoOrden <> -1
+              AND m.cantidad < 0
+              AND (
+                    (
+                        m.almacen = :almacen
+                        AND m.afectaInventario = true
+                        AND m.tipoMovimiento = :tipoDispensacion
+                        AND t.tipoEntidadCausante IN :causantesDispensacion
+                    )
+                    OR
+                    (
+                        m.afectaInventario = false
+                        AND m.tipoMovimiento = :tipoConsumo
+                        AND t.tipoEntidadCausante = :causaConsumo
+                    )
+              )
+            GROUP BY orden.ordenId, orden.loteAsignado, orden.estadoOrden,
+                     orden.fechaInicio, orden.fechaCreacion,
+                     producto.productoId, producto.nombre,
+                     producto.tipoUnidades, producto.costo,
+                     t.tipoEntidadCausante, m.tipoMovimiento
+            ORDER BY MIN(m.fechaMovimiento) ASC,
+                     orden.ordenId ASC, producto.productoId ASC,
+                     t.tipoEntidadCausante ASC, m.tipoMovimiento ASC
+            """)
+    List<OpenProductionMaterialDetailProjection> findOpenWipMaterialDetails(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoDispensacion") Movimiento.TipoMovimiento tipoDispensacion,
+            @Param("tipoConsumo") Movimiento.TipoMovimiento tipoConsumo,
+            @Param("causantesDispensacion")
+            Collection<TransaccionAlmacen.TipoEntidadCausante> causantesDispensacion,
+            @Param("causaConsumo") TransaccionAlmacen.TipoEntidadCausante causaConsumo);
+
+    @Query("""
+            SELECT orden.ordenId AS opId,
+                   orden.loteAsignado AS lote,
+                   orden.estadoOrden AS estado,
+                   COALESCE(orden.fechaInicio, orden.fechaCreacion) AS fechaReferencia,
+                   MIN(m.fechaMovimiento) AS fechaPrimerMovimiento,
+                   producto.productoId AS productoId,
+                   producto.nombre AS productoNombre,
+                   producto.tipoUnidades AS unidadMedida,
+                   producto.costo AS costo,
+                   t.tipoEntidadCausante AS causa,
+                   m.tipoMovimiento AS tipoMovimiento,
+                   COALESCE(SUM(ABS(m.cantidad)), 0) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            JOIN m.producto producto,
+                 OrdenProduccion orden
+            WHERE orden.ordenId = t.idEntidadCausante
+              AND orden.ordenId IN :opIds
+              AND orden.estadoOrden <> 2
+              AND orden.estadoOrden <> -1
+              AND m.cantidad < 0
+              AND (
+                    (
+                        m.almacen = :almacen
+                        AND m.afectaInventario = true
+                        AND m.tipoMovimiento = :tipoDispensacion
+                        AND t.tipoEntidadCausante IN :causantesDispensacion
+                    )
+                    OR
+                    (
+                        m.afectaInventario = false
+                        AND m.tipoMovimiento = :tipoConsumo
+                        AND t.tipoEntidadCausante = :causaConsumo
+                    )
+              )
+            GROUP BY orden.ordenId, orden.loteAsignado, orden.estadoOrden,
+                     orden.fechaInicio, orden.fechaCreacion,
+                     producto.productoId, producto.nombre,
+                     producto.tipoUnidades, producto.costo,
+                     t.tipoEntidadCausante, m.tipoMovimiento
+            ORDER BY MIN(m.fechaMovimiento) ASC,
+                     orden.ordenId ASC, producto.productoId ASC,
+                     t.tipoEntidadCausante ASC, m.tipoMovimiento ASC
+            """)
+    List<OpenProductionMaterialDetailProjection> findOpenWipMaterialDetailsByOrderIds(
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("tipoDispensacion") Movimiento.TipoMovimiento tipoDispensacion,
+            @Param("tipoConsumo") Movimiento.TipoMovimiento tipoConsumo,
+            @Param("causantesDispensacion")
+            Collection<TransaccionAlmacen.TipoEntidadCausante> causantesDispensacion,
+            @Param("causaConsumo") TransaccionAlmacen.TipoEntidadCausante causaConsumo,
+            @Param("opIds") Collection<Integer> opIds);
+
+    @Query("""
             SELECT COALESCE(SUM(m.cantidad), 0)
             FROM Movimiento m
             WHERE m.producto.productoId = :productoId
@@ -241,6 +442,20 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             GROUP BY m.producto.productoId
             """)
     List<Object[]> findTotalCantidadByProductoIds(@Param("productoIds") Collection<String> productoIds);
+
+    @Query("""
+            SELECT m.producto.productoId, COALESCE(SUM(m.cantidad), 0)
+            FROM Movimiento m
+            WHERE m.producto.productoId IN :productoIds
+              AND m.afectaInventario = true
+              AND m.almacen IN :almacenes
+              AND m.fechaMovimiento <= :fechaHoraCorte
+            GROUP BY m.producto.productoId
+            """)
+    List<Object[]> findStockByAlmacenesAndProductoIdsAtCutoff(
+            @Param("almacenes") Collection<Movimiento.Almacen> almacenes,
+            @Param("productoIds") Collection<String> productoIds,
+            @Param("fechaHoraCorte") LocalDateTime fechaHoraCorte);
 
     /**
      * Materiales inventariables con stock físico agregado. Una fila por material.

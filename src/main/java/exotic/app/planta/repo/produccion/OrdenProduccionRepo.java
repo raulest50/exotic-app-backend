@@ -67,6 +67,76 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
             @Param("causantes") Collection<exotic.app.planta.model.inventarios.TransaccionAlmacen.TipoEntidadCausante> causantes,
             Pageable pageable);
 
+    @Query(
+            value = """
+                    SELECT orden.ordenId
+                    FROM OrdenProduccion orden
+                    WHERE orden.estadoOrden <> 2
+                      AND orden.estadoOrden <> -1
+                      AND EXISTS (
+                          SELECT movimiento.movimientoId
+                          FROM Movimiento movimiento
+                          JOIN movimiento.transaccionAlmacen transaccion
+                          WHERE transaccion.idEntidadCausante = orden.ordenId
+                            AND movimiento.cantidad < 0
+                            AND (
+                                (
+                                    movimiento.almacen = :almacen
+                                    AND movimiento.afectaInventario = true
+                                    AND movimiento.tipoMovimiento = :tipoDispensacion
+                                    AND transaccion.tipoEntidadCausante IN :causantesDispensacion
+                                )
+                                OR
+                                (
+                                    movimiento.afectaInventario = false
+                                    AND movimiento.tipoMovimiento = :tipoConsumo
+                                    AND transaccion.tipoEntidadCausante = :causaConsumo
+                                )
+                            )
+                      )
+                    ORDER BY COALESCE(orden.fechaInicio, orden.fechaCreacion) ASC,
+                             orden.ordenId ASC
+                    """,
+            countQuery = """
+                    SELECT COUNT(orden.ordenId)
+                    FROM OrdenProduccion orden
+                    WHERE orden.estadoOrden <> 2
+                      AND orden.estadoOrden <> -1
+                      AND EXISTS (
+                          SELECT movimiento.movimientoId
+                          FROM Movimiento movimiento
+                          JOIN movimiento.transaccionAlmacen transaccion
+                          WHERE transaccion.idEntidadCausante = orden.ordenId
+                            AND movimiento.cantidad < 0
+                            AND (
+                                (
+                                    movimiento.almacen = :almacen
+                                    AND movimiento.afectaInventario = true
+                                    AND movimiento.tipoMovimiento = :tipoDispensacion
+                                    AND transaccion.tipoEntidadCausante IN :causantesDispensacion
+                                )
+                                OR
+                                (
+                                    movimiento.afectaInventario = false
+                                    AND movimiento.tipoMovimiento = :tipoConsumo
+                                    AND transaccion.tipoEntidadCausante = :causaConsumo
+                                )
+                            )
+                      )
+                    """)
+    Page<Integer> findOpenOrderIdsWithWipMaterialForBi(
+            @Param("almacen") exotic.app.planta.model.inventarios.Movimiento.Almacen almacen,
+            @Param("tipoDispensacion")
+            exotic.app.planta.model.inventarios.Movimiento.TipoMovimiento tipoDispensacion,
+            @Param("tipoConsumo")
+            exotic.app.planta.model.inventarios.Movimiento.TipoMovimiento tipoConsumo,
+            @Param("causantesDispensacion")
+            Collection<exotic.app.planta.model.inventarios.TransaccionAlmacen.TipoEntidadCausante>
+                    causantesDispensacion,
+            @Param("causaConsumo")
+            exotic.app.planta.model.inventarios.TransaccionAlmacen.TipoEntidadCausante causaConsumo,
+            Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT orden FROM OrdenProduccion orden JOIN FETCH orden.producto WHERE orden.ordenId = :ordenId")
     Optional<OrdenProduccion> findByIdForUpdate(@Param("ordenId") int ordenId);

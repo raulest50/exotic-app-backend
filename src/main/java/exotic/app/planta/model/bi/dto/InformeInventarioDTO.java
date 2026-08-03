@@ -17,6 +17,7 @@ public record InformeInventarioDTO(
         AjustesInventarioDTO ajustesInventario,
         OcmPendientesDTO ocmPendientes,
         MaterialDirectoOpDTO materialDirectoOp,
+        WipMaterialEstimadoDTO wipMaterialEstimado,
         List<NotaDTO> notas
 ) {
     @Builder
@@ -333,6 +334,27 @@ public record InformeInventarioDTO(
             String lote,
             int estado,
             LocalDateTime fechaReferencia,
+            int referencias,
+            List<CantidadUnidadDTO> cantidadesPorUnidad,
+            double valorEstimado
+    ) {
+    }
+
+    @Builder
+    public record WipMaterialEstimadoDTO(
+            int ordenes,
+            int referencias,
+            List<CantidadUnidadDTO> cantidadesPorUnidad,
+            double valorEstimado
+    ) {
+    }
+
+    @Builder
+    public record OpWipMaterialDTO(
+            int opId,
+            String lote,
+            int estado,
+            LocalDateTime fechaInicioWip,
             int referencias,
             List<CantidadUnidadDTO> cantidadesPorUnidad,
             double valorEstimado

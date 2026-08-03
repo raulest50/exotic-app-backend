@@ -8,8 +8,12 @@ import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioDetalleService;
+import exotic.app.planta.service.bi.inventario.MaterialOpExcelService;
+import exotic.app.planta.service.bi.inventario.OcmPendientesExcelService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,18 +21,24 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/bi/informes-globales/almacen")
 @RequiredArgsConstructor
 public class InformeInventarioResource {
+    private static final DateTimeFormatter EXCEL_FILENAME_TIMESTAMP =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm");
+
     private final InformeInventarioService reportService;
     private final InformeInventarioDetalleService detailService;
     private final BusquedaStockMaterialService searchService;
     private final CoberturaMaterialesService coverageService;
     private final AjustesInventarioDetalleService adjustmentDetailService;
     private final AlertasInventarioDetalleService alertDetailService;
+    private final OcmPendientesExcelService pendingPurchaseOrderExcelService;
+    private final MaterialOpExcelService materialOpExcelService;
 
     @GetMapping
     public ResponseEntity<?> reporte(
@@ -66,6 +76,21 @@ public class InformeInventarioResource {
         }
     }
 
+    @GetMapping("/ocm-pendientes/excel")
+    public ResponseEntity<byte[]> ocmPendientesExcel() {
+        var export = pendingPurchaseOrderExcelService.exportExcel();
+        String filename = "ocm_pendientes_"
+                + EXCEL_FILENAME_TIMESTAMP.format(export.cutoff())
+                + ".xlsx";
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(export.content());
+    }
+
     @GetMapping("/op-material-directo")
     public ResponseEntity<?> materialDirectoOp(
             @RequestParam(defaultValue = "0") int page,
@@ -76,6 +101,39 @@ public class InformeInventarioResource {
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         }
+    }
+
+    @GetMapping("/op-material-directo/excel")
+    public ResponseEntity<byte[]> materialDirectoOpExcel() {
+        var export = materialOpExcelService.exportDispensedMaterial();
+        return excelResponse(
+                export.content(),
+                "material_dispensado_op_abiertas_"
+                        + EXCEL_FILENAME_TIMESTAMP.format(export.cutoff())
+                        + ".xlsx");
+    }
+
+    @GetMapping("/wip-material-estimado")
+    public ResponseEntity<?> wipMaterialEstimado(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        try {
+            return ResponseEntity.ok(
+                    detailService.getWipMaterialEstimate(page, size));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        }
+    }
+
+    @GetMapping("/wip-material-estimado/excel")
+    public ResponseEntity<byte[]> wipMaterialEstimadoExcel() {
+        var export = materialOpExcelService.exportWipMaterial();
+        return excelResponse(
+                export.content(),
+                "wip_material_estimado_"
+                        + EXCEL_FILENAME_TIMESTAMP.format(export.cutoff())
+                        + ".xlsx");
     }
 
     @GetMapping("/cobertura")
@@ -102,6 +160,41 @@ public class InformeInventarioResource {
                     buscar,
                     page,
                     size));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        }
+    }
+
+    @GetMapping("/cobertura/excel")
+    public ResponseEntity<?> coberturaExcel(
+            @RequestParam(defaultValue = "90") int ventanaDias,
+            @RequestParam(defaultValue = "SOLO_DISPENSACIONES")
+            FuenteDemandaCobertura fuenteDemanda,
+            @RequestParam(defaultValue = "TODOS") String horizonte,
+            @RequestParam(defaultValue = "TODOS") String grupo,
+            @RequestParam(required = false) String unidad,
+            @RequestParam(defaultValue = "AGOTAMIENTO") String orden,
+            @RequestParam(required = false) String buscar
+    ) {
+        try {
+            var export = coverageService.exportExcel(
+                    ventanaDias,
+                    fuenteDemanda,
+                    horizonte,
+                    grupo,
+                    unidad,
+                    orden,
+                    buscar);
+            String filename = "cobertura_materiales_"
+                    + EXCEL_FILENAME_TIMESTAMP.format(export.cutoff())
+                    + ".xlsx";
+            return ResponseEntity.ok()
+                    .header(
+                            HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(export.content());
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         }
@@ -164,5 +257,18 @@ public class InformeInventarioResource {
 
     private static ResponseEntity<?> badRequest(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+    }
+
+    private static ResponseEntity<byte[]> excelResponse(
+            byte[] content,
+            String filename
+    ) {
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(content);
     }
 }

@@ -26,6 +26,12 @@ public class InformeInventarioDetalleService {
         return pendingAssembler.getOpenProductionOrderMaterialPage(page, size);
     }
 
+    public PaginaInformeInventarioDTO<InformeInventarioDTO.OpWipMaterialDTO>
+    getWipMaterialEstimate(int page, int size) {
+        validatePage(page, size);
+        return pendingAssembler.getWipMaterialEstimatePage(page, size);
+    }
+
     private void validatePage(int page, int size) {
         if (page < 0) {
             throw new IllegalArgumentException("page no puede ser negativo.");

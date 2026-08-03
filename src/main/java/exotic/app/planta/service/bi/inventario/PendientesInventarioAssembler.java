@@ -32,20 +32,33 @@ class PendientesInventarioAssembler {
             List.of(
                     TransaccionAlmacen.TipoEntidadCausante.OD,
                     TransaccionAlmacen.TipoEntidadCausante.OD_RA);
+    private static final TransaccionAlmacen.TipoEntidadCausante NORMAL_DISPENSATION_CAUSE =
+            TransaccionAlmacen.TipoEntidadCausante.OD;
 
     private final ItemOrdenCompraRepo purchaseItemRepo;
     private final OrdenProduccionRepo productionOrderRepo;
     private final TransaccionAlmacenRepo movementRepo;
 
     InformeInventarioDTO.OcmPendientesDTO buildPendingPurchaseOrders() {
+        return summarizePendingPurchaseOrders(
+                loadPendingPurchaseOrders().values());
+    }
+
+    List<InformeInventarioDTO.OcmDTO> getAllPendingPurchaseOrders() {
+        return loadPendingPurchaseOrders().values().stream()
+                .map(PendingPurchaseOrderAccumulator::toDto)
+                .toList();
+    }
+
+    private Map<Integer, PendingPurchaseOrderAccumulator> loadPendingPurchaseOrders() {
         List<ItemOrdenCompraRepo.PendingPurchaseItemProjection> rows =
                 purchaseItemRepo.findPendingRowsForBi(PENDING_WAREHOUSE_RECEIPT_STATUS);
-        if (rows.isEmpty()) return emptyPendingPurchaseOrders();
+        if (rows.isEmpty()) return Map.of();
 
         Set<Integer> orderIds = new HashSet<>();
         rows.forEach(row -> orderIds.add(row.getOcmId()));
         Map<PurchaseMaterialKey, Double> received = loadReceivedQuantities(orderIds);
-        return summarizePendingPurchaseOrders(assemblePendingOrders(rows, received).values());
+        return assemblePendingOrders(rows, received);
     }
 
     PaginaInformeInventarioDTO<InformeInventarioDTO.OcmDTO> getPendingPurchaseOrdersPage(
@@ -109,6 +122,59 @@ class PendientesInventarioAssembler {
         return toPage(items, orderIds);
     }
 
+    InformeInventarioDTO.WipMaterialEstimadoDTO buildWipMaterialEstimate() {
+        return summarizeWipMaterial(getAllWipMaterialSnapshot());
+    }
+
+    PaginaInformeInventarioDTO<InformeInventarioDTO.OpWipMaterialDTO>
+    getWipMaterialEstimatePage(int page, int size) {
+        Page<Integer> orderIds = productionOrderRepo.findOpenOrderIdsWithWipMaterialForBi(
+                GENERAL,
+                Movimiento.TipoMovimiento.DISPENSACION,
+                Movimiento.TipoMovimiento.CONSUMO,
+                PRODUCTION_CAUSES,
+                NORMAL_DISPENSATION_CAUSE,
+                PageRequest.of(page, size));
+        if (orderIds.isEmpty()) return emptyPage(orderIds);
+
+        List<TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection> rows =
+                movementRepo.findOpenWipMaterialDetailsByOrderIds(
+                        GENERAL,
+                        Movimiento.TipoMovimiento.DISPENSACION,
+                        Movimiento.TipoMovimiento.CONSUMO,
+                        PRODUCTION_CAUSES,
+                        NORMAL_DISPENSATION_CAUSE,
+                        orderIds.getContent());
+        Map<Integer, MaterialOpOrderAccumulator> orders =
+                assembleMaterialOpOrders(rows);
+        List<InformeInventarioDTO.OpWipMaterialDTO> items = orderIds.getContent().stream()
+                .map(orders::get)
+                .filter(accumulator -> accumulator != null)
+                .map(MaterialOpOrderAccumulator::toWipDto)
+                .toList();
+        return toPage(items, orderIds);
+    }
+
+    MaterialOpSnapshot getAllDispensedMaterialSnapshot() {
+        return assembleMaterialOpSnapshot(
+                movementRepo.findOpenProductionMaterialDetails(
+                        GENERAL,
+                        Movimiento.TipoMovimiento.DISPENSACION,
+                        PRODUCTION_CAUSES),
+                false);
+    }
+
+    MaterialOpSnapshot getAllWipMaterialSnapshot() {
+        return assembleMaterialOpSnapshot(
+                movementRepo.findOpenWipMaterialDetails(
+                        GENERAL,
+                        Movimiento.TipoMovimiento.DISPENSACION,
+                        Movimiento.TipoMovimiento.CONSUMO,
+                        PRODUCTION_CAUSES,
+                        NORMAL_DISPENSATION_CAUSE),
+                true);
+    }
+
     private Map<Integer, PendingPurchaseOrderAccumulator> assemblePendingOrders(
             List<ItemOrdenCompraRepo.PendingPurchaseItemProjection> rows,
             Map<PurchaseMaterialKey, Double> receivedByPurchaseAndMaterial
@@ -144,6 +210,70 @@ class PendientesInventarioAssembler {
                     .addDispensation(row);
         }
         return accumulators;
+    }
+
+    private Map<Integer, MaterialOpOrderAccumulator> assembleMaterialOpOrders(
+            List<TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection> rows
+    ) {
+        Map<Integer, MaterialOpOrderAccumulator> accumulators = new LinkedHashMap<>();
+        for (TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection row : rows) {
+            accumulators.computeIfAbsent(
+                            row.getOpId(),
+                            ignored -> new MaterialOpOrderAccumulator(row))
+                    .add(row);
+        }
+        return accumulators;
+    }
+
+    private MaterialOpSnapshot assembleMaterialOpSnapshot(
+            List<TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection> rows,
+            boolean wip
+    ) {
+        Map<Integer, MaterialOpOrderAccumulator> orders =
+                assembleMaterialOpOrders(rows);
+        List<MaterialOpLineSnapshot> lines = rows.stream()
+                .map(this::toMaterialOpLine)
+                .toList();
+        return new MaterialOpSnapshot(
+                orders.values().stream()
+                        .map(order -> order.toSnapshot(wip))
+                        .toList(),
+                lines);
+    }
+
+    private MaterialOpLineSnapshot toMaterialOpLine(
+            TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection row
+    ) {
+        BigDecimal cost = row.getCosto();
+        boolean costAvailable = cost != null && cost.signum() > 0;
+        double unitCost = costAvailable ? cost.doubleValue() : 0;
+        double quantity = row.getCantidad();
+        return new MaterialOpLineSnapshot(
+                row.getOpId(),
+                row.getLote(),
+                row.getEstado(),
+                row.getFechaReferencia(),
+                row.getFechaPrimerMovimiento(),
+                row.getProductoId(),
+                row.getProductoNombre(),
+                InventarioBiUtils.normalizeUnit(row.getUnidadMedida()),
+                resolveOrigin(row),
+                quantity,
+                unitCost,
+                costAvailable,
+                quantity * unitCost);
+    }
+
+    private MaterialOrigin resolveOrigin(
+            TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection row
+    ) {
+        if (row.getTipoMovimiento() == Movimiento.TipoMovimiento.CONSUMO) {
+            return MaterialOrigin.CONSUMO_DIRECTO;
+        }
+        if (row.getCausa() == TransaccionAlmacen.TipoEntidadCausante.OD_RA) {
+            return MaterialOrigin.REPOSICION_AVERIA;
+        }
+        return MaterialOrigin.DISPENSACION_NORMAL;
     }
 
     private Map<PurchaseMaterialKey, Double> loadReceivedQuantities(Set<Integer> orderIds) {
@@ -199,12 +329,30 @@ class PendientesInventarioAssembler {
                 .build();
     }
 
-    private InformeInventarioDTO.OcmPendientesDTO emptyPendingPurchaseOrders() {
-        return new InformeInventarioDTO.OcmPendientesDTO(0, 0, List.of(), 0);
-    }
-
     private InformeInventarioDTO.MaterialDirectoOpDTO emptyOpenProductionOrderMaterial() {
         return new InformeInventarioDTO.MaterialDirectoOpDTO(0, 0, List.of(), 0);
+    }
+
+    private InformeInventarioDTO.WipMaterialEstimadoDTO summarizeWipMaterial(
+            MaterialOpSnapshot snapshot
+    ) {
+        UnitQuantityAccumulator quantities = new UnitQuantityAccumulator();
+        snapshot.orders().forEach(order ->
+                order.cantidadesPorUnidad().forEach(quantity ->
+                        quantities.add(quantity.unidadMedida(), quantity.cantidad())));
+        int references = (int) snapshot.lines().stream()
+                .map(MaterialOpLineSnapshot::productoId)
+                .distinct()
+                .count();
+        double estimatedValue = snapshot.orders().stream()
+                .mapToDouble(MaterialOpOrderSnapshot::valorEstimado)
+                .sum();
+        return InformeInventarioDTO.WipMaterialEstimadoDTO.builder()
+                .ordenes(snapshot.orders().size())
+                .referencias(references)
+                .cantidadesPorUnidad(quantities.toDto())
+                .valorEstimado(estimatedValue)
+                .build();
     }
 
     private static <T> PaginaInformeInventarioDTO<T> toPage(
@@ -327,6 +475,119 @@ class PendientesInventarioAssembler {
                     .valorEstimado(estimatedValue)
                     .build();
         }
+    }
+
+    private static final class MaterialOpOrderAccumulator {
+        private final int productionOrderId;
+        private final String batch;
+        private final int status;
+        private final LocalDateTime referenceDate;
+        private LocalDateTime wipStartDate;
+        private final Set<String> productIds = new HashSet<>();
+        private final UnitQuantityAccumulator quantities =
+                new UnitQuantityAccumulator();
+        private double estimatedValue;
+
+        private MaterialOpOrderAccumulator(
+                TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection firstRow
+        ) {
+            productionOrderId = firstRow.getOpId();
+            batch = firstRow.getLote();
+            status = firstRow.getEstado();
+            referenceDate = firstRow.getFechaReferencia();
+            wipStartDate = firstRow.getFechaPrimerMovimiento();
+        }
+
+        void add(
+                TransaccionAlmacenRepo.OpenProductionMaterialDetailProjection row
+        ) {
+            productIds.add(row.getProductoId());
+            quantities.add(
+                    InventarioBiUtils.normalizeUnit(row.getUnidadMedida()),
+                    row.getCantidad());
+            BigDecimal cost = row.getCosto();
+            if (cost != null && cost.signum() > 0) {
+                estimatedValue += row.getCantidad() * cost.doubleValue();
+            }
+            if (row.getFechaPrimerMovimiento() != null
+                    && (wipStartDate == null
+                    || row.getFechaPrimerMovimiento().isBefore(wipStartDate))) {
+                wipStartDate = row.getFechaPrimerMovimiento();
+            }
+        }
+
+        InformeInventarioDTO.OpWipMaterialDTO toWipDto() {
+            return InformeInventarioDTO.OpWipMaterialDTO.builder()
+                    .opId(productionOrderId)
+                    .lote(batch)
+                    .estado(status)
+                    .fechaInicioWip(wipStartDate)
+                    .referencias(productIds.size())
+                    .cantidadesPorUnidad(quantities.toDto())
+                    .valorEstimado(estimatedValue)
+                    .build();
+        }
+
+        MaterialOpOrderSnapshot toSnapshot(boolean wip) {
+            return new MaterialOpOrderSnapshot(
+                    productionOrderId,
+                    batch,
+                    status,
+                    wip ? wipStartDate : referenceDate,
+                    productIds.size(),
+                    quantities.toDto(),
+                    estimatedValue);
+        }
+    }
+
+    enum MaterialOrigin {
+        DISPENSACION_NORMAL("Dispensación normal"),
+        REPOSICION_AVERIA("Reposición por avería"),
+        CONSUMO_DIRECTO("Consumo directo");
+
+        private final String label;
+
+        MaterialOrigin(String label) {
+            this.label = label;
+        }
+
+        String label() {
+            return label;
+        }
+    }
+
+    record MaterialOpLineSnapshot(
+            int opId,
+            String lote,
+            int estado,
+            LocalDateTime fechaReferencia,
+            LocalDateTime fechaPrimerMovimiento,
+            String productoId,
+            String productoNombre,
+            String unidadMedida,
+            MaterialOrigin origen,
+            double cantidad,
+            double costoUnitario,
+            boolean costoDisponible,
+            double valorEstimado
+    ) {
+    }
+
+    record MaterialOpOrderSnapshot(
+            int opId,
+            String lote,
+            int estado,
+            LocalDateTime fechaReferencia,
+            int referencias,
+            List<InformeInventarioDTO.CantidadUnidadDTO> cantidadesPorUnidad,
+            double valorEstimado
+    ) {
+    }
+
+    record MaterialOpSnapshot(
+            List<MaterialOpOrderSnapshot> orders,
+            List<MaterialOpLineSnapshot> lines
+    ) {
     }
 
     private static final class UnitQuantityAccumulator {

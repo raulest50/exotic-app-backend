@@ -12,6 +12,8 @@ import exotic.app.planta.service.bi.inventario.BusquedaStockMaterialService;
 import exotic.app.planta.service.bi.inventario.CoberturaMaterialesService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioService;
 import exotic.app.planta.service.bi.inventario.InformeInventarioDetalleService;
+import exotic.app.planta.service.bi.inventario.MaterialOpExcelService;
+import exotic.app.planta.service.bi.inventario.OcmPendientesExcelService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -20,11 +22,14 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,6 +56,12 @@ class InformeInventarioResourceTest {
 
     @MockBean
     private AlertasInventarioDetalleService alertDetailService;
+
+    @MockBean
+    private OcmPendientesExcelService pendingPurchaseOrderExcelService;
+
+    @MockBean
+    private MaterialOpExcelService materialOpExcelService;
 
     @Test
     void reportAcceptsSingleDateAndIgnoresLegacyTrendWindow() throws Exception {
@@ -266,6 +277,72 @@ class InformeInventarioResourceTest {
     }
 
     @Test
+    void coverageExcelUsesTheExplorationSelectionWithoutPagination()
+            throws Exception {
+        byte[] excel = new byte[] {1, 2, 3};
+        when(coverageService.exportExcel(
+                30,
+                FuenteDemandaCobertura.DISPENSACIONES_MAS_CONTINGENCIAS,
+                "HASTA_7_DIAS",
+                "EMPAQUE",
+                "U",
+                "MAYOR_DEMANDA",
+                "envase"))
+                .thenReturn(new CoberturaMaterialesService.ExcelExport(
+                        excel,
+                        LocalDateTime.of(2026, 7, 18, 10, 5)));
+
+        mockMvc.perform(get(
+                        "/bi/informes-globales/almacen/cobertura/excel")
+                        .param("ventanaDias", "30")
+                        .param(
+                                "fuenteDemanda",
+                                "DISPENSACIONES_MAS_CONTINGENCIAS")
+                        .param("horizonte", "HASTA_7_DIAS")
+                        .param("grupo", "EMPAQUE")
+                        .param("unidad", "U")
+                        .param("orden", "MAYOR_DEMANDA")
+                        .param("buscar", "envase"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Content-Disposition",
+                        "attachment; filename=\"cobertura_materiales_2026-07-18_1005.xlsx\""))
+                .andExpect(content().contentType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(content().bytes(excel));
+
+        verify(coverageService).exportExcel(
+                30,
+                FuenteDemandaCobertura.DISPENSACIONES_MAS_CONTINGENCIAS,
+                "HASTA_7_DIAS",
+                "EMPAQUE",
+                "U",
+                "MAYOR_DEMANDA",
+                "envase");
+    }
+
+    @Test
+    void coverageExcelReturnsBadRequestForInvalidSelection() throws Exception {
+        when(coverageService.exportExcel(
+                90,
+                FuenteDemandaCobertura.SOLO_DISPENSACIONES,
+                "TODOS",
+                "TODOS",
+                null,
+                "MAYOR_DEMANDA",
+                null))
+                .thenThrow(new IllegalArgumentException(
+                        "Debe seleccionar una unidad para ordenar por demanda."));
+
+        mockMvc.perform(get(
+                        "/bi/informes-globales/almacen/cobertura/excel")
+                        .param("orden", "MAYOR_DEMANDA"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(
+                        "Debe seleccionar una unidad para ordenar por demanda."));
+    }
+
+    @Test
     void pendingPurchaseOrdersUsesIndependentPagination() throws Exception {
         when(detailService.getPendingPurchaseOrders(1, 10))
                 .thenReturn(new PaginaInformeInventarioDTO<>(
@@ -279,6 +356,82 @@ class InformeInventarioResourceTest {
                 .andExpect(jsonPath("$.totalElements").value(12));
 
         verify(detailService).getPendingPurchaseOrders(1, 10);
+    }
+
+    @Test
+    void pendingPurchaseOrdersExcelReturnsTheFreshCompleteWorkbook()
+            throws Exception {
+        byte[] excel = new byte[] {4, 5, 6};
+        when(pendingPurchaseOrderExcelService.exportExcel())
+                .thenReturn(new OcmPendientesExcelService.ExcelExport(
+                        excel,
+                        LocalDateTime.of(2026, 7, 18, 10, 5)));
+
+        mockMvc.perform(get(
+                        "/bi/informes-globales/almacen/ocm-pendientes/excel"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Content-Disposition",
+                        "attachment; filename=\"ocm_pendientes_2026-07-18_1005.xlsx\""))
+                .andExpect(content().contentType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(content().bytes(excel));
+
+        verify(pendingPurchaseOrderExcelService).exportExcel();
+    }
+
+    @Test
+    void wipMaterialUsesIndependentPagination() throws Exception {
+        when(detailService.getWipMaterialEstimate(1, 10))
+                .thenReturn(new PaginaInformeInventarioDTO<>(
+                        List.of(), 1, 10, 14, 2, false, true));
+
+        mockMvc.perform(get(
+                        "/bi/informes-globales/almacen/wip-material-estimado")
+                        .param("page", "1")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalElements").value(14));
+
+        verify(detailService).getWipMaterialEstimate(1, 10);
+    }
+
+    @Test
+    void materialOpExcelEndpointsReturnTimestampedWorkbooks()
+            throws Exception {
+        byte[] dispensed = new byte[] {7, 8};
+        byte[] wip = new byte[] {9, 10};
+        LocalDateTime cutoff = LocalDateTime.of(2026, 7, 18, 10, 5);
+        when(materialOpExcelService.exportDispensedMaterial())
+                .thenReturn(new MaterialOpExcelService.ExcelExport(
+                        dispensed,
+                        cutoff));
+        when(materialOpExcelService.exportWipMaterial())
+                .thenReturn(new MaterialOpExcelService.ExcelExport(wip, cutoff));
+
+        mockMvc.perform(get(
+                        "/bi/informes-globales/almacen/op-material-directo/excel"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Content-Disposition",
+                        "attachment; filename=\"material_dispensado_op_abiertas_2026-07-18_1005.xlsx\""))
+                .andExpect(content().contentType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(content().bytes(dispensed));
+
+        mockMvc.perform(get(
+                        "/bi/informes-globales/almacen/wip-material-estimado/excel"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Content-Disposition",
+                        "attachment; filename=\"wip_material_estimado_2026-07-18_1005.xlsx\""))
+                .andExpect(content().contentType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(content().bytes(wip));
+
+        verify(materialOpExcelService).exportDispensedMaterial();
+        verify(materialOpExcelService).exportWipMaterial();
     }
 
     @Test
