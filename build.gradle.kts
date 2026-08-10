@@ -37,6 +37,7 @@ dependencies {
 	implementation("org.flywaydb:flyway-core")
 
 	implementation("org.springframework.boot:spring-boot-starter-validation")
+	implementation("com.googlecode.owasp-java-html-sanitizer:owasp-java-html-sanitizer:20260313.1")
 
 	compileOnly("org.projectlombok:lombok")
 	//runtimeOnly("com.mysql:mysql-connector-j") // ya no uso mysql sino postgres pq es la disponible en render

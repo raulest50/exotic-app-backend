@@ -2,6 +2,8 @@ package exotic.app.planta.resource.organigrama;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.organigrama.Cargo;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.organigrama.CargoOrganigramaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.Authentication;
 
 @RestController
 @RequestMapping("/organigrama")
@@ -25,15 +28,19 @@ import org.springframework.http.HttpHeaders;
 @Slf4j
 public class CargoOrganigramaResource {
 
+    private static final String TAB_ORGANIGRAMA = "ORGANIGRAMA";
+
     private final CargoOrganigramaService cargoOrganigramaService;
     private final ObjectMapper objectMapper;
+    private final ModuleTabAccessGuard accessGuard;
 
     /**
      * Endpoint para obtener todos los cargos disponibles
      * @return Lista de todos los cargos
      */
     @GetMapping
-    public ResponseEntity<List<Cargo>> getAllCargos() {
+    public ResponseEntity<List<Cargo>> getAllCargos(Authentication authentication) {
+        requireAccess(authentication, 1);
         List<Cargo> cargos = cargoOrganigramaService.getAllCargos();
         return ResponseEntity.ok(cargos);
     }
@@ -46,9 +53,11 @@ public class CargoOrganigramaResource {
      */
     @PostMapping(value = "/save_mfunciones", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Object> saveCargo(
+            Authentication authentication,
             @RequestPart("cargo") String cargoJson,
             @RequestPart(value = "manualFuncionesFile", required = false) MultipartFile manualFuncionesFile
     ) {
+        requireAccess(authentication, 2);
         try {
             Cargo cargo = objectMapper.readValue(cargoJson, Cargo.class);
             Cargo saved = cargoOrganigramaService.saveCargoWithManualFunciones(cargo, manualFuncionesFile);
@@ -74,7 +83,11 @@ public class CargoOrganigramaResource {
      * @return Lista de cargos guardados
      */
     @PostMapping("/save_changes_organigrama")
-    public ResponseEntity<Object> saveChangesOrganigrama(@RequestBody List<Cargo> cargos) {
+    public ResponseEntity<Object> saveChangesOrganigrama(
+            Authentication authentication,
+            @RequestBody List<Cargo> cargos
+    ) {
+        requireAccess(authentication, 2);
         try {
             List<Cargo> saved = cargoOrganigramaService.saveChangesOrganigrama(cargos);
             return ResponseEntity.ok(saved);
@@ -91,7 +104,11 @@ public class CargoOrganigramaResource {
      * @return Archivo PDF del manual de funciones
      */
     @GetMapping("/{cargoId}/manual-funciones")
-    public ResponseEntity<byte[]> downloadManualFunciones(@PathVariable String cargoId) {
+    public ResponseEntity<byte[]> downloadManualFunciones(
+            Authentication authentication,
+            @PathVariable String cargoId
+    ) {
+        requireAccess(authentication, 1);
         try {
             // Obtener el cargo
             Cargo cargo = cargoOrganigramaService.getCargoById(cargoId);
@@ -127,5 +144,15 @@ public class CargoOrganigramaResource {
             log.error("Error inesperado al descargar el manual de funciones: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    private void requireAccess(Authentication authentication, int minNivel) {
+        accessGuard.requireTabAccess(
+                authentication,
+                ModuloSistema.ORGANIGRAMA,
+                TAB_ORGANIGRAMA,
+                minNivel,
+                "No tiene permisos suficientes para administrar el organigrama."
+        );
     }
 }
