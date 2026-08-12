@@ -20,7 +20,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.ListJoin;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,14 +74,7 @@ public class ProcesoProduccionService {
             );
         }
 
-        Specification<ProcesoProduccionCompleto> referencedInProcesoCompleto = (root, query, cb) -> {
-            query.distinct(true);
-            Join<ProcesoProduccionCompleto, ProcesoFabricacionNodo> nodeJoin = root.join("nodes");
-            Join<ProcesoProduccionCompleto, NodoProceso> procesoNodeJoin = cb.treat(nodeJoin, NodoProceso.class);
-            return cb.equal(procesoNodeJoin.get("procesoProduccion").get("procesoId"), id);
-        };
-
-        long references = procesoProduccionCompletoRepo.count(referencedInProcesoCompleto);
+        long references = procesoProduccionCompletoRepo.count(referencedInProcesoCompleto(id));
         if (references > 0) {
             log.warn("No se puede eliminar el proceso de producción con ID: {} porque está referenciado en {} procesos completos", id, references);
             throw new IllegalStateException("El proceso de producción está siendo utilizado en uno o más procesos completos");
@@ -117,14 +110,7 @@ public class ProcesoProduccionService {
         }
 
         // Verificar si está referenciado en algún proceso completo
-        Specification<ProcesoProduccionCompleto> referencedInProcesoCompleto = (root, query, cb) -> {
-            query.distinct(true);
-            Join<ProcesoProduccionCompleto, ProcesoFabricacionNodo> nodeJoin = root.join("nodes");
-            Join<ProcesoProduccionCompleto, NodoProceso> procesoNodeJoin = cb.treat(nodeJoin, NodoProceso.class);
-            return cb.equal(procesoNodeJoin.get("procesoProduccion").get("procesoId"), id);
-        };
-
-        long references = procesoProduccionCompletoRepo.count(referencedInProcesoCompleto);
+        long references = procesoProduccionCompletoRepo.count(referencedInProcesoCompleto(id));
         if (references > 0) {
             result.put("deletable", false);
             result.put("reason", "El proceso de producción está siendo utilizado en " + references + " proceso(s) completo(s)");
@@ -135,6 +121,16 @@ public class ProcesoProduccionService {
         // Si no hay problemas, el proceso es eliminable
         result.put("deletable", true);
         return result;
+    }
+
+    private Specification<ProcesoProduccionCompleto> referencedInProcesoCompleto(Integer procesoId) {
+        return (root, query, cb) -> {
+            query.distinct(true);
+            ListJoin<ProcesoProduccionCompleto, ProcesoFabricacionNodo> nodeJoin = root.joinList("nodes");
+            ListJoin<ProcesoProduccionCompleto, NodoProceso> procesoNodeJoin =
+                    cb.treat(nodeJoin, NodoProceso.class);
+            return cb.equal(procesoNodeJoin.get("procesoProduccion").get("procesoId"), procesoId);
+        };
     }
 
     /**
