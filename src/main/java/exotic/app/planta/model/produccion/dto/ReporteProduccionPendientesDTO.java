@@ -1,5 +1,6 @@
 package exotic.app.planta.model.produccion.dto;
 
+import exotic.app.planta.model.producto.UnidadTiempoVencimiento;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -32,5 +33,8 @@ public class ReporteProduccionPendientesDTO {
         private BigDecimal cantidadReportada;
         private LocalDateTime reportadoEn;
         private String reportadoPor;
+        private Integer vidaUtilCantidadAplicada;
+        private UnidadTiempoVencimiento vidaUtilUnidadAplicada;
+        private LocalDate fechaVencimientoSugerida;
     }
 }

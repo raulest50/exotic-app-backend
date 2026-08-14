@@ -63,6 +63,7 @@ class CierreProduccionServiceTest {
                 loteRepo,
                 transaccionRepo,
                 cierreLockService,
+                new VencimientoLoteService(),
                 Clock.fixed(Instant.parse("2026-07-16T14:00:00Z"), ZoneId.of("America/Bogota"))
         );
     }
@@ -101,13 +102,17 @@ class CierreProduccionServiceTest {
 
         CierreProduccionResponseDTO primera = service.confirmar(actor, request);
         CierreProduccionResponseDTO repetida = service.confirmar(actor, request);
+        request.getReportes().get(0).setFechaVencimiento(LocalDate.of(2027, 2, 1));
 
         assertEquals(700L, primera.getCierreId());
         assertEquals(primera.getCierreId(), repetida.getCierreId());
+        assertThrows(CierreProduccionConflictException.class, () -> service.confirmar(actor, request));
         assertEquals(new BigDecimal("95.5"), reporte.getCantidadConfirmada());
         assertEquals(ReporteProduccionLote.Estado.CONFIRMADO, reporte.getEstado());
         assertEquals(2, reporte.getOrdenProduccion().getEstadoOrden());
         assertEquals(fechaProduccion, reporte.getLote().getProductionDate());
+        assertEquals(LocalDate.of(2027, 1, 1), reporte.getLote().getExpirationDate());
+        assertEquals(LocalDate.of(2027, 1, 1), primera.getReportes().get(0).getFechaVencimiento());
         assertSame(cierreGuardado.get(), reporte.getCierreProduccion());
         assertEquals(TransaccionAlmacen.EstadoContable.PENDIENTE,
                 reporte.getTransaccionAlmacen().getEstadoContable());
@@ -187,6 +192,7 @@ class CierreProduccionServiceTest {
         item.setVersion(version);
         item.setCantidadConfirmada(new BigDecimal(cantidad));
         item.setMotivoCorreccion(motivo);
+        item.setFechaVencimiento(LocalDate.of(2027, 1, 1));
         return item;
     }
 }

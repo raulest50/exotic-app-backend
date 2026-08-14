@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import exotic.app.planta.model.empresa.JornadaLaboralVersion;
 import exotic.app.planta.model.producto.Producto;
+import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.ventas.Vendedor;
 import lombok.Getter;
@@ -41,6 +42,16 @@ public class OrdenProduccion {
     @ManyToOne
     @JoinColumn(name = "producto_id")
     private Producto producto;
+
+    /**
+     * Snapshot de manufactura que gobierna esta orden. Es opcional para
+     * mantener compatibilidad con órdenes históricas; las órdenes liberadas
+     * bajo el flujo de batch record deben fijarlo antes de ejecutarse.
+     */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manufacturing_version_id")
+    private ManufacturingVersions manufacturingVersion;
 
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = true)

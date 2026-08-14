@@ -30,5 +30,6 @@ public class CierreProduccionResponseDTO {
         private String lote;
         private BigDecimal cantidadConfirmada;
         private int transaccionAlmacenId;
+        private LocalDate fechaVencimiento;
     }
 }

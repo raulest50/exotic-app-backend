@@ -33,6 +33,7 @@ public class ReporteProduccionLoteService {
     private final LoteRepo loteRepo;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final ProduccionCierreLockService cierreLockService;
+    private final VencimientoLoteService vencimientoLoteService;
     private final Clock applicationClock;
 
     public ReporteProduccionLote registrarPendiente(
@@ -154,6 +155,7 @@ public class ReporteProduccionLoteService {
 
     private ReporteProduccionPendientesDTO.ItemDTO toPendienteDTO(ReporteProduccionLote reporte) {
         OrdenProduccion orden = reporte.getOrdenProduccion();
+        Lote lote = reporte.getLote();
         return new ReporteProduccionPendientesDTO.ItemDTO(
                 reporte.getId(),
                 reporte.getVersion(),
@@ -167,7 +169,13 @@ public class ReporteProduccionLoteService {
                 reporte.getReportadoEn(),
                 reporte.getReportadoPor().getNombreCompleto() != null
                         ? reporte.getReportadoPor().getNombreCompleto()
-                        : reporte.getReportadoPor().getUsername()
+                        : reporte.getReportadoPor().getUsername(),
+                lote.getVidaUtilCantidadAplicada(),
+                lote.getVidaUtilUnidadAplicada(),
+                lote.getExpirationDate() != null
+                        ? lote.getExpirationDate()
+                        : vencimientoLoteService.calcularFechaSugerida(
+                                lote, reporte.getFechaProduccion())
         );
     }
 

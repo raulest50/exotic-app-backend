@@ -71,6 +71,7 @@ public class ProduccionService {
     private final VendedorRepository vendedorRepository;
     private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
     private final MasterDirectiveService masterDirectiveService;
+    private final VencimientoLoteService vencimientoLoteService;
     private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
@@ -97,19 +98,8 @@ public class ProduccionService {
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
         if (ordenProduccionDTO.getLoteBatchNumber() != null && !ordenProduccionDTO.getLoteBatchNumber().isBlank()) {
-            // Validar que el batch number no exista previamente
-            Lote loteExistente = loteRepo.findByBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
-            if (loteExistente != null) {
-                throw new IllegalArgumentException(
-                    "El número de lote '" + ordenProduccionDTO.getLoteBatchNumber() +
-                    "' ya está asignado a otra orden de producción"
-                );
-            }
-
-            Lote lote = new Lote();
-            lote.setBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
-            lote.setOrdenProduccion(savedOrden);
-            loteRepo.save(lote);
+            Lote lote = crearLoteProduccion(
+                    ordenProduccionDTO.getLoteBatchNumber(), savedOrden, producto);
             savedOrden.setLoteAsignado(lote.getBatchNumber());
             ordenProduccionRepo.save(savedOrden);
         }
@@ -156,16 +146,7 @@ public class ProduccionService {
             OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
             if (loteBatchNumber != null && !loteBatchNumber.isBlank()) {
-                Lote loteExistente = loteRepo.findByBatchNumber(loteBatchNumber);
-                if (loteExistente != null) {
-                    throw new IllegalArgumentException(
-                        "El número de lote '" + loteBatchNumber + "' ya está asignado a otra orden de producción"
-                    );
-                }
-                Lote lote = new Lote();
-                lote.setBatchNumber(loteBatchNumber);
-                lote.setOrdenProduccion(savedOrden);
-                loteRepo.save(lote);
+                Lote lote = crearLoteProduccion(loteBatchNumber, savedOrden, producto);
                 savedOrden.setLoteAsignado(lote.getBatchNumber());
                 ordenProduccionRepo.save(savedOrden);
             }
@@ -624,24 +605,34 @@ public class ProduccionService {
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
         if (ordenProduccionDTO.getLoteBatchNumber() != null && !ordenProduccionDTO.getLoteBatchNumber().isBlank()) {
-            Lote loteExistente = loteRepo.findByBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
-            if (loteExistente != null) {
-                throw new IllegalArgumentException(
-                        "El nÃºmero de lote '" + ordenProduccionDTO.getLoteBatchNumber() +
-                                "' ya estÃ¡ asignado a otra orden de producciÃ³n"
-                );
-            }
-
-            Lote lote = new Lote();
-            lote.setBatchNumber(ordenProduccionDTO.getLoteBatchNumber());
-            lote.setOrdenProduccion(savedOrden);
-            loteRepo.save(lote);
+            Lote lote = crearLoteProduccion(
+                    ordenProduccionDTO.getLoteBatchNumber(), savedOrden, producto);
             savedOrden.setLoteAsignado(lote.getBatchNumber());
             ordenProduccionRepo.save(savedOrden);
         }
 
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
         return savedOrden;
+    }
+
+    private Lote crearLoteProduccion(
+            String batchNumber,
+            OrdenProduccion ordenProduccion,
+            Producto producto
+    ) {
+        Lote loteExistente = loteRepo.findByBatchNumber(batchNumber);
+        if (loteExistente != null) {
+            throw new IllegalArgumentException(
+                    "El numero de lote '" + batchNumber
+                            + "' ya esta asignado a otra orden de produccion");
+        }
+
+        Lote lote = new Lote();
+        lote.setBatchNumber(batchNumber);
+        lote.setOrdenProduccion(ordenProduccion);
+        lote.setProducto(producto);
+        vencimientoLoteService.copiarPoliticaVigente(producto, lote);
+        return loteRepo.save(lote);
     }
 
     private void aplicarPoliticaDispensacionInicial(OrdenProduccion ordenProduccion) {

@@ -2,6 +2,7 @@ package exotic.app.planta.service.productos;
 
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.UnidadTiempoVencimiento;
 import exotic.app.planta.model.producto.dto.CategoriaResponseDTO;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
@@ -69,6 +70,9 @@ public class CategoriaService {
         }
 
         log.info("Guardando nueva categoria: {}", categoria.getCategoriaNombre());
+        // La vida util se administra exclusivamente mediante su endpoint protegido.
+        categoria.setVidaUtilCantidad(null);
+        categoria.setVidaUtilUnidad(null);
         return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
 
@@ -152,6 +156,30 @@ public class CategoriaService {
         Categoria categoria = categoriaRepo.findById(categoriaId)
                 .orElseThrow(() -> new ValidationException("No se encontro categoria con ID: " + categoriaId));
         categoria.setCapacidadProductivaDiaria(capacidadProductivaDiaria);
+        return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
+    }
+
+    @Transactional
+    public CategoriaResponseDTO updateVidaUtil(
+            int categoriaId,
+            Integer vidaUtilCantidad,
+            UnidadTiempoVencimiento vidaUtilUnidad
+    ) {
+        boolean cantidadDefinida = vidaUtilCantidad != null;
+        boolean unidadDefinida = vidaUtilUnidad != null;
+        if (cantidadDefinida != unidadDefinida) {
+            throw new IllegalArgumentException(
+                    "La cantidad y la unidad de vida util deben definirse o eliminarse juntas");
+        }
+        if (cantidadDefinida && vidaUtilCantidad <= 0) {
+            throw new IllegalArgumentException("La vida util debe ser mayor que cero");
+        }
+
+        Categoria categoria = categoriaRepo.findById(categoriaId)
+                .orElseThrow(() -> new ValidationException(
+                        "No se encontro categoria con ID: " + categoriaId));
+        categoria.setVidaUtilCantidad(vidaUtilCantidad);
+        categoria.setVidaUtilUnidad(vidaUtilUnidad);
         return CategoriaResponseDTO.fromEntity(categoriaRepo.save(categoria));
     }
 }

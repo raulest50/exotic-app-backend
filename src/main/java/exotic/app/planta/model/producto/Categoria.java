@@ -2,6 +2,8 @@ package exotic.app.planta.model.producto;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.*;
@@ -37,6 +39,15 @@ public class Categoria {
     @Column(name = "capacidad_productiva_diaria", nullable = true)
     @Getter(AccessLevel.NONE)
     private Integer capacidadProductivaDiaria;
+
+    /** Cantidad de unidades calendario de vida util; null desactiva el calculo automatico. */
+    @Column(name = "vida_util_cantidad")
+    private Integer vidaUtilCantidad;
+
+    /** Unidad calendario asociada a {@link #vidaUtilCantidad}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vida_util_unidad", length = 10)
+    private UnidadTiempoVencimiento vidaUtilUnidad;
 
     /**
      * @return the lote size assigned to the category, or 0 if it has not been set

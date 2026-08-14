@@ -46,6 +46,7 @@ public class CierreProduccionService {
     private final LoteRepo loteRepo;
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final ProduccionCierreLockService cierreLockService;
+    private final VencimientoLoteService vencimientoLoteService;
     private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
@@ -117,12 +118,20 @@ public class CierreProduccionService {
                 throw new CierreProduccionConflictException(
                         "El lote " + lote.getBatchNumber() + " tiene una fecha de produccion diferente.");
             }
+            vencimientoLoteService.validarFechaConfirmada(
+                    reporte.getFechaProduccion(), solicitado.getFechaVencimiento());
+            if (lote.getExpirationDate() != null
+                    && !lote.getExpirationDate().equals(solicitado.getFechaVencimiento())) {
+                throw new CierreProduccionConflictException(
+                        "El lote " + lote.getBatchNumber() + " tiene una fecha de vencimiento diferente.");
+            }
 
             BigDecimal cantidadConfirmada = normalizarCantidad(solicitado.getCantidadConfirmada());
             TransaccionAlmacen transaccion = crearTransaccion(orden, lote, cantidadConfirmada, actor);
             transaccionRepo.save(transaccion);
 
             lote.setProductionDate(reporte.getFechaProduccion());
+            lote.setExpirationDate(solicitado.getFechaVencimiento());
             loteRepo.save(lote);
 
             reporte.setCantidadConfirmada(cantidadConfirmada);
@@ -226,7 +235,8 @@ public class CierreProduccionService {
                         reporte.getOrdenProduccion().getOrdenId(),
                         reporte.getLote().getBatchNumber(),
                         reporte.getCantidadConfirmada(),
-                        reporte.getTransaccionAlmacen().getTransaccionId()
+                        reporte.getTransaccionAlmacen().getTransaccionId(),
+                        reporte.getLote().getExpirationDate()
                 ))
                 .toList();
         BigDecimal total = reportes.stream()
@@ -253,7 +263,10 @@ public class CierreProduccionService {
                     .append(normalizarCantidad(item.getCantidadConfirmada()).toPlainString()).append(':')
                     .append(normalizarTexto(item.getMotivoCorreccion()) == null
                             ? ""
-                            : normalizarTexto(item.getMotivoCorreccion()));
+                            : normalizarTexto(item.getMotivoCorreccion())).append(':')
+                    .append(item.getFechaVencimiento() == null
+                            ? ""
+                            : item.getFechaVencimiento());
         }
 
         try {

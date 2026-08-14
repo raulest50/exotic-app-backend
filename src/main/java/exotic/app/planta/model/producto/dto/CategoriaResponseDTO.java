@@ -1,6 +1,7 @@
 package exotic.app.planta.model.producto.dto;
 
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.UnidadTiempoVencimiento;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -15,6 +16,8 @@ public class CategoriaResponseDTO {
     private Integer loteSize;
     private Integer tiempoDiasFabricacion;
     private Integer capacidadProductivaDiaria;
+    private Integer vidaUtilCantidad;
+    private UnidadTiempoVencimiento vidaUtilUnidad;
 
     public static CategoriaResponseDTO fromEntity(Categoria categoria) {
         return new CategoriaResponseDTO(
@@ -23,7 +26,9 @@ public class CategoriaResponseDTO {
                 categoria.getCategoriaDescripcion(),
                 categoria.getLoteSize(),
                 categoria.getTiempoDiasFabricacion(),
-                categoria.getCapacidadProductivaDiaria()
+                categoria.getCapacidadProductivaDiaria(),
+                categoria.getVidaUtilCantidad(),
+                categoria.getVidaUtilUnidad()
         );
     }
 }

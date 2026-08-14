@@ -20,6 +20,15 @@ import java.util.List;
 @AllArgsConstructor
 public class SemiTerminado extends Producto{
 
+    /**
+     * Define si este semiterminado debe fabricarse mediante una orden propia y
+     * recibir un lote intermedio. Cuando es {@code false}, se trata como una
+     * etapa integrada (phantom) cuya receta se explota dentro de la orden que
+     * lo consume.
+     */
+    @Column(name = "requiere_orden_fabricacion", nullable = false)
+    private boolean requiereOrdenFabricacion = false;
+
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "output_producto_id")
     private List<Insumo> insumos;

@@ -39,5 +39,8 @@ public class CierreProduccionRequestDTO {
 
         @Size(max = 500)
         private String motivoCorreccion;
+
+        @NotNull
+        private LocalDate fechaVencimiento;
     }
 }

@@ -4,6 +4,8 @@ import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.ReporteProduccionLote;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.UnidadTiempoVencimiento;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
@@ -46,7 +48,12 @@ class ReporteProduccionLoteServiceTest {
                 ZoneId.of("America/Bogota")
         );
         service = new ReporteProduccionLoteService(
-                reporteRepo, loteRepo, ordenRepo, cierreLockService, clock);
+                reporteRepo,
+                loteRepo,
+                ordenRepo,
+                cierreLockService,
+                new VencimientoLoteService(),
+                clock);
         when(reporteRepo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -113,6 +120,45 @@ class ReporteProduccionLoteServiceTest {
 
         assertThrows(CierreProduccionConflictException.class, () ->
                 service.anularPendientePorSeguimiento(seguimiento, new User(), "No permitido"));
+    }
+
+    @Test
+    void consultarPendientes_exposesSuggestionFromLotSnapshot() {
+        LocalDate fechaProduccion = LocalDate.of(2026, 7, 15);
+        OrdenProduccion orden = orden(10, 3, "LOT-10");
+        Terminado terminado = new Terminado();
+        terminado.setProductoId("PT-10");
+        terminado.setNombre("Producto terminado");
+        orden.setProducto(terminado);
+        orden.setCantidadProducir(100);
+
+        Lote lote = lote(orden, "LOT-10");
+        lote.setVidaUtilCantidadAplicada(1);
+        lote.setVidaUtilUnidadAplicada(UnidadTiempoVencimiento.MESES);
+        User actor = new User();
+        actor.setUsername("reportador");
+
+        ReporteProduccionLote reporte = new ReporteProduccionLote();
+        reporte.setId(50L);
+        reporte.setOrdenProduccion(orden);
+        reporte.setLote(lote);
+        reporte.setCantidadReportada(new BigDecimal("100"));
+        reporte.setFechaProduccion(fechaProduccion);
+        reporte.setReportadoPor(actor);
+        reporte.setEstado(ReporteProduccionLote.Estado.PENDIENTE);
+
+        when(reporteRepo.findByFechaProduccionAndEstadoOrderByReportadoEnAscIdAsc(
+                fechaProduccion, ReporteProduccionLote.Estado.PENDIENTE))
+                .thenReturn(List.of(reporte));
+
+        var response = service.consultarPendientes(fechaProduccion);
+
+        assertEquals(1, response.getReportes().size());
+        assertEquals(LocalDate.of(2026, 8, 15),
+                response.getReportes().get(0).getFechaVencimientoSugerida());
+        assertEquals(1, response.getReportes().get(0).getVidaUtilCantidadAplicada());
+        assertEquals(UnidadTiempoVencimiento.MESES,
+                response.getReportes().get(0).getVidaUtilUnidadAplicada());
     }
 
     private OrdenProduccion orden(int id, int estado, String loteAsignado) {

@@ -2,6 +2,9 @@ package exotic.app.planta.resource.productos;
 
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.dto.CategoriaResponseDTO;
+import exotic.app.planta.model.producto.dto.CategoriaVidaUtilRequestDTO;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateIdException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.DuplicateNameException;
 import exotic.app.planta.resource.productos.exceptions.CategoriaExceptions.EmptyFieldException;
@@ -13,7 +16,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
@@ -26,7 +32,10 @@ import java.util.Optional;
 @Slf4j
 public class CategoriaResource {
 
+    private static final String TAB_PARAMETROS_POR_CATEGORIA = "PARAMETROS_POR_CATEGORIA";
+
     private final CategoriaService categoriaService;
+    private final ModuleTabAccessGuard accessGuard;
 
     @PostMapping
     public ResponseEntity<CategoriaResponseDTO> saveCategoria(@RequestBody Categoria categoria) {
@@ -54,9 +63,11 @@ public class CategoriaResource {
 
     @PatchMapping("/{categoriaId}/lote-size")
     public ResponseEntity<CategoriaResponseDTO> updateLoteSize(
+            Authentication authentication,
             @PathVariable int categoriaId,
             @RequestBody Map<String, Integer> body
     ) {
+        requirePlanningAccess(authentication);
         Integer loteSize = body != null ? body.get("loteSize") : null;
         if (loteSize == null) {
             return ResponseEntity.badRequest().build();
@@ -67,9 +78,11 @@ public class CategoriaResource {
 
     @PatchMapping("/{categoriaId}/tiempo-dias-fabricacion")
     public ResponseEntity<CategoriaResponseDTO> updateTiempoDiasFabricacion(
+            Authentication authentication,
             @PathVariable int categoriaId,
             @RequestBody Map<String, Integer> body
     ) {
+        requirePlanningAccess(authentication);
         Integer tiempoDiasFabricacion = body != null ? body.get("tiempoDiasFabricacion") : null;
         if (tiempoDiasFabricacion == null) {
             return ResponseEntity.badRequest().build();
@@ -80,15 +93,45 @@ public class CategoriaResource {
 
     @PatchMapping("/{categoriaId}/capacidad-productiva-diaria")
     public ResponseEntity<CategoriaResponseDTO> updateCapacidadProductivaDiaria(
+            Authentication authentication,
             @PathVariable int categoriaId,
             @RequestBody Map<String, Integer> body
     ) {
+        requirePlanningAccess(authentication);
         Integer capacidadProductivaDiaria = body != null ? body.get("capacidadProductivaDiaria") : null;
         if (capacidadProductivaDiaria == null) {
             return ResponseEntity.badRequest().build();
         }
         CategoriaResponseDTO updated = categoriaService.updateCapacidadProductivaDiaria(categoriaId, capacidadProductivaDiaria);
         return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/{categoriaId}/vida-util")
+    public ResponseEntity<CategoriaResponseDTO> updateVidaUtil(
+            Authentication authentication,
+            @PathVariable int categoriaId,
+            @RequestBody CategoriaVidaUtilRequestDTO body
+    ) {
+        requirePlanningAccess(authentication);
+        if (body == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        CategoriaResponseDTO updated = categoriaService.updateVidaUtil(
+                categoriaId,
+                body.getVidaUtilCantidad(),
+                body.getVidaUtilUnidad()
+        );
+        return ResponseEntity.ok(updated);
+    }
+
+    private void requirePlanningAccess(Authentication authentication) {
+        accessGuard.requireTabAccess(
+                authentication,
+                ModuloSistema.PRODUCCION,
+                TAB_PARAMETROS_POR_CATEGORIA,
+                3,
+                "No tiene permisos suficientes para administrar los parametros por categoria."
+        );
     }
 
     @DeleteMapping("/{categoriaId}")
@@ -113,6 +156,15 @@ public class CategoriaResource {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(e.getMessage()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(
+            HttpMessageNotReadableException e
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("El cuerpo de la solicitud contiene valores invalidos"));
     }
 
     @ExceptionHandler(EmptyFieldException.class)
@@ -145,6 +197,13 @@ public class CategoriaResource {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(e.getMessage()));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException e) {
+        return ResponseEntity
+                .status(e.getStatusCode())
+                .body(new ErrorResponse(e.getReason() != null ? e.getReason() : "Acceso denegado"));
     }
 
     @ExceptionHandler(Exception.class)
