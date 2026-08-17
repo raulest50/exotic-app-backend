@@ -60,7 +60,7 @@ public class Lote {
 
     /**
      * Relación opcional con la orden de compra que origina este lote.
-     * Sólo uno de los dos FKs debe estar presente.
+     * Sólo uno de los tres orígenes (compra, producción o fabricación) debe estar presente.
      */
     @ManyToOne
     @JoinColumn(name = "orden_compra_id")
@@ -68,7 +68,7 @@ public class Lote {
 
     /**
      * Relación opcional con la orden de producción que genera este lote de FG.
-     * Sólo uno de los dos FKs debe estar presente.
+     * Sólo uno de los tres orígenes (compra, producción o fabricación) debe estar presente.
      */
     @ManyToOne
     @JoinColumn(name = "orden_produccion_id")

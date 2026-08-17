@@ -35,4 +35,15 @@ public interface SemiTerminadoRepo extends JpaRepository<SemiTerminado, String>,
                                             @Param("threshold") double threshold,
                                             Pageable pageable);
 
+    @Query("""
+            SELECT s FROM SemiTerminado s
+            WHERE s.requiereOrdenFabricacion = true
+              AND (:search IS NULL OR :search = ''
+                   OR LOWER(s.productoId) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR LOWER(s.nombre) LIKE LOWER(CONCAT('%', :search, '%')))
+            """)
+    Page<SemiTerminado> buscarElegiblesOrdenFabricacion(
+            @Param("search") String search,
+            Pageable pageable);
+
 }

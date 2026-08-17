@@ -8,6 +8,8 @@ import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
 import exotic.app.planta.service.produccion.ProduccionService;
 import exotic.app.planta.repo.inventarios.LoteRepo;
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -17,6 +19,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -32,10 +35,15 @@ public class ProduccionResource {
 
     private final ProduccionService produccionService;
     private final LoteRepo loteRepo;
+    private final UserRepository userRepository;
 
     @PostMapping("/save")
-    public ResponseEntity<OrdenProduccion> saveOrdenProduccion(@RequestBody OrdenProduccionDTO_save ordenProduccionDTO){
-        return ResponseEntity.created(URI.create("/ordenes/ordenID")).body(produccionService.saveOrdenProduccion(ordenProduccionDTO));
+    public ResponseEntity<OrdenProduccion> saveOrdenProduccion(
+            Authentication authentication,
+            @RequestBody OrdenProduccionDTO_save ordenProduccionDTO){
+        return ResponseEntity.created(URI.create("/ordenes/ordenID"))
+                .body(produccionService.saveOrdenProduccion(
+                        ordenProduccionDTO, requireAuthenticatedUser(authentication)));
     }
 
     /**
@@ -44,10 +52,12 @@ public class ProduccionResource {
      */
     @PostMapping("/save-multiple")
     public ResponseEntity<List<OrdenProduccion>> saveMultipleOrdenesProduccion(
+            Authentication authentication,
             @RequestBody OrdenProduccionBatchDTO dto) {
         return ResponseEntity
             .created(URI.create("/produccion/save-multiple"))
-            .body(produccionService.saveMultipleOrdenesProduccion(dto));
+            .body(produccionService.saveMultipleOrdenesProduccion(
+                    dto, requireAuthenticatedUser(authentication)));
     }
 
     /**
@@ -131,15 +141,29 @@ public class ProduccionResource {
      * Cancela una orden de producción siempre que esté en estado abierto (0).
      */
     @PutMapping("/orden_produccion/{id}/cancel")
-    public ResponseEntity<?> cancelOrdenProduccion(@PathVariable int id) {
+    public ResponseEntity<?> cancelOrdenProduccion(
+            Authentication authentication,
+            @PathVariable int id) {
         try {
-            OrdenProduccionDTO ordenCancelada = produccionService.cancelarOrdenProduccion(id);
+            OrdenProduccionDTO ordenCancelada = produccionService.cancelarOrdenProduccion(
+                    id, requireAuthenticatedUser(authentication));
             return ResponseEntity.ok(ordenCancelada);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private User requireAuthenticatedUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
     }
 
 

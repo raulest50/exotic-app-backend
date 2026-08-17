@@ -10,6 +10,7 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.ReporteProduccionLoteRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,8 +54,10 @@ class ReporteProduccionLoteServiceTest {
                 ordenRepo,
                 cierreLockService,
                 new VencimientoLoteService(),
+                mock(BatchRecordService.class),
+                mock(BatchRecordRepo.class),
                 clock);
-        when(reporteRepo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reporteRepo.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test

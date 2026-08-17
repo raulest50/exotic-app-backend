@@ -60,6 +60,7 @@ class SeguimientoOrdenAreaServiceTableroTest {
                 mock(ReporteProduccionLoteService.class),
                 mock(UserRepository.class),
                 mock(MasterDirectiveService.class),
+                mock(BatchRecordService.class),
                 Clock.fixed(
                         Instant.parse("2026-07-16T14:00:00Z"),
                         ZoneId.of("America/Bogota")

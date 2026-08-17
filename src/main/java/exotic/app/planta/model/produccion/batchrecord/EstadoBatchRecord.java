@@ -4,6 +4,7 @@ public enum EstadoBatchRecord {
     BORRADOR,
     EN_EJECUCION,
     PENDIENTE_REVISION,
+    DEVUELTO_PRODUCCION,
     APROBADO,
     RECHAZADO,
     CERRADO,

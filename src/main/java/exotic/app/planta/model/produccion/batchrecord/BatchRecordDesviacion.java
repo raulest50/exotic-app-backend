@@ -51,8 +51,25 @@ public class BatchRecordDesviacion {
     @JoinColumn(name = "detectada_por_id", nullable = false)
     private User detectadaPor;
 
+    /** Momento real del evento, que puede ser anterior a su registro tardío. */
+    @Column(name = "ocurrida_en")
+    private LocalDateTime ocurridaEn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private OrigenDesviacionBatchRecord origen;
+
+    @Column(name = "accion_inmediata", columnDefinition = "TEXT")
+    private String accionInmediata;
+
     @Column(name = "evaluacion_impacto", columnDefinition = "TEXT")
     private String evaluacionImpacto;
+
+    @Column(name = "causa_raiz", columnDefinition = "TEXT")
+    private String causaRaiz;
+
+    @Column(name = "acciones_correctivas_preventivas", columnDefinition = "TEXT")
+    private String accionesCorrectivasPreventivas;
 
     @Column(columnDefinition = "TEXT")
     private String resolucion;
@@ -98,5 +115,14 @@ public class BatchRecordDesviacion {
         if (resueltaEn != null && resueltaEn.isBefore(detectadaEn)) {
             throw new IllegalStateException("Una desviación no puede resolverse antes de detectarse.");
         }
+        if (ocurridaEn != null && ocurridaEn.isAfter(detectadaEn)) {
+            throw new IllegalStateException(
+                    "La ocurrencia de una desviación no puede ser posterior a su detección.");
+        }
+    }
+
+    @PreRemove
+    private void impedirEliminacion() {
+        throw new IllegalStateException("Una desviación registrada no puede eliminarse.");
     }
 }

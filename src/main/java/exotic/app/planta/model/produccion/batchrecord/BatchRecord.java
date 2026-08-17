@@ -103,11 +103,11 @@ public class BatchRecord {
     @Column(columnDefinition = "TEXT")
     private String observaciones;
 
-    @OneToMany(mappedBy = "batchRecord", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
     @OrderBy("registradoEn ASC, id ASC")
     private List<BatchRecordConsumo> consumos = new ArrayList<>();
 
-    @OneToMany(mappedBy = "batchRecord", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
     @OrderBy("secuencia ASC, id ASC")
     private List<BatchRecordEtapa> etapas = new ArrayList<>();
 
@@ -115,17 +115,25 @@ public class BatchRecord {
     @OrderBy("fechaRegistro ASC, id ASC")
     private List<ControlProcesoEjecucion> controlesProceso = new ArrayList<>();
 
-    @OneToMany(mappedBy = "batchRecord", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
     @OrderBy("detectadaEn ASC, id ASC")
     private List<BatchRecordDesviacion> desviaciones = new ArrayList<>();
 
-    @OneToMany(mappedBy = "batchRecord", cascade = CascadeType.PERSIST)
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
     @OrderBy("firmadoEn ASC, id ASC")
     private List<BatchRecordFirma> firmas = new ArrayList<>();
 
-    @OneToMany(mappedBy = "batchRecord", cascade = CascadeType.PERSIST)
-    @OrderBy("tipo ASC, versionDocumento ASC")
-    private List<BatchRecordDocumento> documentos = new ArrayList<>();
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
+    @OrderBy("numero ASC")
+    private List<BatchRecordRevision> revisiones = new ArrayList<>();
+
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
+    @OrderBy("corregidaEn ASC, id ASC")
+    private List<BatchRecordCorreccion> correcciones = new ArrayList<>();
+
+    @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
+    @OrderBy("decididaEn ASC, id ASC")
+    private List<BatchRecordDecisionCalidad> decisionesCalidad = new ArrayList<>();
 
     @Version
     @Column(name = "version", nullable = false)
@@ -200,8 +208,7 @@ public class BatchRecord {
         if (contenidoSha256 != null && !contenidoSha256.matches("[0-9A-Fa-f]{64}")) {
             throw new IllegalStateException("El hash del expediente debe ser un SHA-256 válido.");
         }
-        boolean sometidoRevision = estado == EstadoBatchRecord.PENDIENTE_REVISION
-                || estado == EstadoBatchRecord.APROBADO
+        boolean sometidoRevision = estado == EstadoBatchRecord.APROBADO
                 || estado == EstadoBatchRecord.RECHAZADO
                 || estado == EstadoBatchRecord.CERRADO;
         if (sometidoRevision && (cantidadObtenida == null || contenidoSha256 == null)) {

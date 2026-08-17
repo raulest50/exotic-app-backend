@@ -7,6 +7,7 @@ import exotic.app.planta.model.calidad.ControlProcesoLectura;
 import exotic.app.planta.model.calidad.ControlProcesoMuestra;
 import exotic.app.planta.model.calidad.ControlProcesoPlantilla;
 import exotic.app.planta.model.calidad.EstadoControlProcesoPlantilla;
+import exotic.app.planta.model.calidad.ResultadoControlProceso;
 import exotic.app.planta.model.calidad.TipoCaracteristicaControlProceso;
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.AreaOperativaResumen;
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.CaracteristicaRequest;
@@ -26,6 +27,9 @@ import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.ProductoRes
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
+import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
@@ -33,6 +37,8 @@ import exotic.app.planta.repo.calidad.ControlProcesoEjecucionRepo;
 import exotic.app.planta.repo.calidad.ControlProcesoPlantillaRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordEtapaRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
@@ -64,6 +70,8 @@ public class CalidadControlProcesoService {
     private final ControlProcesoEjecucionRepo ejecucionRepo;
     private final AreaProduccionRepo areaProduccionRepo;
     private final LoteRepo loteRepo;
+    private final BatchRecordRepo batchRecordRepo;
+    private final BatchRecordEtapaRepo batchRecordEtapaRepo;
 
     @Transactional(readOnly = true)
     public List<PlantillaResponse> listarPlantillas(Integer areaId, EstadoControlProcesoPlantilla estado) {
@@ -149,23 +157,34 @@ public class CalidadControlProcesoService {
     }
 
     @Transactional(readOnly = true)
-    public PrepararEjecucionResponse prepararEjecucion(Integer areaId, Long loteId) {
+    public PrepararEjecucionResponse prepararEjecucion(
+            Integer areaId,
+            Long loteId,
+            Long batchRecordEtapaId
+    ) {
         if (areaId == null) {
             throw new IllegalArgumentException("Debe seleccionar un area operativa.");
         }
         if (loteId == null) {
             throw new IllegalArgumentException("Debe seleccionar un lote.");
         }
-        ControlProcesoPlantilla plantilla = plantillaRepo
-                .findFirstByAreaOperativa_AreaIdAndEstado(areaId, EstadoControlProcesoPlantilla.VIGENTE)
-                .orElseThrow(() -> new NoSuchElementException("No hay plantilla vigente para el area operativa."));
         Lote lote = loteRepo.findById(loteId)
                 .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
         validarLoteProduccionTerminado(lote);
+        BatchRecord record = batchRecordRepo.findByLoteResultado_Id(loteId).orElse(null);
+        BatchRecordEtapa etapa = resolverEtapaBatchRecord(
+                record, batchRecordEtapaId, areaId, null, false);
+        ControlProcesoPlantilla plantilla = etapa != null
+                ? etapa.getControlProcesoPlantilla()
+                : plantillaRepo.findFirstByAreaOperativa_AreaIdAndEstado(
+                        areaId, EstadoControlProcesoPlantilla.VIGENTE)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No hay plantilla vigente para el area operativa."));
 
         return PrepararEjecucionResponse.builder()
                 .plantilla(toPlantillaResponse(plantilla))
                 .lote(toLoteProduccionResumen(lote))
+                .batchRecordEtapaId(etapa == null ? null : etapa.getId())
                 .build();
     }
 
@@ -180,23 +199,36 @@ public class CalidadControlProcesoService {
 
         ControlProcesoPlantilla plantilla = plantillaRepo.findById(request.getPlantillaId())
                 .orElseThrow(() -> new NoSuchElementException("Plantilla no encontrada."));
-        if (plantilla.getEstado() != EstadoControlProcesoPlantilla.VIGENTE) {
-            throw new IllegalArgumentException("Solo se pueden diligenciar plantillas vigentes.");
-        }
 
         Lote lote = loteRepo.findById(request.getLoteId())
                 .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
         validarLoteProduccionTerminado(lote);
+        BatchRecord record = batchRecordRepo
+                .findByLoteResultadoIdForUpdate(lote.getId())
+                .orElse(null);
+        validarExpedienteAdmiteControl(record);
+        BatchRecordEtapa etapa = resolverEtapaBatchRecord(
+                record,
+                request.getBatchRecordEtapaId(),
+                plantilla.getAreaOperativa().getAreaId(),
+                plantilla,
+                true);
+        if (plantilla.getEstado() != EstadoControlProcesoPlantilla.VIGENTE && etapa == null) {
+            throw new IllegalArgumentException("Solo se pueden diligenciar plantillas vigentes.");
+        }
 
         ControlProcesoEjecucion ejecucion = new ControlProcesoEjecucion();
         ejecucion.setPlantilla(plantilla);
         ejecucion.setLote(lote);
+        ejecucion.setBatchRecord(record);
+        ejecucion.setBatchRecordEtapa(etapa);
         ejecucion.setUsuario(usuario);
         ejecucion.setFechaRegistro(AppTime.now());
         ejecucion.setObservaciones(trimToNull(request.getObservaciones()));
 
         List<ControlProcesoMuestra> muestras = construirMuestrasValidadas(plantilla, ejecucion, request.getMuestras());
         ejecucion.getMuestras().addAll(muestras);
+        ejecucion.setResultado(evaluarResultado(muestras));
 
         return toEjecucionDetalle(ejecucionRepo.saveAndFlush(ejecucion));
     }
@@ -434,6 +466,13 @@ public class CalidadControlProcesoService {
                 .usuarioUsername(ejecucion.getUsuario().getUsername())
                 .usuarioNombreCompleto(ejecucion.getUsuario().getNombreCompleto())
                 .fechaRegistro(ejecucion.getFechaRegistro())
+                .resultado(ejecucion.getResultado())
+                .batchRecordId(ejecucion.getBatchRecord() == null
+                        ? null : ejecucion.getBatchRecord().getId())
+                .batchRecordCodigo(ejecucion.getBatchRecord() == null
+                        ? null : ejecucion.getBatchRecord().getCodigo())
+                .batchRecordEtapaId(ejecucion.getBatchRecordEtapa() == null
+                        ? null : ejecucion.getBatchRecordEtapa().getId())
                 .observaciones(ejecucion.getObservaciones())
                 .build();
     }
@@ -455,6 +494,13 @@ public class CalidadControlProcesoService {
                 .usuarioUsername(ejecucion.getUsuario().getUsername())
                 .usuarioNombreCompleto(ejecucion.getUsuario().getNombreCompleto())
                 .fechaRegistro(ejecucion.getFechaRegistro())
+                .resultado(ejecucion.getResultado())
+                .batchRecordId(ejecucion.getBatchRecord() == null
+                        ? null : ejecucion.getBatchRecord().getId())
+                .batchRecordCodigo(ejecucion.getBatchRecord() == null
+                        ? null : ejecucion.getBatchRecord().getCodigo())
+                .batchRecordEtapaId(ejecucion.getBatchRecordEtapa() == null
+                        ? null : ejecucion.getBatchRecordEtapa().getId())
                 .observaciones(ejecucion.getObservaciones())
                 .muestras(muestras)
                 .build();
@@ -495,17 +541,126 @@ public class CalidadControlProcesoService {
     private LoteProduccionResumen toLoteProduccionResumen(Lote lote) {
         OrdenProduccion orden = lote.getOrdenProduccion();
         Producto producto = orden == null ? null : orden.getProducto();
+        BatchRecord record = lote.getId() == null
+                ? null : batchRecordRepo.findByLoteResultado_Id(lote.getId()).orElse(null);
         return LoteProduccionResumen.builder()
                 .id(lote.getId())
                 .batchNumber(lote.getBatchNumber())
                 .productionDate(lote.getProductionDate())
                 .expirationDate(lote.getExpirationDate())
+                .estadoCalidad(lote.getEstadoCalidad())
                 .ordenProduccionId(orden == null ? null : orden.getOrdenId())
+                .batchRecordId(record == null ? null : record.getId())
+                .batchRecordCodigo(record == null ? null : record.getCodigo())
                 .producto(producto == null ? null : ProductoResumen.builder()
                         .productoId(producto.getProductoId())
                         .nombre(producto.getNombre())
                         .build())
                 .build();
+    }
+
+    private BatchRecordEtapa resolverEtapaBatchRecord(
+            BatchRecord record,
+            Long etapaId,
+            Integer areaId,
+            ControlProcesoPlantilla plantilla,
+            boolean validarPlantillaCongelada
+    ) {
+        if (record == null) {
+            if (etapaId != null) {
+                throw new IllegalArgumentException(
+                        "El lote no tiene expediente digital asociado.");
+            }
+            return null;
+        }
+
+        if (etapaId != null) {
+            BatchRecordEtapa etapa = batchRecordEtapaRepo
+                    .findByIdAndBatchRecord_Id(etapaId, record.getId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "La etapa no pertenece al expediente del lote."));
+            validarEtapaControl(etapa, areaId, plantilla);
+            return etapa;
+        }
+
+        List<BatchRecordEtapa> etapasArea = batchRecordEtapaRepo
+                .findByBatchRecord_IdOrderBySecuenciaAscIdAsc(record.getId())
+                .stream()
+                .filter(etapa -> etapa.getAreaOperativa().getAreaId() == areaId)
+                .filter(etapa -> etapa.getControlProcesoPlantilla() != null)
+                .toList();
+        if (etapasArea.isEmpty()) {
+            return null;
+        }
+
+        List<BatchRecordEtapa> candidatas = plantilla == null
+                ? etapasArea
+                : etapasArea.stream()
+                .filter(etapa -> Objects.equals(
+                        etapa.getControlProcesoPlantilla().getId(), plantilla.getId()))
+                .toList();
+        if (candidatas.size() == 1) {
+            return candidatas.get(0);
+        }
+        if (validarPlantillaCongelada && candidatas.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "La plantilla seleccionada no es la versión congelada en el expediente.");
+        }
+        throw new IllegalArgumentException(
+                "El expediente contiene varias etapas de esta área; seleccione la etapa concreta.");
+    }
+
+    private void validarExpedienteAdmiteControl(BatchRecord record) {
+        if (record == null) return;
+        EstadoBatchRecord estado = record.getEstado();
+        if (estado == EstadoBatchRecord.APROBADO
+                || estado == EstadoBatchRecord.RECHAZADO
+                || estado == EstadoBatchRecord.CERRADO
+                || estado == EstadoBatchRecord.ANULADO) {
+            throw new IllegalStateException(
+                    "No se pueden agregar controles a un expediente con estado " + estado + ".");
+        }
+    }
+
+    private void validarEtapaControl(
+            BatchRecordEtapa etapa,
+            Integer areaId,
+            ControlProcesoPlantilla plantilla
+    ) {
+        if (etapa.getAreaOperativa().getAreaId() != areaId) {
+            throw new IllegalArgumentException("La etapa no corresponde al área seleccionada.");
+        }
+        if (etapa.getControlProcesoPlantilla() == null) {
+            throw new IllegalArgumentException("La etapa no tiene un control de proceso configurado.");
+        }
+        if (plantilla != null && !Objects.equals(
+                etapa.getControlProcesoPlantilla().getId(), plantilla.getId())) {
+            throw new IllegalArgumentException(
+                    "Debe diligenciar la versión de plantilla congelada en el expediente.");
+        }
+    }
+
+    private ResultadoControlProceso evaluarResultado(List<ControlProcesoMuestra> muestras) {
+        for (ControlProcesoMuestra muestra : muestras) {
+            ControlProcesoCaracteristica caracteristica = muestra.getCaracteristica();
+            for (ControlProcesoLectura lectura : muestra.getLecturas()) {
+                if (caracteristica.getTipo() == TipoCaracteristicaControlProceso.BOOLEANA) {
+                    if (!Boolean.TRUE.equals(lectura.getValorBooleano())) {
+                        return ResultadoControlProceso.NO_CONFORME;
+                    }
+                    continue;
+                }
+                Double valor = lectura.getValorNumerico();
+                if (valor == null
+                        || (caracteristica.getLimiteInferior() != null
+                        && valor < caracteristica.getLimiteInferior())
+                        || (caracteristica.getLimiteSuperior() != null
+                        && valor > caracteristica.getLimiteSuperior())) {
+                    return ResultadoControlProceso.NO_CONFORME;
+                }
+            }
+        }
+        return ResultadoControlProceso.CONFORME;
     }
 
     private void validarLoteProduccionTerminado(Lote lote) {

@@ -1,7 +1,9 @@
 package exotic.app.planta.model.calidad.dto;
 
 import exotic.app.planta.model.calidad.EstadoControlProcesoPlantilla;
+import exotic.app.planta.model.calidad.ResultadoControlProceso;
 import exotic.app.planta.model.calidad.TipoCaracteristicaControlProceso;
+import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -43,7 +45,10 @@ public final class CalidadControlProcesoDTOs {
         private String batchNumber;
         private LocalDate productionDate;
         private LocalDate expirationDate;
+        private EstadoCalidadLote estadoCalidad;
         private Integer ordenProduccionId;
+        private Long batchRecordId;
+        private String batchRecordCodigo;
         private ProductoResumen producto;
     }
 
@@ -106,6 +111,7 @@ public final class CalidadControlProcesoDTOs {
     public static class PrepararEjecucionResponse {
         private PlantillaResponse plantilla;
         private LoteProduccionResumen lote;
+        private Long batchRecordEtapaId;
     }
 
     @Data
@@ -135,6 +141,7 @@ public final class CalidadControlProcesoDTOs {
     public static class EjecucionRequest {
         private Long plantillaId;
         private Long loteId;
+        private Long batchRecordEtapaId;
         private String observaciones;
         private List<MuestraRequest> muestras;
     }
@@ -177,6 +184,10 @@ public final class CalidadControlProcesoDTOs {
         private String usuarioUsername;
         private String usuarioNombreCompleto;
         private LocalDateTime fechaRegistro;
+        private ResultadoControlProceso resultado;
+        private Long batchRecordId;
+        private String batchRecordCodigo;
+        private Long batchRecordEtapaId;
         private String observaciones;
     }
 
@@ -193,6 +204,10 @@ public final class CalidadControlProcesoDTOs {
         private String usuarioUsername;
         private String usuarioNombreCompleto;
         private LocalDateTime fechaRegistro;
+        private ResultadoControlProceso resultado;
+        private Long batchRecordId;
+        private String batchRecordCodigo;
+        private Long batchRecordEtapaId;
         private String observaciones;
         private List<MuestraResponse> muestras;
     }

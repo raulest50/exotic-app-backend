@@ -3,6 +3,7 @@ package exotic.app.planta.model.calidad;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
 import exotic.app.planta.model.users.User;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -13,6 +14,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
@@ -52,6 +55,15 @@ public class ControlProcesoEjecucion {
     @JoinColumn(name = "batch_record_id")
     private BatchRecord batchRecord;
 
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_record_etapa_id")
+    private BatchRecordEtapa batchRecordEtapa;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private ResultadoControlProceso resultado;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "usuario_id", nullable = false)
     private User usuario;
@@ -72,6 +84,19 @@ public class ControlProcesoEjecucion {
         if (batchRecord != null && !mismoLote(lote, batchRecord.getLoteResultado())) {
             throw new IllegalStateException(
                     "El control de proceso debe pertenecer al lote de resultado del batch record.");
+        }
+        if (batchRecordEtapa != null) {
+            if (batchRecord == null || batchRecordEtapa.getBatchRecord() == null
+                    || !batchRecord.getId().equals(batchRecordEtapa.getBatchRecord().getId())) {
+                throw new IllegalStateException(
+                        "La etapa del control debe pertenecer al mismo batch record.");
+            }
+            if (batchRecordEtapa.getControlProcesoPlantilla() == null
+                    || !plantilla.getId().equals(
+                    batchRecordEtapa.getControlProcesoPlantilla().getId())) {
+                throw new IllegalStateException(
+                        "El control debe usar la plantilla congelada para la etapa.");
+            }
         }
     }
 

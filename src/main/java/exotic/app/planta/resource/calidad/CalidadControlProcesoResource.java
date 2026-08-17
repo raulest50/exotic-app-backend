@@ -9,11 +9,16 @@ import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.LoteProducc
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.PlantillaRequest;
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.PlantillaResponse;
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.PrepararEjecucionResponse;
+import exotic.app.planta.model.calidad.dto.BatchRecordQualityDTOs;
+import exotic.app.planta.model.produccion.batchrecord.DecisionCalidadBatchRecord;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.calidad.CalidadControlProcesoService;
+import exotic.app.planta.service.calidad.BatchRecordQualityService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -43,8 +48,10 @@ public class CalidadControlProcesoResource {
     private static final String TAB_VERSIONADO = "VERSIONADO_CONTROL_PROCESO";
     private static final String TAB_DILIGENCIAR = "DILIGENCIAR_CONTROL_PROCESO";
     private static final String TAB_HISTORIAL = "HISTORIAL_CONTROL_PROCESO";
+    private static final String TAB_LIBERACION_LOTES = "REVISION_LIBERACION_LOTES";
 
     private final CalidadControlProcesoService service;
+    private final BatchRecordQualityService batchRecordQualityService;
     private final UserRepository userRepository;
 
     @GetMapping("/plantillas")
@@ -107,10 +114,11 @@ public class CalidadControlProcesoResource {
     public PrepararEjecucionResponse prepararEjecucion(
             Authentication authentication,
             @RequestParam Integer areaId,
-            @RequestParam Long loteId
+            @RequestParam Long loteId,
+            @RequestParam(required = false) Long batchRecordEtapaId
     ) {
         requireTabAccess(authentication, TAB_DILIGENCIAR);
-        return service.prepararEjecucion(areaId, loteId);
+        return service.prepararEjecucion(areaId, loteId, batchRecordEtapaId);
     }
 
     @PostMapping("/ejecuciones")
@@ -146,6 +154,43 @@ public class CalidadControlProcesoResource {
         return service.detalleEjecucion(id);
     }
 
+    @GetMapping("/batch-records")
+    public Page<BatchRecordQualityDTOs.InboxItem> bandejaLiberacion(
+            Authentication authentication,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        requireReleaseAccess(authentication, 1);
+        return batchRecordQualityService.bandeja(search, page, size);
+    }
+
+    @GetMapping("/batch-records/{id}")
+    public BatchRecordQualityDTOs.ReviewDetail detalleLiberacion(
+            Authentication authentication,
+            @PathVariable Long id
+    ) {
+        requireReleaseAccess(authentication, 1);
+        return batchRecordQualityService.detalle(id);
+    }
+
+    @PostMapping("/batch-records/{id}/decision")
+    public BatchRecordQualityDTOs.ReviewDetail decidirLiberacion(
+            Authentication authentication,
+            HttpServletRequest servletRequest,
+            @PathVariable Long id,
+            @Valid @RequestBody BatchRecordQualityDTOs.DecisionRequest request
+    ) {
+        int nivel = request.getDecision() == DecisionCalidadBatchRecord.LIBERAR ? 3 : 2;
+        User actor = requireReleaseAccess(authentication, nivel);
+        return batchRecordQualityService.decidir(
+                id,
+                actor,
+                request,
+                servletRequest.getRemoteAddr(),
+                servletRequest.getHeader("User-Agent"));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException ex) {
         return ResponseEntity
@@ -158,6 +203,33 @@ public class CalidadControlProcesoResource {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse("No encontrado", ex.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(IllegalStateException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Conflicto de estado", ex.getMessage()));
+    }
+
+    private User requireReleaseAccess(Authentication authentication, int minNivel) {
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        int nivel = UserAccessEvaluator.tabNivel(
+                user, ModuloSistema.CALIDAD, TAB_LIBERACION_LOTES).orElse(0);
+        if (nivel < minNivel) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "No tiene el nivel requerido para revisar o liberar lotes.");
+        }
+        return user;
     }
 
     private User requireTabAccess(Authentication authentication, String... tabIds) {

@@ -77,7 +77,8 @@ public class MasterProductionScheduleOrderGenerationService {
         }
         log.info("[MPS_SEMANAL] service generarOrdenesDesdeSemanaAprobada pendingLotes mpsId={} count={}", mps.getMpsId(), lotesPendientes.size());
 
-        List<Integer> ordenesIds = generarOrdenesParaLotes(mps, lotesPendientes);
+        List<Integer> ordenesIds = generarOrdenesParaLotes(
+                mps, lotesPendientes, generatedByUsername);
 
         mps.setFechaGeneracionOdps(LocalDateTime.now());
         mps.setGeneradoPorUsername(generatedByUsername);
@@ -108,7 +109,8 @@ public class MasterProductionScheduleOrderGenerationService {
 
     public List<Integer> generarOrdenesParaLotes(
             MasterProductionScheduleSemanal mps,
-            List<MpsSemanalLotePlanificado> lotesPendientes
+            List<MpsSemanalLotePlanificado> lotesPendientes,
+            String generatedByUsername
     ) {
         if (mps == null) {
             throw new IllegalArgumentException("MPS semanal es obligatorio para generar ODPs.");
@@ -126,7 +128,8 @@ public class MasterProductionScheduleOrderGenerationService {
             String productoId = item.getTerminado().getProductoId();
             String loteBatchNumber = nextLotForProduct(productoId, lotesPorProducto);
             OrdenProduccionDTO_save dto = buildOrdenDto(item, lotePlanificado, loteBatchNumber);
-            OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(dto, mps, lotePlanificado);
+            OrdenProduccion orden = produccionService.saveOrdenProduccionDesdeMps(
+                    dto, mps, lotePlanificado, generatedByUsername);
 
             lotePlanificado.setEstado(EstadoMpsSemanalLotePlanificado.ODP_GENERADA);
             lotePlanificado.setOrdenProduccion(orden);

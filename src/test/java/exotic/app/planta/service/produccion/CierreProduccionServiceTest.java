@@ -16,6 +16,7 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.produccion.CierreProduccionRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.ReporteProduccionLoteRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -64,6 +65,8 @@ class CierreProduccionServiceTest {
                 transaccionRepo,
                 cierreLockService,
                 new VencimientoLoteService(),
+                mock(BatchRecordRepo.class),
+                mock(BatchRecordService.class),
                 Clock.fixed(Instant.parse("2026-07-16T14:00:00Z"), ZoneId.of("America/Bogota"))
         );
     }
@@ -124,11 +127,11 @@ class CierreProduccionServiceTest {
     }
 
     @Test
-    void confirmar_rejectsSnapshotThatDoesNotContainEveryPendingReport() {
+    void confirmar_rejectsSnapshotThatContainsAReportNoLongerPending() {
         LocalDate fecha = LocalDate.of(2026, 7, 15);
         ReporteProduccionLote primero = reporte(51L, 0L, fecha, 1001, "LOT-1001");
         ReporteProduccionLote segundo = reporte(52L, 0L, fecha, 1002, "LOT-1002");
-        CierreProduccionRequestDTO request = request(fecha, UUID.randomUUID(), item(51L, 0L, "100", null));
+        CierreProduccionRequestDTO request = request(fecha, UUID.randomUUID(), item(53L, 0L, "100", null));
 
         when(cierreRepo.findByIdempotencyKey(request.getIdempotencyKey())).thenReturn(Optional.empty());
         when(reporteRepo.findPendientesByFechaForUpdate(fecha, ReporteProduccionLote.Estado.PENDIENTE))

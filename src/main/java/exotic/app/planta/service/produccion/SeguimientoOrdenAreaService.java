@@ -81,6 +81,7 @@ public class SeguimientoOrdenAreaService {
     private final ReporteProduccionLoteService reporteProduccionLoteService;
     private final UserRepository userRepository;
     private final MasterDirectiveService masterDirectiveService;
+    private final BatchRecordService batchRecordService;
     private final Clock applicationClock;
 
     /**
@@ -349,6 +350,7 @@ public class SeguimientoOrdenAreaService {
         EstadoSeguimientoOrdenArea estadoDestino = EstadoSeguimientoOrdenArea.fromCode(targetEstado);
         validarEstadosCorreccion(seguimiento, estadoOrigen, estadoDestino);
         validarDependenciasCorreccion(seguimiento, estadoDestino);
+        batchRecordService.validarCorreccionPermitida(seguimiento);
         if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
                 && estadoOrigen != EstadoSeguimientoOrdenArea.COMPLETADO
                 && esNodoFinalConRutaValida(seguimiento, true)) {
@@ -1066,7 +1068,8 @@ public class SeguimientoOrdenAreaService {
         evento.setEventoRevertido(eventoRevertido);
         evento.setUsuario(actor);
         evento.setNota(normalizeNota(nota));
-        seguimientoEventoRepo.save(evento);
+        SeguimientoOrdenAreaEvento eventoGuardado = seguimientoEventoRepo.saveAndFlush(evento);
+        batchRecordService.sincronizarEventoSeguimiento(eventoGuardado);
     }
 
     private User requireUser(Long userId) {

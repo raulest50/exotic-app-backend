@@ -111,6 +111,10 @@ public class MonitoreoAreasOperativasResource {
             log.warn("Correccion administrativa invalida para area {} seguimiento {}: {}", areaId, seguimientoId, e.getMessage());
             return ResponseEntity.badRequest()
                     .body(new ErrorResponse("Correccion administrativa invalida", e.getMessage()));
+        } catch (IllegalStateException e) {
+            log.warn("Correccion administrativa bloqueada para area {} seguimiento {}: {}", areaId, seguimientoId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new ErrorResponse("Correccion administrativa no permitida", e.getMessage()));
         }
     }
 

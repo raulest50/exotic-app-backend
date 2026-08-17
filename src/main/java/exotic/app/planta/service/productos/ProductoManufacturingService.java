@@ -66,6 +66,7 @@ public class ProductoManufacturingService {
         productoCostoService.registrarCostoInicial(
                 saved,
                 ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION));
+        saveManufacturingSnapshot(saved);
         log.info(
                 "[PRODUCTOS_MANUFACTURING] service create persisted productoId={} entityType={} insumos={} procesoNodes={} procesoEdges={}",
                 saved.getProductoId(),
@@ -183,6 +184,14 @@ public class ProductoManufacturingService {
 
         if (dto.getCasePack() != null) {
             throw new IllegalArgumentException("Solo los terminados pueden tener case pack");
+        }
+        SemiTerminado semiTerminado = (SemiTerminado) producto;
+        boolean requiereOrden = dto.getRequiereOrdenFabricacion() != null
+                ? dto.getRequiereOrdenFabricacion()
+                : semiTerminado.isRequiereOrdenFabricacion();
+        semiTerminado.setRequiereOrdenFabricacion(requiereOrden);
+        if (requiereOrden) {
+            semiTerminado.setInventareable(true);
         }
     }
 
@@ -520,6 +529,8 @@ public class ProductoManufacturingService {
                 dto.setCategoriaNombre(terminado.getCategoria().getCategoriaNombre());
             }
             dto.setCasePack(toCasePackDTO(terminado.getCasePack()));
+        } else if (producto instanceof SemiTerminado semiTerminado) {
+            dto.setRequiereOrdenFabricacion(semiTerminado.isRequiereOrdenFabricacion());
         }
 
         return dto;

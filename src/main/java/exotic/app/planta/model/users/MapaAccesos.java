@@ -31,7 +31,12 @@ public final class MapaAccesos {
         TABS_POR_MODULO.put(ModuloSistema.ORGANIGRAMA, Set.of("ORGANIGRAMA", "MISION_VISION"));
         TABS_POR_MODULO.put(
                 ModuloSistema.CALIDAD,
-                Set.of("VERSIONADO_CONTROL_PROCESO", "DILIGENCIAR_CONTROL_PROCESO", "HISTORIAL_CONTROL_PROCESO")
+                Set.of(
+                        "VERSIONADO_CONTROL_PROCESO",
+                        "DILIGENCIAR_CONTROL_PROCESO",
+                        "HISTORIAL_CONTROL_PROCESO",
+                        "REVISION_LIBERACION_LOTES"
+                )
         );
         TABS_POR_MODULO.put(ModuloSistema.PAGOS_PROVEEDORES, Set.of("ASENTAR_TRANSACCIONES_ALMACEN", "FACTURAS_VENCIDAS"));
         TABS_POR_MODULO.put(ModuloSistema.PERSONAL_PLANTA, Set.of("INCORPORACION", "CONSULTA"));
@@ -44,7 +49,9 @@ public final class MapaAccesos {
                         "PLANEACION_PRODUCCION",
                         "PROGRAMACION_PRODUCCION",
                         "MONITOREAR_AREAS_OPERATIVAS",
-                        "APROBACION_MPS_WEEK"
+                        "APROBACION_MPS_WEEK",
+                        "CONSULTAR_BATCH_RECORD",
+                        "CREAR_ORDEN_FABRICACION"
                 )
         );
         TABS_POR_MODULO.put(ModuloSistema.PROVEEDORES, Set.of("CODIFICAR_PROVEEDOR", "CONSULTAR_PROVEEDORES"));

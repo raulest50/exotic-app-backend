@@ -10,6 +10,7 @@ import exotic.app.planta.model.produccion.MpsSemanalDia;
 import exotic.app.planta.model.produccion.MpsSemanalItem;
 import exotic.app.planta.model.produccion.MpsSemanalLotePlanificado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemCreateRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalAprobadoItemEditRequestDTO;
 import exotic.app.planta.model.produccion.dto.MpsSemanalDraftDTO;
@@ -19,6 +20,7 @@ import exotic.app.planta.repo.produccion.MpsSemanalDiaRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalItemRepo;
 import exotic.app.planta.repo.produccion.MpsSemanalLotePlanificadoRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +53,7 @@ public class MpsSemanalAprobadoEditService {
     private final MasterProductionScheduleOrderGenerationService orderGenerationService;
     private final MasterProductionScheduleDraftService draftService;
     private final MpsSemanalOrdenInicioPolicyService ordenInicioPolicyService;
+    private final UserRepository userRepository;
     private final Clock applicationClock;
 
     public MpsSemanalDraftDTO editarItemAprobado(
@@ -90,9 +93,9 @@ public class MpsSemanalAprobadoEditService {
         }
 
         if (desiredLotes < currentActiveLotes) {
-            cancelExcessLotes(activeLotes, currentActiveLotes - desiredLotes);
+            cancelExcessLotes(activeLotes, currentActiveLotes - desiredLotes, editedByUsername);
         } else if (desiredLotes > currentActiveLotes) {
-            addLotes(item, mps, desiredLotes - currentActiveLotes);
+            addLotes(item, mps, desiredLotes - currentActiveLotes, editedByUsername);
         }
 
         item.setNumeroLotes(desiredLotes);
@@ -154,7 +157,7 @@ public class MpsSemanalAprobadoEditService {
         List<MpsSemanalLotePlanificado> newLotes = getActiveLotes(savedItem);
 
         if (mps.getEstado() == EstadoMpsSemanal.CERRADO || mps.getFechaGeneracionOdps() != null) {
-            orderGenerationService.generarOrdenesParaLotes(mps, newLotes);
+            orderGenerationService.generarOrdenesParaLotes(mps, newLotes, editedByUsername);
             mps.setFechaGeneracionOdps(mps.getFechaGeneracionOdps() != null
                     ? mps.getFechaGeneracionOdps()
                     : LocalDateTime.now(applicationClock));
@@ -356,7 +359,11 @@ public class MpsSemanalAprobadoEditService {
         }
     }
 
-    private void cancelExcessLotes(List<MpsSemanalLotePlanificado> activeLotes, int quantityToCancel) {
+    private void cancelExcessLotes(
+            List<MpsSemanalLotePlanificado> activeLotes,
+            int quantityToCancel,
+            String editedByUsername
+    ) {
         List<MpsSemanalLotePlanificado> lotesToCancel = activeLotes.stream()
                 .filter(this::isLoteCancelable)
                 .sorted(Comparator.comparingInt(MpsSemanalLotePlanificado::getLoteOrdinal).reversed())
@@ -373,14 +380,21 @@ public class MpsSemanalAprobadoEditService {
                 if (!ordenInicioPolicyService.isOrdenCancelable(orden)) {
                     throw new IllegalStateException("La OP " + orden.getOrdenId() + " no es cancelable.");
                 }
-                produccionService.cancelarOrdenProduccion(orden.getOrdenId());
+                produccionService.cancelarOrdenProduccion(
+                        orden.getOrdenId(),
+                        requireUser(editedByUsername));
             }
             lote.setEstado(EstadoMpsSemanalLotePlanificado.CANCELADO);
             mpsSemanalLotePlanificadoRepo.save(lote);
         }
     }
 
-    private void addLotes(MpsSemanalItem item, MasterProductionScheduleSemanal mps, int quantityToAdd) {
+    private void addLotes(
+            MpsSemanalItem item,
+            MasterProductionScheduleSemanal mps,
+            int quantityToAdd,
+            String editedByUsername
+    ) {
         int nextOrdinal = item.getLotesPlanificados().stream()
                 .mapToInt(MpsSemanalLotePlanificado::getLoteOrdinal)
                 .max()
@@ -398,7 +412,7 @@ public class MpsSemanalAprobadoEditService {
         }
 
         if (mps.getEstado() == EstadoMpsSemanal.CERRADO || mps.getFechaGeneracionOdps() != null) {
-            orderGenerationService.generarOrdenesParaLotes(mps, newLotes);
+            orderGenerationService.generarOrdenesParaLotes(mps, newLotes, editedByUsername);
             mps.setFechaGeneracionOdps(mps.getFechaGeneracionOdps() != null
                     ? mps.getFechaGeneracionOdps()
                     : LocalDateTime.now(applicationClock));
@@ -415,6 +429,15 @@ public class MpsSemanalAprobadoEditService {
             orden.setFechaFinalPlanificada(item.getFechaFinalPlanificada().atStartOfDay());
             ordenProduccionRepo.save(orden);
         }
+    }
+
+    private User requireUser(String username) {
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("El usuario que edita el MPS es obligatorio.");
+        }
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Usuario editor del MPS no encontrado: " + username));
     }
 
     private int nextDisplayOrder(MpsSemanalDia targetDia, Long movingItemId) {

@@ -61,4 +61,6 @@ public interface LoteRepo extends JpaRepository<Lote, Long> {
      * @return Lista de lotes que referencian esa orden
      */
     List<Lote> findByOrdenProduccion_OrdenId(int ordenId);
+
+    List<Lote> findByOrdenFabricacion_OrdenFabricacionId(Long ordenFabricacionId);
 }

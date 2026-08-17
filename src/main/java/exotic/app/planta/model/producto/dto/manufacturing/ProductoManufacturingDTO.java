@@ -20,6 +20,7 @@ public class ProductoManufacturingDTO {
     private String tipoUnidades;
     private Double cantidadUnidad;
     private Boolean inventareable;
+    private Boolean requiereOrdenFabricacion;
     private Integer categoriaId;
     private String categoriaNombre;
     private Integer status;

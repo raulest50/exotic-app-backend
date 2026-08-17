@@ -1,6 +1,8 @@
 package exotic.app.planta.model.produccion.batchrecord;
 
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
+import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,9 +36,24 @@ public class BatchRecordFirma {
     private User firmante;
 
     /** Etapa concreta firmada al declarar el cierre de un área. */
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_record_etapa_id", unique = true, updatable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_record_etapa_id", updatable = false)
     private BatchRecordEtapa etapa;
+
+    /** Evento exacto que se firmó; permite múltiples ejecuciones históricas de una etapa. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seguimiento_evento_id", unique = true, updatable = false)
+    private SeguimientoOrdenAreaEvento seguimientoEvento;
+
+    /** Revisión documental exacta protegida por la firma, si su alcance es global. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_record_revision_id", updatable = false)
+    private BatchRecordRevision revision;
+
+    /** Versión visual vigente al firmar; es opcional y nunca autentica por sí misma. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "firma_visual_version_id", updatable = false)
+    private FirmaVisualUsuarioVersion firmaVisualVersion;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30, updatable = false)
@@ -94,9 +111,18 @@ public class BatchRecordFirma {
             throw new IllegalStateException("La firma electrónica está incompleta.");
         }
         boolean firmaEtapa = alcance == AlcanceFirmaBatchRecord.CIERRE_ETAPA_AREA;
-        if (firmaEtapa != (etapa != null)) {
+        if (firmaEtapa != (etapa != null) || firmaEtapa != (seguimientoEvento != null)) {
             throw new IllegalStateException(
                     "Solo una firma de cierre de área puede y debe referenciar una etapa.");
+        }
+        if (firmaEtapa && (revision != null
+                || etapa.getSeguimientoEventoOrigen() != seguimientoEvento)) {
+            throw new IllegalStateException(
+                    "La firma de etapa debe referenciar su evento operativo vigente y no una revisión global.");
+        }
+        if (!firmaEtapa && revision == null) {
+            throw new IllegalStateException(
+                    "Una firma global del expediente debe referenciar una revisión documental.");
         }
         if (etapa != null && etapa.getBatchRecord() != batchRecord) {
             Long recordId = batchRecord.getId();
@@ -124,7 +150,9 @@ public class BatchRecordFirma {
         if (!esHashSha256(hashContenidoFirmado) || !"SHA-256".equalsIgnoreCase(algoritmoHash)) {
             throw new IllegalStateException("La firma debe proteger contenido mediante un hash SHA-256 válido.");
         }
-        String hashEsperado = etapa != null ? etapa.getContenidoSha256() : batchRecord.getContenidoSha256();
+        String hashEsperado = etapa != null
+                ? etapa.getContenidoSha256()
+                : revision.getContenidoSha256();
         if (hashEsperado == null || !hashEsperado.equalsIgnoreCase(hashContenidoFirmado)) {
             throw new IllegalStateException(
                     "El hash firmado no corresponde al contenido vigente de la etapa o expediente.");
@@ -133,8 +161,12 @@ public class BatchRecordFirma {
                 || esBlanco(cedulaFirmante) || esBlanco(rolFirmante) || esBlanco(manifestacion)) {
             throw new IllegalStateException("La identidad y manifestación del firmante son obligatorias.");
         }
+        String nombreEsperado = firmante.getNombreCompleto() != null
+                && !firmante.getNombreCompleto().isBlank()
+                ? firmante.getNombreCompleto()
+                : firmante.getUsername();
         if (!usernameFirmante.equals(firmante.getUsername())
-                || !nombreFirmante.equals(firmante.getNombreCompleto())
+                || !nombreFirmante.equals(nombreEsperado)
                 || !cedulaFirmante.equals(Long.toString(firmante.getCedula()))) {
             throw new IllegalStateException("El snapshot de identidad no corresponde al usuario firmante.");
         }

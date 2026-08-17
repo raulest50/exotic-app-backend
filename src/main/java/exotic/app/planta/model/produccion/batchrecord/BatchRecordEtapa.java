@@ -1,5 +1,6 @@
 package exotic.app.planta.model.produccion.batchrecord;
 
+import exotic.app.planta.model.calidad.ControlProcesoPlantilla;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
@@ -43,6 +44,16 @@ public class BatchRecordEtapa {
     @JoinColumn(name = "area_operativa_id", nullable = false)
     private AreaOperativa areaOperativa;
 
+    /** Proyección operativa que gobierna la etapa, cuando proviene de una OP. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seguimiento_orden_area_id", unique = true)
+    private SeguimientoOrdenArea seguimientoOrdenArea;
+
+    /** Plantilla vigente congelada al crear el expediente; nula si no aplica control. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "control_proceso_plantilla_id")
+    private ControlProcesoPlantilla controlProcesoPlantilla;
+
     /** Evento fuente del panel operativo, si la etapa se originó allí. */
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seguimiento_evento_origen_id", unique = true)
@@ -84,6 +95,20 @@ public class BatchRecordEtapa {
     private void validarInvariantes() {
         if (batchRecord == null || areaOperativa == null || nombre == null || nombre.isBlank()) {
             throw new IllegalStateException("El expediente, área y nombre de la etapa son obligatorios.");
+        }
+        if (seguimientoOrdenArea != null) {
+            if (!mismaArea(seguimientoOrdenArea.getAreaOperativa(), areaOperativa)
+                    || batchRecord.getOrdenProduccion() == null
+                    || seguimientoOrdenArea.getOrdenProduccion().getOrdenId()
+                    != batchRecord.getOrdenProduccion().getOrdenId()) {
+                throw new IllegalStateException(
+                        "El seguimiento operativo no corresponde a la etapa del expediente.");
+            }
+        }
+        if (controlProcesoPlantilla != null
+                && !mismaArea(controlProcesoPlantilla.getAreaOperativa(), areaOperativa)) {
+            throw new IllegalStateException(
+                    "La plantilla de control no corresponde al área de la etapa.");
         }
         if (secuencia < 0 || estado == null) {
             throw new IllegalStateException("La secuencia y estado de la etapa no son válidos.");

@@ -1,6 +1,8 @@
 package exotic.app.planta.model.produccion.dto;
 
+import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.producto.UnidadTiempoVencimiento;
+import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -36,5 +38,11 @@ public class ReporteProduccionPendientesDTO {
         private Integer vidaUtilCantidadAplicada;
         private UnidadTiempoVencimiento vidaUtilUnidadAplicada;
         private LocalDate fechaVencimientoSugerida;
+        private EstadoCalidadLote estadoCalidad;
+        private Long batchRecordId;
+        private EstadoBatchRecord batchRecordEstado;
+        private boolean expedienteDigital;
+        private boolean puedeIngresar;
+        private String motivoBloqueo;
     }
 }

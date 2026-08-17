@@ -4,12 +4,15 @@ import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.ReporteProduccionLote;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
 import exotic.app.planta.model.produccion.dto.ReporteProduccionPendientesDTO;
 import exotic.app.planta.model.produccion.dto.ReporteProduccionPendientesResumenDTO;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.ReporteProduccionLoteRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,8 @@ public class ReporteProduccionLoteService {
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final ProduccionCierreLockService cierreLockService;
     private final VencimientoLoteService vencimientoLoteService;
+    private final BatchRecordService batchRecordService;
+    private final BatchRecordRepo batchRecordRepo;
     private final Clock applicationClock;
 
     public ReporteProduccionLote registrarPendiente(
@@ -56,9 +61,27 @@ public class ReporteProduccionLoteService {
                 orden.getOrdenId(), ReporteProduccionLote.Estado.ANULADO)) {
             throw new IllegalStateException("La orden ya tiene un reporte de produccion activo.");
         }
+        boolean expedienteDigital = batchRecordRepo
+                .findByOrdenProduccion_OrdenId(orden.getOrdenId())
+                .isPresent();
 
         Lote lote = resolverLoteUnico(orden);
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        lote.setProductionDate(fechaProduccion);
+        LocalDate vencimiento = vencimientoLoteService.calcularFechaSugerida(
+                lote, fechaProduccion);
+        if (vencimiento != null) {
+            lote.setExpirationDate(vencimiento);
+        } else if (expedienteDigital && lote.getExpirationDate() == null) {
+            throw new IllegalStateException(
+                    "El producto terminado no tiene una vida útil configurada. "
+                            + "Defínala en los parámetros de su categoría antes de cerrar el área final.");
+        }
+        if (lote.getExpirationDate() != null) {
+            vencimientoLoteService.validarFechaConfirmada(
+                    fechaProduccion, lote.getExpirationDate());
+        }
+        loteRepo.save(lote);
 
         ReporteProduccionLote reporte = new ReporteProduccionLote();
         reporte.setOrdenProduccion(orden);
@@ -74,7 +97,11 @@ public class ReporteProduccionLoteService {
         orden.setEstadoOrden(ESTADO_FABRICACION_COMPLETADA);
         orden.setFechaFinal(ahora);
         ordenProduccionRepo.save(orden);
-        return reporteRepo.save(reporte);
+        ReporteProduccionLote guardado = reporteRepo.saveAndFlush(reporte);
+        if (expedienteDigital) {
+            batchRecordService.enviarARevisionCalidad(orden, cantidad, actor);
+        }
+        return guardado;
     }
 
     public void anularPendientePorSeguimiento(SeguimientoOrdenArea seguimiento, User actor, String motivo) {
@@ -156,6 +183,21 @@ public class ReporteProduccionLoteService {
     private ReporteProduccionPendientesDTO.ItemDTO toPendienteDTO(ReporteProduccionLote reporte) {
         OrdenProduccion orden = reporte.getOrdenProduccion();
         Lote lote = reporte.getLote();
+        BatchRecord record = batchRecordRepo.findByOrdenProduccion_OrdenId(
+                orden.getOrdenId()).orElse(null);
+        boolean puedeIngresar = record == null
+                || (record.getEstado() == EstadoBatchRecord.APROBADO
+                && lote.getEstadoCalidad()
+                == exotic.app.planta.model.inventarios.EstadoCalidadLote.LIBERADO);
+        String motivoBloqueo = null;
+        if (record != null && !puedeIngresar) {
+            motivoBloqueo = switch (record.getEstado()) {
+                case RECHAZADO -> "Lote rechazado por Calidad";
+                case DEVUELTO_PRODUCCION -> "Devuelto a Producción para ajuste o corrección";
+                case ANULADO -> "Expediente anulado";
+                default -> "Pendiente de liberación por Calidad";
+            };
+        }
         return new ReporteProduccionPendientesDTO.ItemDTO(
                 reporte.getId(),
                 reporte.getVersion(),
@@ -175,7 +217,13 @@ public class ReporteProduccionLoteService {
                 lote.getExpirationDate() != null
                         ? lote.getExpirationDate()
                         : vencimientoLoteService.calcularFechaSugerida(
-                                lote, reporte.getFechaProduccion())
+                                lote, reporte.getFechaProduccion()),
+                lote.getEstadoCalidad(),
+                record == null ? null : record.getId(),
+                record == null ? null : record.getEstado(),
+                record != null,
+                puedeIngresar,
+                motivoBloqueo
         );
     }
 

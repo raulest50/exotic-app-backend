@@ -6,12 +6,15 @@ import exotic.app.planta.repo.ventas.VendedorRepository;
 import org.springframework.transaction.annotation.Transactional;
 import exotic.app.planta.model.contabilidad.AsientoContable;
 import exotic.app.planta.model.inventarios.Lote;
+import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
+import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.manufacturing.procesos.nodo.NodoProceso;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
@@ -29,7 +32,9 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.*;
@@ -72,12 +77,20 @@ public class ProduccionService {
     private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
     private final MasterDirectiveService masterDirectiveService;
     private final VencimientoLoteService vencimientoLoteService;
+    private final ManufacturingVersionRepo manufacturingVersionRepo;
+    private final UserRepository userRepository;
+    private final BatchRecordService batchRecordService;
     private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
-    public OrdenProduccion saveOrdenProduccion(OrdenProduccionDTO_save ordenProduccionDTO) {
+    public OrdenProduccion saveOrdenProduccion(
+            OrdenProduccionDTO_save ordenProduccionDTO,
+            User actor
+    ) {
         Producto producto = productoRepo.findById(ordenProduccionDTO.getProductoId())
             .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
+        ManufacturingVersions manufacturingVersion = resolverVersionManufactura(producto);
+        String loteNumero = requireLote(ordenProduccionDTO.getLoteBatchNumber());
 
         Long vendedorResponsableId = ordenProduccionDTO.getVendedorResponsableId();
         Vendedor vendedorResponsable = null;
@@ -93,19 +106,18 @@ public class ProduccionService {
         ordenProduccion.setAreaOperativa(ordenProduccionDTO.getAreaOperativa());
         ordenProduccion.setDepartamentoOperativo(ordenProduccionDTO.getDepartamentoOperativo());
         ordenProduccion.setVendedorResponsable(vendedorResponsable);
+        ordenProduccion.setManufacturingVersion(manufacturingVersion);
         aplicarPoliticaDispensacionInicial(ordenProduccion);
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-        if (ordenProduccionDTO.getLoteBatchNumber() != null && !ordenProduccionDTO.getLoteBatchNumber().isBlank()) {
-            Lote lote = crearLoteProduccion(
-                    ordenProduccionDTO.getLoteBatchNumber(), savedOrden, producto);
-            savedOrden.setLoteAsignado(lote.getBatchNumber());
-            ordenProduccionRepo.save(savedOrden);
-        }
+        Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
+        savedOrden.setLoteAsignado(lote.getBatchNumber());
+        ordenProduccionRepo.save(savedOrden);
 
         // Inicializar seguimiento por áreas operativas
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
+        batchRecordService.crearParaOrdenProduccion(savedOrden, lote, requireActor(actor));
 
         return savedOrden;
     }
@@ -115,9 +127,14 @@ public class ProduccionService {
      * lote recibido. Si cualquier lote ya existe, toda la operación hace rollback.
      */
     @Transactional(rollbackFor = Exception.class)
-    public List<OrdenProduccion> saveMultipleOrdenesProduccion(OrdenProduccionBatchDTO dto) {
+    public List<OrdenProduccion> saveMultipleOrdenesProduccion(
+            OrdenProduccionBatchDTO dto,
+            User actor
+    ) {
         Producto producto = productoRepo.findById(dto.getProductoId())
             .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + dto.getProductoId()));
+        ManufacturingVersions manufacturingVersion = resolverVersionManufactura(producto);
+        User creador = requireActor(actor);
 
         Long vendedorResponsableId = dto.getVendedorResponsableId();
         Vendedor vendedorResponsable = null;
@@ -133,6 +150,7 @@ public class ProduccionService {
 
         List<OrdenProduccion> savedOrdenes = new ArrayList<>();
         for (String loteBatchNumber : loteBatchNumbers) {
+            String loteNumero = requireLote(loteBatchNumber);
             OrdenProduccion ordenProduccion = new OrdenProduccion(
                 producto, dto.getObservaciones(), dto.getCantidadProducir());
             ordenProduccion.setFechaLanzamiento(dto.getFechaLanzamiento());
@@ -141,18 +159,18 @@ public class ProduccionService {
             ordenProduccion.setAreaOperativa(dto.getAreaOperativa());
             ordenProduccion.setDepartamentoOperativo(dto.getDepartamentoOperativo());
             ordenProduccion.setVendedorResponsable(vendedorResponsable);
+            ordenProduccion.setManufacturingVersion(manufacturingVersion);
             aplicarPoliticaDispensacionInicial(ordenProduccion);
 
             OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-            if (loteBatchNumber != null && !loteBatchNumber.isBlank()) {
-                Lote lote = crearLoteProduccion(loteBatchNumber, savedOrden, producto);
-                savedOrden.setLoteAsignado(lote.getBatchNumber());
-                ordenProduccionRepo.save(savedOrden);
-            }
+            Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
+            savedOrden.setLoteAsignado(lote.getBatchNumber());
+            ordenProduccionRepo.save(savedOrden);
 
             // Inicializar seguimiento por áreas operativas
             seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
+            batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
 
             savedOrdenes.add(savedOrden);
         }
@@ -375,6 +393,10 @@ public class ProduccionService {
             throw new IllegalArgumentException(
                     "El cierre de una orden de produccion solo puede realizarse desde el reporte de producto terminado.");
         }
+        if (estadoOrden == -1) {
+            throw new IllegalArgumentException(
+                    "Use la operación de cancelación para anular una orden de producción.");
+        }
         ordenProduccionRepo.updateEstadoOrdenById(ordenId, estadoOrden, LocalDateTime.now(applicationClock));
 
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId).orElseThrow(() -> new RuntimeException("OrdenProduccion not found"));
@@ -388,7 +410,7 @@ public class ProduccionService {
      * @return DTO actualizado de la orden cancelada
      */
     @Transactional
-    public OrdenProduccionDTO cancelarOrdenProduccion(int ordenId) {
+    public OrdenProduccionDTO cancelarOrdenProduccion(int ordenId, User actor) {
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId)
             .orElseThrow(() -> new IllegalArgumentException("Orden de producción no encontrada con ID: " + ordenId));
 
@@ -402,6 +424,7 @@ public class ProduccionService {
         }
 
         ordenProduccionRepo.save(ordenProduccion);
+        batchRecordService.anularPorCancelacion(ordenProduccion, requireActor(actor));
         return convertToDto(ordenProduccion);
     }
 
@@ -579,10 +602,16 @@ public class ProduccionService {
     public OrdenProduccion saveOrdenProduccionDesdeMps(
             OrdenProduccionDTO_save ordenProduccionDTO,
             MasterProductionScheduleSemanal mpsSemanal,
-            MpsSemanalLotePlanificado lotePlanificado
+            MpsSemanalLotePlanificado lotePlanificado,
+            String generatedByUsername
     ) {
         Producto producto = productoRepo.findById(ordenProduccionDTO.getProductoId())
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
+        ManufacturingVersions manufacturingVersion = resolverVersionManufactura(producto);
+        String loteNumero = requireLote(ordenProduccionDTO.getLoteBatchNumber());
+        User creador = userRepository.findByUsername(generatedByUsername)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Usuario generador del MPS no encontrado: " + generatedByUsername));
 
         Long vendedorResponsableId = ordenProduccionDTO.getVendedorResponsableId();
         Vendedor vendedorResponsable = null;
@@ -600,18 +629,17 @@ public class ProduccionService {
         ordenProduccion.setVendedorResponsable(vendedorResponsable);
         ordenProduccion.setMpsSemanal(mpsSemanal);
         ordenProduccion.setMpsLotePlanificado(lotePlanificado);
+        ordenProduccion.setManufacturingVersion(manufacturingVersion);
         aplicarPoliticaDispensacionInicial(ordenProduccion);
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-        if (ordenProduccionDTO.getLoteBatchNumber() != null && !ordenProduccionDTO.getLoteBatchNumber().isBlank()) {
-            Lote lote = crearLoteProduccion(
-                    ordenProduccionDTO.getLoteBatchNumber(), savedOrden, producto);
-            savedOrden.setLoteAsignado(lote.getBatchNumber());
-            ordenProduccionRepo.save(savedOrden);
-        }
+        Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
+        savedOrden.setLoteAsignado(lote.getBatchNumber());
+        ordenProduccionRepo.save(savedOrden);
 
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
+        batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
         return savedOrden;
     }
 
@@ -631,8 +659,42 @@ public class ProduccionService {
         lote.setBatchNumber(batchNumber);
         lote.setOrdenProduccion(ordenProduccion);
         lote.setProducto(producto);
+        lote.setEstadoCalidad(EstadoCalidadLote.CUARENTENA);
         vencimientoLoteService.copiarPoliticaVigente(producto, lote);
+        if (lote.getVidaUtilCantidadAplicada() == null
+                || lote.getVidaUtilUnidadAplicada() == null) {
+            throw new IllegalStateException(
+                    "El producto terminado no tiene una vida útil configurada en su categoría. "
+                            + "Defínala antes de emitir la orden de producción.");
+        }
         return loteRepo.save(lote);
+    }
+
+    private ManufacturingVersions resolverVersionManufactura(Producto producto) {
+        if (!(producto instanceof Terminado)) {
+            throw new IllegalArgumentException(
+                    "Una orden de producción debe generar un producto terminado.");
+        }
+        return manufacturingVersionRepo.findTopByProductoOrderByVersionNumberDesc(producto)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El producto " + producto.getProductoId()
+                                + " no tiene una versión de manufactura disponible."));
+    }
+
+    private String requireLote(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    "El número de lote es obligatorio para crear el expediente digital.");
+        }
+        return value.trim();
+    }
+
+    private User requireActor(User actor) {
+        if (actor == null) {
+            throw new IllegalArgumentException(
+                    "Se requiere un usuario autenticado para crear el expediente digital.");
+        }
+        return actor;
     }
 
     private void aplicarPoliticaDispensacionInicial(OrdenProduccion ordenProduccion) {
