@@ -2,6 +2,7 @@ package exotic.app.planta.service.produccion;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.itextpdf.text.BadElementException;
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Chunk;
 import com.itextpdf.text.Document;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -225,7 +227,8 @@ public class BatchRecordPdfService {
         }
     }
 
-    private void addFirmaVisual(Document document, JsonNode idNode) {
+    private void addFirmaVisual(Document document, JsonNode idNode)
+            throws DocumentException {
         if (!idNode.canConvertToLong()) return;
         FirmaVisualUsuarioVersion firma = firmaVisualRepo.findById(idNode.longValue()).orElse(null);
         addFirmaVisual(document, firma);
@@ -266,21 +269,25 @@ public class BatchRecordPdfService {
     private void addFirmaVisual(
             Document document,
             FirmaVisualUsuarioVersion firma
-    ) {
+    ) throws DocumentException {
         if (firma == null || firma.getContenido() == null || firma.getContenido().length == 0) return;
+
+        Image image;
         try {
-            Image image = Image.getInstance(firma.getContenido());
-            image.scaleToFit(150, 60);
-            image.setAlignment(Element.ALIGN_LEFT);
-            document.add(image);
-            document.add(new Paragraph(
-                    "Representación visual opcional · versión " + firma.getVersion(),
-                    font(7, Font.ITALIC, BaseColor.GRAY)));
-        } catch (Exception ignored) {
+            image = Image.getInstance(firma.getContenido());
+        } catch (BadElementException | IOException exception) {
             document.add(new Paragraph(
                     "La representación visual de la firma no pudo renderizarse; la evidencia electrónica permanece en el expediente.",
                     font(7, Font.ITALIC, BaseColor.GRAY)));
+            return;
         }
+
+        image.scaleToFit(150, 60);
+        image.setAlignment(Element.ALIGN_LEFT);
+        document.add(image);
+        document.add(new Paragraph(
+                "Representación visual opcional · versión " + firma.getVersion(),
+                font(7, Font.ITALIC, BaseColor.GRAY)));
     }
 
     private void addSectionTitle(Document document, String value) throws DocumentException {
