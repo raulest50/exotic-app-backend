@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface RutaProcesoNodeRepo extends JpaRepository<RutaProcesoNode, Long> {
+    long countByProcesoProduccion_ProcesoId(Integer procesoId);
 }

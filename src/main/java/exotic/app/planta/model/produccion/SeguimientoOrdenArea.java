@@ -1,6 +1,7 @@
 package exotic.app.planta.model.produccion;
 
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.users.User;
 import jakarta.persistence.*;
@@ -45,6 +46,11 @@ public class SeguimientoOrdenArea {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "area_operativa_id", nullable = false)
     private AreaOperativa areaOperativa;
+
+    /** Version exacta del POE vigente al crear la orden; nunca se recalcula. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "poe_documento_version_id")
+    private ProcesoProduccionDocumentoVersion poeDocumentoVersion;
 
     @Column(nullable = false)
     private int estado = ESTADO_PENDIENTE;

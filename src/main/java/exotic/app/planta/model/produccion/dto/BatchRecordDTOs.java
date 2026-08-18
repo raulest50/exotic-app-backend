@@ -89,6 +89,20 @@ public final class BatchRecordDTOs {
         private Long plantillaControlId;
         private Integer plantillaControlVersion;
         private Long seguimientoEventoOrigenId;
+        private PoeReferencia poe;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PoeReferencia {
+        private Integer procesoProduccionId;
+        private String procesoProduccionNombre;
+        private Long documentoVersionId;
+        private Integer version;
+        private String nombreArchivo;
+        private String sha256;
     }
 
     @Data

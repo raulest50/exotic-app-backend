@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 public interface ProcesoProduccionDocumentoVersionRepo
@@ -16,6 +17,11 @@ public interface ProcesoProduccionDocumentoVersionRepo
     List<ProcesoProduccionDocumentoVersion> findAllByProcesoProcesoIdOrderByVersionDesc(Integer procesoId);
 
     Optional<ProcesoProduccionDocumentoVersion> findByIdAndProcesoProcesoId(Long id, Integer procesoId);
+
+    List<ProcesoProduccionDocumentoVersion> findAllByProcesoProcesoIdInAndEstado(
+            Collection<Integer> procesoIds,
+            ProcesoProduccionDocumentoVersion.Estado estado
+    );
 
     long countByProcesoProcesoId(Integer procesoId);
 

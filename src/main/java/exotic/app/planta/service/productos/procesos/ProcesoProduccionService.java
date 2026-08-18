@@ -12,6 +12,7 @@ import exotic.app.planta.repo.producto.procesos.ProcesoProduccionCompletoRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.RecursoProduccionRepo;
+import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoNodeRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -36,6 +37,7 @@ public class ProcesoProduccionService {
     private final ProcesoProduccionRepo procesoProduccionRepo;
     private final ProcesoProduccionCompletoRepo procesoProduccionCompletoRepo;
     private final ProcesoProduccionDocumentoVersionRepo procesoProduccionDocumentoVersionRepo;
+    private final RutaProcesoNodeRepo rutaProcesoNodeRepo;
     private final RecursoProduccionRepo recursoProduccionRepo;
     private final ProcesoRecursoService procesoRecursoService;
 
@@ -64,6 +66,14 @@ public class ProcesoProduccionService {
         if (!procesoProduccionRepo.existsById(id)) {
             log.warn("No se encontró proceso de producción con ID: {}", id);
             throw new IllegalArgumentException("No se encontró el proceso de producción con ID: " + id);
+        }
+
+        long routeReferences = rutaProcesoNodeRepo.countByProcesoProduccion_ProcesoId(id);
+        if (routeReferences > 0) {
+            log.warn("No se puede eliminar el proceso de producción con ID: {} porque está referenciado en {} nodos de ruta", id, routeReferences);
+            throw new IllegalStateException(
+                    "El proceso está asociado al historial de una o más rutas de producción"
+            );
         }
 
         long documentVersions = procesoProduccionDocumentoVersionRepo.countByProcesoProcesoId(id);
@@ -98,6 +108,14 @@ public class ProcesoProduccionService {
         if (!procesoProduccionRepo.existsById(id)) {
             result.put("deletable", false);
             result.put("reason", "No se encontró el proceso de producción con ID: " + id);
+            return result;
+        }
+
+        long routeReferences = rutaProcesoNodeRepo.countByProcesoProduccion_ProcesoId(id);
+        if (routeReferences > 0) {
+            result.put("deletable", false);
+            result.put("reason", "El proceso está asociado al historial de una o más rutas de producción");
+            result.put("routeReferencesCount", routeReferences);
             return result;
         }
 

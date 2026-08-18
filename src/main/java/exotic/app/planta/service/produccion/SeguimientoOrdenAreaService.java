@@ -15,11 +15,13 @@ import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.empresa.JornadaLaboralVersionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
@@ -82,6 +84,7 @@ public class SeguimientoOrdenAreaService {
     private final UserRepository userRepository;
     private final MasterDirectiveService masterDirectiveService;
     private final BatchRecordService batchRecordService;
+    private final ProcesoProduccionDocumentoVersionRepo procesoDocumentoVersionRepo;
     private final Clock applicationClock;
 
     /**
@@ -130,6 +133,22 @@ public class SeguimientoOrdenAreaService {
                 .map(edge -> edge.getTargetNode().getId())
                 .collect(Collectors.toSet());
 
+        Set<Integer> procesoIds = rutaVersion.getNodes().stream()
+                .map(RutaProcesoNode::getProcesoProduccion)
+                .filter(java.util.Objects::nonNull)
+                .map(proceso -> proceso.getProcesoId())
+                .collect(Collectors.toSet());
+        Map<Integer, ProcesoProduccionDocumentoVersion> poeVigentePorProceso = procesoIds.isEmpty()
+                ? Map.of()
+                : procesoDocumentoVersionRepo.findAllByProcesoProcesoIdInAndEstado(
+                                procesoIds,
+                                ProcesoProduccionDocumentoVersion.Estado.VIGENTE
+                        ).stream()
+                        .collect(Collectors.toMap(
+                                documento -> documento.getProceso().getProcesoId(),
+                                documento -> documento
+                        ));
+
         int posicion = 0;
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         SeguimientoOrdenArea seguimientoAlmacenGeneral = null;
@@ -148,6 +167,11 @@ public class SeguimientoOrdenAreaService {
             seguimiento.setFechaEstadoActual(ahora);
             seguimiento.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
             seguimiento.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
+            if (node.getProcesoProduccion() != null) {
+                seguimiento.setPoeDocumentoVersion(
+                        poeVigentePorProceso.get(node.getProcesoProduccion().getProcesoId())
+                );
+            }
 
             boolean esNodoInicial = !nodosConPredecesores.contains(node.getId());
             if (esNodoInicial) {

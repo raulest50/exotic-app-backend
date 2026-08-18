@@ -7,6 +7,7 @@ import exotic.app.planta.repo.producto.procesos.ProcesoProduccionCompletoRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.RecursoProduccionRepo;
+import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoNodeRepo;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.ListJoin;
@@ -34,12 +35,14 @@ class ProcesoProduccionServiceDocumentoDeleteTest {
     private final ProcesoProduccionCompletoRepo completoRepo = mock(ProcesoProduccionCompletoRepo.class);
     private final ProcesoProduccionDocumentoVersionRepo documentoRepo =
             mock(ProcesoProduccionDocumentoVersionRepo.class);
+    private final RutaProcesoNodeRepo rutaProcesoNodeRepo = mock(RutaProcesoNodeRepo.class);
     private final RecursoProduccionRepo recursoRepo = mock(RecursoProduccionRepo.class);
     private final ProcesoRecursoService recursoService = mock(ProcesoRecursoService.class);
     private final ProcesoProduccionService service = new ProcesoProduccionService(
             procesoRepo,
             completoRepo,
             documentoRepo,
+            rutaProcesoNodeRepo,
             recursoRepo,
             recursoService
     );
@@ -64,6 +67,17 @@ class ProcesoProduccionServiceDocumentoDeleteTest {
 
         assertThat(result.get("deletable")).isEqualTo(false);
         assertThat(result.get("documentVersionsCount")).isEqualTo(3L);
+    }
+
+    @Test
+    void bloqueaEliminarProcesoReferenciadoPorRutaVersionada() {
+        when(procesoRepo.existsById(8)).thenReturn(true);
+        when(rutaProcesoNodeRepo.countByProcesoProduccion_ProcesoId(8)).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.deleteProcesoProduccion(8))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("rutas de producción");
+        verify(procesoRepo, never()).deleteById(8);
     }
 
     @Test

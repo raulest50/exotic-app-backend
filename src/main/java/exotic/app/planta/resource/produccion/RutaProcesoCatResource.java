@@ -1,11 +1,16 @@
 package exotic.app.planta.resource.produccion;
 
 import exotic.app.planta.dto.ErrorResponse;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.produccion.RutaProcesoCatService;
+import exotic.app.planta.service.produccion.RutaProcesoCatService.ProcesoRutaOptionDTO;
 import exotic.app.planta.service.produccion.RutaProcesoCatService.RutaProcesoCatDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +24,20 @@ import java.util.Map;
 @Slf4j
 public class RutaProcesoCatResource {
 
+    private static final String TAB_PARAMETROS_POR_CATEGORIA = "PARAMETROS_POR_CATEGORIA";
+
     private final RutaProcesoCatService rutaProcesoCatService;
+    private final ModuleTabAccessGuard accessGuard;
+
+    @GetMapping("/procesos-disponibles")
+    public ResponseEntity<Page<ProcesoRutaOptionDTO>> getProcesosDisponibles(
+            Authentication authentication,
+            @RequestParam(required = false) String search,
+            Pageable pageable
+    ) {
+        requirePlanningAccess(authentication);
+        return ResponseEntity.ok(rutaProcesoCatService.getProcesosDisponibles(search, pageable));
+    }
 
     @GetMapping("/{categoriaId}")
     public ResponseEntity<RutaProcesoCatDTO> getRutaByCategoria(@PathVariable int categoriaId) {
@@ -50,6 +68,7 @@ public class RutaProcesoCatResource {
     public ResponseEntity<?> saveRuta(Authentication authentication, @RequestBody RutaProcesoCatDTO dto) {
         Integer categoriaId = dto != null ? dto.getCategoriaId() : null;
         try {
+            requirePlanningAccess(authentication);
             if (dto == null) {
                 throw new IllegalArgumentException("La ruta de proceso no puede estar vacía.");
             }
@@ -71,8 +90,9 @@ public class RutaProcesoCatResource {
     }
 
     @DeleteMapping("/{categoriaId}")
-    public ResponseEntity<?> deleteRuta(@PathVariable int categoriaId) {
+    public ResponseEntity<?> deleteRuta(Authentication authentication, @PathVariable int categoriaId) {
         try {
+            requirePlanningAccess(authentication);
             rutaProcesoCatService.deleteRuta(categoriaId);
             return ResponseEntity.noContent().build();
         } catch (IllegalStateException e) {
@@ -86,5 +106,15 @@ public class RutaProcesoCatResource {
     public ResponseEntity<Map<Integer, Boolean>> checkRoutesExist(
             @RequestParam List<Integer> categoriaIds) {
         return ResponseEntity.ok(rutaProcesoCatService.checkRoutesExist(categoriaIds));
+    }
+
+    private void requirePlanningAccess(Authentication authentication) {
+        accessGuard.requireTabAccess(
+                authentication,
+                ModuloSistema.PRODUCCION,
+                TAB_PARAMETROS_POR_CATEGORIA,
+                3,
+                "No tiene permisos suficientes para administrar las rutas por categoria."
+        );
     }
 }

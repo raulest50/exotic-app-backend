@@ -13,6 +13,7 @@ import exotic.app.planta.model.produccion.*;
 import exotic.app.planta.model.produccion.batchrecord.*;
 import exotic.app.planta.model.produccion.dto.BatchRecordDTOs;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
 import exotic.app.planta.repo.calidad.ControlProcesoEjecucionRepo;
@@ -43,8 +44,8 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v1";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v1";
+    public static final String ESQUEMA_VERSION = "batch-record-v2";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v2";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
 
     private final BatchRecordRepo batchRecordRepo;
@@ -829,6 +830,7 @@ public class BatchRecordService {
                 ? null : etapa.getControlProcesoPlantilla().getId());
         data.put("plantillaControlVersion", etapa.getControlProcesoPlantilla() == null
                 ? null : etapa.getControlProcesoPlantilla().getVersion());
+        data.put("poe", mapPoeCanonica(etapa));
         data.put("observaciones", etapa.getObservaciones());
         data.put("contenidoSha256", etapa.getContenidoSha256());
         return data;
@@ -1037,7 +1039,44 @@ public class BatchRecordService {
                         ? null : etapa.getControlProcesoPlantilla().getVersion())
                 .seguimientoEventoOrigenId(etapa.getSeguimientoEventoOrigen() == null
                         ? null : etapa.getSeguimientoEventoOrigen().getId())
+                .poe(toPoeReferenciaDTO(etapa))
                 .build();
+    }
+
+    private BatchRecordDTOs.PoeReferencia toPoeReferenciaDTO(BatchRecordEtapa etapa) {
+        ProcesoProduccionDocumentoVersion documento = poeDocumento(etapa);
+        if (documento == null) {
+            return null;
+        }
+        return BatchRecordDTOs.PoeReferencia.builder()
+                .procesoProduccionId(documento.getProceso().getProcesoId())
+                .procesoProduccionNombre(documento.getProceso().getNombre())
+                .documentoVersionId(documento.getId())
+                .version(documento.getVersion())
+                .nombreArchivo(documento.getNombreArchivoOriginal())
+                .sha256(documento.getSha256())
+                .build();
+    }
+
+    private Map<String, Object> mapPoeCanonica(BatchRecordEtapa etapa) {
+        ProcesoProduccionDocumentoVersion documento = poeDocumento(etapa);
+        if (documento == null) {
+            return null;
+        }
+        Map<String, Object> data = new TreeMap<>();
+        data.put("procesoProduccionId", documento.getProceso().getProcesoId());
+        data.put("procesoProduccionNombre", documento.getProceso().getNombre());
+        data.put("documentoVersionId", documento.getId());
+        data.put("version", documento.getVersion());
+        data.put("nombreArchivo", documento.getNombreArchivoOriginal());
+        data.put("sha256", documento.getSha256());
+        return data;
+    }
+
+    private ProcesoProduccionDocumentoVersion poeDocumento(BatchRecordEtapa etapa) {
+        return etapa.getSeguimientoOrdenArea() == null
+                ? null
+                : etapa.getSeguimientoOrdenArea().getPoeDocumentoVersion();
     }
 
     private BatchRecordDTOs.Consumo toConsumoDTO(BatchRecordConsumo consumo) {
@@ -1190,6 +1229,12 @@ public class BatchRecordService {
         contenido.put("completadaEn", evento.getFechaEvento());
         contenido.put("usuarioId", evento.getUsuario().getId());
         contenido.put("observaciones", evento.getNota());
+        ProcesoProduccionDocumentoVersion documento = poeDocumento(etapa);
+        contenido.put("poeDocumentoVersionId", documento == null ? null : documento.getId());
+        contenido.put("poeProcesoProduccionId", documento == null
+                ? null : documento.getProceso().getProcesoId());
+        contenido.put("poeVersion", documento == null ? null : documento.getVersion());
+        contenido.put("poeSha256", documento == null ? null : documento.getSha256());
         try {
             return sha256(objectMapper.copy()
                     .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)

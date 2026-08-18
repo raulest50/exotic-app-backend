@@ -9,7 +9,9 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO;
+import exotic.app.planta.service.produccion.AreaOperativaPoeService;
 import exotic.app.planta.service.produccion.AreaOperativaRuidoMuestraService;
+import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
@@ -17,7 +19,12 @@ import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.Resource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +39,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -42,6 +50,7 @@ import java.util.NoSuchElementException;
 public class AreaOperativaPanelResource {
 
     private final AreaOperativaPanelDetalleService areaOperativaPanelDetalleService;
+    private final AreaOperativaPoeService areaOperativaPoeService;
     private final AreaOperativaRuidoMuestraService areaOperativaRuidoMuestraService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
@@ -69,6 +78,47 @@ public class AreaOperativaPanelResource {
             log.warn("Detalle operativo no encontrado para orden {}: {}", ordenId, e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ErrorResponse("Detalle no encontrado", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/ordenes/{ordenId}/seguimientos/{seguimientoId}/poe/archivo")
+    public ResponseEntity<?> getPoeEtapa(
+            Authentication authentication,
+            @PathVariable int ordenId,
+            @PathVariable Long seguimientoId
+    ) {
+        User user = getCurrentUser(authentication);
+
+        try {
+            ProcesoProduccionDocumentoService.DescargaDocumento descarga =
+                    areaOperativaPoeService.getDescarga(ordenId, seguimientoId, user.getId());
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(descarga.contentType()));
+            headers.setContentLength(descarga.contentLength());
+            ContentDisposition disposition = MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(
+                    descarga.contentType())
+                    ? ContentDisposition.inline()
+                            .filename(descarga.fileName(), StandardCharsets.UTF_8)
+                            .build()
+                    : ContentDisposition.attachment()
+                            .filename(descarga.fileName(), StandardCharsets.UTF_8)
+                            .build();
+            headers.setContentDisposition(disposition);
+            headers.set("X-Content-Type-Options", "nosniff");
+            headers.setCacheControl(CacheControl.noStore().getHeaderValue());
+            return new ResponseEntity<Resource>(descarga.resource(), headers, HttpStatus.OK);
+        } catch (AccessDeniedException e) {
+            log.warn("Acceso denegado al POE de orden {} y etapa {} para user {}: {}",
+                    ordenId, seguimientoId, user.getId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Acceso denegado", e.getMessage()));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse("POE no encontrado", e.getMessage()));
+        } catch (IllegalStateException e) {
+            log.error("No se pudo descargar el POE de orden {} y etapa {}", ordenId, seguimientoId, e);
+            return ResponseEntity.internalServerError()
+                    .body(new ErrorResponse("Archivo no disponible", e.getMessage()));
         }
     }
 

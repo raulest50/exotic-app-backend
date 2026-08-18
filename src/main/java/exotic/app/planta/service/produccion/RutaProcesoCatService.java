@@ -4,16 +4,22 @@ import exotic.app.planta.config.AppTime;
 import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
+import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +37,8 @@ public class RutaProcesoCatService {
     private final RutaProcesoCatVersionRepo rutaProcesoCatVersionRepo;
     private final CategoriaRepo categoriaRepo;
     private final AreaProduccionRepo areaProduccionRepo;
+    private final ProcesoProduccionRepo procesoProduccionRepo;
+    private final ProcesoProduccionDocumentoVersionRepo procesoDocumentoVersionRepo;
 
     @Transactional(readOnly = true)
     public RutaProcesoCatDTO getRutaByCategoria(int categoriaId) {
@@ -52,6 +60,29 @@ public class RutaProcesoCatService {
         return rutaProcesoCatVersionRepo.findByCategoriaIdAndVersionId(categoriaId, versionId)
                 .map(this::toDTO)
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProcesoRutaOptionDTO> getProcesosDisponibles(String search, Pageable pageable) {
+        String normalizedSearch = normalizeText(search);
+        Page<ProcesoProduccion> procesos = normalizedSearch == null
+                ? procesoProduccionRepo.findAll(pageable)
+                : procesoProduccionRepo.findByNombreContainingIgnoreCase(normalizedSearch, pageable);
+
+        Map<Integer, ProcesoProduccionDocumentoVersion> poeVigentePorProceso =
+                findPoeVigentePorProceso(procesos.getContent().stream()
+                        .map(ProcesoProduccion::getProcesoId)
+                        .collect(Collectors.toSet()));
+
+        return procesos.map(proceso -> {
+            ProcesoProduccionDocumentoVersion poe = poeVigentePorProceso.get(proceso.getProcesoId());
+            ProcesoRutaOptionDTO option = new ProcesoRutaOptionDTO();
+            option.setProcesoId(proceso.getProcesoId());
+            option.setNombre(proceso.getNombre());
+            option.setPoeVigenteDisponible(poe != null);
+            option.setPoeVigenteVersion(poe != null ? poe.getVersion() : null);
+            return option;
+        });
     }
 
     public RutaProcesoCatDTO saveRuta(int categoriaId, RutaProcesoCatDTO dto, String username) {
@@ -102,6 +133,14 @@ public class RutaProcesoCatService {
                         .orElseThrow(() -> new IllegalArgumentException(
                                 "Area operativa no encontrada con ID: " + nodeDto.getAreaOperativaId()));
                 node.setAreaOperativa(area);
+            }
+
+            if (nodeDto.getProcesoProduccionId() != null) {
+                ProcesoProduccion proceso = procesoProduccionRepo.findById(nodeDto.getProcesoProduccionId())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Proceso de produccion no encontrado con ID: "
+                                        + nodeDto.getProcesoProduccionId()));
+                node.setProcesoProduccion(proceso);
             }
 
             nuevaVersion.getNodes().add(node);
@@ -171,8 +210,15 @@ public class RutaProcesoCatService {
         dto.setCreadoPor(version.getCreadoPor());
         dto.setMotivoCambio(version.getMotivoCambio());
 
+        Map<Integer, ProcesoProduccionDocumentoVersion> poeVigentePorProceso =
+                findPoeVigentePorProceso(version.getNodes().stream()
+                        .map(RutaProcesoNode::getProcesoProduccion)
+                        .filter(Objects::nonNull)
+                        .map(ProcesoProduccion::getProcesoId)
+                        .collect(Collectors.toSet()));
+
         List<RutaProcesoNodeDTO> nodeDtos = version.getNodes().stream()
-                .map(this::toNodeDTO)
+                .map(node -> toNodeDTO(node, poeVigentePorProceso))
                 .collect(Collectors.toList());
         dto.setNodes(nodeDtos);
 
@@ -184,7 +230,10 @@ public class RutaProcesoCatService {
         return dto;
     }
 
-    private RutaProcesoNodeDTO toNodeDTO(RutaProcesoNode node) {
+    private RutaProcesoNodeDTO toNodeDTO(
+            RutaProcesoNode node,
+            Map<Integer, ProcesoProduccionDocumentoVersion> poeVigentePorProceso
+    ) {
         RutaProcesoNodeDTO dto = new RutaProcesoNodeDTO();
         dto.setId(node.getFrontendId());
         dto.setPosicionX(node.getPosicionX());
@@ -198,6 +247,15 @@ public class RutaProcesoCatService {
         if (node.getAreaOperativa() != null) {
             dto.setAreaOperativaId(node.getAreaOperativa().getAreaId());
             dto.setAreaOperativaNombre(node.getAreaOperativa().getNombre());
+        }
+
+        if (node.getProcesoProduccion() != null) {
+            ProcesoProduccion proceso = node.getProcesoProduccion();
+            ProcesoProduccionDocumentoVersion poe = poeVigentePorProceso.get(proceso.getProcesoId());
+            dto.setProcesoProduccionId(proceso.getProcesoId());
+            dto.setProcesoProduccionNombre(proceso.getNombre());
+            dto.setPoeVigenteDisponible(poe != null);
+            dto.setPoeVigenteVersion(poe != null ? poe.getVersion() : null);
         }
 
         return dto;
@@ -249,6 +307,13 @@ public class RutaProcesoCatService {
             }
             if (node.getAreaOperativaId() == AreaOperativaInitializer.ALMACEN_GENERAL_ID) {
                 almacenCount++;
+                if (node.getProcesoProduccionId() != null) {
+                    throw new IllegalArgumentException(
+                            "Almacen General no puede tener un proceso de produccion asignado.");
+                }
+            } else if (node.getProcesoProduccionId() == null) {
+                throw new IllegalArgumentException(
+                        "Cada area productiva debe tener un proceso de produccion asignado.");
             }
 
             nodesById.put(nodeId, node);
@@ -378,6 +443,22 @@ public class RutaProcesoCatService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    private Map<Integer, ProcesoProduccionDocumentoVersion> findPoeVigentePorProceso(
+            Collection<Integer> procesoIds
+    ) {
+        if (procesoIds == null || procesoIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return procesoDocumentoVersionRepo.findAllByProcesoProcesoIdInAndEstado(
+                        procesoIds,
+                        ProcesoProduccionDocumentoVersion.Estado.VIGENTE
+                ).stream()
+                .collect(Collectors.toMap(
+                        documento -> documento.getProceso().getProcesoId(),
+                        documento -> documento
+                ));
+    }
+
     @lombok.Data
     public static class RutaProcesoCatDTO {
         private Long id;
@@ -401,6 +482,10 @@ public class RutaProcesoCatService {
         private double posicionY;
         private Integer areaOperativaId;
         private String areaOperativaNombre;
+        private Integer procesoProduccionId;
+        private String procesoProduccionNombre;
+        private boolean poeVigenteDisponible;
+        private Integer poeVigenteVersion;
         private String label;
         private boolean hasLeftHandle = true;
         private boolean hasRightHandle = true;
@@ -413,5 +498,13 @@ public class RutaProcesoCatService {
         private String id;
         private String sourceNodeId;
         private String targetNodeId;
+    }
+
+    @lombok.Data
+    public static class ProcesoRutaOptionDTO {
+        private int procesoId;
+        private String nombre;
+        private boolean poeVigenteDisponible;
+        private Integer poeVigenteVersion;
     }
 }

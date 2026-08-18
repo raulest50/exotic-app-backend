@@ -213,10 +213,29 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH op.producto p
         JOIN FETCH s.areaOperativa a
         JOIN FETCH s.rutaProcesoNode n
+        LEFT JOIN FETCH n.procesoProduccion
+        LEFT JOIN FETCH s.poeDocumentoVersion documento
+        LEFT JOIN FETCH documento.proceso
         WHERE op.ordenId = :ordenId
         ORDER BY s.posicionSecuencia ASC
         """)
     List<SeguimientoOrdenArea> findDetalleByOrdenId(@Param("ordenId") int ordenId);
+
+    @Query("""
+        SELECT s FROM SeguimientoOrdenArea s
+        JOIN FETCH s.ordenProduccion op
+        JOIN FETCH s.areaOperativa a
+        JOIN FETCH s.rutaProcesoNode n
+        LEFT JOIN FETCH n.procesoProduccion
+        LEFT JOIN FETCH s.poeDocumentoVersion documento
+        LEFT JOIN FETCH documento.proceso
+        WHERE s.id = :seguimientoId
+        AND op.ordenId = :ordenId
+        """)
+    Optional<SeguimientoOrdenArea> findPoeDetalleByIdAndOrdenId(
+            @Param("seguimientoId") Long seguimientoId,
+            @Param("ordenId") int ordenId
+    );
 
     /**
      * Cuenta predecesores no completados de un nodo para una orden.

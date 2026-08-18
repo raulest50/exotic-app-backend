@@ -3,9 +3,13 @@ package exotic.app.planta.service.produccion;
 import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
+import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.service.produccion.RutaProcesoCatService.RutaProcesoCatDTO;
@@ -19,6 +23,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -114,11 +120,32 @@ class RutaProcesoCatServiceTest {
         assertDoesNotThrow(() -> service.saveRuta(10, buildLinearRuta(), "tester"));
     }
 
+    @Test
+    void saveRuta_productiveNodeWithoutProcess_throwsValidationError() {
+        RutaProcesoCatService service = createService();
+        RutaProcesoCatDTO dto = buildLinearRuta();
+        dto.getNodes().get(1).setProcesoProduccionId(null);
+
+        assertThrows(IllegalArgumentException.class, () -> service.saveRuta(10, dto, "tester"));
+    }
+
+    @Test
+    void saveRuta_warehouseWithProcess_throwsValidationError() {
+        RutaProcesoCatService service = createService();
+        RutaProcesoCatDTO dto = buildLinearRuta();
+        dto.getNodes().get(0).setProcesoProduccionId(201);
+
+        assertThrows(IllegalArgumentException.class, () -> service.saveRuta(10, dto, "tester"));
+    }
+
     private RutaProcesoCatService createService() {
         RutaProcesoCatRepo rutaRepo = mock(RutaProcesoCatRepo.class);
         RutaProcesoCatVersionRepo versionRepo = mock(RutaProcesoCatVersionRepo.class);
         CategoriaRepo categoriaRepo = mock(CategoriaRepo.class);
         AreaProduccionRepo areaRepo = mock(AreaProduccionRepo.class);
+        ProcesoProduccionRepo procesoRepo = mock(ProcesoProduccionRepo.class);
+        ProcesoProduccionDocumentoVersionRepo documentoRepo =
+                mock(ProcesoProduccionDocumentoVersionRepo.class);
 
         Categoria categoria = new Categoria();
         categoria.setCategoriaId(10);
@@ -139,6 +166,10 @@ class RutaProcesoCatServiceTest {
         areaC.setAreaId(103);
         areaC.setNombre("Empaque");
 
+        ProcesoProduccion proceso = new ProcesoProduccion();
+        proceso.setProcesoId(201);
+        proceso.setNombre("Proceso de prueba");
+
         when(categoriaRepo.findById(10)).thenReturn(Optional.of(categoria));
         when(rutaRepo.findByCategoria_CategoriaId(10)).thenReturn(Optional.empty());
         when(rutaRepo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -150,8 +181,20 @@ class RutaProcesoCatServiceTest {
         when(areaRepo.findById(101)).thenReturn(Optional.of(areaA));
         when(areaRepo.findById(102)).thenReturn(Optional.of(areaB));
         when(areaRepo.findById(103)).thenReturn(Optional.of(areaC));
+        when(procesoRepo.findById(201)).thenReturn(Optional.of(proceso));
+        when(documentoRepo.findAllByProcesoProcesoIdInAndEstado(
+                anyCollection(),
+                eq(ProcesoProduccionDocumentoVersion.Estado.VIGENTE)
+        )).thenReturn(List.of());
 
-        return new RutaProcesoCatService(rutaRepo, versionRepo, categoriaRepo, areaRepo);
+        return new RutaProcesoCatService(
+                rutaRepo,
+                versionRepo,
+                categoriaRepo,
+                areaRepo,
+                procesoRepo,
+                documentoRepo
+        );
     }
 
     private RutaProcesoCatDTO buildLinearRuta() {
@@ -179,6 +222,9 @@ class RutaProcesoCatServiceTest {
         node.setPosicionY(0);
         node.setHasLeftHandle(true);
         node.setHasRightHandle(true);
+        if (areaId != AreaOperativaInitializer.ALMACEN_GENERAL_ID) {
+            node.setProcesoProduccionId(201);
+        }
         return node;
     }
 

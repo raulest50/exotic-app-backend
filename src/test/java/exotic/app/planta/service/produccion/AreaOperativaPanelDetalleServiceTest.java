@@ -7,6 +7,8 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
 import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
 import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
@@ -61,6 +63,10 @@ class AreaOperativaPanelDetalleServiceTest {
         assertEquals(10.0, result.getBom().getReceta().get(0).getCantidadTotalRequerida());
         assertEquals(20.0, result.getBom().getReceta().get(0).getSubInsumos().get(0).getCantidadTotalRequerida());
         assertEquals(10.0, result.getBom().getEmpaque().get(0).getCantidadTotalRequerida());
+        assertEquals(701, result.getSeguimiento().get(1).getProcesoProduccionId());
+        assertEquals("Pesaje de formula", result.getSeguimiento().get(1).getProcesoProduccionNombre());
+        assertEquals(true, result.getSeguimiento().get(1).isPuedeConsultarPoe());
+        assertEquals(3, result.getSeguimiento().get(1).getPoe().getVersion());
     }
 
     @Test
@@ -176,6 +182,18 @@ class AreaOperativaPanelDetalleServiceTest {
         nodePesaje.setPosicionY(0);
         nodePesaje.setRutaProcesoCatVersion(fixture.rutaVersion);
 
+        ProcesoProduccion procesoPesaje = new ProcesoProduccion();
+        procesoPesaje.setProcesoId(701);
+        procesoPesaje.setNombre("Pesaje de formula");
+        nodePesaje.setProcesoProduccion(procesoPesaje);
+
+        ProcesoProduccionDocumentoVersion poePesaje = new ProcesoProduccionDocumentoVersion();
+        poePesaje.setId(9001L);
+        poePesaje.setProceso(procesoPesaje);
+        poePesaje.setVersion(3);
+        poePesaje.setNombreArchivoOriginal("POE-PESAJE.pdf");
+        poePesaje.setContentType("application/pdf");
+
         RutaProcesoEdge edge = new RutaProcesoEdge();
         edge.setId(100L);
         edge.setFrontendId("e1-2");
@@ -201,6 +219,7 @@ class AreaOperativaPanelDetalleServiceTest {
         fixture.segPesaje.setAreaOperativa(fixture.areaPesaje);
         fixture.segPesaje.setEstado(4);
         fixture.segPesaje.setPosicionSecuencia(1);
+        fixture.segPesaje.setPoeDocumentoVersion(poePesaje);
 
         fixture.insumoSemi = new InsumoWithStockDTO();
         fixture.insumoSemi.setInsumoId(1);

@@ -1,6 +1,7 @@
 package exotic.app.planta.model.produccion.ruprocatdesigner;
 
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -35,6 +36,11 @@ public class RutaProcesoNode {
     @ManyToOne
     @JoinColumn(name = "area_operativa_id")
     private AreaOperativa areaOperativa;
+
+    /** Operacion ejecutada por el area; su documento vigente actua como POE. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "proceso_produccion_id")
+    private ProcesoProduccion procesoProduccion;
 
     private String label;
 

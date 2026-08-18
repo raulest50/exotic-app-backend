@@ -78,7 +78,7 @@ public class AreaOperativaPanelDetalleService {
         dto.setOrden(buildOrdenDTO(orden, terminado, seguimientos));
         dto.setSeguimiento(seguimientos.stream()
                 .sorted(Comparator.comparing(SeguimientoOrdenArea::getPosicionSecuencia, Comparator.nullsLast(Integer::compareTo)))
-                .map(this::buildSeguimientoDTO)
+                .map(seguimiento -> buildSeguimientoDTO(seguimiento, areaIdsResponsables))
                 .toList());
         dto.setRutaProceso(buildRutaProcesoDTO(orden, seguimientos, areaIdsResponsables));
         dto.setBom(buildBomDTO(terminado, orden.getCantidadProducir()));
@@ -123,7 +123,10 @@ public class AreaOperativaPanelDetalleService {
         return dto;
     }
 
-    private SeguimientoOperativoItemDTO buildSeguimientoDTO(SeguimientoOrdenArea seguimiento) {
+    private SeguimientoOperativoItemDTO buildSeguimientoDTO(
+            SeguimientoOrdenArea seguimiento,
+            Set<Integer> areaIdsResponsables
+    ) {
         SeguimientoOperativoItemDTO dto = new SeguimientoOperativoItemDTO();
         dto.setSeguimientoId(seguimiento.getId());
         dto.setNodeId(seguimiento.getRutaProcesoNode().getId());
@@ -139,6 +142,25 @@ public class AreaOperativaPanelDetalleService {
         dto.setRequiereJornadaLaboral(seguimiento.isRequiereJornadaLaboral());
         dto.setUsuarioReportaNombre(seguimiento.getUsuarioReporta() != null ? seguimiento.getUsuarioReporta().getNombreCompleto() : null);
         dto.setObservaciones(seguimiento.getObservaciones());
+
+        if (seguimiento.getRutaProcesoNode().getProcesoProduccion() != null) {
+            dto.setProcesoProduccionId(
+                    seguimiento.getRutaProcesoNode().getProcesoProduccion().getProcesoId());
+            dto.setProcesoProduccionNombre(
+                    seguimiento.getRutaProcesoNode().getProcesoProduccion().getNombre());
+        }
+
+        boolean puedeConsultarPoe = seguimiento.getAreaOperativa() != null
+                && areaIdsResponsables.contains(seguimiento.getAreaOperativa().getAreaId());
+        dto.setPuedeConsultarPoe(puedeConsultarPoe);
+        if (puedeConsultarPoe && seguimiento.getPoeDocumentoVersion() != null) {
+            PoeOperativoDTO poe = new PoeOperativoDTO();
+            poe.setDocumentoVersionId(seguimiento.getPoeDocumentoVersion().getId());
+            poe.setVersion(seguimiento.getPoeDocumentoVersion().getVersion());
+            poe.setNombreArchivo(seguimiento.getPoeDocumentoVersion().getNombreArchivoOriginal());
+            poe.setContentType(seguimiento.getPoeDocumentoVersion().getContentType());
+            dto.setPoe(poe);
+        }
         return dto;
     }
 
@@ -335,6 +357,18 @@ public class AreaOperativaPanelDetalleService {
         private boolean requiereJornadaLaboral;
         private String usuarioReportaNombre;
         private String observaciones;
+        private Integer procesoProduccionId;
+        private String procesoProduccionNombre;
+        private boolean puedeConsultarPoe;
+        private PoeOperativoDTO poe;
+    }
+
+    @Data
+    public static class PoeOperativoDTO {
+        private Long documentoVersionId;
+        private Integer version;
+        private String nombreArchivo;
+        private String contentType;
     }
 
     @Data
