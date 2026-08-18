@@ -34,6 +34,7 @@ import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.calidad.ControlProcesoEjecucionRepo;
+import exotic.app.planta.repo.calidad.ControlProcesoEjecucionSpecifications;
 import exotic.app.planta.repo.calidad.ControlProcesoPlantillaRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
@@ -249,7 +250,14 @@ public class CalidadControlProcesoService {
         int safeSize = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "fechaRegistro"));
 
-        return ejecucionRepo.buscar(areaId, loteId, normalizarBusqueda(producto), desde, hasta, pageable)
+        return ejecucionRepo.findAll(
+                        ControlProcesoEjecucionSpecifications.conFiltros(
+                                areaId,
+                                loteId,
+                                normalizarBusqueda(producto),
+                                desde,
+                                hasta),
+                        pageable)
                 .map(this::toEjecucionListItem);
     }
 
