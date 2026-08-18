@@ -666,6 +666,16 @@ public class ProductoService {
         }
 
         if (productoOriginal instanceof SemiTerminado semiTerminadoOriginal) {
+            if (dto.getPrefijoLote() != null) {
+                String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
+                if (semiTerminadoOriginal.isRequiereOrdenFabricacion()
+                        && prefijoLote == null) {
+                    throw new IllegalArgumentException(
+                            "El prefijo de lote es requerido para un semiterminado con orden de fabricacion.");
+                }
+                validatePrefijoLoteDisponibleForProduct(prefijoLote, productoId);
+                semiTerminadoOriginal.setPrefijoLote(prefijoLote);
+            }
             return semiTerminadoRepo.save(semiTerminadoOriginal);
         }
 

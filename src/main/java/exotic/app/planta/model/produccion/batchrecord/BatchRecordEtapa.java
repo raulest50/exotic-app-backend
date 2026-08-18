@@ -6,6 +6,8 @@ import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
 import exotic.app.planta.model.users.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -49,6 +51,11 @@ public class BatchRecordEtapa {
     @JoinColumn(name = "seguimiento_orden_area_id", unique = true)
     private SeguimientoOrdenArea seguimientoOrdenArea;
 
+    /** Proyeccion operativa que gobierna la etapa, cuando proviene de una OF. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "orden_fabricacion_operacion_id", unique = true)
+    private OrdenFabricacionOperacion ordenFabricacionOperacion;
+
     /** Plantilla vigente congelada al crear el expediente; nula si no aplica control. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "control_proceso_plantilla_id")
@@ -58,6 +65,11 @@ public class BatchRecordEtapa {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seguimiento_evento_origen_id", unique = true)
     private SeguimientoOrdenAreaEvento seguimientoEventoOrigen;
+
+    /** Evento fuente equivalente para una operacion de orden de fabricacion. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "orden_fabricacion_evento_origen_id", unique = true)
+    private OrdenFabricacionOperacionEvento ordenFabricacionEventoOrigen;
 
     /** Nombre del proceso o etapa congelado para el expediente. */
     @Column(nullable = false, length = 200)
@@ -105,6 +117,19 @@ public class BatchRecordEtapa {
                         "El seguimiento operativo no corresponde a la etapa del expediente.");
             }
         }
+        if (ordenFabricacionOperacion != null) {
+            if (!mismaArea(ordenFabricacionOperacion.getAreaOperativa(), areaOperativa)
+                    || batchRecord.getOrdenFabricacion() == null
+                    || !batchRecord.getOrdenFabricacion().getOrdenFabricacionId().equals(
+                    ordenFabricacionOperacion.getOrdenFabricacion().getOrdenFabricacionId())) {
+                throw new IllegalStateException(
+                        "La operacion de fabricacion no corresponde a la etapa del expediente.");
+            }
+        }
+        if ((seguimientoOrdenArea == null) == (ordenFabricacionOperacion == null)) {
+            throw new IllegalStateException(
+                    "La etapa debe pertenecer exactamente a un seguimiento de OP o a una operacion de OF.");
+        }
         if (controlProcesoPlantilla != null
                 && !mismaArea(controlProcesoPlantilla.getAreaOperativa(), areaOperativa)) {
             throw new IllegalStateException(
@@ -125,6 +150,39 @@ public class BatchRecordEtapa {
             throw new IllegalStateException("El hash de la etapa debe ser un SHA-256 válido.");
         }
         validarEventoOrigen();
+        validarEventoOrigenFabricacion();
+    }
+
+    private void validarEventoOrigenFabricacion() {
+        if (ordenFabricacionEventoOrigen == null) {
+            return;
+        }
+        if (ordenFabricacionOperacion == null
+                || ordenFabricacionEventoOrigen.getOperacion() == null
+                || !ordenFabricacionOperacion.getId().equals(
+                ordenFabricacionEventoOrigen.getOperacion().getId())) {
+            throw new IllegalStateException(
+                    "El evento de fabricacion pertenece a otra operacion.");
+        }
+        if (ordenFabricacionEventoOrigen.getActorTipo() != ActorTipoEventoSeguimiento.USER
+                || ordenFabricacionEventoOrigen.getTipoEvento() != TipoEventoSeguimiento.OPERATIVO
+                || ordenFabricacionEventoOrigen.getEstadoDestino()
+                != SeguimientoOrdenArea.ESTADO_COMPLETADO
+                || ordenFabricacionEventoOrigen.getUsuario() == null
+                || estado != EstadoBatchRecordEtapa.COMPLETADA) {
+            throw new IllegalStateException(
+                    "La etapa de OF solo puede cerrarse con un reporte autenticado.");
+        }
+        if (reportadaPor != null
+                && !mismoUsuario(ordenFabricacionEventoOrigen.getUsuario(), reportadaPor)) {
+            throw new IllegalStateException(
+                    "El responsable de la etapa no coincide con el evento de fabricacion.");
+        }
+        if (completadaEn == null
+                || !completadaEn.equals(ordenFabricacionEventoOrigen.getFechaEvento())) {
+            throw new IllegalStateException(
+                    "La etapa debe conservar la fecha del evento de fabricacion.");
+        }
     }
 
     private void validarEventoOrigen() {

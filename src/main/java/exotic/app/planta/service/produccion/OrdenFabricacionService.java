@@ -3,6 +3,11 @@ package exotic.app.planta.service.produccion;
 import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
+import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
+import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
 import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
@@ -14,6 +19,9 @@ import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionEventoRepo;
+import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
+import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
@@ -21,14 +29,23 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(rollbackFor = Exception.class)
 public class OrdenFabricacionService {
+
+    private static final BigDecimal CANTIDAD_MAXIMA =
+            new BigDecimal("99999999999999.9999");
 
     private final OrdenFabricacionRepo ordenRepo;
     private final SemiTerminadoRepo semiTerminadoRepo;
@@ -39,6 +56,11 @@ public class OrdenFabricacionService {
     private final VencimientoLoteService vencimientoLoteService;
     private final BatchRecordService batchRecordService;
     private final MasterDirectiveService masterDirectiveService;
+    private final OrdenFabricacionOperacionService operacionService;
+    private final OrdenFabricacionOperacionEventoRepo operacionEventoRepo;
+    private final TransaccionAlmacenHeaderRepo transaccionRepo;
+    private final LoteManufacturaNumeroService loteNumeroService;
+    private final Clock applicationClock;
 
     public OrdenFabricacionDTOs.Response crear(
             OrdenFabricacionDTOs.CreateRequest request,
@@ -75,18 +97,104 @@ public class OrdenFabricacionService {
                 : userRepository.findById(request.getResponsableId())
                 .orElseThrow(() -> new NoSuchElementException("Responsable no encontrado."));
 
+        return crearInterna(
+                semi,
+                version,
+                request.getCantidadPlanificada(),
+                loteNumero,
+                request.getFechaLanzamiento(),
+                request.getFechaFinalPlanificada(),
+                actor,
+                responsable,
+                normalizar(request.getObservaciones()),
+                null,
+                false);
+    }
+
+    /** Emite una OF ligada a una OP; se usa dentro de la misma transaccion creadora. */
+    public OrdenFabricacionDTOs.Response crearAutomatica(
+            SemiTerminado semi,
+            BigDecimal cantidad,
+            OrdenProduccion ordenOrigen,
+            User actor
+    ) {
+        if (semi == null || ordenOrigen == null || actor == null) {
+            throw new IllegalArgumentException(
+                    "Semiterminado, OP origen y usuario son obligatorios para la OF automatica.");
+        }
+        if (ordenRepo.existsByOrdenProduccionOrigen_OrdenIdAndSemiTerminado_ProductoId(
+                ordenOrigen.getOrdenId(), semi.getProductoId())) {
+            throw new IllegalStateException(
+                    "La OP ya tiene una OF para el semiterminado " + semi.getProductoId() + ".");
+        }
+        ManufacturingVersions version = manufacturingVersionRepo
+                .findTopByProductoOrderByVersionNumberDesc(semi)
+                .orElseThrow(() -> new IllegalStateException(
+                        "El semiterminado " + semi.getProductoId()
+                                + " no tiene una version de manufactura disponible."));
+        String loteNumero = loteNumeroService.siguiente(semi.getProductoId());
+        return crearInterna(
+                semi, version, cantidad, loteNumero,
+                LocalDateTime.now(applicationClock),
+                ordenOrigen.getFechaFinalPlanificada(),
+                actor, actor,
+                "Generada automaticamente para abastecer la OP " + ordenOrigen.getOrdenId(),
+                ordenOrigen, true);
+    }
+
+    private OrdenFabricacionDTOs.Response crearInterna(
+            SemiTerminado semi,
+            ManufacturingVersions version,
+            BigDecimal cantidad,
+            String loteNumero,
+            LocalDateTime fechaLanzamiento,
+            LocalDateTime fechaFinalPlanificada,
+            User actor,
+            User responsable,
+            String observaciones,
+            OrdenProduccion ordenOrigen,
+            boolean liberarInmediatamente
+    ) {
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        if (cantidad == null || cantidad.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad planificada de la OF debe ser mayor que cero.");
+        }
+        BigDecimal cantidadNormalizada = cantidad.setScale(4, RoundingMode.HALF_UP);
+        if (cantidadNormalizada.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad planificada es menor que la precision admitida (0.0001).");
+        }
+        if (cantidadNormalizada.compareTo(CANTIDAD_MAXIMA) > 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad planificada excede el valor maximo admitido.");
+        }
+        boolean liberar = liberarInmediatamente || fechaLanzamiento == null
+                || !fechaLanzamiento.isAfter(ahora);
         OrdenFabricacion orden = new OrdenFabricacion();
         orden.setSemiTerminado(semi);
         orden.setManufacturingVersion(version);
-        orden.setEstado(EstadoOrdenFabricacion.PLANIFICADA);
-        orden.setCantidadPlanificada(request.getCantidadPlanificada());
+        orden.setOrdenProduccionOrigen(ordenOrigen);
+        orden.setEstado(liberar
+                ? EstadoOrdenFabricacion.LIBERADA
+                : EstadoOrdenFabricacion.PLANIFICADA);
+        orden.setLiberadaEn(liberar ? ahora : null);
+        orden.setCantidadPlanificada(cantidadNormalizada);
         orden.setUnidadMedida(normalizarObligatorio(
                 semi.getTipoUnidades(), "El semiterminado no tiene unidad de medida."));
-        orden.setFechaLanzamiento(request.getFechaLanzamiento());
-        orden.setFechaFinalPlanificada(request.getFechaFinalPlanificada());
+        orden.setFechaLanzamiento(fechaLanzamiento);
+        orden.setFechaFinalPlanificada(fechaFinalPlanificada);
         orden.setCreadaPor(actor);
         orden.setResponsable(responsable);
-        orden.setObservaciones(normalizar(request.getObservaciones()));
+        orden.setObservaciones(observaciones);
+        boolean noBloqueante = masterDirectiveService.isDispensacionNoBloqueaInicioProduccion();
+        orden.setPoliticaDispensacionInicio(noBloqueante
+                ? PoliticaDispensacionInicio.NO_BLOQUEANTE
+                : PoliticaDispensacionInicio.BLOQUEANTE);
+        orden.setFechaAplicacionPoliticaDispensacion(ahora);
+        orden.setEstadoDispensacionMateriales(noBloqueante
+                ? EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION
+                : EstadoDispensacionMateriales.PENDIENTE);
         ordenRepo.saveAndFlush(orden);
 
         Lote lote = new Lote();
@@ -98,6 +206,7 @@ public class OrdenFabricacionService {
         loteRepo.saveAndFlush(lote);
 
         BatchRecord record = batchRecordService.crearParaOrdenFabricacion(orden, lote, actor);
+        operacionService.inicializar(orden, record);
         return toResponse(orden, lote, record);
     }
 
@@ -134,23 +243,82 @@ public class OrdenFabricacionService {
 
     @Transactional(readOnly = true)
     public OrdenFabricacionDTOs.Response detalle(Long id) {
-        OrdenFabricacion orden = ordenRepo.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Orden de fabricación no encontrada."));
+        OrdenFabricacion orden = requireEntity(id);
         return toResponse(orden);
+    }
+
+    @Transactional(readOnly = true)
+    public OrdenFabricacionDTOs.Response detalleOperativo(Long id, Long userId) {
+        if (userId == null || !operacionService.esResponsableDeAlgunaOperacion(id, userId)) {
+            throw new AccessDeniedException(
+                    "La OF no pertenece a un area operativa a cargo del usuario.");
+        }
+        return toResponse(requireEntity(id));
+    }
+
+    @Transactional(readOnly = true)
+    public OrdenFabricacion requireEntity(Long id) {
+        return ordenRepo.findById(id)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Orden de fabricación no encontrada."));
     }
 
     public OrdenFabricacionDTOs.Response cancelar(Long id, User actor) {
         OrdenFabricacion orden = ordenRepo.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Orden de fabricación no encontrada."));
         if (orden.getEstado() != EstadoOrdenFabricacion.BORRADOR
-                && orden.getEstado() != EstadoOrdenFabricacion.PLANIFICADA) {
+                && orden.getEstado() != EstadoOrdenFabricacion.PLANIFICADA
+                && orden.getEstado() != EstadoOrdenFabricacion.LIBERADA) {
             throw new IllegalStateException(
-                    "Solo una orden en borrador o planificada puede cancelarse.");
+                    "Solo una orden sin ejecucion puede cancelarse.");
+        }
+        if (operacionEventoRepo
+                .existsByOperacion_OrdenFabricacion_OrdenFabricacionIdAndActorTipoAndTipoEvento(
+                        id, ActorTipoEventoSeguimiento.USER, TipoEventoSeguimiento.OPERATIVO)
+                || transaccionRepo.countByTipoEntidadCausanteAndIdEntidadCausante(
+                        TransaccionAlmacen.TipoEntidadCausante.OD_OF,
+                        Math.toIntExact(id)) > 0) {
+            throw new IllegalStateException(
+                    "La OF tiene ejecucion o dispensaciones y ya no puede cancelarse.");
         }
         orden.setEstado(EstadoOrdenFabricacion.CANCELADA);
         ordenRepo.save(orden);
         batchRecordService.anularPorCancelacion(orden, actor);
         return toResponse(orden);
+    }
+
+    /** Cancela de forma atomica las OF automaticas; cualquier evidencia bloquea la cancelacion de la OP. */
+    public void cancelarVinculadasPorCancelacionOp(OrdenProduccion ordenProduccion, User actor) {
+        if (ordenProduccion == null) return;
+        List<OrdenFabricacion> vinculadas = ordenRepo.findByOrdenProduccionOrigen_OrdenId(
+                ordenProduccion.getOrdenId());
+        for (OrdenFabricacion orden : vinculadas) {
+            if (orden.getEstado() == EstadoOrdenFabricacion.CANCELADA) continue;
+            boolean tieneEjecucion = operacionEventoRepo
+                    .existsByOperacion_OrdenFabricacion_OrdenFabricacionIdAndActorTipoAndTipoEvento(
+                            orden.getOrdenFabricacionId(),
+                            ActorTipoEventoSeguimiento.USER,
+                            TipoEventoSeguimiento.OPERATIVO);
+            boolean tieneDispensacion = transaccionRepo
+                    .countByTipoEntidadCausanteAndIdEntidadCausante(
+                            TransaccionAlmacen.TipoEntidadCausante.OD_OF,
+                            Math.toIntExact(orden.getOrdenFabricacionId())) > 0;
+            boolean estadoCancelable = orden.getEstado() == EstadoOrdenFabricacion.PLANIFICADA
+                    || orden.getEstado() == EstadoOrdenFabricacion.LIBERADA
+                    || orden.getEstado() == EstadoOrdenFabricacion.BORRADOR;
+            if (!estadoCancelable || tieneEjecucion || tieneDispensacion) {
+                throw new IllegalStateException(
+                        "La OP no puede cancelarse porque su OF "
+                                + orden.getOrdenFabricacionId()
+                                + " ya tiene ejecucion o dispensacion.");
+            }
+        }
+        for (OrdenFabricacion orden : vinculadas) {
+            if (orden.getEstado() == EstadoOrdenFabricacion.CANCELADA) continue;
+            orden.setEstado(EstadoOrdenFabricacion.CANCELADA);
+            ordenRepo.save(orden);
+            batchRecordService.anularPorCancelacion(orden, actor);
+        }
     }
 
     private OrdenFabricacionDTOs.Response toResponse(OrdenFabricacion orden) {
@@ -191,6 +359,12 @@ public class OrdenFabricacionService {
                 .creadaPor(nombreUsuario(orden.getCreadaPor()))
                 .responsable(nombreUsuario(orden.getResponsable()))
                 .observaciones(orden.getObservaciones())
+                .ordenProduccionOrigenId(orden.getOrdenProduccionOrigen() == null
+                        ? null : orden.getOrdenProduccionOrigen().getOrdenId())
+                .liberadaEn(orden.getLiberadaEn())
+                .politicaDispensacionInicio(orden.getPoliticaDispensacionInicio().name())
+                .estadoDispensacionMateriales(orden.getEstadoDispensacionMateriales().name())
+                .operaciones(operacionService.listar(orden.getOrdenFabricacionId()))
                 .build();
     }
 

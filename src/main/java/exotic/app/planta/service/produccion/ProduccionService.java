@@ -80,6 +80,8 @@ public class ProduccionService {
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final UserRepository userRepository;
     private final BatchRecordService batchRecordService;
+    private final OrdenFabricacionAutoGenerationService ordenFabricacionAutoGenerationService;
+    private final OrdenFabricacionService ordenFabricacionService;
     private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
@@ -123,6 +125,8 @@ public class ProduccionService {
         if (batchRecordWorkflowEnabled) {
             batchRecordService.crearParaOrdenProduccion(
                     savedOrden, lote, requireActor(actor));
+            ordenFabricacionAutoGenerationService.generarParaOrden(
+                    savedOrden, requireActor(actor));
         }
 
         return savedOrden;
@@ -181,6 +185,7 @@ public class ProduccionService {
             seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
             if (batchRecordWorkflowEnabled) {
                 batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+                ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
             }
 
             savedOrdenes.add(savedOrden);
@@ -436,6 +441,8 @@ public class ProduccionService {
 
         ordenProduccionRepo.save(ordenProduccion);
         batchRecordService.anularPorCancelacion(ordenProduccion, requireActor(actor));
+        ordenFabricacionService.cancelarVinculadasPorCancelacionOp(
+                ordenProduccion, requireActor(actor));
         return convertToDto(ordenProduccion);
     }
 
@@ -655,6 +662,7 @@ public class ProduccionService {
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
         if (batchRecordWorkflowEnabled) {
             batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+            ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
         }
         return savedOrden;
     }

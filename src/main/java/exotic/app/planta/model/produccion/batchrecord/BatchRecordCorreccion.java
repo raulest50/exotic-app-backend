@@ -1,6 +1,7 @@
 package exotic.app.planta.model.produccion.batchrecord;
 
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
 import exotic.app.planta.model.users.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -30,12 +31,20 @@ public class BatchRecordCorreccion {
     private BatchRecordEtapa etapa;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "evento_correccion_id", nullable = false, unique = true, updatable = false)
+    @JoinColumn(name = "evento_correccion_id", unique = true, updatable = false)
     private SeguimientoOrdenAreaEvento eventoCorreccion;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "evento_revertido_id", updatable = false)
     private SeguimientoOrdenAreaEvento eventoRevertido;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "orden_fabricacion_evento_correccion_id", unique = true, updatable = false)
+    private OrdenFabricacionOperacionEvento ordenFabricacionEventoCorreccion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "orden_fabricacion_evento_revertido_id", updatable = false)
+    private OrdenFabricacionOperacionEvento ordenFabricacionEventoRevertido;
 
     @Column(name = "valor_anterior", nullable = false, length = 120, updatable = false)
     private String valorAnterior;
@@ -63,7 +72,9 @@ public class BatchRecordCorreccion {
 
     @PrePersist
     private void validarCreacion() {
-        if (batchRecord == null || eventoCorreccion == null || corregidaPor == null
+        if (batchRecord == null
+                || ((eventoCorreccion == null) == (ordenFabricacionEventoCorreccion == null))
+                || corregidaPor == null
                 || corregidaEn == null || esBlanco(valorAnterior)
                 || esBlanco(valorNuevo) || esBlanco(motivo)) {
             throw new IllegalStateException("La evidencia de corrección está incompleta.");

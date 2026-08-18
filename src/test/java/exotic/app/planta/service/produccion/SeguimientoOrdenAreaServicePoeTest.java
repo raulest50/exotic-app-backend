@@ -11,10 +11,12 @@ import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.empresa.JornadaLaboralVersionRepo;
+import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
@@ -77,6 +79,8 @@ class SeguimientoOrdenAreaServicePoeTest {
                 mock(MasterDirectiveService.class),
                 batchRecordService,
                 documentoRepo,
+                mock(OrdenFabricacionOperacionRepo.class),
+                mock(LoteRepo.class),
                 Clock.fixed(Instant.parse("2026-08-18T15:00:00Z"), ZoneId.of("America/Bogota"))
         );
 

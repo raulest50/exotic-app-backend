@@ -11,5 +11,7 @@ public enum EstadoCalidadLote {
     APROBADO,
     LIBERADO,
     RECHAZADO,
-    BLOQUEADO
+    BLOQUEADO,
+    /** Lote intermedio cuya liberacion formal no aplica por decision de negocio. */
+    NO_APLICA_CALIDAD
 }

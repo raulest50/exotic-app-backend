@@ -25,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -40,6 +41,58 @@ public class SalidaAlmacenResource {
     private final DispensacionV2WorkflowService dispensacionV2WorkflowService;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+
+    @GetMapping("/dispensacion-v2/ordenes-fabricacion")
+    public ResponseEntity<List<DispensacionV2OrdenFabricacionDTOs.Option>>
+    buscarOrdenesFabricacionDispensacionV2(
+            Authentication authentication,
+            @RequestParam int areaId,
+            @RequestParam(defaultValue = "") String search
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService
+                .buscarOrdenesFabricacion(areaId, search));
+    }
+
+    @GetMapping("/dispensacion-v2/ordenes-fabricacion/{ordenFabricacionId}/preparacion")
+    public ResponseEntity<DispensacionV2OrdenFabricacionDTOs.PreparationResponse>
+    prepararOrdenFabricacionDispensacionV2(
+            Authentication authentication,
+            @PathVariable Long ordenFabricacionId,
+            @RequestParam int areaId
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService
+                .prepararOrdenFabricacion(ordenFabricacionId, areaId));
+    }
+
+    @PostMapping("/dispensacion-v2/ordenes-fabricacion/{ordenFabricacionId}/asignacion-lotes")
+    public ResponseEntity<DispensacionV2OrdenFabricacionDTOs.PreparationResponse>
+    asignarLotesOrdenFabricacionDispensacionV2(
+            Authentication authentication,
+            @PathVariable Long ordenFabricacionId,
+            @RequestBody DispensacionV2OrdenFabricacionDTOs.AssignmentRequest request
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService
+                .asignarLotesOrdenFabricacion(ordenFabricacionId, request));
+    }
+
+    @PostMapping("/dispensacion-v2/ordenes-fabricacion/{ordenFabricacionId}/finalizar")
+    public ResponseEntity<DispensacionV2OrdenFabricacionDTOs.FinalizationResponse>
+    finalizarOrdenFabricacionDispensacionV2(
+            Authentication authentication,
+            @PathVariable Long ordenFabricacionId,
+            @RequestBody DispensacionV2OrdenFabricacionDTOs.FinalizationRequest request
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        requireDispensacionV2Access(currentUser);
+        return ResponseEntity.ok(dispensacionV2WorkflowService
+                .finalizarOrdenFabricacion(ordenFabricacionId, request, currentUser));
+    }
 
     @GetMapping("/dispensacion-v2/mps-semanal")
     public ResponseEntity<MpsSemanalDraftDTO> getDispensacionV2MpsSemanal(

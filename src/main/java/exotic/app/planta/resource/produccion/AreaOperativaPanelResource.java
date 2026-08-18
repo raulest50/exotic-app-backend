@@ -15,7 +15,11 @@ import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoSe
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
+import exotic.app.planta.service.produccion.OrdenFabricacionOperacionService;
+import exotic.app.planta.service.produccion.OrdenFabricacionService;
+import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
 import exotic.app.planta.service.users.UserOperationalCompatibilityService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -34,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.DayOfWeek;
@@ -56,6 +61,63 @@ public class AreaOperativaPanelResource {
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
     private final UserRepository userRepository;
+    private final OrdenFabricacionOperacionService ordenFabricacionOperacionService;
+    private final OrdenFabricacionService ordenFabricacionService;
+
+    @PostMapping("/ordenes-fabricacion/operaciones/{operacionId}/iniciar")
+    public OrdenFabricacionDTOs.OperacionResponse iniciarOperacionFabricacion(
+            Authentication authentication,
+            @PathVariable Long operacionId,
+            @Valid @RequestBody(required = false) OrdenFabricacionDTOs.OperacionTransitionRequest request
+    ) {
+        User actor = getCurrentUser(authentication);
+        return ordenFabricacionOperacionService.iniciar(
+                operacionId, actor, request == null ? null : request.getObservaciones());
+    }
+
+    @PostMapping("/ordenes-fabricacion/operaciones/{operacionId}/pausar")
+    public OrdenFabricacionDTOs.OperacionResponse pausarOperacionFabricacion(
+            Authentication authentication,
+            @PathVariable Long operacionId,
+            @Valid @RequestBody(required = false) OrdenFabricacionDTOs.OperacionTransitionRequest request
+    ) {
+        User actor = getCurrentUser(authentication);
+        return ordenFabricacionOperacionService.pausar(
+                operacionId, actor, request == null ? null : request.getObservaciones());
+    }
+
+    @PostMapping("/ordenes-fabricacion/operaciones/{operacionId}/completar")
+    public OrdenFabricacionDTOs.OperacionResponse completarOperacionFabricacion(
+            Authentication authentication,
+            @PathVariable Long operacionId,
+            @Valid @RequestBody OrdenFabricacionDTOs.OperacionCompletarRequest request
+    ) {
+        return ordenFabricacionOperacionService.completar(
+                operacionId, getCurrentUser(authentication), request);
+    }
+
+    @GetMapping("/ordenes-fabricacion/{ordenFabricacionId}/detalle-operativo")
+    public OrdenFabricacionDTOs.Response getDetalleOperativoFabricacion(
+            Authentication authentication,
+            @PathVariable Long ordenFabricacionId
+    ) {
+        User actor = getCurrentUser(authentication);
+        return ordenFabricacionService.detalleOperativo(
+                ordenFabricacionId, actor.getId());
+    }
+
+    @GetMapping("/ordenes-fabricacion/{ordenFabricacionId}/operaciones/{operacionId}/poe/archivo")
+    public ResponseEntity<?> getPoeOperacionFabricacion(
+            Authentication authentication,
+            @PathVariable Long ordenFabricacionId,
+            @PathVariable Long operacionId
+    ) {
+        ProcesoProduccionDocumentoService.DescargaDocumento descarga =
+                areaOperativaPoeService.getDescargaFabricacion(
+                        ordenFabricacionId, operacionId,
+                        getCurrentUser(authentication).getId());
+        return buildDocumentoResponse(descarga);
+    }
 
     @GetMapping("/ordenes/{ordenId}/detalle-operativo")
     public ResponseEntity<?> getDetalleOperativoOrden(
@@ -92,21 +154,7 @@ public class AreaOperativaPanelResource {
         try {
             ProcesoProduccionDocumentoService.DescargaDocumento descarga =
                     areaOperativaPoeService.getDescarga(ordenId, seguimientoId, user.getId());
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(descarga.contentType()));
-            headers.setContentLength(descarga.contentLength());
-            ContentDisposition disposition = MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(
-                    descarga.contentType())
-                    ? ContentDisposition.inline()
-                            .filename(descarga.fileName(), StandardCharsets.UTF_8)
-                            .build()
-                    : ContentDisposition.attachment()
-                            .filename(descarga.fileName(), StandardCharsets.UTF_8)
-                            .build();
-            headers.setContentDisposition(disposition);
-            headers.set("X-Content-Type-Options", "nosniff");
-            headers.setCacheControl(CacheControl.noStore().getHeaderValue());
-            return new ResponseEntity<Resource>(descarga.resource(), headers, HttpStatus.OK);
+            return buildDocumentoResponse(descarga);
         } catch (AccessDeniedException e) {
             log.warn("Acceso denegado al POE de orden {} y etapa {} para user {}: {}",
                     ordenId, seguimientoId, user.getId(), e.getMessage());
@@ -120,6 +168,49 @@ public class AreaOperativaPanelResource {
             return ResponseEntity.internalServerError()
                     .body(new ErrorResponse("Archivo no disponible", e.getMessage()));
         }
+    }
+
+    private ResponseEntity<Resource> buildDocumentoResponse(
+            ProcesoProduccionDocumentoService.DescargaDocumento descarga) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(descarga.contentType()));
+        headers.setContentLength(descarga.contentLength());
+        ContentDisposition disposition = MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(
+                descarga.contentType())
+                ? ContentDisposition.inline()
+                .filename(descarga.fileName(), StandardCharsets.UTF_8)
+                .build()
+                : ContentDisposition.attachment()
+                .filename(descarga.fileName(), StandardCharsets.UTF_8)
+                .build();
+        headers.setContentDisposition(disposition);
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.setCacheControl(CacheControl.noStore().getHeaderValue());
+        return new ResponseEntity<>(descarga.resource(), headers, HttpStatus.OK);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException error) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("Acceso denegado", error.getMessage()));
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NoSuchElementException error) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse("No encontrado", error.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException error) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("Solicitud invalida", error.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(IllegalStateException error) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Operacion no permitida", error.getMessage()));
     }
 
     @PostMapping("/ruido-muestras")

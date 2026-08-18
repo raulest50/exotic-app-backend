@@ -2,6 +2,9 @@ package exotic.app.planta.model.produccion.fabricacion;
 
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
+import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
 import exotic.app.planta.model.users.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -37,6 +40,11 @@ public class OrdenFabricacion {
     @JoinColumn(name = "manufacturing_version_id", nullable = false)
     private ManufacturingVersions manufacturingVersion;
 
+    /** OP que genero automaticamente esta OF. Nula para ordenes independientes. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "orden_produccion_origen_id")
+    private OrdenProduccion ordenProduccionOrigen;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private EstadoOrdenFabricacion estado = EstadoOrdenFabricacion.BORRADOR;
@@ -55,6 +63,10 @@ public class OrdenFabricacion {
     @Column(name = "fecha_lanzamiento")
     private LocalDateTime fechaLanzamiento;
 
+    /** Instante real en que la orden quedo disponible para ejecucion. */
+    @Column(name = "liberada_en")
+    private LocalDateTime liberadaEn;
+
     @Column(name = "fecha_final_planificada")
     private LocalDateTime fechaFinalPlanificada;
 
@@ -63,6 +75,17 @@ public class OrdenFabricacion {
 
     @Column(name = "fecha_final")
     private LocalDateTime fechaFinal;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "politica_dispensacion_inicio", nullable = false, length = 30)
+    private PoliticaDispensacionInicio politicaDispensacionInicio = PoliticaDispensacionInicio.BLOQUEANTE;
+
+    @Column(name = "fecha_aplicacion_politica_dispensacion")
+    private LocalDateTime fechaAplicacionPoliticaDispensacion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_dispensacion_materiales", nullable = false, length = 40)
+    private EstadoDispensacionMateriales estadoDispensacionMateriales = EstadoDispensacionMateriales.PENDIENTE;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "creada_por_id", nullable = false)
@@ -94,7 +117,8 @@ public class OrdenFabricacion {
     }
 
     private void validarInvariantes() {
-        if (semiTerminado == null || estado == null || creadaPor == null) {
+        if (semiTerminado == null || estado == null || creadaPor == null
+                || politicaDispensacionInicio == null || estadoDispensacionMateriales == null) {
             throw new IllegalStateException(
                     "El semiterminado, estado y usuario creador de la orden son obligatorios.");
         }

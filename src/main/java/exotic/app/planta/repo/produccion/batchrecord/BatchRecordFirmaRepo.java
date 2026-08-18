@@ -10,7 +10,9 @@ public interface BatchRecordFirmaRepo extends JpaRepository<BatchRecordFirma, Lo
 
     boolean existsBySeguimientoEvento_Id(Long eventoId);
 
-    @EntityGraph(attributePaths = {"firmante", "etapa", "seguimientoEvento", "revision", "firmaVisualVersion"})
+    boolean existsByOrdenFabricacionEvento_Id(Long eventoId);
+
+    @EntityGraph(attributePaths = {"firmante", "etapa", "seguimientoEvento", "ordenFabricacionEvento", "revision", "firmaVisualVersion"})
     List<BatchRecordFirma> findByBatchRecord_IdOrderByFirmadoEnAscIdAsc(Long batchRecordId);
 
     @EntityGraph(attributePaths = {"firmante", "revision", "firmaVisualVersion"})

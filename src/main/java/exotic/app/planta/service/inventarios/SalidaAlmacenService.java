@@ -14,12 +14,16 @@ import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
@@ -63,6 +67,107 @@ public class SalidaAlmacenService {
     private final ProductoService productoService;
     private final AreaProduccionRepo areaProduccionRepo;
     private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
+    private final OrdenFabricacionRepo ordenFabricacionRepo;
+    private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
+
+    /** Registra una dispensación de materiales cuyo documento causante es una OF. */
+    @Transactional
+    public TransaccionAlmacen createDispensacionOrdenFabricacion(
+            Long ordenFabricacionId,
+            Integer areaOperativaDestinoId,
+            List<DispensacionItemDTO> items,
+            String observaciones,
+            User actor
+    ) {
+        if (ordenFabricacionId == null || actor == null || actor.getId() == null) {
+            throw new IllegalArgumentException("La OF y el usuario autenticado son obligatorios.");
+        }
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("La dispensacion de la OF requiere materiales.");
+        }
+        OrdenFabricacion orden = ordenFabricacionRepo.findByIdForUpdate(ordenFabricacionId)
+                .orElseThrow(() -> new IllegalArgumentException("Orden de fabricacion no encontrada."));
+        if (orden.getEstado() != EstadoOrdenFabricacion.LIBERADA
+                && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION) {
+            throw new IllegalStateException(
+                    "Solo una OF liberada o en ejecucion admite dispensaciones.");
+        }
+        AreaOperativa areaDestino = areaProduccionRepo.findById(areaOperativaDestinoId)
+                .orElseThrow(() -> new IllegalArgumentException("Area operativa destino no encontrada."));
+        if (!ordenFabricacionOperacionRepo
+                .existsByOrdenFabricacion_OrdenFabricacionIdAndAreaOperativa_AreaId(
+                        ordenFabricacionId, areaDestino.getAreaId())) {
+            throw new IllegalArgumentException(
+                    "El area destino no pertenece al proceso congelado de la OF.");
+        }
+
+        TransaccionAlmacen transaccion = new TransaccionAlmacen();
+        transaccion.setTipoEntidadCausante(TransaccionAlmacen.TipoEntidadCausante.OD_OF);
+        transaccion.setIdEntidadCausante(Math.toIntExact(ordenFabricacionId));
+        transaccion.setObservaciones(observaciones);
+        transaccion.setUsuarioAprobador(actor);
+        transaccion.setUsuariosResponsables(List.of(actor));
+
+        List<Movimiento> movimientos = new ArrayList<>();
+        for (DispensacionItemDTO item : items) {
+            if (item == null || item.getProductoId() == null || item.getProductoId().isBlank()
+                    || item.getCantidad() <= 0) {
+                throw new IllegalArgumentException(
+                        "Cada material de la OF requiere producto y cantidad positiva.");
+            }
+            Producto producto = productoRepo.findById(item.getProductoId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Producto no encontrado: " + item.getProductoId()));
+            boolean consumoDirecto = producto instanceof Material material
+                    && material.isConsumoDirecto();
+            if (producto.isInventareable() == consumoDirecto) {
+                throw new IllegalStateException(
+                        "El producto " + producto.getProductoId()
+                                + " tiene una configuracion de inventario/consumo invalida.");
+            }
+
+            Lote lote = null;
+            if (consumoDirecto) {
+                if (item.getLoteId() != null) {
+                    throw new IllegalArgumentException(
+                            "Un consumo directo no admite lote origen.");
+                }
+            } else {
+                if (item.getLoteId() == null) {
+                    throw new IllegalArgumentException(
+                            "El material inventariable " + producto.getProductoId()
+                                    + " requiere lote origen.");
+                }
+                lote = loteRepo.findById(item.getLoteId().longValue())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Lote origen no encontrado: " + item.getLoteId()));
+                if (lote.getProducto() != null
+                        && !producto.getProductoId().equals(lote.getProducto().getProductoId())) {
+                    throw new IllegalArgumentException(
+                            "El lote " + lote.getBatchNumber()
+                                    + " no corresponde al producto " + producto.getProductoId() + ".");
+                }
+            }
+
+            Movimiento movimiento = new Movimiento();
+            movimiento.setCantidad(-item.getCantidad());
+            movimiento.setProducto(producto);
+            movimiento.setTipoMovimiento(consumoDirecto
+                    ? Movimiento.TipoMovimiento.CONSUMO
+                    : Movimiento.TipoMovimiento.DISPENSACION);
+            movimiento.setAfectaInventario(!consumoDirecto);
+            movimiento.setAlmacen(consumoDirecto ? null : Movimiento.Almacen.GENERAL);
+            movimiento.setLote(lote);
+            movimiento.setAreaOperativa(areaDestino);
+            movimiento.setTransaccionAlmacen(transaccion);
+            movimientos.add(movimiento);
+        }
+        transaccion.setMovimientosTransaccion(movimientos);
+        TransaccionAlmacen guardada = transaccionAlmacenHeaderRepo.saveAndFlush(transaccion);
+        orden.setEstadoDispensacionMateriales(EstadoDispensacionMateriales.PARCIAL);
+        ordenFabricacionRepo.save(orden);
+        return guardada;
+    }
 
     /**
      * Creates a dispensation transaction for a production order.

@@ -132,6 +132,8 @@ public class BatchRecordPdfService {
         addObjectSection(document, "Lote de resultado", root.path("lote"));
         addObjectSection(document, "Producto", root.path("producto"));
         addObjectSection(document, "Versión de manufactura congelada", root.path("manufactura"));
+        addArraySection(document, "Requerimientos de materiales congelados",
+                jsonArray(root.path("requerimientosMaterialesJson")), false);
         addObjectSection(document, "Cantidades", root.path("cantidades"));
         addArraySection(document, "Etapas de fabricación", root.path("etapas"), false);
         addArraySection(document, "Consumos y trazabilidad de lotes", root.path("consumos"), false);
@@ -156,6 +158,15 @@ public class BatchRecordPdfService {
                 font(8, Font.ITALIC, BaseColor.DARK_GRAY)));
         document.close();
         return output.toByteArray();
+    }
+
+    private JsonNode jsonArray(JsonNode value) throws IOException {
+        if (value.isArray()) return value;
+        if (value.isTextual() && !value.asText().isBlank()) {
+            JsonNode parsed = objectMapper.readTree(value.asText());
+            if (parsed != null && parsed.isArray()) return parsed;
+        }
+        return objectMapper.createArrayNode();
     }
 
     private void addSummary(

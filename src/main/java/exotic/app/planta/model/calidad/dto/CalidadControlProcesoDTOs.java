@@ -46,7 +46,9 @@ public final class CalidadControlProcesoDTOs {
         private LocalDate productionDate;
         private LocalDate expirationDate;
         private EstadoCalidadLote estadoCalidad;
+        private String tipoOrden;
         private Integer ordenProduccionId;
+        private Long ordenFabricacionId;
         private Long batchRecordId;
         private String batchRecordCodigo;
         private ProductoResumen producto;

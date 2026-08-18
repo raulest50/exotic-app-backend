@@ -12,4 +12,10 @@ public interface BatchRecordConsumoRepo extends JpaRepository<BatchRecordConsumo
 
     @EntityGraph(attributePaths = {"producto", "loteOrigen", "movimiento", "registradoPor"})
     List<BatchRecordConsumo> findByBatchRecord_IdOrderByRegistradoEnAscIdAsc(Long batchRecordId);
+
+    @EntityGraph(attributePaths = {
+            "batchRecord", "batchRecord.ordenProduccion", "batchRecord.ordenFabricacion",
+            "batchRecord.loteResultado", "batchRecord.productoResultado", "producto", "loteOrigen"
+    })
+    List<BatchRecordConsumo> findByLoteOrigen_IdOrderByRegistradoEnAscIdAsc(Long loteId);
 }

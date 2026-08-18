@@ -3,6 +3,7 @@ package exotic.app.planta.model.produccion.batchrecord;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -44,6 +45,11 @@ public class BatchRecordFirma {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seguimiento_evento_id", unique = true, updatable = false)
     private SeguimientoOrdenAreaEvento seguimientoEvento;
+
+    /** Evento exacto de OF protegido por la firma de etapa. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "orden_fabricacion_evento_id", unique = true, updatable = false)
+    private OrdenFabricacionOperacionEvento ordenFabricacionEvento;
 
     /** Revisión documental exacta protegida por la firma, si su alcance es global. */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -111,12 +117,15 @@ public class BatchRecordFirma {
             throw new IllegalStateException("La firma electrónica está incompleta.");
         }
         boolean firmaEtapa = alcance == AlcanceFirmaBatchRecord.CIERRE_ETAPA_AREA;
-        if (firmaEtapa != (etapa != null) || firmaEtapa != (seguimientoEvento != null)) {
+        boolean tieneEventoEtapa = (seguimientoEvento != null) ^ (ordenFabricacionEvento != null);
+        if (firmaEtapa != (etapa != null) || firmaEtapa != tieneEventoEtapa) {
             throw new IllegalStateException(
                     "Solo una firma de cierre de área puede y debe referenciar una etapa.");
         }
-        if (firmaEtapa && (revision != null
-                || etapa.getSeguimientoEventoOrigen() != seguimientoEvento)) {
+        boolean eventoCoincide = !firmaEtapa || (seguimientoEvento != null
+                ? mismaEntidad(etapa.getSeguimientoEventoOrigen(), seguimientoEvento)
+                : mismaEntidad(etapa.getOrdenFabricacionEventoOrigen(), ordenFabricacionEvento));
+        if (firmaEtapa && (revision != null || !eventoCoincide)) {
             throw new IllegalStateException(
                     "La firma de etapa debe referenciar su evento operativo vigente y no una revisión global.");
         }
@@ -196,5 +205,22 @@ public class BatchRecordFirma {
                 && segundo != null
                 && primero.getId() != null
                 && primero.getId().equals(segundo.getId()));
+    }
+
+    private boolean mismaEntidad(Object primera, Object segunda) {
+        if (primera == segunda) {
+            return true;
+        }
+        if (primera instanceof SeguimientoOrdenAreaEvento primerSeguimiento
+                && segunda instanceof SeguimientoOrdenAreaEvento segundoSeguimiento) {
+            return primerSeguimiento.getId() != null
+                    && primerSeguimiento.getId().equals(segundoSeguimiento.getId());
+        }
+        if (primera instanceof OrdenFabricacionOperacionEvento primerEvento
+                && segunda instanceof OrdenFabricacionOperacionEvento segundoEvento) {
+            return primerEvento.getId() != null
+                    && primerEvento.getId().equals(segundoEvento.getId());
+        }
+        return false;
     }
 }

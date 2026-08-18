@@ -83,6 +83,10 @@ public class BatchRecord {
     @Column(name = "contenido_sha256", length = 64)
     private String contenidoSha256;
 
+    /** Requerimientos normalizados y congelados al emitir la orden. */
+    @Column(name = "requerimientos_materiales_json", columnDefinition = "TEXT")
+    private String requerimientosMaterialesJson;
+
     @CreationTimestamp
     @Column(name = "creado_en", nullable = false, updatable = false)
     private LocalDateTime creadoEn;

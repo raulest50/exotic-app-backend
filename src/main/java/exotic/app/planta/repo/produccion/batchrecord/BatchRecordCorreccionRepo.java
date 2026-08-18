@@ -10,6 +10,8 @@ public interface BatchRecordCorreccionRepo extends JpaRepository<BatchRecordCorr
 
     boolean existsByEventoCorreccion_Id(Long eventoId);
 
-    @EntityGraph(attributePaths = {"etapa", "corregidaPor", "eventoCorreccion", "eventoRevertido", "revision", "firma"})
+    boolean existsByOrdenFabricacionEventoCorreccion_Id(Long eventoId);
+
+    @EntityGraph(attributePaths = {"etapa", "corregidaPor", "eventoCorreccion", "eventoRevertido", "ordenFabricacionEventoCorreccion", "ordenFabricacionEventoRevertido", "revision", "firma"})
     List<BatchRecordCorreccion> findByBatchRecord_IdOrderByCorregidaEnAscIdAsc(Long batchRecordId);
 }

@@ -191,6 +191,13 @@ public class ProductoManufacturingService {
                 : semiTerminado.isRequiereOrdenFabricacion();
         semiTerminado.setRequiereOrdenFabricacion(requiereOrden);
         if (requiereOrden) {
+            String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
+            if (prefijoLote == null) {
+                throw new IllegalArgumentException(
+                        "Un semiterminado que requiere orden de fabricacion debe tener prefijo de lote.");
+            }
+            validatePrefijoLoteDisponible(prefijoLote, producto.getProductoId());
+            semiTerminado.setPrefijoLote(prefijoLote);
             semiTerminado.setInventareable(true);
         }
     }
@@ -531,6 +538,7 @@ public class ProductoManufacturingService {
             dto.setCasePack(toCasePackDTO(terminado.getCasePack()));
         } else if (producto instanceof SemiTerminado semiTerminado) {
             dto.setRequiereOrdenFabricacion(semiTerminado.isRequiereOrdenFabricacion());
+            dto.setPrefijoLote(semiTerminado.getPrefijoLote());
         }
 
         return dto;

@@ -69,6 +69,10 @@ public final class BatchRecordDTOs {
         private List<Revision> revisiones = new ArrayList<>();
         @Builder.Default
         private List<DecisionCalidad> decisionesCalidad = new ArrayList<>();
+        @Builder.Default
+        private List<VinculoGenealogia> lotesOrigen = new ArrayList<>();
+        @Builder.Default
+        private List<VinculoGenealogia> lotesDestino = new ArrayList<>();
     }
 
     @Data
@@ -89,6 +93,8 @@ public final class BatchRecordDTOs {
         private Long plantillaControlId;
         private Integer plantillaControlVersion;
         private Long seguimientoEventoOrigenId;
+        private Long ordenFabricacionOperacionId;
+        private Long ordenFabricacionEventoOrigenId;
         private PoeReferencia poe;
     }
 
@@ -121,6 +127,23 @@ public final class BatchRecordDTOs {
         private String unidadMedida;
         private LocalDateTime registradoEn;
         private String registradoPor;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class VinculoGenealogia {
+        private Long batchRecordId;
+        private String batchRecordCodigo;
+        private Integer ordenProduccionId;
+        private Long ordenFabricacionId;
+        private Long loteId;
+        private String lote;
+        private String productoId;
+        private String productoNombre;
+        private BigDecimal cantidad;
+        private String unidadMedida;
     }
 
     @Data
@@ -172,6 +195,8 @@ public final class BatchRecordDTOs {
         private Long etapaId;
         private Long eventoCorreccionId;
         private Long eventoRevertidoId;
+        private Long ordenFabricacionEventoCorreccionId;
+        private Long ordenFabricacionEventoRevertidoId;
         private String valorAnterior;
         private String valorNuevo;
         private String motivo;
@@ -188,6 +213,7 @@ public final class BatchRecordDTOs {
         private Long id;
         private Long etapaId;
         private Long seguimientoEventoId;
+        private Long ordenFabricacionEventoId;
         private Integer revision;
         private AlcanceFirmaBatchRecord alcance;
         private DecisionFirmaBatchRecord decision;

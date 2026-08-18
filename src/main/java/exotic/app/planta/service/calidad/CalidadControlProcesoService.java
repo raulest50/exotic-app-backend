@@ -40,6 +40,7 @@ import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordEtapaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
@@ -73,6 +74,7 @@ public class CalidadControlProcesoService {
     private final LoteRepo loteRepo;
     private final BatchRecordRepo batchRecordRepo;
     private final BatchRecordEtapaRepo batchRecordEtapaRepo;
+    private final MasterDirectiveService masterDirectiveService;
 
     @Transactional(readOnly = true)
     public List<PlantillaResponse> listarPlantillas(Integer areaId, EstadoControlProcesoPlantilla estado) {
@@ -151,8 +153,8 @@ public class CalidadControlProcesoService {
     public List<LoteProduccionResumen> buscarLotesProduccion(String search, int size) {
         int safeSize = Math.min(Math.max(size, 1), 50);
         Pageable pageable = PageRequest.of(0, safeSize);
-        return loteRepo.searchProduccionLotes(normalizarBusqueda(search), pageable).stream()
-                .filter(this::esLoteProduccionTerminado)
+        return loteRepo.searchLotesManufactura(normalizarBusqueda(search), pageable).stream()
+                .filter(this::esLoteManufactura)
                 .map(this::toLoteProduccionResumen)
                 .toList();
     }
@@ -171,8 +173,9 @@ public class CalidadControlProcesoService {
         }
         Lote lote = loteRepo.findById(loteId)
                 .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
-        validarLoteProduccionTerminado(lote);
+        validarLoteManufactura(lote);
         BatchRecord record = batchRecordRepo.findByLoteResultado_Id(loteId).orElse(null);
+        validarExpedienteAdmiteControl(record);
         BatchRecordEtapa etapa = resolverEtapaBatchRecord(
                 record, batchRecordEtapaId, areaId, null, false);
         ControlProcesoPlantilla plantilla = etapa != null
@@ -203,7 +206,7 @@ public class CalidadControlProcesoService {
 
         Lote lote = loteRepo.findById(request.getLoteId())
                 .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
-        validarLoteProduccionTerminado(lote);
+        validarLoteManufactura(lote);
         BatchRecord record = batchRecordRepo
                 .findByLoteResultadoIdForUpdate(lote.getId())
                 .orElse(null);
@@ -570,7 +573,10 @@ public class CalidadControlProcesoService {
 
     private LoteProduccionResumen toLoteProduccionResumen(Lote lote) {
         OrdenProduccion orden = lote.getOrdenProduccion();
-        Producto producto = orden == null ? null : orden.getProducto();
+        var ordenFabricacion = lote.getOrdenFabricacion();
+        Producto producto = lote.getProducto() != null
+                ? lote.getProducto()
+                : orden == null ? null : orden.getProducto();
         BatchRecord record = lote.getId() == null
                 ? null : batchRecordRepo.findByLoteResultado_Id(lote.getId()).orElse(null);
         return LoteProduccionResumen.builder()
@@ -579,7 +585,10 @@ public class CalidadControlProcesoService {
                 .productionDate(lote.getProductionDate())
                 .expirationDate(lote.getExpirationDate())
                 .estadoCalidad(lote.getEstadoCalidad())
+                .tipoOrden(ordenFabricacion == null ? "OP" : "OF")
                 .ordenProduccionId(orden == null ? null : orden.getOrdenId())
+                .ordenFabricacionId(ordenFabricacion == null
+                        ? null : ordenFabricacion.getOrdenFabricacionId())
                 .batchRecordId(record == null ? null : record.getId())
                 .batchRecordCodigo(record == null ? null : record.getCodigo())
                 .producto(producto == null ? null : ProductoResumen.builder()
@@ -620,7 +629,8 @@ public class CalidadControlProcesoService {
                 .filter(etapa -> etapa.getControlProcesoPlantilla() != null)
                 .toList();
         if (etapasArea.isEmpty()) {
-            return null;
+            throw new NoSuchElementException(
+                    "El expediente no congelo un control de proceso para esta area.");
         }
 
         List<BatchRecordEtapa> candidatas = plantilla == null
@@ -643,10 +653,9 @@ public class CalidadControlProcesoService {
     private void validarExpedienteAdmiteControl(BatchRecord record) {
         if (record == null) return;
         EstadoBatchRecord estado = record.getEstado();
-        if (estado == EstadoBatchRecord.APROBADO
-                || estado == EstadoBatchRecord.RECHAZADO
-                || estado == EstadoBatchRecord.CERRADO
-                || estado == EstadoBatchRecord.ANULADO) {
+        if (estado != EstadoBatchRecord.BORRADOR
+                && estado != EstadoBatchRecord.EN_EJECUCION
+                && estado != EstadoBatchRecord.DEVUELTO_PRODUCCION) {
             throw new IllegalStateException(
                     "No se pueden agregar controles a un expediente con estado " + estado + ".");
         }
@@ -693,16 +702,26 @@ public class CalidadControlProcesoService {
         return ResultadoControlProceso.CONFORME;
     }
 
-    private void validarLoteProduccionTerminado(Lote lote) {
-        if (!esLoteProduccionTerminado(lote)) {
-            throw new IllegalArgumentException("Debe seleccionar un lote de produccion de producto terminado.");
+    private void validarLoteManufactura(Lote lote) {
+        if (lote != null
+                && lote.getOrdenFabricacion() != null
+                && !masterDirectiveService.isBatchRecordWorkflowEnabled()) {
+            throw new IllegalStateException(
+                    "El flujo de ordenes de fabricacion y Batch Record esta deshabilitado.");
+        }
+        if (!esLoteManufactura(lote)) {
+            throw new IllegalArgumentException(
+                    "Debe seleccionar un lote originado en una OP u OF.");
         }
     }
 
-    private boolean esLoteProduccionTerminado(Lote lote) {
-        if (lote == null || lote.getOrdenProduccion() == null || lote.getOrdenProduccion().getProducto() == null) {
-            return false;
+    private boolean esLoteManufactura(Lote lote) {
+        if (lote == null) return false;
+        if (lote.getOrdenFabricacion() != null && lote.getProducto() != null) {
+            return masterDirectiveService.isBatchRecordWorkflowEnabled();
         }
+        if (lote.getOrdenProduccion() == null
+                || lote.getOrdenProduccion().getProducto() == null) return false;
         Object producto = Hibernate.unproxy(lote.getOrdenProduccion().getProducto());
         return producto instanceof Terminado;
     }

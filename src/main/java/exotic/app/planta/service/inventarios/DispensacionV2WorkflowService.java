@@ -8,18 +8,31 @@ import exotic.app.planta.model.inventarios.dto.*;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
+import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.dto.InsumoWithStockDTO;
 import exotic.app.planta.model.producto.manufacturing.packaging.CasePack;
 import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
+import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
+import exotic.app.planta.service.produccion.MaterialRequirementSnapshotService;
+import exotic.app.planta.service.produccion.BatchRecordService;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +49,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -53,6 +69,241 @@ public class DispensacionV2WorkflowService {
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final SalidaAlmacenService salidaAlmacenService;
+    private final OrdenFabricacionRepo ordenFabricacionRepo;
+    private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
+    private final BatchRecordRepo batchRecordRepo;
+    private final LoteRepo loteRepo;
+    private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
+    private final MasterDirectiveService masterDirectiveService;
+    private final BatchRecordService batchRecordService;
+
+    @Transactional(readOnly = true)
+    public List<DispensacionV2OrdenFabricacionDTOs.Option> buscarOrdenesFabricacion(
+            Integer areaId, String search) {
+        requireBatchRecordWorkflow();
+        AreaOperativa area = requireArea(areaId);
+        String searchPattern = search == null || search.isBlank()
+                ? "" : "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+        Map<Long, OrdenFabricacion> ordenes = new LinkedHashMap<>();
+        for (OrdenFabricacionOperacion operacion
+                : ordenFabricacionOperacionRepo.findParaDispensacionPorArea(
+                area.getAreaId(),
+                List.of(EstadoOrdenFabricacion.LIBERADA, EstadoOrdenFabricacion.EN_EJECUCION),
+                searchPattern)) {
+            OrdenFabricacion orden = operacion.getOrdenFabricacion();
+            ordenes.putIfAbsent(orden.getOrdenFabricacionId(), orden);
+        }
+        return ordenes.values().stream().map(this::toOrdenFabricacionOption).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public DispensacionV2OrdenFabricacionDTOs.PreparationResponse prepararOrdenFabricacion(
+            Long ordenFabricacionId, Integer areaId) {
+        return buildOrdenFabricacionResponse(
+                ordenFabricacionId, areaId, Map.of(), false, false);
+    }
+
+    @Transactional(readOnly = true)
+    public DispensacionV2OrdenFabricacionDTOs.PreparationResponse asignarLotesOrdenFabricacion(
+            Long ordenFabricacionId,
+            DispensacionV2OrdenFabricacionDTOs.AssignmentRequest request) {
+        Map<String, DispensacionV2MaterialEditableRequestDTO> overrides = new HashMap<>();
+        if (request != null && request.getMateriales() != null) {
+            for (DispensacionV2MaterialEditableRequestDTO material : request.getMateriales()) {
+                if (material != null && material.getProductoId() != null
+                        && !material.getProductoId().isBlank()) {
+                    overrides.put(material.getProductoId(), material);
+                }
+            }
+        }
+        return buildOrdenFabricacionResponse(
+                ordenFabricacionId,
+                request == null ? null : request.getAreaId(),
+                overrides,
+                true,
+                false);
+    }
+
+    @Transactional
+    public DispensacionV2OrdenFabricacionDTOs.FinalizationResponse finalizarOrdenFabricacion(
+            Long ordenFabricacionId,
+            DispensacionV2OrdenFabricacionDTOs.FinalizationRequest request,
+            User currentUser) {
+        requireBatchRecordWorkflow();
+        AreaOperativa area = requireArea(request == null ? null : request.getAreaId());
+        OrdenFabricacion orden = requireOrdenFabricacion(ordenFabricacionId);
+        validateOrdenFabricacion(area, orden);
+        BatchRecord record = requireBatchRecordFabricacion(orden);
+        List<MaterialRequirementSnapshotService.RequirementView> requirements =
+                materialRequirementSnapshotService.leer(
+                        record.getRequerimientosMaterialesJson());
+        Set<String> productosPermitidos = requirements.stream()
+                .map(MaterialRequirementSnapshotService.RequirementView::productoId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        List<DispensacionV2FinalizacionMaterialRequestDTO> materiales =
+                request == null || request.getMateriales() == null
+                        ? List.of() : request.getMateriales();
+        boolean contieneMaterialAjeno = materiales.stream()
+                .filter(Objects::nonNull)
+                .filter(material -> Boolean.TRUE.equals(material.getChecked()))
+                .map(DispensacionV2FinalizacionMaterialRequestDTO::getProductoId)
+                .anyMatch(productoId -> !productosPermitidos.contains(productoId));
+        if (contieneMaterialAjeno) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La dispensacion contiene un material ajeno al snapshot de la OF.");
+        }
+
+        DispensacionV2FinalizacionOrdenRequestDTO requestCompatible =
+                new DispensacionV2FinalizacionOrdenRequestDTO();
+        requestCompatible.setOrdenProduccionId(Math.toIntExact(ordenFabricacionId));
+        requestCompatible.setMateriales(materiales);
+        Map<StockDemandKey, Double> demandaPorLote = new HashMap<>();
+        List<DispensacionItemDTO> items = buildFinalizacionItems(
+                requestCompatible, demandaPorLote);
+        if (items.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debe seleccionar al menos un material de la OF.");
+        }
+        validateStockDisponible(demandaPorLote);
+        String observaciones = "Dispensacion v2 de OF " + ordenFabricacionId
+                + " hacia " + area.getNombre()
+                + (request.getObservaciones() == null || request.getObservaciones().isBlank()
+                ? "" : ". " + request.getObservaciones().trim());
+        TransaccionAlmacen transaccion = salidaAlmacenService
+                .createDispensacionOrdenFabricacion(
+                        ordenFabricacionId, area.getAreaId(), items,
+                        observaciones, currentUser);
+        batchRecordService.sincronizarConsumosOrdenFabricacion(ordenFabricacionId);
+
+        Map<String, Double> historico = calcularHistoricoPorProducto(
+                TransaccionAlmacen.TipoEntidadCausante.OD_OF,
+                Math.toIntExact(ordenFabricacionId));
+        boolean completa = requirements.stream()
+                .filter(requirement -> requirement.inventareable()
+                        || requirement.consumoDirecto())
+                .allMatch(requirement -> historico.getOrDefault(
+                        requirement.productoId(), 0.0) + TOLERANCE
+                        >= requirement.cantidad().doubleValue());
+        orden.setEstadoDispensacionMateriales(completa
+                ? EstadoDispensacionMateriales.COMPLETA
+                : EstadoDispensacionMateriales.PARCIAL);
+        ordenFabricacionRepo.save(orden);
+
+        return DispensacionV2OrdenFabricacionDTOs.FinalizationResponse.builder()
+                .ordenFabricacionId(ordenFabricacionId)
+                .lote(loteFabricacion(orden).getBatchNumber())
+                .transaccionId(transaccion.getTransaccionId())
+                .build();
+    }
+
+    private DispensacionV2OrdenFabricacionDTOs.PreparationResponse buildOrdenFabricacionResponse(
+            Long ordenFabricacionId,
+            Integer areaId,
+            Map<String, DispensacionV2MaterialEditableRequestDTO> overrides,
+            boolean asignarLotes,
+            boolean defaultChecked) {
+        requireBatchRecordWorkflow();
+        AreaOperativa area = requireArea(areaId);
+        OrdenFabricacion orden = requireOrdenFabricacion(ordenFabricacionId);
+        validateOrdenFabricacion(area, orden);
+        BatchRecord record = requireBatchRecordFabricacion(orden);
+        Map<String, MaterialAccumulator> requirements = buildMaterialesDesdeSnapshot(
+                record.getRequerimientosMaterialesJson());
+        Map<String, Double> historico = calcularHistoricoPorProducto(
+                TransaccionAlmacen.TipoEntidadCausante.OD_OF,
+                Math.toIntExact(ordenFabricacionId));
+        Map<String, List<LoteStock>> stockCache = new HashMap<>();
+        Map<String, Double> stockRestantePorLote = new HashMap<>();
+        List<DispensacionV2MaterialDTO> materiales = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        for (MaterialAccumulator requirement : requirements.values()) {
+            DispensacionV2MaterialDTO material = toMaterialDTO(
+                    requirement,
+                    historico.getOrDefault(requirement.productoId, 0.0),
+                    overrides.get(requirement.productoId),
+                    defaultChecked);
+            if (asignarLotes && material.isChecked() && material.isInventareable()
+                    && material.getCantidadADispensar() > TOLERANCE) {
+                asignarLotesSugeridos(material, stockCache, stockRestantePorLote);
+            }
+            if (material.getWarning() != null && !material.getWarning().isBlank()) {
+                warnings.add(material.getProductoId() + ": " + material.getWarning());
+            }
+            materiales.add(material);
+        }
+        return DispensacionV2OrdenFabricacionDTOs.PreparationResponse.builder()
+                .orden(toOrdenFabricacionOption(orden))
+                .area(toAreaDTO(area))
+                .materiales(materiales)
+                .warnings(warnings)
+                .build();
+    }
+
+    private void requireBatchRecordWorkflow() {
+        if (!masterDirectiveService.isBatchRecordWorkflowEnabled()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "El flujo de ordenes de fabricacion esta deshabilitado por directiva maestra.");
+        }
+    }
+
+    private OrdenFabricacion requireOrdenFabricacion(Long id) {
+        if (id == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "La ordenFabricacionId es obligatoria.");
+        }
+        return ordenFabricacionRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Orden de fabricacion no encontrada."));
+    }
+
+    private void validateOrdenFabricacion(AreaOperativa area, OrdenFabricacion orden) {
+        if (orden.getEstado() != EstadoOrdenFabricacion.LIBERADA
+                && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "La OF debe estar liberada o en ejecucion para dispensar.");
+        }
+        if (!ordenFabricacionOperacionRepo
+                .existsByOrdenFabricacion_OrdenFabricacionIdAndAreaOperativa_AreaId(
+                        orden.getOrdenFabricacionId(), area.getAreaId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "El area no pertenece al proceso congelado de la OF.");
+        }
+    }
+
+    private BatchRecord requireBatchRecordFabricacion(OrdenFabricacion orden) {
+        return batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
+                        orden.getOrdenFabricacionId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "La OF no tiene un expediente con materiales congelados."));
+    }
+
+    private DispensacionV2OrdenFabricacionDTOs.Option toOrdenFabricacionOption(
+            OrdenFabricacion orden) {
+        return DispensacionV2OrdenFabricacionDTOs.Option.builder()
+                .ordenFabricacionId(orden.getOrdenFabricacionId())
+                .lote(loteFabricacion(orden).getBatchNumber())
+                .semiTerminadoId(orden.getSemiTerminado().getProductoId())
+                .semiTerminadoNombre(orden.getSemiTerminado().getNombre())
+                .cantidadPlanificada(orden.getCantidadPlanificada().doubleValue())
+                .unidadMedida(orden.getUnidadMedida())
+                .estado(orden.getEstado().name())
+                .estadoDispensacionMateriales(
+                        orden.getEstadoDispensacionMateriales().name())
+                .build();
+    }
+
+    private Lote loteFabricacion(OrdenFabricacion orden) {
+        return loteRepo.findByOrdenFabricacion_OrdenFabricacionId(
+                        orden.getOrdenFabricacionId()).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT, "La OF no tiene lote de resultado."));
+    }
 
     @Transactional(readOnly = true)
     public DispensacionV2PreparacionResponseDTO preparar(DispensacionV2PreparacionRequestDTO request) {
@@ -177,6 +428,10 @@ public class DispensacionV2WorkflowService {
                     draft.dispensacionDTO(),
                     currentUser.getId()
             );
+            if (masterDirectiveService.isBatchRecordWorkflowEnabled()) {
+                batchRecordService.sincronizarConsumosOrdenProduccion(
+                        draft.orden().getOrdenId());
+            }
             log.info(
                     "[DISP_V2][FINALIZACION_PERSIST_COMPLETE] ordenProduccionId={} transaccionId={}",
                     draft.orden().getOrdenId(),
@@ -434,7 +689,7 @@ public class DispensacionV2WorkflowService {
             );
         }
 
-        Map<String, MaterialAccumulator> materiales = buildMaterialesRequeridos(terminado, orden.getCantidadProducir());
+        Map<String, MaterialAccumulator> materiales = buildMaterialesRequeridos(orden, terminado);
         Map<String, Double> historico = calcularHistoricoPorProducto(orden.getOrdenId());
 
         List<DispensacionV2MaterialDTO> materialesDTO = new ArrayList<>();
@@ -524,6 +779,35 @@ public class DispensacionV2WorkflowService {
         return materiales;
     }
 
+    private Map<String, MaterialAccumulator> buildMaterialesRequeridos(
+            OrdenProduccion orden, Terminado terminado) {
+        if (masterDirectiveService.isBatchRecordWorkflowEnabled()) {
+            BatchRecord record = batchRecordRepo.findByOrdenProduccion_OrdenId(
+                    orden.getOrdenId()).orElse(null);
+            if (record != null && record.getRequerimientosMaterialesJson() != null) {
+                return buildMaterialesDesdeSnapshot(record.getRequerimientosMaterialesJson());
+            }
+        }
+        return buildMaterialesRequeridos(terminado, orden.getCantidadProducir());
+    }
+
+    private Map<String, MaterialAccumulator> buildMaterialesDesdeSnapshot(String json) {
+        Map<String, MaterialAccumulator> materiales = new LinkedHashMap<>();
+        for (MaterialRequirementSnapshotService.RequirementView requirement
+                : materialRequirementSnapshotService.leer(json)) {
+            addMaterial(
+                    materiales,
+                    requirement.productoId(),
+                    requirement.productoNombre(),
+                    normalizeUnidad(requirement.unidadMedida(), "U"),
+                    requirement.tipoProducto(),
+                    requirement.inventareable(),
+                    requirement.consumoDirecto(),
+                    requirement.cantidad().doubleValue());
+        }
+        return materiales;
+    }
+
     private void aplanarInsumos(
             List<InsumoWithStockDTO> insumos,
             Map<String, MaterialAccumulator> materiales,
@@ -551,7 +835,14 @@ public class DispensacionV2WorkflowService {
                     hasSubInsumos,
                     insumo.getSubInsumos() != null ? insumo.getSubInsumos().size() : 0
             );
-            if (hasSubInsumos) {
+            boolean semiterminadoConOrdenPropia = hasSubInsumos
+                    && masterDirectiveService.isBatchRecordWorkflowEnabled()
+                    && productoRepo.findById(insumo.getProductoId())
+                    .filter(SemiTerminado.class::isInstance)
+                    .map(SemiTerminado.class::cast)
+                    .map(SemiTerminado::isRequiereOrdenFabricacion)
+                    .orElse(false);
+            if (hasSubInsumos && !semiterminadoConOrdenPropia) {
                 aplanarInsumos(
                         insumo.getSubInsumos(),
                         materiales,
@@ -918,23 +1209,31 @@ public class DispensacionV2WorkflowService {
     }
 
     private Map<String, Double> calcularHistoricoPorProducto(int ordenProduccionId) {
+        return calcularHistoricoPorProducto(
+                TransaccionAlmacen.TipoEntidadCausante.OD, ordenProduccionId);
+    }
+
+    private Map<String, Double> calcularHistoricoPorProducto(
+            TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
+            int entidadCausanteId) {
         Map<String, Double> historico = new HashMap<>();
         List<TransaccionAlmacen> transacciones = transaccionAlmacenHeaderRepo
                 .findByTipoEntidadCausanteAndIdEntidadCausanteWithMovimientos(
-                        TransaccionAlmacen.TipoEntidadCausante.OD,
-                        ordenProduccionId
+                        tipoEntidadCausante,
+                        entidadCausanteId
                 );
 
         log.info(
-                "[DISP_V2][HISTORY_QUERY] ordenProduccionId={} transactionCount={}",
-                ordenProduccionId,
+                "[DISP_V2][HISTORY_QUERY] tipoEntidad={} entidadCausanteId={} transactionCount={}",
+                tipoEntidadCausante,
+                entidadCausanteId,
                 transacciones.size()
         );
         for (TransaccionAlmacen transaccion : transacciones) {
             if (transaccion.getMovimientosTransaccion() == null) {
                 log.debug(
                         "[DISP_V2][HISTORY_TRANSACTION_SKIPPED] ordenProduccionId={} transaccionId={} reason=MOVIMIENTOS_NULL",
-                        ordenProduccionId,
+                        entidadCausanteId,
                         transaccion.getTransaccionId()
                 );
                 continue;
@@ -943,7 +1242,7 @@ public class DispensacionV2WorkflowService {
                 if (movimiento.getProducto() == null || movimiento.getProducto().getProductoId() == null) {
                     log.warn(
                             "[DISP_V2][HISTORY_MOVEMENT_SKIPPED] ordenProduccionId={} transaccionId={} movimientoId={} reason=PRODUCTO_NULL",
-                            ordenProduccionId,
+                            entidadCausanteId,
                             transaccion.getTransaccionId(),
                             movimiento.getMovimientoId()
                     );
@@ -951,7 +1250,7 @@ public class DispensacionV2WorkflowService {
                 }
                 log.debug(
                         "[DISP_V2][HISTORY_MOVEMENT] ordenProduccionId={} transaccionId={} movimientoId={} productoId={} cantidad={} absoluteCantidad={} loteId={} almacen={} tipoMovimiento={}",
-                        ordenProduccionId,
+                        entidadCausanteId,
                         transaccion.getTransaccionId(),
                         movimiento.getMovimientoId(),
                         movimiento.getProducto().getProductoId(),
@@ -973,7 +1272,7 @@ public class DispensacionV2WorkflowService {
         }
         historico.forEach((productoId, cantidad) -> log.info(
                 "[DISP_V2][HISTORY_TOTAL] ordenProduccionId={} productoId={} cantidadHistorica={}",
-                ordenProduccionId,
+                entidadCausanteId,
                 productoId,
                 cantidad
         ));

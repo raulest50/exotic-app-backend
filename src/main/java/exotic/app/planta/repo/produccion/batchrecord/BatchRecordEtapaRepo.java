@@ -11,11 +11,15 @@ public interface BatchRecordEtapaRepo extends JpaRepository<BatchRecordEtapa, Lo
 
     @EntityGraph(attributePaths = {
             "areaOperativa", "controlProcesoPlantilla", "seguimientoOrdenArea",
-            "seguimientoEventoOrigen", "reportadaPor"
+            "seguimientoEventoOrigen", "ordenFabricacionOperacion",
+            "ordenFabricacionOperacion.poeDocumentoVersion",
+            "ordenFabricacionEventoOrigen", "reportadaPor"
     })
     List<BatchRecordEtapa> findByBatchRecord_IdOrderBySecuenciaAscIdAsc(Long batchRecordId);
 
     Optional<BatchRecordEtapa> findBySeguimientoOrdenArea_Id(Long seguimientoId);
+
+    Optional<BatchRecordEtapa> findByOrdenFabricacionOperacion_Id(Long operacionId);
 
     Optional<BatchRecordEtapa> findByIdAndBatchRecord_Id(Long id, Long batchRecordId);
 }

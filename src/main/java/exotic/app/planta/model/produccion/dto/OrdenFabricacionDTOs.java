@@ -13,6 +13,9 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class OrdenFabricacionDTOs {
 
@@ -76,5 +79,70 @@ public final class OrdenFabricacionDTOs {
         private String creadaPor;
         private String responsable;
         private String observaciones;
+        private Integer ordenProduccionOrigenId;
+        private LocalDateTime liberadaEn;
+        private String politicaDispensacionInicio;
+        private String estadoDispensacionMateriales;
+        @Builder.Default
+        private List<OperacionResponse> operaciones = new ArrayList<>();
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OperacionResponse {
+        private Long id;
+        private Long ordenFabricacionId;
+        private String frontendNodeId;
+        private Integer procesoProduccionId;
+        private String procesoNombre;
+        private Integer areaOperativaId;
+        private String areaOperativaNombre;
+        private int posicionSecuencia;
+        private int estado;
+        private String estadoDescripcion;
+        private LocalDateTime fechaEstadoActual;
+        private LocalDateTime fechaVisible;
+        private LocalDateTime fechaCompletado;
+        private String usuarioReporta;
+        private String observaciones;
+        private Long batchRecordEtapaId;
+        private Long poeDocumentoVersionId;
+        private Integer poeVersion;
+        private String poeNombreArchivo;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OperacionTransitionRequest {
+        @Size(max = 500)
+        private String observaciones;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OperacionCompletarRequest {
+        @Size(max = 500)
+        private String observaciones;
+        private BigDecimal cantidadObtenida;
+        private LocalDate fechaVencimiento;
+        @Size(max = 500)
+        private String motivoDiferenciaCantidad;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CorreccionOperacionRequest {
+        @NotNull
+        private Integer estadoEsperado;
+        @NotNull
+        private Integer estadoDestino;
+        @NotBlank
+        @Size(max = 500)
+        private String motivo;
     }
 }

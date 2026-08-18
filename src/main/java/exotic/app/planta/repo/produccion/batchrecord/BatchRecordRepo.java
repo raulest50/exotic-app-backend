@@ -38,7 +38,14 @@ public interface BatchRecordRepo extends JpaRepository<BatchRecord, Long> {
                    OR op.ordenId = :ordenProduccionId)
               AND (:lote IS NULL OR :lote = ''
                    OR LOWER(b.loteResultado.batchNumber)
-                        LIKE LOWER(CONCAT('%', :lote, '%')))
+                        LIKE LOWER(CONCAT('%', :lote, '%'))
+                   OR EXISTS (
+                       SELECT c.id FROM BatchRecordConsumo c
+                       WHERE c.batchRecord = b
+                         AND c.loteOrigen IS NOT NULL
+                         AND LOWER(c.loteOrigen.batchNumber)
+                             LIKE LOWER(CONCAT('%', :lote, '%'))
+                   ))
             """)
     Page<BatchRecord> buscar(
             @Param("ordenProduccionId") Integer ordenProduccionId,
@@ -55,11 +62,19 @@ public interface BatchRecordRepo extends JpaRepository<BatchRecord, Long> {
             FROM BatchRecord b
             LEFT JOIN b.ordenProduccion op
             WHERE b.estado IN :estados
+              AND b.ordenProduccion IS NOT NULL
               AND (:search IS NULL OR :search = ''
                    OR LOWER(b.codigo) LIKE LOWER(CONCAT('%', :search, '%'))
                    OR LOWER(b.loteResultado.batchNumber) LIKE LOWER(CONCAT('%', :search, '%'))
                    OR LOWER(b.productoResultado.productoId) LIKE LOWER(CONCAT('%', :search, '%'))
                    OR LOWER(b.productoResultado.nombre) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR EXISTS (
+                       SELECT c.id FROM BatchRecordConsumo c
+                       WHERE c.batchRecord = b
+                         AND c.loteOrigen IS NOT NULL
+                         AND LOWER(c.loteOrigen.batchNumber)
+                             LIKE LOWER(CONCAT('%', :search, '%'))
+                   )
                    OR (:ordenId IS NOT NULL AND op.ordenId = :ordenId))
             """)
     Page<BatchRecord> buscarPorEstados(

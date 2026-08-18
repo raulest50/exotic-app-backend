@@ -220,7 +220,9 @@
             RAA,  // Reporte de Avería de Almacén - material aún en almacén general, no asociado a OP
             OD_RA, // Dispensación de Reposición por Avería - material que repone lo dañado en producción
             DVC,  // Devolución de Cliente - producto terminado devuelto por el cliente
-            DVP   // Devolución a Proveedor - material defectuoso para devolver al proveedor
+            DVP,  // Devolución a Proveedor - material defectuoso para devolver al proveedor
+            OD_OF, // Dispensacion de materiales para una orden de fabricacion (ordinal 11)
+            OF    // Ingreso/backflush del lote producido por una orden de fabricacion (ordinal 12)
         }
 
         /**

@@ -1,7 +1,6 @@
 package exotic.app.planta.service.produccion;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import exotic.app.planta.model.calidad.*;
@@ -13,6 +12,7 @@ import exotic.app.planta.model.produccion.*;
 import exotic.app.planta.model.produccion.batchrecord.*;
 import exotic.app.planta.model.produccion.dto.BatchRecordDTOs;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
@@ -20,7 +20,6 @@ import exotic.app.planta.repo.calidad.ControlProcesoEjecucionRepo;
 import exotic.app.planta.repo.calidad.ControlProcesoPlantillaRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
-import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.*;
 import exotic.app.planta.repo.usuarios.FirmaVisualUsuarioVersionRepo;
@@ -59,12 +58,12 @@ public class BatchRecordService {
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
     private final ControlProcesoPlantillaRepo plantillaRepo;
     private final ControlProcesoEjecucionRepo ejecucionRepo;
-    private final AreaProduccionRepo areaRepo;
     private final FirmaVisualUsuarioVersionRepo firmaVisualRepo;
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final LoteRepo loteRepo;
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
+    private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
 
     public BatchRecord crearParaOrdenProduccion(
             OrdenProduccion orden,
@@ -87,6 +86,15 @@ public class BatchRecordService {
         record.setUnidadMedida(unidadObligatoria(orden.getProducto().getTipoUnidades()));
         record.setCreadoPor(creador);
         record.setEstado(EstadoBatchRecord.BORRADOR);
+        String requerimientosJson = materialRequirementSnapshotService.construirJson(
+                orden.getProducto(), orden.getManufacturingVersion(),
+                BigDecimal.valueOf(orden.getCantidadProducir()));
+        record.setRequerimientosMaterialesJson(requerimientosJson);
+        if (!materialRequirementSnapshotService.requiereRegistroDispensacion(
+                requerimientosJson)) {
+            orden.setEstadoDispensacionMateriales(
+                    EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION);
+        }
         batchRecordRepo.saveAndFlush(record);
 
         crearEtapasDesdeSeguimiento(record, orden);
@@ -115,10 +123,121 @@ public class BatchRecordService {
         record.setUnidadMedida(unidadObligatoria(orden.getUnidadMedida()));
         record.setCreadoPor(creador);
         record.setEstado(EstadoBatchRecord.BORRADOR);
+        String requerimientosJson = materialRequirementSnapshotService.construirJson(
+                orden.getSemiTerminado(), orden.getManufacturingVersion(),
+                orden.getCantidadPlanificada());
+        record.setRequerimientosMaterialesJson(requerimientosJson);
+        if (!materialRequirementSnapshotService.requiereRegistroDispensacion(
+                requerimientosJson)) {
+            orden.setEstadoDispensacionMateriales(
+                    EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION);
+        }
+        batchRecordRepo.saveAndFlush(record);
+        return record;
+    }
+
+    /** Sincroniza la evidencia operativa propia de una OF. */
+    public void sincronizarEventoFabricacion(OrdenFabricacionOperacionEvento evento) {
+        if (evento == null || evento.getId() == null || evento.getOperacion() == null
+                || evento.getOperacion().getId() == null) return;
+        BatchRecordEtapa etapa = etapaRepo
+                .findByOrdenFabricacionOperacion_Id(evento.getOperacion().getId())
+                .orElse(null);
+        if (etapa == null) return;
+
+        BatchRecord record = etapa.getBatchRecord();
+        EstadoSeguimientoOrdenArea destino = EstadoSeguimientoOrdenArea.fromCode(
+                evento.getEstadoDestino());
+        aplicarEstadoEtapaFabricacion(etapa, record, evento, destino);
+        etapaRepo.saveAndFlush(etapa);
+        batchRecordRepo.save(record);
+
+        if (evento.getTipoEvento() == TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA) {
+            registrarCorreccionFabricacion(record, etapa, evento);
+        } else if (destino == EstadoSeguimientoOrdenArea.COMPLETADO
+                && evento.getActorTipo() == ActorTipoEventoSeguimiento.USER
+                && evento.getUsuario() != null) {
+            registrarFirmaEtapaFabricacion(record, etapa, evento);
+        }
+    }
+
+    public BatchRecordRevision cerrarOrdenFabricacion(
+            OrdenFabricacion orden,
+            BigDecimal cantidadObtenida,
+            User actor,
+            String motivo
+    ) {
+        if (orden == null || orden.getOrdenFabricacionId() == null) {
+            throw new IllegalArgumentException("La orden de fabricacion es obligatoria.");
+        }
+        BatchRecord record = batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
+                        orden.getOrdenFabricacionId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "La orden de fabricacion no tiene expediente digital."));
+        boolean pendientes = etapaRepo.findByBatchRecord_IdOrderBySecuenciaAscIdAsc(record.getId())
+                .stream()
+                .anyMatch(etapa -> etapa.getEstado() != EstadoBatchRecordEtapa.COMPLETADA
+                        && etapa.getEstado() != EstadoBatchRecordEtapa.OMITIDA);
+        if (pendientes) {
+            throw new IllegalStateException("La OF todavia tiene etapas operativas pendientes.");
+        }
+        sincronizarConsumos(record);
+        validarIdentidadAuditable(actor);
+
+        record = batchRecordRepo.findByIdForUpdate(record.getId())
+                .orElseThrow(() -> new NoSuchElementException("Expediente digital no encontrado."));
+        if (record.getEstado() == EstadoBatchRecord.CERRADO) {
+            throw new IllegalStateException("El expediente de la OF ya se encuentra cerrado.");
+        }
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        int numero = revisionRepo.findTopByBatchRecord_IdOrderByNumeroDesc(record.getId())
+                .map(ultima -> ultima.getNumero() + 1)
+                .orElse(1);
+        record.setRevisionDocumental(numero);
+        record.setCantidadObtenida(cantidadObtenida);
+        record.setEstado(EstadoBatchRecord.CERRADO);
+        record.setCerradoEn(ahora);
+        if (record.getIniciadoEn() == null) record.setIniciadoEn(ahora);
+
+        String contenido = serializarCanonico(record, ahora);
+        String hash = sha256(contenido);
+        record.setContenidoSha256(hash);
         batchRecordRepo.saveAndFlush(record);
 
-        crearEtapasDesdeVersionManufactura(record, orden);
-        return record;
+        BatchRecordRevision revision = new BatchRecordRevision();
+        revision.setBatchRecord(record);
+        revision.setNumero(numero);
+        revision.setTipo(TipoRevisionBatchRecord.CIERRE);
+        revision.setContenidoCanonico(contenido);
+        revision.setContenidoSha256(hash);
+        revision.setEsquemaVersion(ESQUEMA_VERSION);
+        revision.setPlantillaPdfVersion(PLANTILLA_PDF_VERSION);
+        revision.setCreadaEn(ahora);
+        revision.setCreadaPor(actor);
+        revision.setCreadaPorUsername(actor.getUsername());
+        revision.setCreadaPorNombre(nombreUsuario(actor));
+        revision.setCreadaPorCedula(Long.toString(actor.getCedula()));
+        revision.setMotivo(normalizarTexto(motivo));
+        revisionRepo.saveAndFlush(revision);
+        registrarFirmaRevision(
+                record, revision, actor,
+                AlcanceFirmaBatchRecord.REVISION_PRODUCCION,
+                DecisionFirmaBatchRecord.CONFIRMA,
+                "Confirmo el rendimiento final y el cierre del expediente de fabricacion.",
+                motivo, "Responsable del area final", null, null);
+        return revision;
+    }
+
+    public void sincronizarConsumosOrdenProduccion(Integer ordenProduccionId) {
+        if (ordenProduccionId == null) return;
+        batchRecordRepo.findByOrdenProduccion_OrdenId(ordenProduccionId)
+                .ifPresent(this::sincronizarConsumos);
+    }
+
+    public void sincronizarConsumosOrdenFabricacion(Long ordenFabricacionId) {
+        if (ordenFabricacionId == null) return;
+        batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(ordenFabricacionId)
+                .ifPresent(this::sincronizarConsumos);
     }
 
     public void validarCorreccionPermitida(SeguimientoOrdenArea seguimiento) {
@@ -458,51 +577,6 @@ public class BatchRecordService {
         }
     }
 
-    private void crearEtapasDesdeVersionManufactura(
-            BatchRecord record,
-            OrdenFabricacion orden
-    ) {
-        String procesoJson = orden.getManufacturingVersion().getProcesoProduccionJson();
-        if (procesoJson == null || procesoJson.isBlank()) {
-            return;
-        }
-        try {
-            JsonNode root = objectMapper.readTree(procesoJson);
-            JsonNode nodes = root.isArray() ? root : root.path("nodes");
-            if (!nodes.isArray()) return;
-
-            int secuencia = 0;
-            for (JsonNode node : nodes) {
-                String nodeType = node.path("nodeType").asText("");
-                if (!"PROCESO".equalsIgnoreCase(nodeType)
-                        && !node.hasNonNull("areaOperativaId")) {
-                    continue;
-                }
-                int areaId = node.path("areaOperativaId").asInt(Integer.MIN_VALUE);
-                if (areaId == Integer.MIN_VALUE || areaId == ALMACEN_GENERAL_AREA_ID) {
-                    continue;
-                }
-                var area = areaRepo.findById(areaId)
-                        .orElseThrow(() -> new IllegalStateException(
-                                "La versión de manufactura referencia un área inexistente: " + areaId));
-                BatchRecordEtapa etapa = new BatchRecordEtapa();
-                etapa.setBatchRecord(record);
-                etapa.setAreaOperativa(area);
-                etapa.setSecuencia(secuencia++);
-                etapa.setNombre(primerTexto(
-                        node.path("procesoNombre").asText(null),
-                        node.path("label").asText(null),
-                        area.getNombre()));
-                etapa.setEstado(EstadoBatchRecordEtapa.PENDIENTE);
-                etapa.setControlProcesoPlantilla(plantillaVigente(areaId));
-                etapaRepo.save(etapa);
-            }
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException(
-                    "No se pudo interpretar el proceso congelado de la orden de fabricación.", exception);
-        }
-    }
-
     private void aplicarEstadoEtapa(
             BatchRecordEtapa etapa,
             BatchRecord record,
@@ -547,10 +621,62 @@ public class BatchRecordService {
         }
     }
 
+    private void aplicarEstadoEtapaFabricacion(
+            BatchRecordEtapa etapa,
+            BatchRecord record,
+            OrdenFabricacionOperacionEvento evento,
+            EstadoSeguimientoOrdenArea destino
+    ) {
+        switch (destino) {
+            case COLA, ESPERA -> {
+                etapa.setEstado(EstadoBatchRecordEtapa.PENDIENTE);
+                if (evento.getTipoEvento() == TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA) {
+                    limpiarCierreActualFabricacion(etapa);
+                }
+            }
+            case EN_PROCESO -> {
+                etapa.setEstado(EstadoBatchRecordEtapa.EN_EJECUCION);
+                if (etapa.getIniciadaEn() == null) etapa.setIniciadaEn(evento.getFechaEvento());
+                if (evento.getTipoEvento() == TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA) {
+                    limpiarCierreActualFabricacion(etapa);
+                }
+                if (record.getIniciadoEn() == null) record.setIniciadoEn(evento.getFechaEvento());
+                record.setEstado(EstadoBatchRecord.EN_EJECUCION);
+            }
+            case COMPLETADO -> {
+                if (evento.getActorTipo() == ActorTipoEventoSeguimiento.USER
+                        && evento.getUsuario() != null) {
+                    etapa.setEstado(EstadoBatchRecordEtapa.COMPLETADA);
+                    if (etapa.getIniciadaEn() == null) etapa.setIniciadaEn(evento.getFechaEvento());
+                    etapa.setCompletadaEn(evento.getFechaEvento());
+                    etapa.setReportadaPor(evento.getUsuario());
+                    etapa.setOrdenFabricacionEventoOrigen(evento);
+                    etapa.setObservaciones(normalizarTexto(evento.getNota()));
+                    etapa.setContenidoSha256(hashEtapaFabricacion(etapa, evento));
+                } else {
+                    etapa.setEstado(EstadoBatchRecordEtapa.OMITIDA);
+                }
+                if (record.getIniciadoEn() == null) record.setIniciadoEn(evento.getFechaEvento());
+                if (record.getEstado() == EstadoBatchRecord.BORRADOR) {
+                    record.setEstado(EstadoBatchRecord.EN_EJECUCION);
+                }
+            }
+            case OMITIDO -> etapa.setEstado(EstadoBatchRecordEtapa.OMITIDA);
+        }
+    }
+
     private void limpiarCierreActual(BatchRecordEtapa etapa) {
         etapa.setCompletadaEn(null);
         etapa.setReportadaPor(null);
         etapa.setSeguimientoEventoOrigen(null);
+        etapa.setContenidoSha256(null);
+        etapa.setObservaciones(null);
+    }
+
+    private void limpiarCierreActualFabricacion(BatchRecordEtapa etapa) {
+        etapa.setCompletadaEn(null);
+        etapa.setReportadaPor(null);
+        etapa.setOrdenFabricacionEventoOrigen(null);
         etapa.setContenidoSha256(null);
         etapa.setObservaciones(null);
     }
@@ -608,6 +734,49 @@ public class BatchRecordService {
         correccionRepo.save(correccion);
     }
 
+    private void registrarCorreccionFabricacion(
+            BatchRecord record,
+            BatchRecordEtapa etapa,
+            OrdenFabricacionOperacionEvento evento
+    ) {
+        if (evento.getUsuario() == null
+                || correccionRepo.existsByOrdenFabricacionEventoCorreccion_Id(evento.getId())) {
+            return;
+        }
+        record.setEstado(EstadoBatchRecord.EN_EJECUCION);
+        record.setCantidadObtenida(null);
+        record.setContenidoSha256(null);
+        record.getLoteResultado().setEstadoCalidad(EstadoCalidadLote.SIN_CLASIFICAR);
+        loteRepo.save(record.getLoteResultado());
+        batchRecordRepo.saveAndFlush(record);
+
+        BatchRecordCorreccion correccion = new BatchRecordCorreccion();
+        correccion.setBatchRecord(record);
+        correccion.setEtapa(etapa);
+        correccion.setOrdenFabricacionEventoCorreccion(evento);
+        correccion.setOrdenFabricacionEventoRevertido(evento.getEventoRevertido());
+        correccion.setValorAnterior(nombreEstadoSeguimiento(evento.getEstadoOrigen()));
+        correccion.setValorNuevo(nombreEstadoSeguimiento(evento.getEstadoDestino()));
+        correccion.setMotivo(textoObligatorio(
+                evento.getNota(), "La correccion administrativa requiere motivo."));
+        correccion.setCorregidaEn(evento.getFechaEvento());
+        correccion.setCorregidaPor(evento.getUsuario());
+        correccionRepo.saveAndFlush(correccion);
+
+        BatchRecordRevision revision = crearRevision(
+                record, TipoRevisionBatchRecord.CORRECCION,
+                evento.getUsuario(), evento.getNota());
+        BatchRecordFirma firma = registrarFirmaRevision(
+                record, revision, evento.getUsuario(),
+                AlcanceFirmaBatchRecord.CORRECCION_EXPEDIENTE,
+                DecisionFirmaBatchRecord.CONFIRMA,
+                "Declaro que la correccion conserva el dato original y corresponde al motivo registrado.",
+                evento.getNota(), "Jefatura de Produccion", null, null);
+        correccion.setRevision(revision);
+        correccion.setFirma(firma);
+        correccionRepo.save(correccion);
+    }
+
     private void registrarFirmaEtapa(
             BatchRecord record,
             BatchRecordEtapa etapa,
@@ -628,6 +797,26 @@ public class BatchRecordService {
         firma.setHashContenidoFirmado(etapa.getContenidoSha256());
         firma.setManifestacion(
                 "Confirmo que la etapa fue ejecutada y que la información reportada es veraz.");
+        firma.setComentario(recortar(normalizarTexto(evento.getNota()), 500));
+        firmaRepo.save(firma);
+    }
+
+    private void registrarFirmaEtapaFabricacion(
+            BatchRecord record,
+            BatchRecordEtapa etapa,
+            OrdenFabricacionOperacionEvento evento
+    ) {
+        if (firmaRepo.existsByOrdenFabricacionEvento_Id(evento.getId())) return;
+        BatchRecordFirma firma = firmaBase(
+                record, evento.getUsuario(), evento.getFechaEvento(),
+                "Responsable del area " + etapa.getAreaOperativa().getNombre());
+        firma.setEtapa(etapa);
+        firma.setOrdenFabricacionEvento(evento);
+        firma.setAlcance(AlcanceFirmaBatchRecord.CIERRE_ETAPA_AREA);
+        firma.setDecision(DecisionFirmaBatchRecord.CONFIRMA);
+        firma.setHashContenidoFirmado(etapa.getContenidoSha256());
+        firma.setManifestacion(
+                "Confirmo que la etapa fue ejecutada y que la informacion reportada es veraz.");
         firma.setComentario(recortar(normalizarTexto(evento.getNota()), 500));
         firmaRepo.save(firma);
     }
@@ -682,13 +871,26 @@ public class BatchRecordService {
     }
 
     private void sincronizarConsumos(BatchRecord record) {
-        if (record.getOrdenProduccion() == null) return;
-        int ordenId = record.getOrdenProduccion().getOrdenId();
-        List<TransaccionAlmacen.TipoEntidadCausante> tipos = List.of(
-                TransaccionAlmacen.TipoEntidadCausante.OD,
-                TransaccionAlmacen.TipoEntidadCausante.OD_RA,
-                TransaccionAlmacen.TipoEntidadCausante.RA
-        );
+        int ordenId;
+        List<TransaccionAlmacen.TipoEntidadCausante> tipos;
+        Map<String, String> unidadesCongeladas = materialRequirementSnapshotService
+                .leer(record.getRequerimientosMaterialesJson()).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        MaterialRequirementSnapshotService.RequirementView::productoId,
+                        MaterialRequirementSnapshotService.RequirementView::unidadMedida,
+                        (primera, ignored) -> primera));
+        if (record.getOrdenProduccion() != null) {
+            ordenId = record.getOrdenProduccion().getOrdenId();
+            tipos = List.of(
+                    TransaccionAlmacen.TipoEntidadCausante.OD,
+                    TransaccionAlmacen.TipoEntidadCausante.OD_RA,
+                    TransaccionAlmacen.TipoEntidadCausante.RA);
+        } else if (record.getOrdenFabricacion() != null) {
+            ordenId = Math.toIntExact(record.getOrdenFabricacion().getOrdenFabricacionId());
+            tipos = List.of(TransaccionAlmacen.TipoEntidadCausante.OD_OF);
+        } else {
+            return;
+        }
         for (TransaccionAlmacen transaccion : transaccionRepo
                 .findByTipoEntidadCausanteInAndIdEntidadCausanteWithMovimientos(tipos, ordenId)) {
             if (transaccion.getMovimientosTransaccion() == null) continue;
@@ -701,14 +903,20 @@ public class BatchRecordService {
                     continue;
                 }
                 TipoRegistroConsumoBatchRecord tipo = switch (transaccion.getTipoEntidadCausante()) {
-                    case OD -> TipoRegistroConsumoBatchRecord.DISPENSACION;
+                    case OD, OD_OF -> TipoRegistroConsumoBatchRecord.DISPENSACION;
                     case OD_RA -> TipoRegistroConsumoBatchRecord.REPOSICION_AVERIA;
                     case RA -> TipoRegistroConsumoBatchRecord.EXCLUSION_AVERIA;
                     default -> null;
                 };
                 if (tipo == null) continue;
 
-                BigDecimal cantidad = BigDecimal.valueOf(Math.abs(movimiento.getCantidad()));
+                BigDecimal cantidad = BigDecimal.valueOf(Math.abs(movimiento.getCantidad()))
+                        .setScale(4, java.math.RoundingMode.HALF_UP);
+                if (cantidad.signum() == 0) {
+                    throw new IllegalStateException(
+                            "El movimiento " + movimiento.getMovimientoId()
+                                    + " es menor que la precision auditable del expediente (0.0001).");
+                }
                 if (tipo == TipoRegistroConsumoBatchRecord.EXCLUSION_AVERIA) {
                     cantidad = cantidad.negate();
                 }
@@ -729,7 +937,9 @@ public class BatchRecordService {
                 consumo.setTipo(tipo);
                 consumo.setCantidad(cantidad);
                 consumo.setUnidadMedida(unidadObligatoria(
-                        movimiento.getProducto().getTipoUnidades()));
+                        unidadesCongeladas.getOrDefault(
+                                movimiento.getProducto().getProductoId(),
+                                movimiento.getProducto().getTipoUnidades())));
                 consumo.setRegistradoEn(registradoEn);
                 consumo.setRegistradoPor(registradoPor);
                 consumo.setObservaciones("Movimiento " + movimiento.getMovimientoId()
@@ -776,6 +986,8 @@ public class BatchRecordService {
                 "procesoJson", Objects.toString(record.getManufacturingVersion().getProcesoProduccionJson(), ""),
                 "casePackJson", Objects.toString(record.getManufacturingVersion().getCasePackJson(), "")
         ));
+        root.put("requerimientosMaterialesJson",
+                Objects.toString(record.getRequerimientosMaterialesJson(), "[]"));
         Map<String, Object> cantidades = new TreeMap<>();
         cantidades.put("planificada", record.getCantidadPlanificada());
         cantidades.put("obtenida", record.getCantidadObtenida());
@@ -826,6 +1038,10 @@ public class BatchRecordService {
                 ? null : identidadUsuario(etapa.getReportadaPor()));
         data.put("eventoOrigenId", etapa.getSeguimientoEventoOrigen() == null
                 ? null : etapa.getSeguimientoEventoOrigen().getId());
+        data.put("operacionFabricacionId", etapa.getOrdenFabricacionOperacion() == null
+                ? null : etapa.getOrdenFabricacionOperacion().getId());
+        data.put("eventoFabricacionOrigenId", etapa.getOrdenFabricacionEventoOrigen() == null
+                ? null : etapa.getOrdenFabricacionEventoOrigen().getId());
         data.put("plantillaControlId", etapa.getControlProcesoPlantilla() == null
                 ? null : etapa.getControlProcesoPlantilla().getId());
         data.put("plantillaControlVersion", etapa.getControlProcesoPlantilla() == null
@@ -919,9 +1135,16 @@ public class BatchRecordService {
         Map<String, Object> data = new TreeMap<>();
         data.put("id", correccion.getId());
         data.put("etapaId", correccion.getEtapa() == null ? null : correccion.getEtapa().getId());
-        data.put("eventoCorreccionId", correccion.getEventoCorreccion().getId());
+        data.put("eventoCorreccionId", correccion.getEventoCorreccion() == null
+                ? null : correccion.getEventoCorreccion().getId());
         data.put("eventoRevertidoId", correccion.getEventoRevertido() == null
                 ? null : correccion.getEventoRevertido().getId());
+        data.put("eventoFabricacionCorreccionId",
+                correccion.getOrdenFabricacionEventoCorreccion() == null
+                        ? null : correccion.getOrdenFabricacionEventoCorreccion().getId());
+        data.put("eventoFabricacionRevertidoId",
+                correccion.getOrdenFabricacionEventoRevertido() == null
+                        ? null : correccion.getOrdenFabricacionEventoRevertido().getId());
         data.put("valorAnterior", correccion.getValorAnterior());
         data.put("valorNuevo", correccion.getValorNuevo());
         data.put("motivo", correccion.getMotivo());
@@ -946,6 +1169,8 @@ public class BatchRecordService {
         data.put("etapaId", firma.getEtapa() == null ? null : firma.getEtapa().getId());
         data.put("eventoId", firma.getSeguimientoEvento() == null
                 ? null : firma.getSeguimientoEvento().getId());
+        data.put("eventoFabricacionId", firma.getOrdenFabricacionEvento() == null
+                ? null : firma.getOrdenFabricacionEvento().getId());
         data.put("revision", firma.getRevision() == null ? null : firma.getRevision().getNumero());
         data.put("alcance", firma.getAlcance().name());
         data.put("decision", firma.getDecision().name());
@@ -972,6 +1197,8 @@ public class BatchRecordService {
                 .findByBatchRecord_IdOrderBySecuenciaAscIdAsc(record.getId());
         List<ControlProcesoEjecucion> controles = ejecucionRepo
                 .findByBatchRecord_IdOrderByFechaRegistroAscIdAsc(record.getId());
+        List<BatchRecordConsumo> consumos = consumoRepo
+                .findByBatchRecord_IdOrderByRegistradoEnAscIdAsc(record.getId());
         return BatchRecordDTOs.Detail.builder()
                 .resumen(toListItem(record))
                 .manufacturingVersionId(record.getManufacturingVersion().getId())
@@ -981,8 +1208,7 @@ public class BatchRecordService {
                 .cerradoEn(record.getCerradoEn())
                 .observaciones(record.getObservaciones())
                 .etapas(etapas.stream().map(this::toEtapaDTO).toList())
-                .consumos(consumoRepo.findByBatchRecord_IdOrderByRegistradoEnAscIdAsc(record.getId())
-                        .stream().map(this::toConsumoDTO).toList())
+                .consumos(consumos.stream().map(this::toConsumoDTO).toList())
                 .controles(controles.stream().map(this::toControlDTO).toList())
                 .desviaciones(desviacionRepo.findByBatchRecord_IdOrderByDetectadaEnAscIdAsc(record.getId())
                         .stream().map(this::toDesviacionDTO).toList())
@@ -994,6 +1220,52 @@ public class BatchRecordService {
                         .stream().map(this::toRevisionDTO).toList())
                 .decisionesCalidad(decisionRepo.findByBatchRecord_IdOrderByDecididaEnAscIdAsc(record.getId())
                         .stream().map(this::toDecisionDTO).toList())
+                .lotesOrigen(consumos.stream()
+                        .filter(consumo -> consumo.getLoteOrigen() != null)
+                        .map(this::toVinculoOrigenDTO)
+                        .toList())
+                .lotesDestino(consumoRepo.findByLoteOrigen_IdOrderByRegistradoEnAscIdAsc(
+                                record.getLoteResultado().getId())
+                        .stream().map(this::toVinculoDestinoDTO).toList())
+                .build();
+    }
+
+    private BatchRecordDTOs.VinculoGenealogia toVinculoOrigenDTO(
+            BatchRecordConsumo consumo) {
+        BatchRecord productor = batchRecordRepo.findByLoteResultado_Id(
+                consumo.getLoteOrigen().getId()).orElse(null);
+        return BatchRecordDTOs.VinculoGenealogia.builder()
+                .batchRecordId(productor == null ? null : productor.getId())
+                .batchRecordCodigo(productor == null ? null : productor.getCodigo())
+                .ordenProduccionId(productor == null || productor.getOrdenProduccion() == null
+                        ? null : productor.getOrdenProduccion().getOrdenId())
+                .ordenFabricacionId(productor == null || productor.getOrdenFabricacion() == null
+                        ? null : productor.getOrdenFabricacion().getOrdenFabricacionId())
+                .loteId(consumo.getLoteOrigen().getId())
+                .lote(consumo.getLoteOrigen().getBatchNumber())
+                .productoId(consumo.getProducto().getProductoId())
+                .productoNombre(consumo.getProducto().getNombre())
+                .cantidad(consumo.getCantidad())
+                .unidadMedida(consumo.getUnidadMedida())
+                .build();
+    }
+
+    private BatchRecordDTOs.VinculoGenealogia toVinculoDestinoDTO(
+            BatchRecordConsumo consumo) {
+        BatchRecord destino = consumo.getBatchRecord();
+        return BatchRecordDTOs.VinculoGenealogia.builder()
+                .batchRecordId(destino.getId())
+                .batchRecordCodigo(destino.getCodigo())
+                .ordenProduccionId(destino.getOrdenProduccion() == null
+                        ? null : destino.getOrdenProduccion().getOrdenId())
+                .ordenFabricacionId(destino.getOrdenFabricacion() == null
+                        ? null : destino.getOrdenFabricacion().getOrdenFabricacionId())
+                .loteId(destino.getLoteResultado().getId())
+                .lote(destino.getLoteResultado().getBatchNumber())
+                .productoId(destino.getProductoResultado().getProductoId())
+                .productoNombre(destino.getProductoResultado().getNombre())
+                .cantidad(consumo.getCantidad())
+                .unidadMedida(consumo.getUnidadMedida())
                 .build();
     }
 
@@ -1039,6 +1311,10 @@ public class BatchRecordService {
                         ? null : etapa.getControlProcesoPlantilla().getVersion())
                 .seguimientoEventoOrigenId(etapa.getSeguimientoEventoOrigen() == null
                         ? null : etapa.getSeguimientoEventoOrigen().getId())
+                .ordenFabricacionOperacionId(etapa.getOrdenFabricacionOperacion() == null
+                        ? null : etapa.getOrdenFabricacionOperacion().getId())
+                .ordenFabricacionEventoOrigenId(etapa.getOrdenFabricacionEventoOrigen() == null
+                        ? null : etapa.getOrdenFabricacionEventoOrigen().getId())
                 .poe(toPoeReferenciaDTO(etapa))
                 .build();
     }
@@ -1074,9 +1350,11 @@ public class BatchRecordService {
     }
 
     private ProcesoProduccionDocumentoVersion poeDocumento(BatchRecordEtapa etapa) {
-        return etapa.getSeguimientoOrdenArea() == null
-                ? null
-                : etapa.getSeguimientoOrdenArea().getPoeDocumentoVersion();
+        if (etapa.getSeguimientoOrdenArea() != null) {
+            return etapa.getSeguimientoOrdenArea().getPoeDocumentoVersion();
+        }
+        return etapa.getOrdenFabricacionOperacion() == null
+                ? null : etapa.getOrdenFabricacionOperacion().getPoeDocumentoVersion();
     }
 
     private BatchRecordDTOs.Consumo toConsumoDTO(BatchRecordConsumo consumo) {
@@ -1137,9 +1415,16 @@ public class BatchRecordService {
         return BatchRecordDTOs.Correccion.builder()
                 .id(correccion.getId())
                 .etapaId(correccion.getEtapa() == null ? null : correccion.getEtapa().getId())
-                .eventoCorreccionId(correccion.getEventoCorreccion().getId())
+                .eventoCorreccionId(correccion.getEventoCorreccion() == null
+                        ? null : correccion.getEventoCorreccion().getId())
                 .eventoRevertidoId(correccion.getEventoRevertido() == null
                         ? null : correccion.getEventoRevertido().getId())
+                .ordenFabricacionEventoCorreccionId(
+                        correccion.getOrdenFabricacionEventoCorreccion() == null
+                                ? null : correccion.getOrdenFabricacionEventoCorreccion().getId())
+                .ordenFabricacionEventoRevertidoId(
+                        correccion.getOrdenFabricacionEventoRevertido() == null
+                                ? null : correccion.getOrdenFabricacionEventoRevertido().getId())
                 .valorAnterior(correccion.getValorAnterior())
                 .valorNuevo(correccion.getValorNuevo())
                 .motivo(correccion.getMotivo())
@@ -1155,6 +1440,8 @@ public class BatchRecordService {
                 .etapaId(firma.getEtapa() == null ? null : firma.getEtapa().getId())
                 .seguimientoEventoId(firma.getSeguimientoEvento() == null
                         ? null : firma.getSeguimientoEvento().getId())
+                .ordenFabricacionEventoId(firma.getOrdenFabricacionEvento() == null
+                        ? null : firma.getOrdenFabricacionEvento().getId())
                 .revision(firma.getRevision() == null ? null : firma.getRevision().getNumero())
                 .alcance(firma.getAlcance())
                 .decision(firma.getDecision())
@@ -1241,6 +1528,36 @@ public class BatchRecordService {
                     .writeValueAsString(contenido));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("No se pudo proteger el contenido de la etapa.", exception);
+        }
+    }
+
+    private String hashEtapaFabricacion(
+            BatchRecordEtapa etapa,
+            OrdenFabricacionOperacionEvento evento
+    ) {
+        Map<String, Object> contenido = new TreeMap<>();
+        contenido.put("batchRecordId", etapa.getBatchRecord().getId());
+        contenido.put("etapaId", etapa.getId());
+        contenido.put("operacionFabricacionId", evento.getOperacion().getId());
+        contenido.put("areaId", etapa.getAreaOperativa().getAreaId());
+        contenido.put("nombre", etapa.getNombre());
+        contenido.put("eventoId", evento.getId());
+        contenido.put("completadaEn", evento.getFechaEvento());
+        contenido.put("usuarioId", evento.getUsuario().getId());
+        contenido.put("observaciones", evento.getNota());
+        ProcesoProduccionDocumentoVersion documento = poeDocumento(etapa);
+        contenido.put("poeDocumentoVersionId", documento == null ? null : documento.getId());
+        contenido.put("poeProcesoProduccionId", documento == null
+                ? null : documento.getProceso().getProcesoId());
+        contenido.put("poeVersion", documento == null ? null : documento.getVersion());
+        contenido.put("poeSha256", documento == null ? null : documento.getSha256());
+        try {
+            return sha256(objectMapper.copy()
+                    .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
+                    .writeValueAsString(contenido));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException(
+                    "No se pudo proteger el contenido de la etapa de fabricacion.", exception);
         }
     }
 

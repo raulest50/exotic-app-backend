@@ -63,4 +63,17 @@ public interface LoteRepo extends JpaRepository<Lote, Long> {
     List<Lote> findByOrdenProduccion_OrdenId(int ordenId);
 
     List<Lote> findByOrdenFabricacion_OrdenFabricacionId(Long ordenFabricacionId);
+
+    List<Lote> findByProducto_ProductoId(String productoId);
+
+    @Query("""
+            SELECT l FROM Lote l
+            WHERE (l.ordenProduccion IS NOT NULL OR l.ordenFabricacion IS NOT NULL)
+              AND (:search IS NULL OR :search = ''
+                   OR LOWER(l.batchNumber) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR LOWER(l.producto.productoId) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR LOWER(l.producto.nombre) LIKE LOWER(CONCAT('%', :search, '%')))
+            ORDER BY l.batchNumber DESC
+            """)
+    List<Lote> searchLotesManufactura(@Param("search") String search, Pageable pageable);
 }

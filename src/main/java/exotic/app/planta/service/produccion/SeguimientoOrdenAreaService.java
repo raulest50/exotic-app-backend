@@ -13,6 +13,8 @@ import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
@@ -23,6 +25,8 @@ import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
+import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.Data;
@@ -85,6 +89,8 @@ public class SeguimientoOrdenAreaService {
     private final MasterDirectiveService masterDirectiveService;
     private final BatchRecordService batchRecordService;
     private final ProcesoProduccionDocumentoVersionRepo procesoDocumentoVersionRepo;
+    private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
+    private final LoteRepo loteRepo;
     private final Clock applicationClock;
 
     /**
@@ -500,25 +506,64 @@ public class SeguimientoOrdenAreaService {
         List<SeguimientoOrdenArea> activeSeguimientos = new ArrayList<>(
                 seguimientoRepo.findTableroActivosByResponsableUserId(userId, activeStates)
         );
-        List<SeguimientoOrdenArea> completedSeguimientos;
-        Page<SeguimientoOrdenArea> completedHistoryPage = null;
+        boolean incluirFabricacion = masterDirectiveService.isBatchRecordWorkflowEnabled();
+        List<OrdenFabricacionOperacion> activeFabricacion = incluirFabricacion
+                ? ordenFabricacionOperacionRepo.findActivasPorResponsable(
+                        userId,
+                        activeStates,
+                        List.of(
+                                EstadoOrdenFabricacion.BORRADOR,
+                                EstadoOrdenFabricacion.PLANIFICADA,
+                                EstadoOrdenFabricacion.FABRICACION_COMPLETADA,
+                                EstadoOrdenFabricacion.CERRADA,
+                                EstadoOrdenFabricacion.CANCELADA))
+                : List.of();
+        List<SeguimientoOrdenAreaDTO> completedCards;
         long totalCompleted;
+        long totalCompletedFiltered = 0;
 
         if (effectiveVista == TableroVista.HISTORICO) {
             String searchPattern = normalizeBoardSearchPattern(search);
-            completedHistoryPage = seguimientoRepo.findTableroCompletadosHistoricosByResponsableUserId(
+            int prefixSize = Math.max(1, Math.multiplyExact(completedPage + 1, completedPageSize));
+            Page<SeguimientoOrdenArea> completedHistoryPrefix =
+                    seguimientoRepo.findTableroCompletadosHistoricosByResponsableUserId(
                     userId,
                     EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
                     searchPattern,
-                    PageRequest.of(completedPage, completedPageSize)
+                    PageRequest.of(0, prefixSize)
             );
-            completedSeguimientos = completedHistoryPage.getContent();
+            List<OrdenFabricacionOperacion> completedFabricacion = incluirFabricacion
+                    ? ordenFabricacionOperacionRepo.findCompletadasPorResponsable(
+                            userId,
+                            EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
+                            null,
+                            null,
+                            searchPattern)
+                    : List.of();
+            List<SeguimientoOrdenAreaDTO> combined = new ArrayList<>(
+                    completedHistoryPrefix.getContent().size() + completedFabricacion.size());
+            combined.addAll(completedHistoryPrefix.getContent().stream()
+                    .map(this::toDTO)
+                    .toList());
+            combined.addAll(completedFabricacion.stream()
+                    .map(this::toDTOFabricacion)
+                    .toList());
+            combined.sort(completedCardComparator());
+            int desde = Math.min(completedPage * completedPageSize, combined.size());
+            int hasta = Math.min(desde + completedPageSize, combined.size());
+            completedCards = new ArrayList<>(combined.subList(desde, hasta));
+            totalCompletedFiltered = completedHistoryPrefix.getTotalElements()
+                    + completedFabricacion.size();
             totalCompleted = searchPattern.isEmpty()
-                    ? completedHistoryPage.getTotalElements()
+                    ? totalCompletedFiltered
                     : seguimientoRepo.countTableroCompletadosHistoricosByResponsableUserId(
                             userId,
                             EstadoSeguimientoOrdenArea.COMPLETADO.getCode()
-                    );
+                    ) + (incluirFabricacion
+                            ? ordenFabricacionOperacionRepo
+                            .countByAreaOperativa_ResponsableArea_IdAndEstado(
+                                    userId, EstadoSeguimientoOrdenArea.COMPLETADO.getCode())
+                            : 0L);
         } else {
             LocalDate today = LocalDate.now(applicationClock);
             if (effectiveVista == TableroVista.HOY) {
@@ -529,22 +574,38 @@ public class SeguimientoOrdenAreaService {
                 periodEndDate = periodStartDate.plusDays(6);
             }
 
-            completedSeguimientos = seguimientoRepo.findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
+            List<SeguimientoOrdenArea> completedSeguimientos =
+                    seguimientoRepo.findTableroCompletadosByResponsableUserIdAndFechaCompletadoBetween(
                             userId,
                             EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
                             periodStartDate.atStartOfDay(),
                             periodEndDate.plusDays(1).atStartOfDay()
                     );
-            totalCompleted = completedSeguimientos.size();
+            List<OrdenFabricacionOperacion> completedFabricacion = incluirFabricacion
+                    ? ordenFabricacionOperacionRepo.findCompletadasPorResponsable(
+                            userId,
+                            EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
+                            periodStartDate.atStartOfDay(),
+                            periodEndDate.plusDays(1).atStartOfDay(),
+                            "")
+                    : List.of();
+            completedCards = new ArrayList<>(
+                    completedSeguimientos.size() + completedFabricacion.size());
+            completedCards.addAll(completedSeguimientos.stream().map(this::toDTO).toList());
+            completedCards.addAll(completedFabricacion.stream().map(this::toDTOFabricacion).toList());
+            completedCards.sort(completedCardComparator());
+            totalCompleted = completedCards.size();
         }
 
-        List<SeguimientoOrdenAreaDTO> tarjetas = new ArrayList<>(activeSeguimientos.size() + completedSeguimientos.size());
+        List<SeguimientoOrdenAreaDTO> tarjetas = new ArrayList<>(
+                activeSeguimientos.size() + activeFabricacion.size() + completedCards.size());
         tarjetas.addAll(activeSeguimientos.stream()
                 .map(this::toDTO)
                 .toList());
-        tarjetas.addAll(completedSeguimientos.stream()
-                .map(this::toDTO)
+        tarjetas.addAll(activeFabricacion.stream()
+                .map(this::toDTOFabricacion)
                 .toList());
+        tarjetas.addAll(completedCards);
 
         TableroOperativoDTO tablero = buildTableroOperativo(tarjetas);
         tablero.getResumen().setCompletado(totalCompleted);
@@ -557,10 +618,21 @@ public class SeguimientoOrdenAreaService {
         tablero.setVista(effectiveVista);
         tablero.setPeriodStartDate(periodStartDate);
         tablero.setPeriodEndDate(periodEndDate);
-        if (completedHistoryPage != null) {
-            tablero.setPaginacionCompletadas(toCompletedPaginationDTO(completedHistoryPage));
+        if (effectiveVista == TableroVista.HISTORICO) {
+            tablero.setPaginacionCompletadas(toCompletedPaginationDTO(
+                    completedPage, completedPageSize, totalCompletedFiltered));
         }
         return tablero;
+    }
+
+    private Comparator<SeguimientoOrdenAreaDTO> completedCardComparator() {
+        return Comparator
+                .comparing(
+                        SeguimientoOrdenAreaDTO::getFechaCompletado,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(
+                        SeguimientoOrdenAreaDTO::getId,
+                        Comparator.nullsLast(Comparator.reverseOrder()));
     }
 
     private void validateCompletedPagination(int completedPage, int completedPageSize, String search) {
@@ -590,6 +662,20 @@ public class SeguimientoOrdenAreaService {
         dto.setTotalPages(page.getTotalPages());
         dto.setFirst(page.isFirst());
         dto.setLast(page.isLast());
+        return dto;
+    }
+
+    private PaginacionCompletadasDTO toCompletedPaginationDTO(
+            int page, int size, long totalElements) {
+        PaginacionCompletadasDTO dto = new PaginacionCompletadasDTO();
+        int totalPages = totalElements == 0
+                ? 0 : (int) Math.ceil((double) totalElements / size);
+        dto.setPage(page);
+        dto.setSize(size);
+        dto.setTotalElements(totalElements);
+        dto.setTotalPages(totalPages);
+        dto.setFirst(page == 0);
+        dto.setLast(totalPages == 0 || page >= totalPages - 1);
         return dto;
     }
 
@@ -1137,6 +1223,7 @@ public class SeguimientoOrdenAreaService {
 
     private SeguimientoOrdenAreaDTO toDTO(SeguimientoOrdenArea entity, LocalDateTime instanteReferencia) {
         SeguimientoOrdenAreaDTO dto = new SeguimientoOrdenAreaDTO();
+        dto.setTipoOrden("OP");
         dto.setId(entity.getId());
         dto.setOrdenId(entity.getOrdenProduccion().getOrdenId());
         dto.setLoteAsignado(entity.getOrdenProduccion().getLoteAsignado());
@@ -1180,6 +1267,59 @@ public class SeguimientoOrdenAreaService {
             dto.setUsuarioReportaNombre(entity.getUsuarioReporta().getNombreCompleto());
         }
 
+        return dto;
+    }
+
+    private SeguimientoOrdenAreaDTO toDTOFabricacion(
+            OrdenFabricacionOperacion entity) {
+        SeguimientoOrdenAreaDTO dto = new SeguimientoOrdenAreaDTO();
+        var orden = entity.getOrdenFabricacion();
+        dto.setTipoOrden("OF");
+        dto.setId(entity.getId());
+        dto.setOrdenFabricacionId(orden.getOrdenFabricacionId());
+        dto.setOperacionFabricacionId(entity.getId());
+        dto.setOrdenId(Math.toIntExact(orden.getOrdenFabricacionId()));
+        dto.setLoteAsignado(loteRepo
+                .findByOrdenFabricacion_OrdenFabricacionId(orden.getOrdenFabricacionId())
+                .stream().findFirst().map(lote -> lote.getBatchNumber()).orElse(null));
+        dto.setProductoId(orden.getSemiTerminado().getProductoId());
+        dto.setProductoNombre(orden.getSemiTerminado().getNombre());
+        dto.setTipoUnidades(orden.getUnidadMedida());
+        dto.setCantidadProducir(orden.getCantidadPlanificada().doubleValue());
+        dto.setEstadoOrdenFabricacion(orden.getEstado().name());
+        dto.setPoliticaDispensacionInicio(orden.getPoliticaDispensacionInicio().name());
+        dto.setFechaAplicacionPoliticaDispensacion(
+                orden.getFechaAplicacionPoliticaDispensacion());
+        dto.setEstadoDispensacionMateriales(
+                orden.getEstadoDispensacionMateriales().name());
+        dto.setOrdenObservaciones(orden.getObservaciones());
+        dto.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
+        dto.setNodeLabel(entity.getProcesoNombre());
+        dto.setEsNodoFinal(ordenFabricacionOperacionRepo
+                .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(
+                        orden.getOrdenFabricacionId())
+                .stream()
+                .filter(candidate -> !Objects.equals(candidate.getId(), entity.getId()))
+                .allMatch(candidate -> candidate.getEstadoEnum()
+                                == EstadoSeguimientoOrdenArea.COMPLETADO
+                        || candidate.getEstadoEnum()
+                                == EstadoSeguimientoOrdenArea.OMITIDO));
+        dto.setAreaId(entity.getAreaOperativa().getAreaId());
+        dto.setAreaNombre(entity.getAreaOperativa().getNombre());
+        dto.setEstado(entity.getEstado());
+        dto.setEstadoDescripcion(entity.getEstadoEnum().getDescripcion());
+        dto.setPosicionSecuencia(entity.getPosicionSecuencia());
+        dto.setFechaCreacion(orden.getFechaCreacion());
+        dto.setFechaVisible(entity.getFechaVisible());
+        dto.setFechaEstadoActual(entity.getFechaEstadoActual());
+        dto.setFechaCompletado(entity.getFechaCompletado());
+        dto.setObservaciones(entity.getObservaciones());
+        dto.setMinutosEnEstadoActual(calculateMinutesBetween(
+                entity.getFechaEstadoActual(), LocalDateTime.now(applicationClock)));
+        if (entity.getUsuarioReporta() != null) {
+            dto.setUsuarioReportaId(entity.getUsuarioReporta().getId());
+            dto.setUsuarioReportaNombre(entity.getUsuarioReporta().getNombreCompleto());
+        }
         return dto;
     }
 
@@ -1544,14 +1684,18 @@ public class SeguimientoOrdenAreaService {
 
     @Data
     public static class SeguimientoOrdenAreaDTO {
+        private String tipoOrden;
         private Long id;
         private int ordenId;
+        private Long ordenFabricacionId;
+        private Long operacionFabricacionId;
         private String loteAsignado;
         private String productoId;
         private String productoNombre;
         private String tipoUnidades;
         private double cantidadProducir;
         private int estadoOrden;
+        private String estadoOrdenFabricacion;
         private String politicaDispensacionInicio;
         private LocalDateTime fechaAplicacionPoliticaDispensacion;
         private String estadoDispensacionMateriales;
