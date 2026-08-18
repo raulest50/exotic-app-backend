@@ -167,6 +167,8 @@ public final class CalidadControlProcesoDTOs {
         private String caracteristicaNombre;
         private TipoCaracteristicaControlProceso tipo;
         private String unidad;
+        private Double limiteInferior;
+        private Double limiteSuperior;
         private Integer numeroMuestra;
         private List<LecturaResponse> lecturas;
     }

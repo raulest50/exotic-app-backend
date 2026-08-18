@@ -260,6 +260,26 @@ public class CalidadControlProcesoService {
         return toEjecucionDetalle(ejecucion);
     }
 
+    @Transactional(readOnly = true)
+    public EjecucionDetalleResponse detalleEjecucionBatchRecord(
+            Long batchRecordId,
+            Long ejecucionId
+    ) {
+        if (batchRecordId == null || ejecucionId == null) {
+            throw new IllegalArgumentException(
+                    "El expediente y el control de proceso son obligatorios.");
+        }
+        ControlProcesoEjecucion ejecucion = ejecucionRepo.findById(ejecucionId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Control de proceso no encontrado."));
+        if (ejecucion.getBatchRecord() == null
+                || !Objects.equals(ejecucion.getBatchRecord().getId(), batchRecordId)) {
+            throw new NoSuchElementException(
+                    "El control de proceso no pertenece al expediente indicado.");
+        }
+        return toEjecucionDetalle(ejecucion);
+    }
+
     private void reemplazarCaracteristicas(ControlProcesoPlantilla plantilla, List<CaracteristicaRequest> requests) {
         if (requests == null || requests.isEmpty()) {
             throw new IllegalArgumentException("La plantilla debe tener al menos una caracteristica.");
@@ -514,6 +534,8 @@ public class CalidadControlProcesoService {
                 .caracteristicaNombre(caracteristica.getNombre())
                 .tipo(caracteristica.getTipo())
                 .unidad(caracteristica.getUnidad())
+                .limiteInferior(caracteristica.getLimiteInferior())
+                .limiteSuperior(caracteristica.getLimiteSuperior())
                 .numeroMuestra(muestra.getNumeroMuestra())
                 .lecturas(muestra.getLecturas().stream()
                         .sorted(Comparator.comparing(ControlProcesoLectura::getIndiceUnidad))

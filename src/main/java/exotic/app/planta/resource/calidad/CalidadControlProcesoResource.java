@@ -174,6 +174,16 @@ public class CalidadControlProcesoResource {
         return batchRecordQualityService.detalle(id);
     }
 
+    @GetMapping("/batch-records/{id}/controles/{ejecucionId}")
+    public EjecucionDetalleResponse detalleControlLiberacion(
+            Authentication authentication,
+            @PathVariable Long id,
+            @PathVariable Long ejecucionId
+    ) {
+        requireReleaseAccess(authentication, 1);
+        return service.detalleEjecucionBatchRecord(id, ejecucionId);
+    }
+
     @PostMapping("/batch-records/{id}/decision")
     public BatchRecordQualityDTOs.ReviewDetail decidirLiberacion(
             Authentication authentication,
