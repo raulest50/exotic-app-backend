@@ -38,6 +38,8 @@ public class MasterDirectiveInitializer {
     private static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_AYUDA = "Cuando esta activa, el panel de Area Operativa permite alternar las ordenes completadas entre hoy, semana actual e historico. Las ordenes activas siempre permanecen visibles. Cuando esta apagada, el panel conserva la vista historica.";
     private static final String AREA_OPERATIVA_ADMIN_CORRECTION_RESUMEN = "Habilita correcciones administrativas de estados en monitoreo de Area Operativa";
     private static final String AREA_OPERATIVA_ADMIN_CORRECTION_AYUDA = "Cuando esta activa, usuarios con nivel suficiente en Monitorear Areas Operativas pueden corregir estados de ordenes del area desde el monitoreo. Cada cambio queda auditado como correccion administrativa y no debe usarse como flujo operativo normal.";
+    private static final String BATCH_RECORD_WORKFLOW_RESUMEN = "Habilita el flujo regulado de expediente digital de lote para ordenes nuevas";
+    private static final String BATCH_RECORD_WORKFLOW_AYUDA = "Cuando esta activa, las OP nuevas crean Batch Record, registran firmas por etapa y requieren liberacion de Calidad antes del ingreso a almacen. Tambien habilita la creacion de OF. No genera expedientes retroactivos y no puede apagarse mientras existan expedientes sin cerrar o anular.";
 
     private final MasterDirectiveRepo masterDirectiveRepo;
 
@@ -55,6 +57,7 @@ public class MasterDirectiveInitializer {
         ensureAreaOperativaInactivityCheckIntervalMinutes();
         ensureAreaOperativaPanelHistoricoToggleEnabled();
         ensureAreaOperativaAdminCorrectionEnabled();
+        ensureBatchRecordWorkflowEnabled();
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {
@@ -380,5 +383,33 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(AREA_OPERATIVA_ADMIN_CORRECTION_AYUDA);
+    }
+
+    private void ensureBatchRecordWorkflowEnabled() {
+        masterDirectiveRepo.findByNombre(MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED)
+                .map(this::actualizarMetadataBatchRecordWorkflowEnabled)
+                .orElseGet(() -> {
+                    MasterDirective directive = new MasterDirective();
+                    directive.setNombre(MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED);
+                    directive.setValor(String.valueOf(
+                            MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED));
+                    aplicarMetadataBatchRecordWorkflowEnabled(directive);
+                    log.info("Creando directiva maestra por defecto: {}", directive.getNombre());
+                    return masterDirectiveRepo.save(directive);
+                });
+    }
+
+    private MasterDirective actualizarMetadataBatchRecordWorkflowEnabled(
+            MasterDirective directive
+    ) {
+        aplicarMetadataBatchRecordWorkflowEnabled(directive);
+        return masterDirectiveRepo.save(directive);
+    }
+
+    private void aplicarMetadataBatchRecordWorkflowEnabled(MasterDirective directive) {
+        directive.setResumen(BATCH_RECORD_WORKFLOW_RESUMEN);
+        directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setAyuda(BATCH_RECORD_WORKFLOW_AYUDA);
     }
 }

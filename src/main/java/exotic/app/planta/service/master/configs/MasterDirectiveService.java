@@ -4,11 +4,16 @@ import exotic.app.planta.model.master.configs.MasterDirective;
 import exotic.app.planta.model.master.configs.MasterDirectiveKeys;
 import exotic.app.planta.model.master.configs.dto.DTO_All_MasterDirectives;
 import exotic.app.planta.model.master.configs.dto.DTO_MasterD_Update;
+import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
 import exotic.app.planta.repo.master.configs.MasterDirectiveRepo;
+import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,7 +25,11 @@ import java.util.Optional;
 @Slf4j
 public class MasterDirectiveService {
 
+    private static final EnumSet<EstadoBatchRecord> ESTADOS_BATCH_RECORD_TERMINALES =
+            EnumSet.of(EstadoBatchRecord.CERRADO, EstadoBatchRecord.ANULADO);
+
     private final MasterDirectiveRepo masterDirectiveRepo;
+    private final BatchRecordRepo batchRecordRepo;
 
     /**
      * Obtiene todas las directivas maestras
@@ -129,6 +138,34 @@ public class MasterDirectiveService {
         );
     }
 
+    public boolean isBatchRecordWorkflowEnabled() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED,
+                MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED
+        );
+    }
+
+    /**
+     * Obtiene el modo que debe congelarse para una orden nueva y conserva un
+     * bloqueo compartido hasta que termine la transaccion creadora. De esta
+     * manera, una desactivacion no puede adelantarse a una OP u OF en curso.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean lockBatchRecordWorkflowForNewOrder() {
+        return masterDirectiveRepo.findByNombreForShare(
+                        MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED)
+                .map(directive -> parseBooleanOrFallback(
+                        directive.getValor(),
+                        MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED,
+                        MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED))
+                .orElseGet(() -> {
+                    log.warn("Directiva maestra {} no encontrada. Usando fallback {}",
+                            MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED,
+                            MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED);
+                    return MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED;
+                });
+    }
+
     public int getPositiveIntegerDirectiveValue(String nombre, int fallback) {
         Optional<MasterDirective> directiveOpt = masterDirectiveRepo.findByNombre(nombre);
         if (directiveOpt.isEmpty()) {
@@ -183,6 +220,7 @@ public class MasterDirectiveService {
      * @return La directiva actualizada
      * @throws RuntimeException si la directiva no existe o si se intenta cambiar el nombre
      */
+    @Transactional
     public MasterDirective updateMasterDirective(DTO_MasterD_Update updateDTO) {
         if (updateDTO == null || updateDTO.getOldMasterDirective() == null || updateDTO.getNewMasterDirective() == null) {
             throw new RuntimeException("La solicitud de actualizacion de directiva maestra es invalida");
@@ -192,7 +230,7 @@ public class MasterDirectiveService {
         MasterDirective newDirective = updateDTO.getNewMasterDirective();
         
         // Verificar que la directiva existe
-        Optional<MasterDirective> existingDirectiveOpt = masterDirectiveRepo.findById(oldDirective.getId());
+        Optional<MasterDirective> existingDirectiveOpt = masterDirectiveRepo.findByIdForUpdate(oldDirective.getId());
         if (existingDirectiveOpt.isEmpty()) {
             throw new RuntimeException("La directiva maestra con ID " + oldDirective.getId() + " no existe");
         }
@@ -205,6 +243,7 @@ public class MasterDirectiveService {
         }
 
         validateValorByTipo(existingDirective, newDirective.getValor());
+        validarDesactivacionBatchRecord(existingDirective, newDirective.getValor());
         
         // Actualizar solo los campos permitidos
         existingDirective.setValor(normalizeValorByTipo(existingDirective, newDirective.getValor()));
@@ -213,6 +252,31 @@ public class MasterDirectiveService {
         
         // Guardar y retornar la directiva actualizada
         return masterDirectiveRepo.save(existingDirective);
+    }
+
+    private void validarDesactivacionBatchRecord(
+            MasterDirective existingDirective,
+            String nuevoValor
+    ) {
+        if (!MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED.equals(
+                existingDirective.getNombre())) {
+            return;
+        }
+
+        boolean valorActual = parseBooleanOrFallback(
+                existingDirective.getValor(),
+                existingDirective.getNombre(),
+                MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED);
+        boolean valorNuevo = parseBoolean(nuevoValor, existingDirective.getNombre());
+        if (!valorActual || valorNuevo) {
+            return;
+        }
+
+        long expedientesActivos = batchRecordRepo.countByEstadoNotIn(
+                ESTADOS_BATCH_RECORD_TERMINALES);
+        if (expedientesActivos > 0) {
+            throw new BatchRecordWorkflowTransitionException(expedientesActivos);
+        }
     }
 
     private void validateValorByTipo(MasterDirective directive, String valor) {
@@ -303,5 +367,35 @@ public class MasterDirectiveService {
         }
 
         return Boolean.parseBoolean(normalized);
+    }
+
+    private boolean parseBooleanOrFallback(
+            String valor,
+            String nombre,
+            boolean fallback
+    ) {
+        try {
+            return parseBoolean(valor, nombre);
+        } catch (IllegalArgumentException exception) {
+            log.warn("Valor invalido para directiva maestra {}. Usando fallback {}. Causa: {}",
+                    nombre, fallback, exception.getMessage());
+            return fallback;
+        }
+    }
+
+    public static final class BatchRecordWorkflowTransitionException
+            extends IllegalStateException {
+
+        private final long expedientesActivos;
+
+        public BatchRecordWorkflowTransitionException(long expedientesActivos) {
+            super("No se puede desactivar Batch Record mientras existan "
+                    + expedientesActivos + " expediente(s) sin cerrar o anular.");
+            this.expedientesActivos = expedientesActivos;
+        }
+
+        public long getExpedientesActivos() {
+            return expedientesActivos;
+        }
     }
 }

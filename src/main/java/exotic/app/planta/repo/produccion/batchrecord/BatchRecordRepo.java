@@ -24,6 +24,8 @@ public interface BatchRecordRepo extends JpaRepository<BatchRecord, Long> {
 
     Optional<BatchRecord> findByLoteResultado_BatchNumberIgnoreCase(String lote);
 
+    long countByEstadoNotIn(Collection<EstadoBatchRecord> estadosTerminales);
+
     @EntityGraph(attributePaths = {
             "ordenProduccion", "ordenFabricacion", "loteResultado",
             "productoResultado", "manufacturingVersion", "creadoPor"

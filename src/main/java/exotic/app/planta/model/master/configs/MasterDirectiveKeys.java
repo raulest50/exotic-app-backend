@@ -15,6 +15,7 @@ public final class MasterDirectiveKeys {
     public static final String AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES = "AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES";
     public static final String AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED = "AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED";
     public static final String AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED = "AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED";
+    public static final String BATCH_RECORD_WORKFLOW_ENABLED = "BATCH_RECORD_WORKFLOW_ENABLED";
     public static final int DEFAULT_LIMITE_RECEPCIONES_PARCIALES_OCM = 3;
     public static final int DEFAULT_LIMITE_RECEPCIONES_PARCIALES_OCM_PROVEEDOR = 2;
     public static final boolean DEFAULT_DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION = true;
@@ -29,6 +30,7 @@ public final class MasterDirectiveKeys {
     public static final int DEFAULT_AREA_OPERATIVA_INACTIVITY_CHECK_INTERVAL_MINUTES = 10;
     public static final boolean DEFAULT_AREA_OPERATIVA_PANEL_HISTORICO_TOGGLE_ENABLED = false;
     public static final boolean DEFAULT_AREA_OPERATIVA_ADMIN_CORRECTION_ENABLED = false;
+    public static final boolean DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED = false;
 
     private MasterDirectiveKeys() {
     }

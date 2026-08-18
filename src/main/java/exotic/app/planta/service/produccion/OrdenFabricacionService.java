@@ -15,6 +15,7 @@ import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVers
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,6 +38,7 @@ public class OrdenFabricacionService {
     private final BatchRecordRepo batchRecordRepo;
     private final VencimientoLoteService vencimientoLoteService;
     private final BatchRecordService batchRecordService;
+    private final MasterDirectiveService masterDirectiveService;
 
     public OrdenFabricacionDTOs.Response crear(
             OrdenFabricacionDTOs.CreateRequest request,
@@ -44,6 +46,11 @@ public class OrdenFabricacionService {
     ) {
         if (request == null || actor == null) {
             throw new IllegalArgumentException("La solicitud y el usuario autenticado son obligatorios.");
+        }
+        if (!masterDirectiveService.lockBatchRecordWorkflowForNewOrder()) {
+            throw new IllegalStateException(
+                    "La creación de órdenes de fabricación está deshabilitada "
+                            + "mientras el flujo de Batch Record permanezca apagado.");
         }
         String loteNumero = normalizarObligatorio(request.getLote(),
                 "El número de lote es obligatorio.");

@@ -87,6 +87,8 @@ public class ProduccionService {
             OrdenProduccionDTO_save ordenProduccionDTO,
             User actor
     ) {
+        boolean batchRecordWorkflowEnabled =
+                masterDirectiveService.lockBatchRecordWorkflowForNewOrder();
         Producto producto = productoRepo.findById(ordenProduccionDTO.getProductoId())
             .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
         ManufacturingVersions manufacturingVersion = resolverVersionManufactura(producto);
@@ -111,13 +113,17 @@ public class ProduccionService {
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-        Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
+        Lote lote = crearLoteProduccion(
+                loteNumero, savedOrden, producto, batchRecordWorkflowEnabled);
         savedOrden.setLoteAsignado(lote.getBatchNumber());
         ordenProduccionRepo.save(savedOrden);
 
         // Inicializar seguimiento por áreas operativas
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
-        batchRecordService.crearParaOrdenProduccion(savedOrden, lote, requireActor(actor));
+        if (batchRecordWorkflowEnabled) {
+            batchRecordService.crearParaOrdenProduccion(
+                    savedOrden, lote, requireActor(actor));
+        }
 
         return savedOrden;
     }
@@ -131,6 +137,8 @@ public class ProduccionService {
             OrdenProduccionBatchDTO dto,
             User actor
     ) {
+        boolean batchRecordWorkflowEnabled =
+                masterDirectiveService.lockBatchRecordWorkflowForNewOrder();
         Producto producto = productoRepo.findById(dto.getProductoId())
             .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + dto.getProductoId()));
         ManufacturingVersions manufacturingVersion = resolverVersionManufactura(producto);
@@ -164,13 +172,16 @@ public class ProduccionService {
 
             OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-            Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
+            Lote lote = crearLoteProduccion(
+                    loteNumero, savedOrden, producto, batchRecordWorkflowEnabled);
             savedOrden.setLoteAsignado(lote.getBatchNumber());
             ordenProduccionRepo.save(savedOrden);
 
             // Inicializar seguimiento por áreas operativas
             seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
-            batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+            if (batchRecordWorkflowEnabled) {
+                batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+            }
 
             savedOrdenes.add(savedOrden);
         }
@@ -605,6 +616,8 @@ public class ProduccionService {
             MpsSemanalLotePlanificado lotePlanificado,
             String generatedByUsername
     ) {
+        boolean batchRecordWorkflowEnabled =
+                masterDirectiveService.lockBatchRecordWorkflowForNewOrder();
         Producto producto = productoRepo.findById(ordenProduccionDTO.getProductoId())
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado con ID: " + ordenProduccionDTO.getProductoId()));
         ManufacturingVersions manufacturingVersion = resolverVersionManufactura(producto);
@@ -634,19 +647,23 @@ public class ProduccionService {
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-        Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
+        Lote lote = crearLoteProduccion(
+                loteNumero, savedOrden, producto, batchRecordWorkflowEnabled);
         savedOrden.setLoteAsignado(lote.getBatchNumber());
         ordenProduccionRepo.save(savedOrden);
 
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
-        batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+        if (batchRecordWorkflowEnabled) {
+            batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+        }
         return savedOrden;
     }
 
     private Lote crearLoteProduccion(
             String batchNumber,
             OrdenProduccion ordenProduccion,
-            Producto producto
+            Producto producto,
+            boolean batchRecordWorkflowEnabled
     ) {
         Lote loteExistente = loteRepo.findByBatchNumber(batchNumber);
         if (loteExistente != null) {
@@ -659,7 +676,9 @@ public class ProduccionService {
         lote.setBatchNumber(batchNumber);
         lote.setOrdenProduccion(ordenProduccion);
         lote.setProducto(producto);
-        lote.setEstadoCalidad(EstadoCalidadLote.CUARENTENA);
+        lote.setEstadoCalidad(batchRecordWorkflowEnabled
+                ? EstadoCalidadLote.CUARENTENA
+                : EstadoCalidadLote.SIN_CLASIFICAR);
         vencimientoLoteService.copiarPoliticaVigente(producto, lote);
         if (lote.getVidaUtilCantidadAplicada() == null
                 || lote.getVidaUtilUnidadAplicada() == null) {
