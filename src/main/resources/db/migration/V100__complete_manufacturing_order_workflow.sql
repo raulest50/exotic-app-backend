@@ -193,7 +193,12 @@ WITH nodos AS (
     JOIN batch_record br ON br.orden_fabricacion_id = ofa.orden_fabricacion_id
     CROSS JOIN LATERAL jsonb_array_elements(
         COALESCE(
-            (NULLIF(BTRIM(mv.proceso_produccion_json), '')::jsonb)->'nodes',
+            (
+                NULLIF(
+                    BTRIM(convert_from(lo_get(mv.proceso_produccion_json), 'UTF8')),
+                    ''
+                )::jsonb
+            )->'nodes',
             '[]'::jsonb
         )
     ) WITH ORDINALITY AS nodo(value, ordinality)
