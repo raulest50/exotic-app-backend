@@ -1,10 +1,12 @@
 package exotic.app.planta.service.compras;
 
+import exotic.app.planta.model.compras.ContactoProveedor;
 import exotic.app.planta.model.compras.OrdenCompraMateriales;
 import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.compras.dto.UpdateEstadoOrdenCompraRequest;
 import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
 import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
+import exotic.app.planta.model.empresa.dto.EmpresaIdentidadDocumentalVigenteResponse;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.compras.FacturaCompraRepo;
 import exotic.app.planta.repo.compras.OrdenCompraRepo;
@@ -16,15 +18,18 @@ import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.commons.EmailService;
+import exotic.app.planta.service.empresa.EmpresaIdentidadDocumentalService;
 import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
 import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,6 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +50,9 @@ class ComprasServiceTest {
 
     private OrdenCompraRepo ordenCompraRepo;
     private ProveedorRepo proveedorRepo;
+    private EmailService emailService;
+    private UserRepository userRepository;
+    private EmpresaIdentidadDocumentalService empresaIdentidadDocumentalService;
     private EmpresaIdentidadLegalService empresaIdentidadLegalService;
     private EmpresaLogoDocumentalService empresaLogoDocumentalService;
     private ComprasService service;
@@ -50,6 +61,9 @@ class ComprasServiceTest {
     void setUp() {
         ordenCompraRepo = mock(OrdenCompraRepo.class);
         proveedorRepo = mock(ProveedorRepo.class);
+        emailService = mock(EmailService.class);
+        userRepository = mock(UserRepository.class);
+        empresaIdentidadDocumentalService = mock(EmpresaIdentidadDocumentalService.class);
         empresaIdentidadLegalService = mock(EmpresaIdentidadLegalService.class);
         empresaLogoDocumentalService = mock(EmpresaLogoDocumentalService.class);
         service = new ComprasService(
@@ -60,9 +74,10 @@ class ComprasServiceTest {
                 mock(SemiTerminadoRepo.class),
                 mock(TerminadoRepo.class),
                 ordenCompraRepo,
-                mock(EmailService.class),
-                mock(UserRepository.class),
+                emailService,
+                userRepository,
                 mock(TransaccionAlmacenHeaderRepo.class),
+                empresaIdentidadDocumentalService,
                 empresaIdentidadLegalService,
                 empresaLogoDocumentalService
         );
@@ -173,8 +188,9 @@ class ComprasServiceTest {
         EmpresaIdentidadLegalVersion identidad = identidadLegal(5L);
         EmpresaLogoDocumentalVersion logo = logoDocumental(8L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
-        when(empresaIdentidadLegalService.resolveVersion(null)).thenReturn(identidad);
-        when(empresaLogoDocumentalService.resolveVersion(null)).thenReturn(logo);
+        when(empresaIdentidadDocumentalService.getVigente()).thenReturn(vigente(5L, 8L));
+        when(empresaIdentidadLegalService.resolveVersion(5L)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(8L)).thenReturn(logo);
         when(ordenCompraRepo.save(any(OrdenCompraMateriales.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
@@ -200,8 +216,9 @@ class ComprasServiceTest {
         EmpresaIdentidadLegalVersion identidad = identidadLegal(5L);
         EmpresaLogoDocumentalVersion logo = logoDocumental(8L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
-        when(empresaIdentidadLegalService.resolveVersion(null)).thenReturn(identidad);
-        when(empresaLogoDocumentalService.resolveVersion(null)).thenReturn(logo);
+        when(empresaIdentidadDocumentalService.getVigente()).thenReturn(vigente(5L, 8L));
+        when(empresaIdentidadLegalService.resolveVersion(5L)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(8L)).thenReturn(logo);
         when(ordenCompraRepo.save(any(OrdenCompraMateriales.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
@@ -263,9 +280,132 @@ class ComprasServiceTest {
     }
 
     @Test
+    void updateEstadoOrdenCompra_rejectsPartialRequestedDocumentalSnapshot() {
+        OrdenCompraMateriales orden = orden(1, null);
+        UpdateEstadoOrdenCompraRequest request = request(2, UpdateEstadoOrdenCompraRequest.TipoEnvio.MANUAL);
+        request.setEmpresaIdentidadLegalVersionId(7L);
+        when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updateEstadoOrdenCompra(101, request, user(30L, "usuario.envio"))
+        );
+
+        assertEquals(
+                "Las versiones de identidad legal y logo documental deben enviarse juntas.",
+                exception.getMessage()
+        );
+        assertEquals(1, orden.getEstado());
+        verify(ordenCompraRepo, never()).save(any());
+    }
+
+    @Test
+    void updateEstadoOrdenCompra_rejectsSnapshotDifferentFromHistoricalPair() {
+        OrdenCompraMateriales orden = orden(1, null);
+        orden.setEmpresaIdentidadLegalVersion(identidadLegal(3L));
+        orden.setEmpresaLogoDocumentalVersion(logoDocumental(4L));
+        UpdateEstadoOrdenCompraRequest request = request(2, UpdateEstadoOrdenCompraRequest.TipoEnvio.MANUAL);
+        request.setEmpresaIdentidadLegalVersionId(7L);
+        request.setEmpresaLogoDocumentalVersionId(11L);
+        when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.updateEstadoOrdenCompra(101, request, user(30L, "usuario.envio"))
+        );
+
+        assertEquals("La OCM ya tiene una identidad documental diferente asociada.", exception.getMessage());
+        assertEquals(1, orden.getEstado());
+        verify(ordenCompraRepo, never()).save(any());
+    }
+
+    @Test
+    void updateEstadoOrdenCompra_emailUsesSnapshottedCommercialName() throws Exception {
+        OrdenCompraMateriales orden = ordenConEmail(1, "proveedor@example.com");
+        EmpresaIdentidadLegalVersion identidad = identidadLegal(7L, "Nueva Marca");
+        EmpresaLogoDocumentalVersion logo = logoDocumental(11L);
+        UpdateEstadoOrdenCompraRequest request = request(2, UpdateEstadoOrdenCompraRequest.TipoEnvio.EMAIL);
+        request.setEmpresaIdentidadLegalVersionId(7L);
+        request.setEmpresaLogoDocumentalVersionId(11L);
+        request.setOCMpdf(new MockMultipartFile("OCMpdf", "ocm.pdf", "application/pdf", new byte[]{1}));
+        when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
+        when(empresaIdentidadLegalService.resolveVersion(7L)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(11L)).thenReturn(logo);
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(ordenCompraRepo.save(any(OrdenCompraMateriales.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrdenCompraMateriales updated = service.updateEstadoOrdenCompra(
+                101,
+                request,
+                user(30L, "usuario.envio")
+        );
+
+        assertEquals(2, updated.getEstado());
+        verify(emailService).sendEmailWithAttachment(
+                eq("proveedor@example.com"),
+                eq("No Reply - Orden de Compra Nueva Marca #101"),
+                contains("Nueva Marca - Departamento de Compras"),
+                eq(request.getOCMpdf())
+        );
+    }
+
+    @Test
+    void enviarCorreoCancelacionOrdenCompra_usesHistoricalCommercialNameWithoutCc() throws Exception {
+        OrdenCompraMateriales orden = ordenConEmail(2, "proveedor@example.com");
+        orden.setEmpresaIdentidadLegalVersion(identidadLegal(3L, "Marca Histórica"));
+
+        service.enviarCorreoCancelacionOrdenCompra(orden);
+
+        verify(emailService).sendSimpleEmail(
+                eq("proveedor@example.com"),
+                eq("Cancelación - Orden de Compra Marca Histórica #101"),
+                contains("Marca Histórica - Departamento de Compras")
+        );
+        verify(empresaIdentidadLegalService, never()).getVigente();
+    }
+
+    @Test
+    void enviarCorreoCancelacionOrdenCompra_withCcUsesSimpleEmailWithoutAttachment() throws Exception {
+        OrdenCompraMateriales orden = ordenConEmail(2, "proveedor@example.com");
+        orden.setEmpresaIdentidadLegalVersion(identidadLegal(3L, "Marca Histórica"));
+        List<String> cc = List.of("compras@example.com");
+
+        service.enviarCorreoCancelacionOrdenCompra_wCC(orden, cc);
+
+        verify(emailService).sendSimpleEmailWithCC(
+                eq("proveedor@example.com"),
+                eq(new String[]{"compras@example.com"}),
+                eq("Cancelación - Orden de Compra Marca Histórica #101"),
+                contains("Marca Histórica - Departamento de Compras")
+        );
+        verify(emailService, never()).sendEmailWithAttachmentAndCC(
+                anyString(), any(String[].class), anyString(), anyString(), any()
+        );
+    }
+
+    @Test
+    void enviarCorreoCancelacionOrdenCompra_legacyOrderUsesCurrentCommercialName() throws Exception {
+        OrdenCompraMateriales orden = ordenConEmail(2, "proveedor@example.com");
+        when(empresaIdentidadLegalService.getVigente()).thenReturn(identidadLegal(9L, "Marca Vigente"));
+
+        service.enviarCorreoCancelacionOrdenCompra(orden);
+
+        verify(emailService).sendSimpleEmail(
+                eq("proveedor@example.com"),
+                eq("Cancelación - Orden de Compra Marca Vigente #101"),
+                contains("Marca Vigente - Departamento de Compras")
+        );
+    }
+
+    @Test
     void updateEstadoOrdenCompra_emailFailureDoesNotSetFechaEnvioProveedor() {
         OrdenCompraMateriales orden = orden(1, null);
+        EmpresaIdentidadLegalVersion identidad = identidadLegal(5L);
+        EmpresaLogoDocumentalVersion logo = logoDocumental(8L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
+        when(empresaIdentidadDocumentalService.getVigente()).thenReturn(vigente(5L, 8L));
+        when(empresaIdentidadLegalService.resolveVersion(5L)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(8L)).thenReturn(logo);
 
         assertThrows(RuntimeException.class,
                 () -> service.updateEstadoOrdenCompra(
@@ -275,17 +415,19 @@ class ComprasServiceTest {
                 ));
 
         assertNull(orden.getFechaEnvioProveedor());
-        assertNull(orden.getEmpresaIdentidadLegalVersion());
         assertEquals(1, orden.getEstado());
-        verify(empresaIdentidadLegalService, never()).resolveVersion(any());
-        verify(empresaLogoDocumentalService, never()).resolveVersion(any());
         verify(ordenCompraRepo, never()).save(any());
     }
 
     @Test
     void updateEstadoOrdenCompra_whatsappFailureDoesNotSetFechaEnvioProveedor() {
         OrdenCompraMateriales orden = orden(1, null);
+        EmpresaIdentidadLegalVersion identidad = identidadLegal(5L);
+        EmpresaLogoDocumentalVersion logo = logoDocumental(8L);
         when(ordenCompraRepo.findById(101)).thenReturn(Optional.of(orden));
+        when(empresaIdentidadDocumentalService.getVigente()).thenReturn(vigente(5L, 8L));
+        when(empresaIdentidadLegalService.resolveVersion(5L)).thenReturn(identidad);
+        when(empresaLogoDocumentalService.resolveVersion(8L)).thenReturn(logo);
 
         assertThrows(UnsupportedOperationException.class,
                 () -> service.updateEstadoOrdenCompra(
@@ -295,10 +437,7 @@ class ComprasServiceTest {
                 ));
 
         assertNull(orden.getFechaEnvioProveedor());
-        assertNull(orden.getEmpresaIdentidadLegalVersion());
         assertEquals(1, orden.getEstado());
-        verify(empresaIdentidadLegalService, never()).resolveVersion(any());
-        verify(empresaLogoDocumentalService, never()).resolveVersion(any());
         verify(ordenCompraRepo, never()).save(any());
     }
 
@@ -322,13 +461,25 @@ class ComprasServiceTest {
         return orden;
     }
 
+    private static OrdenCompraMateriales ordenConEmail(int estado, String email) {
+        OrdenCompraMateriales orden = orden(estado, null);
+        ContactoProveedor contacto = new ContactoProveedor();
+        contacto.setEmail(email);
+        orden.getProveedor().getContactos().add(contacto);
+        return orden;
+    }
+
     private static EmpresaIdentidadLegalVersion identidadLegal(Long id) {
+        return identidadLegal(id, "EXOTIC EXPERT");
+    }
+
+    private static EmpresaIdentidadLegalVersion identidadLegal(Long id, String nombreComercial) {
         EmpresaIdentidadLegalVersion identidad = new EmpresaIdentidadLegalVersion();
         identidad.setId(id);
         identidad.setEstado(EmpresaIdentidadLegalVersion.Estado.VIGENTE);
         identidad.setVersion(1);
         identidad.setRazonSocial("Napolitana J.P S.A.S.");
-        identidad.setNombreComercial("EXOTIC EXPERT");
+        identidad.setNombreComercial(nombreComercial);
         identidad.setTipoIdentificacion("NIT");
         identidad.setNumeroIdentificacion("901751897");
         identidad.setDigitoVerificacion("1");
@@ -345,6 +496,33 @@ class ComprasServiceTest {
         logo.setContentType("image/png");
         logo.setSha256("abc");
         return logo;
+    }
+
+    private static EmpresaIdentidadDocumentalVigenteResponse vigente(Long identidadId, Long logoId) {
+        return new EmpresaIdentidadDocumentalVigenteResponse(
+                "identidad-" + identidadId + "-logo-" + logoId,
+                new EmpresaIdentidadDocumentalVigenteResponse.IdentidadLegal(
+                        identidadId,
+                        1,
+                        "Napolitana J.P S.A.S.",
+                        "Marca Vigente",
+                        "NIT",
+                        "901751897",
+                        "1",
+                        "301 711 51 81",
+                        "produccion.exotic@gmail.com"
+                ),
+                new EmpresaIdentidadDocumentalVigenteResponse.Logo(
+                        logoId,
+                        1,
+                        "abc",
+                        "image/png",
+                        1L,
+                        1,
+                        1,
+                        "/api/empresa-logo-documental/versiones/" + logoId + "/imagen"
+                )
+        );
     }
 
     private static UpdateEstadoOrdenCompraRequest request(

@@ -48,6 +48,27 @@ public class EmailService {
     }
 
     /**
+     * Send a simple text email with CC recipients.
+     *
+     * @param to      The recipient email address
+     * @param cc      Array of CC email addresses
+     * @param subject The email subject
+     * @param text    The email body text
+     */
+    public void sendSimpleEmailWithCC(String to, String[] cc, String subject, String text) {
+        log.info("Sending simple email to: {}, CC: {}", to, (Object) cc);
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        if (cc != null && cc.length > 0) {
+            message.setCc(cc);
+        }
+        message.setSubject(subject);
+        message.setText(text);
+        mailSender.send(message);
+        log.info("Simple email sent successfully to: {}, CC: {}", to, (Object) cc);
+    }
+
+    /**
      * Send an HTML email
      *
      * @param to          The recipient email address

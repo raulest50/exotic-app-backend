@@ -2,6 +2,8 @@ package exotic.app.planta.service.compras;
 
 import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.compras.*;
+import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
+import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import jakarta.mail.MessagingException;
 import jakarta.transaction.Transactional;
 import exotic.app.planta.model.compras.dto.UpdateEstadoOrdenCompraRequest;
@@ -16,6 +18,7 @@ import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.service.commons.EmailService;
+import exotic.app.planta.service.empresa.EmpresaIdentidadDocumentalService;
 import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
 import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import exotic.app.planta.model.users.ModuloSistema;
@@ -58,6 +61,8 @@ public class ComprasService {
     private final UserRepository userRepository;
 
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
+
+    private final EmpresaIdentidadDocumentalService empresaIdentidadDocumentalService;
 
     private final EmpresaIdentidadLegalService empresaIdentidadLegalService;
 
@@ -221,22 +226,13 @@ public class ComprasService {
             throw new RuntimeException("No se encontró email para el proveedor con ID: " + proveedor.getId());
         }
 
-        // Preparar el asunto y cuerpo del correo
-        String subject = "No Reply - Orden de Compra Exotic Expert #" + orden.getOrdenCompraId();
-        String text = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n" +
-                "Por medio de la presente le hacemos llegar la orden de compra #" + orden.getOrdenCompraId() +
-                "correspondiente a los productos/servicios detallados en el documento adjunto.\n" +
-                "Le agradeceremos confirmar la recepción de esta orden y, en caso de ser necesario," +
-                "informarnos sobre el tiempo estimado de entrega o cualquier observación relevante.\n\n" +
-                "Quedamos atentos a su confirmación y agradecemos de antemano su atención y colaboración.\n\n" +
-                "Saludos cordiales,\n" +
-                "Exotic Expert - Departamento de Compras";
+        EmailContent emailContent = buildOrderEmailContent(orden);
 
         // Enviar el correo con el PDF adjunto
         emailService.sendEmailWithAttachment(
                 emailProveedor,
-                subject,
-                text,
+                emailContent.subject(),
+                emailContent.body(),
                 pdfAttachment
         );
 
@@ -290,21 +286,13 @@ public class ComprasService {
             throw new RuntimeException("No se encontró email para el proveedor con ID: " + proveedor.getId());
         }
 
-        String subject = "No Reply - Orden de Compra Exotic Expert #" + orden.getOrdenCompraId();
-        String text = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n" +
-                "Por medio de la presente le hacemos llegar la orden de compra #" + orden.getOrdenCompraId() +
-                "correspondiente a los productos/servicios detallados en el documento adjunto.\n" +
-                "Le agradeceremos confirmar la recepción de esta orden y, en caso de ser necesario," +
-                "informarnos sobre el tiempo estimado de entrega o cualquier observación relevante.\n\n" +
-                "Quedamos atentos a su confirmación y agradecemos de antemano su atención y colaboración.\n\n" +
-                "Saludos cordiales,\n" +
-                "Exotic Expert - Departamento de Compras";
+        EmailContent emailContent = buildOrderEmailContent(orden);
 
         emailService.sendEmailWithAttachmentAndCC(
                 emailProveedor,
                 ccEmails.toArray(new String[0]),
-                subject,
-                text,
+                emailContent.subject(),
+                emailContent.body(),
                 pdfAttachment
         );
 
@@ -353,6 +341,7 @@ public class ComprasService {
         // Si el nuevo estado es 2 y estamos cambiando desde estado 1, manejar según el tipo de envío
         if (transicionEnvioProveedor) {
             log.info("Cambiando estado de 1 a 2 para orden ID: {}", ordenCompraId);
+            resolveDocumentalSnapshot(orden, ue);
 
             // Verificar el tipo de envío seleccionado
             if (ue.getTipoEnvio() != null) {
@@ -416,18 +405,6 @@ public class ComprasService {
             }
         }
 
-        if (transicionEnvioProveedor && orden.getEmpresaIdentidadLegalVersion() == null) {
-            orden.setEmpresaIdentidadLegalVersion(
-                    empresaIdentidadLegalService.resolveVersion(ue.getEmpresaIdentidadLegalVersionId())
-            );
-        }
-
-        if (transicionEnvioProveedor && orden.getEmpresaLogoDocumentalVersion() == null) {
-            orden.setEmpresaLogoDocumentalVersion(
-                    empresaLogoDocumentalService.resolveVersion(ue.getEmpresaLogoDocumentalVersionId())
-            );
-        }
-
         if (transicionEnvioProveedor && orden.getFechaEnvioProveedor() == null) {
             orden.setFechaEnvioProveedor(AppTime.now());
         }
@@ -455,6 +432,104 @@ public class ComprasService {
                     "Una orden pendiente de liberación debe pasar primero al estado liberado."
             );
         }
+    }
+
+    private void resolveDocumentalSnapshot(
+            OrdenCompraMateriales orden,
+            UpdateEstadoOrdenCompraRequest request
+    ) {
+        EmpresaIdentidadLegalVersion identidadExistente = orden.getEmpresaIdentidadLegalVersion();
+        EmpresaLogoDocumentalVersion logoExistente = orden.getEmpresaLogoDocumentalVersion();
+
+        if (identidadExistente != null || logoExistente != null) {
+            if (identidadExistente == null || logoExistente == null) {
+                throw new IllegalStateException("La OCM tiene una asociación documental histórica incompleta.");
+            }
+            validateRequestedSnapshotMatchesExisting(identidadExistente, logoExistente, request);
+            return;
+        }
+
+        Long identidadId = request.getEmpresaIdentidadLegalVersionId();
+        Long logoId = request.getEmpresaLogoDocumentalVersionId();
+        if ((identidadId == null) != (logoId == null)) {
+            throw new IllegalArgumentException(
+                    "Las versiones de identidad legal y logo documental deben enviarse juntas."
+            );
+        }
+
+        if (identidadId == null) {
+            var vigente = empresaIdentidadDocumentalService.getVigente();
+            identidadId = vigente.identidadLegal().id();
+            logoId = vigente.logo().id();
+        }
+
+        orden.setEmpresaIdentidadLegalVersion(empresaIdentidadLegalService.resolveVersion(identidadId));
+        orden.setEmpresaLogoDocumentalVersion(empresaLogoDocumentalService.resolveVersion(logoId));
+    }
+
+    private void validateRequestedSnapshotMatchesExisting(
+            EmpresaIdentidadLegalVersion identidadExistente,
+            EmpresaLogoDocumentalVersion logoExistente,
+            UpdateEstadoOrdenCompraRequest request
+    ) {
+        Long identidadId = request.getEmpresaIdentidadLegalVersionId();
+        Long logoId = request.getEmpresaLogoDocumentalVersionId();
+        if ((identidadId == null) != (logoId == null)) {
+            throw new IllegalArgumentException(
+                    "Las versiones de identidad legal y logo documental deben enviarse juntas."
+            );
+        }
+        if (identidadId != null
+                && (!identidadExistente.getId().equals(identidadId) || !logoExistente.getId().equals(logoId))) {
+            throw new IllegalArgumentException("La OCM ya tiene una identidad documental diferente asociada.");
+        }
+    }
+
+    private EmailContent buildOrderEmailContent(OrdenCompraMateriales orden) {
+        String nombreComercial = getNombreComercialDocumento(orden);
+        String subject = "No Reply - Orden de Compra " + nombreComercial + " #" + orden.getOrdenCompraId();
+        String body = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n"
+                + "Por medio de la presente le hacemos llegar la orden de compra #" + orden.getOrdenCompraId()
+                + " correspondiente a los productos/servicios detallados en el documento adjunto.\n"
+                + "Le agradeceremos confirmar la recepción de esta orden y, en caso de ser necesario, "
+                + "informarnos sobre el tiempo estimado de entrega o cualquier observación relevante.\n\n"
+                + "Quedamos atentos a su confirmación y agradecemos de antemano su atención y colaboración.\n\n"
+                + "Saludos cordiales,\n"
+                + nombreComercial + " - Departamento de Compras";
+        return new EmailContent(subject, body);
+    }
+
+    private EmailContent buildCancellationEmailContent(OrdenCompraMateriales orden) {
+        String nombreComercial = getNombreComercialDocumento(orden);
+        String subject = "Cancelación - Orden de Compra " + nombreComercial + " #" + orden.getOrdenCompraId();
+        String body = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n"
+                + "Por medio de la presente le informamos que la orden de compra #" + orden.getOrdenCompraId()
+                + " ha sido cancelada.\n\n"
+                + "Lamentamos cualquier inconveniente que esto pueda causar. Si tiene alguna consulta o requiere "
+                + "información adicional, no dude en contactarnos.\n\n"
+                + "Saludos cordiales,\n"
+                + nombreComercial + " - Departamento de Compras";
+        return new EmailContent(subject, body);
+    }
+
+    private String getNombreComercialDocumento(OrdenCompraMateriales orden) {
+        EmpresaIdentidadLegalVersion identidad = orden.getEmpresaIdentidadLegalVersion();
+        if (identidad == null) {
+            log.warn(
+                    "La OCM {} no tiene una instantánea de identidad legal; se usará la identidad vigente.",
+                    orden.getOrdenCompraId()
+            );
+            identidad = empresaIdentidadLegalService.getVigente();
+        }
+        if (identidad == null
+                || identidad.getNombreComercial() == null
+                || identidad.getNombreComercial().isBlank()) {
+            throw new IllegalStateException("La OCM no tiene una identidad legal válida asociada.");
+        }
+        return identidad.getNombreComercial().trim();
+    }
+
+    private record EmailContent(String subject, String body) {
     }
 
 
@@ -494,21 +569,13 @@ public class ComprasService {
             throw new RuntimeException("No se encontró email para el proveedor con ID: " + proveedor.getId());
         }
 
-        // Preparar el asunto y cuerpo del correo
-        String subject = "Cancelación - Orden de Compra Exotic Expert #" + orden.getOrdenCompraId();
-        String text = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n" +
-                "Por medio de la presente le informamos que la orden de compra #" + orden.getOrdenCompraId() +
-                " ha sido cancelada.\n\n" +
-                "Lamentamos cualquier inconveniente que esto pueda causar. Si tiene alguna consulta o requiere " +
-                "información adicional, no dude en contactarnos.\n\n" +
-                "Saludos cordiales,\n" +
-                "Exotic Expert - Departamento de Compras";
+        EmailContent emailContent = buildCancellationEmailContent(orden);
 
         // Enviar el correo
         emailService.sendSimpleEmail(
                 emailProveedor,
-                subject,
-                text
+                emailContent.subject(),
+                emailContent.body()
         );
 
         log.info("Email de cancelación enviado al proveedor {} para orden ID: {}", emailProveedor, orden.getOrdenCompraId());
@@ -550,23 +617,14 @@ public class ComprasService {
             throw new RuntimeException("No se encontró email para el proveedor con ID: " + proveedor.getId());
         }
 
-        // Preparar el asunto y cuerpo del correo
-        String subject = "Cancelación - Orden de Compra Exotic Expert #" + orden.getOrdenCompraId();
-        String text = "Estimado proveedor: " + orden.getProveedor().getNombre() + ",\n\n" +
-                "Por medio de la presente le informamos que la orden de compra #" + orden.getOrdenCompraId() +
-                " ha sido cancelada.\n\n" +
-                "Lamentamos cualquier inconveniente que esto pueda causar. Si tiene alguna consulta o requiere " +
-                "información adicional, no dude en contactarnos.\n\n" +
-                "Saludos cordiales,\n" +
-                "Exotic Expert - Departamento de Compras";
+        EmailContent emailContent = buildCancellationEmailContent(orden);
 
         // Enviar el correo con copia (sin adjunto)
-        emailService.sendEmailWithAttachmentAndCC(
+        emailService.sendSimpleEmailWithCC(
                 emailProveedor,
                 ccEmails.toArray(new String[0]),
-                subject,
-                text,
-                null
+                emailContent.subject(),
+                emailContent.body()
         );
 
         log.info("Email de cancelación enviado al proveedor {} con CC {} para orden ID: {}", 

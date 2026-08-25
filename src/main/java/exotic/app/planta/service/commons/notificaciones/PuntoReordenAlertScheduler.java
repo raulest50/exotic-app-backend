@@ -4,10 +4,12 @@ import exotic.app.planta.model.commons.notificaciones.MaterialEnPuntoReordenConO
 import exotic.app.planta.model.commons.notificaciones.MaterialEnPuntoReordenDTO;
 import exotic.app.planta.model.commons.notificaciones.OcmPendienteIngresoDTO;
 import exotic.app.planta.model.commons.notificaciones.PuntoReordenEvaluacionResult;
+import exotic.app.planta.model.empresa.EmpresaIdentidadLegalVersion;
 import exotic.app.planta.model.notificaciones.MaestraNotificacion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.notificaciones.MaestraNotificacionRepo;
 import exotic.app.planta.service.commons.EmailService;
+import exotic.app.planta.service.empresa.EmpresaIdentidadLegalService;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +39,7 @@ public class PuntoReordenAlertScheduler {
     private final PuntoReordenEvaluacionService puntoReordenEvaluacionService;
     private final MaestraNotificacionRepo maestraNotificacionRepo;
     private final EmailService emailService;
+    private final EmpresaIdentidadLegalService empresaIdentidadLegalService;
 
     @Scheduled(cron = "0 0 7 * * MON-FRI", zone = "America/Bogota")
     @Scheduled(cron = "0 0 16 * * MON-FRI", zone = "America/Bogota")
@@ -63,9 +66,21 @@ public class PuntoReordenAlertScheduler {
             return;
         }
 
+        EmpresaIdentidadLegalVersion identidad;
+        try {
+            identidad = empresaIdentidadLegalService.getVigente();
+            validateIdentidadVigente(identidad);
+        } catch (RuntimeException e) {
+            log.error(
+                    "PuntoReordenAlert: no fue posible resolver una identidad legal vigente; no se enviarán correos.",
+                    e
+            );
+            return;
+        }
+
         String fecha = LocalDate.now(BOGOTA).toString();
-        String subject = "[Exotic] Alerta de Punto de Reorden - " + fecha;
-        String html = buildHtmlBody(eval);
+        String subject = "[" + identidad.getNombreComercial().trim() + "] Alerta de Punto de Reorden - " + fecha;
+        String html = buildHtmlBody(eval, identidad);
 
         for (User user : destinatarios) {
             try {
@@ -78,7 +93,10 @@ public class PuntoReordenAlertScheduler {
                 destinatarios.size(), eval.totalEnAlerta());
     }
 
-    private static String buildHtmlBody(PuntoReordenEvaluacionResult eval) {
+    private static String buildHtmlBody(
+            PuntoReordenEvaluacionResult eval,
+            EmpresaIdentidadLegalVersion identidad
+    ) {
         StringBuilder sb = new StringBuilder(3072);
         sb.append("<html><body>");
         sb.append("<h2>Resumen de alerta de punto de reorden</h2>");
@@ -135,8 +153,24 @@ public class PuntoReordenAlertScheduler {
             sb.append("</ul>");
         }
 
+        sb.append("<hr style=\"margin-top:2em;\"/>")
+                .append("<p style=\"color:#555;font-size:0.9em;\">")
+                .append("<strong>").append(escapeHtml(identidad.getNombreComercial())).append("</strong><br/>")
+                .append(escapeHtml(identidad.getRazonSocial())).append("<br/>")
+                .append("Teléfono: ").append(escapeHtml(identidad.getTelefonoPrincipal())).append("<br/>")
+                .append("Correo: ").append(escapeHtml(identidad.getEmailPrincipal()))
+                .append("</p>");
+
         sb.append("</body></html>");
         return sb.toString();
+    }
+
+    private static void validateIdentidadVigente(EmpresaIdentidadLegalVersion identidad) {
+        if (identidad == null
+                || identidad.getNombreComercial() == null
+                || identidad.getNombreComercial().isBlank()) {
+            throw new IllegalStateException("La identidad legal vigente no tiene un nombre comercial válido.");
+        }
     }
 
     private static void appendBaseMaterialRow(StringBuilder sb, MaterialEnPuntoReordenDTO material) {
