@@ -7,6 +7,7 @@ import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
@@ -30,6 +31,7 @@ class AreaOperativaPoeServiceTest {
                 mock(ProcesoProduccionDocumentoService.class);
         AreaOperativaPoeService service = new AreaOperativaPoeService(
                 seguimientoRepo,
+                mock(OrdenFabricacionOperacionRepo.class),
                 documentoService
         );
         SeguimientoOrdenArea seguimiento = seguimientoConPoe(55, 1001L, 99L);
@@ -54,6 +56,7 @@ class AreaOperativaPoeServiceTest {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaOperativaPoeService service = new AreaOperativaPoeService(
                 seguimientoRepo,
+                mock(OrdenFabricacionOperacionRepo.class),
                 mock(ProcesoProduccionDocumentoService.class)
         );
         when(seguimientoRepo.findPoeDetalleByIdAndOrdenId(1001L, 55))
@@ -68,6 +71,7 @@ class AreaOperativaPoeServiceTest {
         SeguimientoOrdenAreaRepo seguimientoRepo = mock(SeguimientoOrdenAreaRepo.class);
         AreaOperativaPoeService service = new AreaOperativaPoeService(
                 seguimientoRepo,
+                mock(OrdenFabricacionOperacionRepo.class),
                 mock(ProcesoProduccionDocumentoService.class)
         );
         SeguimientoOrdenArea seguimiento = seguimientoConPoe(55, 1001L, 99L);

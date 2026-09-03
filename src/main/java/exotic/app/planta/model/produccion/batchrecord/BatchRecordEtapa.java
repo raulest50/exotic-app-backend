@@ -82,6 +82,10 @@ public class BatchRecordEtapa {
     @Column(nullable = false, length = 20)
     private EstadoBatchRecordEtapa estado = EstadoBatchRecordEtapa.PENDIENTE;
 
+    /** Ciclo de Calidad que habilitó expresamente la corrección de esta etapa. */
+    @Column(name = "ciclo_correccion_habilitado")
+    private Long cicloCorreccionHabilitado;
+
     @Column(name = "iniciada_en")
     private LocalDateTime iniciadaEn;
 
@@ -135,7 +139,8 @@ public class BatchRecordEtapa {
             throw new IllegalStateException(
                     "La plantilla de control no corresponde al área de la etapa.");
         }
-        if (secuencia < 0 || estado == null) {
+        if (secuencia < 0 || estado == null
+                || (cicloCorreccionHabilitado != null && cicloCorreccionHabilitado <= 0)) {
             throw new IllegalStateException("La secuencia y estado de la etapa no son válidos.");
         }
         if (completadaEn != null && iniciadaEn != null && completadaEn.isBefore(iniciadaEn)) {
@@ -169,7 +174,8 @@ public class BatchRecordEtapa {
                 || ordenFabricacionEventoOrigen.getEstadoDestino()
                 != SeguimientoOrdenArea.ESTADO_COMPLETADO
                 || ordenFabricacionEventoOrigen.getUsuario() == null
-                || estado != EstadoBatchRecordEtapa.COMPLETADA) {
+                || (estado != EstadoBatchRecordEtapa.COMPLETADA
+                && estado != EstadoBatchRecordEtapa.EN_CORRECCION)) {
             throw new IllegalStateException(
                     "La etapa de OF solo puede cerrarse con un reporte autenticado.");
         }
@@ -204,7 +210,8 @@ public class BatchRecordEtapa {
                 || seguimientoEventoOrigen.getTipoEvento() != TipoEventoSeguimiento.OPERATIVO
                 || seguimientoEventoOrigen.getEstadoDestino() != SeguimientoOrdenArea.ESTADO_COMPLETADO
                 || seguimientoEventoOrigen.getUsuario() == null
-                || estado != EstadoBatchRecordEtapa.COMPLETADA) {
+                || (estado != EstadoBatchRecordEtapa.COMPLETADA
+                && estado != EstadoBatchRecordEtapa.EN_CORRECCION)) {
             throw new IllegalStateException(
                     "La etapa solo puede originarse en un reporte operativo de terminación autenticado.");
         }

@@ -99,7 +99,7 @@ public class ReporteProduccionLoteService {
         ordenProduccionRepo.save(orden);
         ReporteProduccionLote guardado = reporteRepo.saveAndFlush(reporte);
         if (expedienteDigital) {
-            batchRecordService.enviarARevisionCalidad(orden, cantidad, actor);
+            batchRecordService.prepararRevisionCalidad(orden, cantidad);
         }
         return guardado;
     }
@@ -132,6 +132,7 @@ public class ReporteProduccionLoteService {
         orden.setFechaFinal(null);
         ordenProduccionRepo.save(orden);
         reporteRepo.save(reporte);
+        batchRecordService.revertirPreparacionRevision(orden);
     }
 
     @Transactional(readOnly = true)

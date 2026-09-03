@@ -137,10 +137,27 @@ public class BatchRecordPdfService {
         addObjectSection(document, "Cantidades", root.path("cantidades"));
         addArraySection(document, "Etapas de fabricación", root.path("etapas"), false);
         addArraySection(document, "Consumos y trazabilidad de lotes", root.path("consumos"), false);
-        addArraySection(document, "Controles de proceso", root.path("controles"), false);
-        addArraySection(document, "Desviaciones", root.path("desviaciones"), false);
+        boolean esquemaV3 = "batch-record-v3".equals(texto(root.path("esquemaVersion"), ""));
+        addArraySection(document,
+                esquemaV3 ? "Controles de proceso legados (transición)" : "Controles de proceso",
+                root.path("controles"), false);
+        if (esquemaV3) {
+            addArraySection(document, "Controles unificados de Proceso y Calidad",
+                    root.path("controlesUnificados").path("requisitos"), false);
+        }
+        addArraySection(document,
+                esquemaV3 ? "Desviaciones legadas (transición)" : "Desviaciones",
+                root.path("desviaciones"), false);
         addArraySection(document, "Correcciones y entradas tardías", root.path("correcciones"), false);
         addArraySection(document, "Decisiones de Calidad", root.path("decisionesCalidad"), false);
+        if (esquemaV3) {
+            addArraySection(document, "Ciclos de revisión de Calidad",
+                    root.path("ciclosRevision"), false);
+            addArraySection(document, "Secciones documentales devueltas",
+                    root.path("seccionesCorreccion"), false);
+            addArraySection(document, "Solicitudes de reapertura excepcional",
+                    root.path("solicitudesReapertura"), false);
+        }
         addArraySection(document, "Firmas electrónicas", root.path("firmas"), true);
         if (revision != null) {
             addFirmasAplicadasARevision(document, revision);

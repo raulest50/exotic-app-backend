@@ -22,6 +22,7 @@ Los **Architecture Decision Records (ADRs)** son documentos que capturan decisio
 | # | Título | Estado | Fecha |
 |---|--------|--------|-------|
 | [001](001-transaccion-almacen-multiples-ubicaciones.md) | TransaccionAlmacen con Movimientos a Múltiples Almacenes | ✅ Aceptado | 2026-02-27 |
+| [002](002-motor-unificado-controles-proceso-calidad.md) | Motor unificado de controles de Proceso y Calidad | ✅ Aceptado | 2026-09-02 |
 
 ## Cómo crear un nuevo ADR
 

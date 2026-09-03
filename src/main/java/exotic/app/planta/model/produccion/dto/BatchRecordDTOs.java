@@ -2,11 +2,14 @@ package exotic.app.planta.model.produccion.dto;
 
 import exotic.app.planta.model.calidad.ResultadoControlProceso;
 import exotic.app.planta.model.inventarios.EstadoCalidadLote;
+import exotic.app.planta.model.controles.dto.BloqueoControlDTO;
 import exotic.app.planta.model.produccion.batchrecord.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,6 +42,7 @@ public final class BatchRecordDTOs {
         private String unidadMedida;
         private LocalDateTime creadoEn;
         private LocalDateTime enviadoRevisionEn;
+        private long cicloRevisionActual;
     }
 
     @Data
@@ -70,6 +74,12 @@ public final class BatchRecordDTOs {
         @Builder.Default
         private List<DecisionCalidad> decisionesCalidad = new ArrayList<>();
         @Builder.Default
+        private List<CicloRevision> ciclosRevision = new ArrayList<>();
+        @Builder.Default
+        private List<SolicitudReapertura> solicitudesReapertura = new ArrayList<>();
+        @Builder.Default
+        private List<SeccionCorreccion> seccionesCorreccion = new ArrayList<>();
+        @Builder.Default
         private List<VinculoGenealogia> lotesOrigen = new ArrayList<>();
         @Builder.Default
         private List<VinculoGenealogia> lotesDestino = new ArrayList<>();
@@ -86,6 +96,7 @@ public final class BatchRecordDTOs {
         private Integer areaOperativaId;
         private String areaOperativaNombre;
         private EstadoBatchRecordEtapa estado;
+        private Long cicloCorreccionHabilitado;
         private LocalDateTime iniciadaEn;
         private LocalDateTime completadaEn;
         private String reportadaPor;
@@ -255,5 +266,96 @@ public final class BatchRecordDTOs {
         private String decididaPor;
         private Integer revision;
         private Long firmaId;
+        private Long cicloRevision;
+        private String alcanceDevolucionJson;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CicloRevision {
+        private Long id;
+        private long numero;
+        private OrigenCicloRevisionBatchRecord origen;
+        private EstadoCicloRevisionBatchRecord estado;
+        private LocalDateTime enviadoEn;
+        private String enviadoPor;
+        private String motivoEnvio;
+        private Integer revisionEnvio;
+        private LocalDateTime cerradoEn;
+        private String cerradoPor;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SolicitudReapertura {
+        private Long id;
+        private long cicloRevisionNumero;
+        private EstadoSolicitudReaperturaRechazo estado;
+        private LocalDateTime solicitadaEn;
+        private String solicitadaPor;
+        private String motivo;
+        private String evidencia;
+        private String alcance;
+        private Integer revisionSolicitud;
+        private Long firmaSolicitudId;
+        private LocalDateTime aprobadaEn;
+        private String aprobadaPor;
+        private String motivoAprobacion;
+        private Integer revisionAprobacion;
+        private Long firmaAprobacionId;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SeccionCorreccion {
+        private Long id;
+        private long cicloRevisionNumero;
+        private String seccion;
+        private EstadoSeccionCorreccionBatchRecord estado;
+        private LocalDateTime solicitadaEn;
+        private String solicitadaPor;
+        private LocalDateTime atendidaEn;
+        private String atendidaPor;
+        private String justificacion;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class EnvioCalidadRequest {
+        @NotBlank
+        @Size(max = 500)
+        private String motivo;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AtenderSeccionCorreccionRequest {
+        @NotBlank
+        @Size(max = 500)
+        private String justificacion;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PrevalidacionEnvio {
+        private Long batchRecordId;
+        private EstadoBatchRecord estado;
+        private long cicloRevisionActual;
+        private boolean reenvio;
+        private boolean permitido;
+        @Builder.Default
+        private List<String> bloqueosGenerales = new ArrayList<>();
+        @Builder.Default
+        private List<BloqueoControlDTO> bloqueosControl = new ArrayList<>();
     }
 }

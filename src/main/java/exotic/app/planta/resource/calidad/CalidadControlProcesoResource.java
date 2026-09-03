@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.calidad;
 
 import exotic.app.planta.dto.ErrorResponse;
+import exotic.app.planta.config.LegacyControlCompatibilityProperties;
 import exotic.app.planta.model.calidad.EstadoControlProcesoPlantilla;
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.EjecucionDetalleResponse;
 import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.EjecucionListItemResponse;
@@ -16,11 +17,14 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.calidad.CalidadControlProcesoService;
+import exotic.app.planta.service.calidad.LegacyControlCompatibilityService;
 import exotic.app.planta.service.calidad.BatchRecordQualityService;
+import exotic.app.planta.service.controles.ControlIdempotencyService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +34,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,8 +56,11 @@ public class CalidadControlProcesoResource {
     private static final String TAB_LIBERACION_LOTES = "REVISION_LIBERACION_LOTES";
 
     private final CalidadControlProcesoService service;
+    private final LegacyControlCompatibilityService compatibilityService;
+    private final LegacyControlCompatibilityProperties compatibilityProperties;
     private final BatchRecordQualityService batchRecordQualityService;
     private final UserRepository userRepository;
+    private final ControlIdempotencyService idempotencyService;
 
     @GetMapping("/plantillas")
     public List<PlantillaResponse> listarPlantillas(
@@ -69,8 +77,9 @@ public class CalidadControlProcesoResource {
             Authentication authentication,
             @RequestBody PlantillaRequest request
     ) {
-        requireTabAccess(authentication, TAB_VERSIONADO);
-        return service.guardarBorrador(request);
+        User actor = requireLegacyMutationTab(authentication, TAB_VERSIONADO);
+        requireLegacyBridge();
+        return compatibilityService.guardarBorrador(actor, request);
     }
 
     @PostMapping("/plantillas/{id}/publicar")
@@ -78,8 +87,9 @@ public class CalidadControlProcesoResource {
             Authentication authentication,
             @PathVariable Long id
     ) {
-        requireTabAccess(authentication, TAB_VERSIONADO);
-        return service.publicarPlantilla(id);
+        User actor = requireLegacyMutationTab(authentication, TAB_VERSIONADO);
+        requireLegacyBridge();
+        return compatibilityService.publicarPlantilla(actor, id);
     }
 
     @PostMapping("/plantillas/{id}/retirar")
@@ -87,8 +97,9 @@ public class CalidadControlProcesoResource {
             Authentication authentication,
             @PathVariable Long id
     ) {
-        requireTabAccess(authentication, TAB_VERSIONADO);
-        return service.retirarPlantilla(id);
+        User actor = requireLegacyMutationTab(authentication, TAB_VERSIONADO);
+        requireLegacyBridge();
+        return compatibilityService.retirarPlantilla(actor, id);
     }
 
     @GetMapping("/plantillas/vigente")
@@ -126,8 +137,9 @@ public class CalidadControlProcesoResource {
             Authentication authentication,
             @RequestBody EjecucionRequest request
     ) {
-        User user = requireTabAccess(authentication, TAB_DILIGENCIAR);
-        return service.guardarEjecucion(user, request);
+        User actor = requireLegacyMutationTab(authentication, TAB_DILIGENCIAR);
+        requireLegacyBridge();
+        return compatibilityService.guardarEjecucion(actor, request);
     }
 
     @GetMapping("/ejecuciones")
@@ -157,12 +169,13 @@ public class CalidadControlProcesoResource {
     @GetMapping("/batch-records")
     public Page<BatchRecordQualityDTOs.InboxItem> bandejaLiberacion(
             Authentication authentication,
+            @RequestParam(defaultValue = "pendientes") String scope,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         requireReleaseAccess(authentication, 1);
-        return batchRecordQualityService.bandeja(search, page, size);
+        return batchRecordQualityService.bandeja(scope, search, page, size);
     }
 
     @GetMapping("/batch-records/{id}")
@@ -184,21 +197,58 @@ public class CalidadControlProcesoResource {
         return service.detalleEjecucionBatchRecord(id, ejecucionId);
     }
 
-    @PostMapping("/batch-records/{id}/decision")
+    @PostMapping({"/batch-records/{id}/decision", "/batch-records/{id}/decisiones"})
     public BatchRecordQualityDTOs.ReviewDetail decidirLiberacion(
             Authentication authentication,
             HttpServletRequest servletRequest,
             @PathVariable Long id,
+            @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
             @Valid @RequestBody BatchRecordQualityDTOs.DecisionRequest request
     ) {
         int nivel = request.getDecision() == DecisionCalidadBatchRecord.LIBERAR ? 3 : 2;
         User actor = requireReleaseAccess(authentication, nivel);
-        return batchRecordQualityService.decidir(
-                id,
-                actor,
-                request,
-                servletRequest.getRemoteAddr(),
-                servletRequest.getHeader("User-Agent"));
+        return idempotencyService.ejecutar(
+                actor, "DECISION_CALIDAD_BATCH_RECORD", "batch-record/" + id,
+                idempotencyKey, request, BatchRecordQualityDTOs.ReviewDetail.class,
+                () -> batchRecordQualityService.decidir(
+                        id, actor, request, servletRequest.getRemoteAddr(),
+                        servletRequest.getHeader("User-Agent")));
+    }
+
+    @PostMapping("/batch-records/{id}/reaperturas")
+    public BatchRecordQualityDTOs.ReviewDetail solicitarReapertura(
+            Authentication authentication,
+            HttpServletRequest servletRequest,
+            @PathVariable Long id,
+            @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
+            @Valid @RequestBody BatchRecordQualityDTOs.ReaperturaRequest request
+    ) {
+        User actor = requireReleaseAccess(authentication, 2);
+        return idempotencyService.ejecutar(
+                actor, "SOLICITUD_REAPERTURA_RECHAZO", "batch-record/" + id,
+                idempotencyKey, request, BatchRecordQualityDTOs.ReviewDetail.class,
+                () -> batchRecordQualityService.solicitarReapertura(
+                        id, actor, request, servletRequest.getRemoteAddr(),
+                        servletRequest.getHeader("User-Agent")));
+    }
+
+    @PostMapping("/batch-records/{id}/reaperturas/{solicitudId}/aprobar")
+    public BatchRecordQualityDTOs.ReviewDetail aprobarReapertura(
+            Authentication authentication,
+            HttpServletRequest servletRequest,
+            @PathVariable Long id,
+            @PathVariable Long solicitudId,
+            @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
+            @Valid @RequestBody BatchRecordQualityDTOs.AprobarReaperturaRequest request
+    ) {
+        User actor = requireReleaseAccess(authentication, 3);
+        return idempotencyService.ejecutar(
+                actor, "APROBACION_REAPERTURA_RECHAZO",
+                "batch-record/" + id + "/reapertura/" + solicitudId,
+                idempotencyKey, request, BatchRecordQualityDTOs.ReviewDetail.class,
+                () -> batchRecordQualityService.aprobarReapertura(
+                        id, solicitudId, actor, request, servletRequest.getRemoteAddr(),
+                        servletRequest.getHeader("User-Agent")));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -220,6 +270,16 @@ public class CalidadControlProcesoResource {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse("Conflicto de estado", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentChange(
+            ConcurrencyFailureException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(
+                        "Conflicto de concurrencia",
+                        "El expediente cambió mientras se procesaba la acción; actualice e intente de nuevo."));
     }
 
     private User requireReleaseAccess(Authentication authentication, int minNivel) {
@@ -278,5 +338,27 @@ public class CalidadControlProcesoResource {
         if (username == null) return false;
         String normalized = username.trim().toLowerCase(Locale.ROOT);
         return "master".equals(normalized) || "super_master".equals(normalized);
+    }
+
+    private User requireLegacyMutationTab(Authentication authentication, String tabId) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        if (!isMasterLike(user.getUsername())
+                && UserAccessEvaluator.tabNivel(user, ModuloSistema.CALIDAD, tabId).orElse(0) < 1) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "No tiene permiso explicito para la operacion legada.");
+        }
+        return user;
+    }
+
+    private void requireLegacyBridge() {
+        if (!compatibilityProperties.bridgeEnabled()) {
+            throw new ResponseStatusException(HttpStatus.GONE,
+                    "La escritura legada fue retirada. Use las APIs de controles de proceso.");
+        }
     }
 }

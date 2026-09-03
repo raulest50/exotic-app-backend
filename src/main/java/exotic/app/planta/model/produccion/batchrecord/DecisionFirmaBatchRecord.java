@@ -4,5 +4,7 @@ public enum DecisionFirmaBatchRecord {
     CONFIRMA,
     APRUEBA,
     RECHAZA,
-    DEVUELVE
+    DEVUELVE,
+    SOLICITA,
+    REABRE
 }

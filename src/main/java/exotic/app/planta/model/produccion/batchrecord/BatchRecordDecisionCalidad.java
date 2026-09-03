@@ -42,6 +42,14 @@ public class BatchRecordDecisionCalidad {
     @JoinColumn(name = "revision_id")
     private BatchRecordRevision revision;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ciclo_revision_id")
+    private CicloRevisionBatchRecord cicloRevision;
+
+    /** Selección inmutable de etapas, requisitos y secciones devueltas. */
+    @Column(name = "alcance_devolucion_json", columnDefinition = "TEXT", updatable = false)
+    private String alcanceDevolucionJson;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "firma_id", unique = true)
     private BatchRecordFirma firma;
@@ -51,6 +59,14 @@ public class BatchRecordDecisionCalidad {
         if (batchRecord == null || decision == null || decididaPor == null
                 || decididaEn == null || motivo == null || motivo.isBlank()) {
             throw new IllegalStateException("La decisión de Calidad está incompleta.");
+        }
+        if (cicloRevision != null && cicloRevision.getBatchRecord() != batchRecord) {
+            Long recordId = batchRecord.getId();
+            Long cicloRecordId = cicloRevision.getBatchRecord() == null
+                    ? null : cicloRevision.getBatchRecord().getId();
+            if (recordId == null || !recordId.equals(cicloRecordId)) {
+                throw new IllegalStateException("El ciclo de revisión pertenece a otro expediente.");
+            }
         }
     }
 

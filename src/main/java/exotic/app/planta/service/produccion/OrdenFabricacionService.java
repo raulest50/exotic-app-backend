@@ -69,11 +69,6 @@ public class OrdenFabricacionService {
         if (request == null || actor == null) {
             throw new IllegalArgumentException("La solicitud y el usuario autenticado son obligatorios.");
         }
-        if (!masterDirectiveService.lockBatchRecordWorkflowForNewOrder()) {
-            throw new IllegalStateException(
-                    "La creación de órdenes de fabricación está deshabilitada "
-                            + "mientras el flujo de Batch Record permanezca apagado.");
-        }
         String loteNumero = normalizarObligatorio(request.getLote(),
                 "El número de lote es obligatorio.");
         if (loteRepo.findByBatchNumber(loteNumero) != null) {
@@ -155,6 +150,8 @@ public class OrdenFabricacionService {
             OrdenProduccion ordenOrigen,
             boolean liberarInmediatamente
     ) {
+        boolean batchRecordWorkflowEnabled =
+                masterDirectiveService.lockBatchRecordWorkflowForNewOrder();
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         if (cantidad == null || cantidad.signum() <= 0) {
             throw new IllegalArgumentException(
@@ -201,12 +198,17 @@ public class OrdenFabricacionService {
         lote.setBatchNumber(loteNumero);
         lote.setProducto(semi);
         lote.setOrdenFabricacion(orden);
-        lote.setEstadoCalidad(EstadoCalidadLote.SIN_CLASIFICAR);
+        lote.setEstadoCalidad(batchRecordWorkflowEnabled
+                ? EstadoCalidadLote.CUARENTENA
+                : EstadoCalidadLote.SIN_CLASIFICAR);
         vencimientoLoteService.copiarPoliticaVigente(semi, lote);
         loteRepo.saveAndFlush(lote);
 
-        BatchRecord record = batchRecordService.crearParaOrdenFabricacion(orden, lote, actor);
+        BatchRecord record = batchRecordWorkflowEnabled
+                ? batchRecordService.crearParaOrdenFabricacion(orden, lote, actor)
+                : null;
         operacionService.inicializar(orden, record);
+        if (record != null) batchRecordService.materializarRequisitos(orden);
         return toResponse(orden, lote, record);
     }
 
@@ -329,8 +331,7 @@ public class OrdenFabricacionService {
                         "La orden de fabricación no tiene lote asociado."));
         BatchRecord record = batchRecordRepo
                 .findByOrdenFabricacion_OrdenFabricacionId(orden.getOrdenFabricacionId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "La orden de fabricación no tiene expediente asociado."));
+                .orElse(null);
         return toResponse(orden, lote, record);
     }
 
@@ -351,8 +352,8 @@ public class OrdenFabricacionService {
                 .loteId(lote.getId())
                 .lote(lote.getBatchNumber())
                 .estadoCalidadLote(lote.getEstadoCalidad())
-                .batchRecordId(record.getId())
-                .batchRecordCodigo(record.getCodigo())
+                .batchRecordId(record == null ? null : record.getId())
+                .batchRecordCodigo(record == null ? null : record.getCodigo())
                 .fechaCreacion(orden.getFechaCreacion())
                 .fechaLanzamiento(orden.getFechaLanzamiento())
                 .fechaFinalPlanificada(orden.getFechaFinalPlanificada())

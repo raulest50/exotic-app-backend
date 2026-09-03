@@ -101,6 +101,10 @@ public class BatchRecord {
     @Column(name = "enviado_revision_en")
     private LocalDateTime enviadoRevisionEn;
 
+    /** Número del último ciclo enviado a Calidad; cero mientras no exista envío. */
+    @Column(name = "ciclo_revision_actual", nullable = false)
+    private long cicloRevisionActual;
+
     @Column(name = "cerrado_en")
     private LocalDateTime cerradoEn;
 
@@ -205,6 +209,9 @@ public class BatchRecord {
         }
         if (revisionDocumental <= 0 || unidadMedida == null || unidadMedida.isBlank()) {
             throw new IllegalStateException("La revisión y unidad de medida del expediente son obligatorias.");
+        }
+        if (cicloRevisionActual < 0) {
+            throw new IllegalStateException("El número del ciclo de revisión no puede ser negativo.");
         }
         if (cantidadObtenida != null && cantidadObtenida.signum() < 0) {
             throw new IllegalStateException("La cantidad obtenida no puede ser negativa.");

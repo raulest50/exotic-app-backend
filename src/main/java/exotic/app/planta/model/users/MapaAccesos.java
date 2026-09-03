@@ -35,6 +35,10 @@ public final class MapaAccesos {
                         "VERSIONADO_CONTROL_PROCESO",
                         "DILIGENCIAR_CONTROL_PROCESO",
                         "HISTORIAL_CONTROL_PROCESO",
+                        "PLANES_CONTROL_CALIDAD",
+                        "REGISTRAR_CONTROL_CALIDAD",
+                        "DESVIACIONES_CONTROL_CALIDAD",
+                        "HISTORIAL_CONTROL_CALIDAD",
                         "REVISION_LIBERACION_LOTES"
                 )
         );
@@ -51,6 +55,10 @@ public final class MapaAccesos {
                         "MONITOREAR_AREAS_OPERATIVAS",
                         "APROBACION_MPS_WEEK",
                         "CONSULTAR_BATCH_RECORD",
+                        "PLANES_CONTROL_PROCESO",
+                        "REGISTRAR_CONTROL_PROCESO",
+                        "DESVIACIONES_CONTROL_PROCESO",
+                        "HISTORIAL_CONTROL_PROCESO",
                         "CREAR_ORDEN_FABRICACION"
                 )
         );

@@ -23,7 +23,6 @@ import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersio
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordEtapaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import exotic.app.planta.repo.produccion.fabricacion.*;
-import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -61,11 +60,10 @@ public class OrdenFabricacionOperacionService {
     private final BatchRecordService batchRecordService;
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
-    private final MasterDirectiveService masterDirectiveService;
 
     public void inicializar(OrdenFabricacion orden, BatchRecord record) {
-        if (orden == null || orden.getOrdenFabricacionId() == null || record == null) {
-            throw new IllegalArgumentException("La OF y su expediente persistido son obligatorios.");
+        if (orden == null || orden.getOrdenFabricacionId() == null) {
+            throw new IllegalArgumentException("La OF persistida es obligatoria.");
         }
         if (operacionRepo.existsByOrdenFabricacion_OrdenFabricacionId(
                 orden.getOrdenFabricacionId())) {
@@ -119,19 +117,23 @@ public class OrdenFabricacionOperacionService {
             operacionRepo.saveAndFlush(operacion);
             persisted.put(frontendId, operacion);
 
-            BatchRecordEtapa etapa = new BatchRecordEtapa();
-            etapa.setBatchRecord(record);
-            etapa.setAreaOperativa(area);
-            etapa.setOrdenFabricacionOperacion(operacion);
-            etapa.setNombre(node.nombre());
-            etapa.setSecuencia(secuencia++);
-            etapa.setEstado(EstadoBatchRecordEtapa.PENDIENTE);
-            etapa.setControlProcesoPlantilla(plantillaRepo
-                    .findFirstByAreaOperativa_AreaIdAndEstado(
-                            area.getAreaId(), EstadoControlProcesoPlantilla.VIGENTE)
-                    .orElse(null));
-            etapaRepo.saveAndFlush(etapa);
-            operacion.setBatchRecordEtapa(etapa);
+            if (record != null) {
+                BatchRecordEtapa etapa = new BatchRecordEtapa();
+                etapa.setBatchRecord(record);
+                etapa.setAreaOperativa(area);
+                etapa.setOrdenFabricacionOperacion(operacion);
+                etapa.setNombre(node.nombre());
+                etapa.setSecuencia(secuencia);
+                etapa.setEstado(EstadoBatchRecordEtapa.PENDIENTE);
+                etapa.setControlProcesoPlantilla(plantillaRepo
+                        .findFirstByAreaOperativa_AreaIdAndEstado(
+                                area.getAreaId(), EstadoControlProcesoPlantilla.VIGENTE)
+                        .orElse(null));
+                etapaRepo.saveAndFlush(etapa);
+                record.getEtapas().add(etapa);
+                operacion.setBatchRecordEtapa(etapa);
+            }
+            secuencia++;
 
             registrarEvento(operacion, null, operacion.getEstadoEnum(),
                     ActorTipoEventoSeguimiento.SYSTEM, null,
@@ -150,7 +152,6 @@ public class OrdenFabricacionOperacionService {
 
     public OrdenFabricacionDTOs.OperacionResponse iniciar(
             Long operacionId, User actor, String observaciones) {
-        requireWorkflowEnabled();
         Lock lock = lock(operacionId);
         OrdenFabricacionOperacion operacion = lock.operacion();
         validarResponsable(operacion, actor);
@@ -181,7 +182,6 @@ public class OrdenFabricacionOperacionService {
 
     public OrdenFabricacionDTOs.OperacionResponse pausar(
             Long operacionId, User actor, String observaciones) {
-        requireWorkflowEnabled();
         Lock lock = lock(operacionId);
         OrdenFabricacionOperacion operacion = lock.operacion();
         validarResponsable(operacion, actor);
@@ -199,7 +199,6 @@ public class OrdenFabricacionOperacionService {
             User actor,
             OrdenFabricacionDTOs.OperacionCompletarRequest request
     ) {
-        requireWorkflowEnabled();
         Lock lock = lock(operacionId);
         OrdenFabricacionOperacion operacion = lock.operacion();
         OrdenFabricacion orden = lock.orden();
@@ -234,16 +233,25 @@ public class OrdenFabricacionOperacionService {
             LocalDate fechaProduccion = LocalDate.now(applicationClock);
             lote.setProductionDate(fechaProduccion);
             lote.setExpirationDate(request.getFechaVencimiento());
-            lote.setEstadoCalidad(EstadoCalidadLote.NO_APLICA_CALIDAD);
+            BatchRecord expediente = batchRecordRepo
+                    .findByOrdenFabricacion_OrdenFabricacionId(
+                            orden.getOrdenFabricacionId())
+                    .orElse(null);
+            lote.setEstadoCalidad(expediente == null
+                    ? EstadoCalidadLote.SIN_CLASIFICAR
+                    : EstadoCalidadLote.CUARENTENA);
             loteRepo.save(lote);
 
-            orden.setEstado(EstadoOrdenFabricacion.FABRICACION_COMPLETADA);
-            crearEntradaResultado(orden, lote, obtenida, actor);
+            orden.setEstado(expediente == null
+                    ? EstadoOrdenFabricacion.CERRADA
+                    : EstadoOrdenFabricacion.FABRICACION_COMPLETADA);
             orden.setFechaFinal(ahora);
-            orden.setEstado(EstadoOrdenFabricacion.CERRADA);
             ordenRepo.saveAndFlush(orden);
-            String motivo = buildMotivoCierre(request, orden);
-            batchRecordService.cerrarOrdenFabricacion(orden, obtenida, actor, motivo);
+            if (expediente == null) {
+                crearEntradaResultado(orden, lote, obtenida, actor);
+            } else {
+                batchRecordService.prepararRevisionCalidad(orden, obtenida);
+            }
         }
         return toResponse(operacion);
     }
@@ -253,7 +261,6 @@ public class OrdenFabricacionOperacionService {
             User actor,
             OrdenFabricacionDTOs.CorreccionOperacionRequest request
     ) {
-        requireWorkflowEnabled();
         if (request == null || request.getEstadoEsperado() == null
                 || request.getEstadoDestino() == null
                 || request.getMotivo() == null || request.getMotivo().isBlank()) {
@@ -266,8 +273,15 @@ public class OrdenFabricacionOperacionService {
                 || orden.getEstado() == EstadoOrdenFabricacion.CANCELADA) {
             throw new IllegalStateException("Una OF cerrada o cancelada no admite correcciones.");
         }
+        boolean expedienteEnCorreccion = batchRecordService.estaDevueltoAProduccion(orden);
+        boolean correccionCalidad = orden.getEstado() == EstadoOrdenFabricacion.FABRICACION_COMPLETADA
+                && expedienteEnCorreccion;
+        if (expedienteEnCorreccion) {
+            batchRecordService.validarCorreccionPermitida(operacion);
+        }
         if (orden.getEstado() != EstadoOrdenFabricacion.LIBERADA
-                && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION) {
+                && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION
+                && !correccionCalidad) {
             throw new IllegalStateException(
                     "Solo una OF liberada o en ejecucion admite correcciones operativas.");
         }
@@ -319,16 +333,17 @@ public class OrdenFabricacionOperacionService {
                 TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA, revertido,
                 ahora);
         if (destino == EstadoSeguimientoOrdenArea.EN_PROCESO
-                && orden.getEstado() == EstadoOrdenFabricacion.LIBERADA) {
+                && (orden.getEstado() == EstadoOrdenFabricacion.LIBERADA
+                || correccionCalidad)) {
             orden.setEstado(EstadoOrdenFabricacion.EN_EJECUCION);
             if (orden.getFechaInicio() == null) orden.setFechaInicio(ahora);
+            if (correccionCalidad) orden.setFechaFinal(null);
             ordenRepo.save(orden);
         }
         return toResponse(operacion);
     }
 
     public void liberar(OrdenFabricacion ordenSolicitada) {
-        requireWorkflowEnabled();
         if (ordenSolicitada == null || ordenSolicitada.getOrdenFabricacionId() == null) return;
         OrdenFabricacion orden = ordenRepo.findByIdForUpdate(
                         ordenSolicitada.getOrdenFabricacionId())
@@ -416,7 +431,6 @@ public class OrdenFabricacionOperacionService {
 
     @Scheduled(fixedDelayString = "${app.orden-fabricacion.release-check-ms:60000}")
     public void liberarProgramadas() {
-        if (!masterDirectiveService.isBatchRecordWorkflowEnabled()) return;
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         for (OrdenFabricacion orden : ordenRepo.findPendientesLiberacion(
                 List.of(EstadoOrdenFabricacion.PLANIFICADA), ahora)) {
@@ -517,6 +531,38 @@ public class OrdenFabricacionOperacionService {
         return evento;
     }
 
+    public void cerrarTrasLiberacionCalidad(
+            Long ordenFabricacionId,
+            User actor
+    ) {
+        OrdenFabricacion orden = ordenRepo.findByIdForUpdate(ordenFabricacionId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Orden de fabricación no encontrada."));
+        if (orden.getEstado() == EstadoOrdenFabricacion.CERRADA) return;
+        if (orden.getEstado() != EstadoOrdenFabricacion.FABRICACION_COMPLETADA) {
+            throw new IllegalStateException(
+                    "La OF debe tener su fabricación completada antes de la liberación.");
+        }
+        BatchRecord record = batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
+                        ordenFabricacionId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "La OF no tiene expediente digital."));
+        if (record.getEstado() != EstadoBatchRecord.APROBADO
+                || record.getLoteResultado().getEstadoCalidad() != EstadoCalidadLote.LIBERADO) {
+            throw new IllegalStateException(
+                    "El lote intermedio debe estar liberado por Calidad.");
+        }
+        Lote lote = record.getLoteResultado();
+        int entidadId = Math.toIntExact(ordenFabricacionId);
+        if (transaccionRepo.countByTipoEntidadCausanteAndIdEntidadCausante(
+                TransaccionAlmacen.TipoEntidadCausante.OF, entidadId) == 0) {
+            crearEntradaResultado(orden, lote, record.getCantidadObtenida(), actor);
+        }
+        orden.setEstado(EstadoOrdenFabricacion.CERRADA);
+        ordenRepo.saveAndFlush(orden);
+        batchRecordService.cerrarPorIngresoAlmacen(orden, actor);
+    }
+
     private void crearEntradaResultado(
             OrdenFabricacion orden, Lote lote, BigDecimal cantidad, User actor) {
         TransaccionAlmacen transaccion = new TransaccionAlmacen();
@@ -524,7 +570,7 @@ public class OrdenFabricacionOperacionService {
         transaccion.setIdEntidadCausante(Math.toIntExact(orden.getOrdenFabricacionId()));
         transaccion.setUsuarioAprobador(actor);
         transaccion.setUsuariosResponsables(List.of(actor));
-        transaccion.setObservaciones("Ingreso de lote intermedio al cerrar OF "
+        transaccion.setObservaciones("Ingreso de lote intermedio resultante de la OF "
                 + orden.getOrdenFabricacionId());
 
         Movimiento movimiento = new Movimiento();
@@ -591,13 +637,6 @@ public class OrdenFabricacionOperacionService {
         return diferencia == null
                 ? "Cierre operativo de OF con cantidad planificada cumplida"
                 : "Cierre operativo de OF. Diferencia de rendimiento: " + diferencia;
-    }
-
-    private void requireWorkflowEnabled() {
-        if (!masterDirectiveService.isBatchRecordWorkflowEnabled()) {
-            throw new IllegalStateException(
-                    "El flujo de ordenes de fabricacion esta deshabilitado por directiva maestra.");
-        }
     }
 
     private Lock lock(Long operacionId) {

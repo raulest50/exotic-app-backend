@@ -65,6 +65,11 @@ logging:
     org.flywaydb: DEBUG
     org.springframework.boot.autoconfigure.flyway: DEBUG
 
+app:
+  control-engine:
+    legacy:
+      write-mode: ${CONTROL_ENGINE_LEGACY_WRITE_MODE:BRIDGE}
+
 #security:
 #  user:
 #   name: admin

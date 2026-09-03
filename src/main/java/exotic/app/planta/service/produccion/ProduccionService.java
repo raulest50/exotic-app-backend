@@ -122,12 +122,12 @@ public class ProduccionService {
 
         // Inicializar seguimiento por áreas operativas
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
+        User creador = requireActor(actor);
         if (batchRecordWorkflowEnabled) {
             batchRecordService.crearParaOrdenProduccion(
-                    savedOrden, lote, requireActor(actor));
-            ordenFabricacionAutoGenerationService.generarParaOrden(
-                    savedOrden, requireActor(actor));
+                    savedOrden, lote, creador);
         }
+        ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
 
         return savedOrden;
     }
@@ -185,8 +185,8 @@ public class ProduccionService {
             seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
             if (batchRecordWorkflowEnabled) {
                 batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
-                ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
             }
+            ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
 
             savedOrdenes.add(savedOrden);
         }
@@ -662,8 +662,8 @@ public class ProduccionService {
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
         if (batchRecordWorkflowEnabled) {
             batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
-            ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
         }
+        ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
         return savedOrden;
     }
 

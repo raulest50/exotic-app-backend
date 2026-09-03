@@ -4,6 +4,7 @@ import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.ReporteProduccionLote;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.UnidadTiempoVencimiento;
 import exotic.app.planta.model.users.User;
@@ -27,7 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReporteProduccionLoteServiceTest {
@@ -36,6 +42,8 @@ class ReporteProduccionLoteServiceTest {
     private LoteRepo loteRepo;
     private OrdenProduccionRepo ordenRepo;
     private ProduccionCierreLockService cierreLockService;
+    private BatchRecordService batchRecordService;
+    private BatchRecordRepo batchRecordRepo;
     private ReporteProduccionLoteService service;
 
     @BeforeEach
@@ -44,6 +52,8 @@ class ReporteProduccionLoteServiceTest {
         loteRepo = mock(LoteRepo.class);
         ordenRepo = mock(OrdenProduccionRepo.class);
         cierreLockService = mock(ProduccionCierreLockService.class);
+        batchRecordService = mock(BatchRecordService.class);
+        batchRecordRepo = mock(BatchRecordRepo.class);
         Clock clock = Clock.fixed(
                 Instant.parse("2026-07-15T15:30:00Z"),
                 ZoneId.of("America/Bogota")
@@ -54,8 +64,8 @@ class ReporteProduccionLoteServiceTest {
                 ordenRepo,
                 cierreLockService,
                 new VencimientoLoteService(),
-                mock(BatchRecordService.class),
-                mock(BatchRecordRepo.class),
+                batchRecordService,
+                batchRecordRepo,
                 clock);
         when(reporteRepo.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -110,6 +120,27 @@ class ReporteProduccionLoteServiceTest {
     void registrarPendiente_rejectsNonPositiveQuantity() {
         assertThrows(IllegalArgumentException.class, () -> service.registrarPendiente(
                 seguimiento(orden(10, 1, "LOT-10")), new User(), BigDecimal.ZERO));
+    }
+
+    @Test
+    void registrarPendiente_preparesDigitalRecordButDoesNotSendItAutomatically() {
+        OrdenProduccion orden = orden(10, 1, "LOT-10");
+        SeguimientoOrdenArea seguimiento = seguimiento(orden);
+        Lote lote = lote(orden, "LOT-10");
+        lote.setExpirationDate(LocalDate.of(2026, 7, 16));
+
+        when(reporteRepo.existsByOrdenProduccion_OrdenIdAndEstadoNot(
+                10, ReporteProduccionLote.Estado.ANULADO)).thenReturn(false);
+        when(batchRecordRepo.findByOrdenProduccion_OrdenId(10))
+                .thenReturn(Optional.of(new BatchRecord()));
+        when(loteRepo.findByOrdenProduccion_OrdenId(10)).thenReturn(List.of(lote));
+
+        service.registrarPendiente(seguimiento, new User(), new BigDecimal("10.0000"));
+
+        verify(batchRecordService).prepararRevisionCalidad(
+                eq(orden), argThat(valor -> valor.compareTo(new BigDecimal("10")) == 0));
+        verify(batchRecordService, never()).enviarARevisionCalidad(
+                anyLong(), any(), any(), any(), any());
     }
 
     @Test

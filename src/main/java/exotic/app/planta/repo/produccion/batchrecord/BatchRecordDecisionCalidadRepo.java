@@ -8,6 +8,6 @@ import java.util.List;
 
 public interface BatchRecordDecisionCalidadRepo extends JpaRepository<BatchRecordDecisionCalidad, Long> {
 
-    @EntityGraph(attributePaths = {"decididaPor", "revision", "firma"})
+    @EntityGraph(attributePaths = {"decididaPor", "revision", "firma", "cicloRevision"})
     List<BatchRecordDecisionCalidad> findByBatchRecord_IdOrderByDecididaEnAscIdAsc(Long batchRecordId);
 }

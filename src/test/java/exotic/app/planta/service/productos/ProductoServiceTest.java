@@ -131,7 +131,9 @@ class ProductoServiceTest {
         Material material = material("M-3", true);
         when(productoRepo.findById("M-3")).thenReturn(Optional.of(material));
         when(transaccionAlmacenRepo.findNonZeroStockGroupsByProductoId(eq("M-3"), eq(0.0001d)))
-                .thenReturn(List.of(new Object[]{Movimiento.Almacen.GENERAL, 10L, 2.0d}));
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{Movimiento.Almacen.GENERAL, 10L, 2.0d}
+                ));
 
         IllegalStateException error = assertThrows(
                 IllegalStateException.class,

@@ -655,7 +655,9 @@ public class CalidadControlProcesoService {
         EstadoBatchRecord estado = record.getEstado();
         if (estado != EstadoBatchRecord.BORRADOR
                 && estado != EstadoBatchRecord.EN_EJECUCION
-                && estado != EstadoBatchRecord.DEVUELTO_PRODUCCION) {
+                && estado != EstadoBatchRecord.LISTO_PARA_REVISION
+                && estado != EstadoBatchRecord.DEVUELTO_PRODUCCION
+                && estado != EstadoBatchRecord.EN_CORRECCION) {
             throw new IllegalStateException(
                     "No se pueden agregar controles a un expediente con estado " + estado + ".");
         }

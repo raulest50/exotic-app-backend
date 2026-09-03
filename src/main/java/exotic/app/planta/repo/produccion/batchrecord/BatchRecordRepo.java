@@ -61,8 +61,9 @@ public interface BatchRecordRepo extends JpaRepository<BatchRecord, Long> {
             SELECT b
             FROM BatchRecord b
             LEFT JOIN b.ordenProduccion op
+            LEFT JOIN b.ordenFabricacion ofab
             WHERE b.estado IN :estados
-              AND b.ordenProduccion IS NOT NULL
+              AND (:soloEnviados = FALSE OR b.enviadoRevisionEn IS NOT NULL)
               AND (:search IS NULL OR :search = ''
                    OR LOWER(b.codigo) LIKE LOWER(CONCAT('%', :search, '%'))
                    OR LOWER(b.loteResultado.batchNumber) LIKE LOWER(CONCAT('%', :search, '%'))
@@ -75,12 +76,17 @@ public interface BatchRecordRepo extends JpaRepository<BatchRecord, Long> {
                          AND LOWER(c.loteOrigen.batchNumber)
                              LIKE LOWER(CONCAT('%', :search, '%'))
                    )
-                   OR (:ordenId IS NOT NULL AND op.ordenId = :ordenId))
+                   OR (:ordenProduccionId IS NOT NULL
+                       AND op.ordenId = :ordenProduccionId)
+                   OR (:ordenFabricacionId IS NOT NULL
+                       AND ofab.ordenFabricacionId = :ordenFabricacionId))
             """)
     Page<BatchRecord> buscarPorEstados(
             @Param("estados") Collection<EstadoBatchRecord> estados,
             @Param("search") String search,
-            @Param("ordenId") Integer ordenId,
+            @Param("ordenProduccionId") Integer ordenProduccionId,
+            @Param("ordenFabricacionId") Long ordenFabricacionId,
+            @Param("soloEnviados") boolean soloEnviados,
             Pageable pageable
     );
 
