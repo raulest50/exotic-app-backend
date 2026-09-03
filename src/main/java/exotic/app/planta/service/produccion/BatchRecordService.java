@@ -48,9 +48,14 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v3";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v3";
+    public static final String ESQUEMA_VERSION = "batch-record-v4";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v4";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
+    private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
+            EnumSet.of(
+                    TransaccionAlmacen.TipoEntidadCausante.OD,
+                    TransaccionAlmacen.TipoEntidadCausante.OD_RA,
+                    TransaccionAlmacen.TipoEntidadCausante.OD_OF);
 
     private final BatchRecordRepo batchRecordRepo;
     private final BatchRecordEtapaRepo etapaRepo;
@@ -1526,11 +1531,46 @@ public class BatchRecordService {
 
         Map<String, Object> orden = new TreeMap<>();
         if (record.getOrdenProduccion() != null) {
+            OrdenProduccion ordenProduccion = record.getOrdenProduccion();
             orden.put("tipo", "ORDEN_PRODUCCION");
-            orden.put("id", record.getOrdenProduccion().getOrdenId());
+            orden.put("id", ordenProduccion.getOrdenId());
+            orden.put("estado", ordenProduccion.getEstadoOrden());
+            orden.put("estadoDispensacion", ordenProduccion.getEstadoDispensacionMateriales());
+            orden.put("politicaDispensacion", ordenProduccion.getPoliticaDispensacionInicio());
+            orden.put("fechaCreacion", ordenProduccion.getFechaCreacion());
+            orden.put("fechaLanzamiento", ordenProduccion.getFechaLanzamiento());
+            orden.put("fechaFinalPlanificada", ordenProduccion.getFechaFinalPlanificada());
+            orden.put("fechaInicio", ordenProduccion.getFechaInicio());
+            orden.put("fechaFinal", ordenProduccion.getFechaFinal());
+            orden.put("pedidoComercial", ordenProduccion.getNumeroPedidoComercial());
+            orden.put("areaOperativa", ordenProduccion.getAreaOperativa());
+            orden.put("departamentoOperativo", ordenProduccion.getDepartamentoOperativo());
+            orden.put("observaciones", ordenProduccion.getObservaciones());
+            if (ordenProduccion.getVendedorResponsable() != null) {
+                Map<String, Object> responsable = new TreeMap<>();
+                responsable.put("cedula", ordenProduccion.getVendedorResponsable().getCedula());
+                responsable.put("nombre", String.join(" ",
+                        Objects.toString(ordenProduccion.getVendedorResponsable().getNombres(), ""),
+                        Objects.toString(ordenProduccion.getVendedorResponsable().getApellidos(), "")).trim());
+                orden.put("responsable", responsable);
+            }
         } else {
+            OrdenFabricacion ordenFabricacion = record.getOrdenFabricacion();
             orden.put("tipo", "ORDEN_FABRICACION");
-            orden.put("id", record.getOrdenFabricacion().getOrdenFabricacionId());
+            orden.put("id", ordenFabricacion.getOrdenFabricacionId());
+            orden.put("estado", ordenFabricacion.getEstado());
+            orden.put("estadoDispensacion", ordenFabricacion.getEstadoDispensacionMateriales());
+            orden.put("politicaDispensacion", ordenFabricacion.getPoliticaDispensacionInicio());
+            orden.put("fechaCreacion", ordenFabricacion.getFechaCreacion());
+            orden.put("fechaLanzamiento", ordenFabricacion.getFechaLanzamiento());
+            orden.put("fechaFinalPlanificada", ordenFabricacion.getFechaFinalPlanificada());
+            orden.put("fechaInicio", ordenFabricacion.getFechaInicio());
+            orden.put("fechaFinal", ordenFabricacion.getFechaFinal());
+            orden.put("ordenProduccionOrigenId", ordenFabricacion.getOrdenProduccionOrigen() == null
+                    ? null : ordenFabricacion.getOrdenProduccionOrigen().getOrdenId());
+            orden.put("creadaPor", identidadUsuario(ordenFabricacion.getCreadaPor()));
+            orden.put("responsable", identidadUsuario(ordenFabricacion.getResponsable()));
+            orden.put("observaciones", ordenFabricacion.getObservaciones());
         }
         root.put("orden", orden);
         root.put("lote", Map.of(
@@ -1568,10 +1608,13 @@ public class BatchRecordService {
         root.put("cerradoEn", record.getCerradoEn());
         root.put("observaciones", record.getObservaciones());
 
-        root.put("etapas", etapaRepo.findByBatchRecord_IdOrderBySecuenciaAscIdAsc(record.getId())
-                .stream().map(this::mapEtapaCanonica).toList());
-        root.put("consumos", consumoRepo.findByBatchRecord_IdOrderByRegistradoEnAscIdAsc(record.getId())
-                .stream().map(this::mapConsumoCanonico).toList());
+        List<BatchRecordEtapa> etapas =
+                etapaRepo.findByBatchRecord_IdOrderBySecuenciaAscIdAsc(record.getId());
+        List<BatchRecordConsumo> consumos =
+                consumoRepo.findByBatchRecord_IdOrderByRegistradoEnAscIdAsc(record.getId());
+        root.put("etapas", etapas.stream().map(this::mapEtapaCanonica).toList());
+        root.put("consumos", consumos.stream().map(this::mapConsumoCanonico).toList());
+        root.put("dispensaciones", mapDispensacionesCanonicas(consumos));
         root.put("controles", ejecucionRepo.findByBatchRecord_IdOrderByFechaRegistroAscIdAsc(record.getId())
                 .stream().map(this::mapControlCanonico).toList());
         root.put("controlesUnificados",
@@ -1742,6 +1785,80 @@ public class BatchRecordService {
         data.put("cicloRevision", decision.getCicloRevision() == null
                 ? null : decision.getCicloRevision().getNumero());
         data.put("alcanceDevolucionJson", decision.getAlcanceDevolucionJson());
+        return data;
+    }
+
+    private List<Map<String, Object>> mapDispensacionesCanonicas(
+            List<BatchRecordConsumo> consumos
+    ) {
+        Map<Integer, List<BatchRecordConsumo>> porTransaccion = new TreeMap<>();
+        for (BatchRecordConsumo consumo : consumos) {
+            Movimiento movimiento = consumo.getMovimiento();
+            TransaccionAlmacen transaccion = movimiento == null
+                    ? null : movimiento.getTransaccionAlmacen();
+            if (transaccion == null
+                    || !TIPOS_DISPENSACION_DOCUMENTAL.contains(
+                    transaccion.getTipoEntidadCausante())) {
+                continue;
+            }
+            porTransaccion.computeIfAbsent(transaccion.getTransaccionId(), ignored -> new ArrayList<>())
+                    .add(consumo);
+        }
+
+        return porTransaccion.values().stream()
+                .map(this::mapDispensacionCanonica)
+                .sorted(Comparator
+                        .comparing((Map<String, Object> value) ->
+                                Objects.toString(value.get("fechaTransaccion"), ""))
+                        .thenComparing(value -> ((Number) value.get("transaccionId")).intValue()))
+                .toList();
+    }
+
+    private Map<String, Object> mapDispensacionCanonica(
+            List<BatchRecordConsumo> consumos
+    ) {
+        TransaccionAlmacen transaccion = consumos.get(0).getMovimiento().getTransaccionAlmacen();
+        Map<String, Object> data = new TreeMap<>();
+        data.put("transaccionId", transaccion.getTransaccionId());
+        data.put("tipo", transaccion.getTipoEntidadCausante().name());
+        data.put("fechaTransaccion", transaccion.getFechaTransaccion());
+        data.put("estadoContable", transaccion.getEstadoContable() == null
+                ? null : transaccion.getEstadoContable().name());
+        data.put("observaciones", transaccion.getObservaciones());
+        data.put("usuariosRealizadores", transaccion.getUsuariosResponsables() == null
+                ? List.of()
+                : transaccion.getUsuariosResponsables().stream()
+                .sorted(Comparator.comparing(User::getId, Comparator.nullsLast(Long::compareTo)))
+                .map(this::identidadUsuario)
+                .toList());
+        data.put("usuarioAprobador", identidadUsuario(transaccion.getUsuarioAprobador()));
+        data.put("movimientos", consumos.stream()
+                .sorted(Comparator.comparingInt(value -> value.getMovimiento().getMovimientoId()))
+                .map(this::mapMovimientoDispensacionCanonica)
+                .toList());
+        return data;
+    }
+
+    private Map<String, Object> mapMovimientoDispensacionCanonica(
+            BatchRecordConsumo consumo
+    ) {
+        Movimiento movimiento = consumo.getMovimiento();
+        Map<String, Object> data = new TreeMap<>();
+        data.put("movimientoId", movimiento.getMovimientoId());
+        data.put("tipoConsumo", consumo.getTipo().name());
+        data.put("productoId", consumo.getProducto().getProductoId());
+        data.put("productoNombre", consumo.getProducto().getNombre());
+        data.put("loteOrigen", consumo.getLoteOrigen() == null
+                ? null : consumo.getLoteOrigen().getBatchNumber());
+        data.put("cantidad", consumo.getCantidad());
+        data.put("cantidadMovimientoInventario", movimiento.getCantidad());
+        data.put("unidad", consumo.getUnidadMedida());
+        data.put("almacen", movimiento.getAlmacen() == null
+                ? null : movimiento.getAlmacen().name());
+        data.put("areaOperativa", movimiento.getAreaOperativa() == null
+                ? null : movimiento.getAreaOperativa().getNombre());
+        data.put("fechaMovimiento", movimiento.getFechaMovimiento());
+        data.put("registradoPor", identidadUsuario(consumo.getRegistradoPor()));
         return data;
     }
 

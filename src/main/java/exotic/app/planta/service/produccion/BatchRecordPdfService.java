@@ -46,6 +46,7 @@ public class BatchRecordPdfService {
     private final BatchRecordFirmaRepo firmaRepo;
     private final FirmaVisualUsuarioVersionRepo firmaVisualRepo;
     private final ObjectMapper objectMapper;
+    private final BatchRecordPdfAnnexService annexService;
 
     public record PdfResult(byte[] contenido, String nombreArchivo, boolean borrador) {
     }
@@ -83,7 +84,8 @@ public class BatchRecordPdfService {
 
         try {
             JsonNode root = objectMapper.readTree(contenidoCanonico);
-            byte[] pdf = crearPdf(root, etiquetaRevision, hash, borrador, revision);
+            byte[] pdfPrincipal = crearPdf(root, etiquetaRevision, hash, borrador, revision);
+            byte[] pdf = annexService.componer(pdfPrincipal, root);
             String codigo = texto(root.path("codigo"), "batch-record");
             String nombre = codigo.replaceAll("[^A-Za-z0-9._-]", "-")
                     + (borrador ? "-borrador" : "-rev-" + revision.getNumero())
@@ -137,7 +139,9 @@ public class BatchRecordPdfService {
         addObjectSection(document, "Cantidades", root.path("cantidades"));
         addArraySection(document, "Etapas de fabricación", root.path("etapas"), false);
         addArraySection(document, "Consumos y trazabilidad de lotes", root.path("consumos"), false);
-        boolean esquemaV3 = "batch-record-v3".equals(texto(root.path("esquemaVersion"), ""));
+        String esquemaVersion = texto(root.path("esquemaVersion"), "");
+        boolean esquemaV3 = "batch-record-v3".equals(esquemaVersion)
+                || "batch-record-v4".equals(esquemaVersion);
         addArraySection(document,
                 esquemaV3 ? "Controles de proceso legados (transición)" : "Controles de proceso",
                 root.path("controles"), false);
@@ -171,7 +175,8 @@ public class BatchRecordPdfService {
                 font(8, Font.NORMAL, BaseColor.DARK_GRAY));
         document.add(integrity);
         document.add(new Paragraph(
-                "El PDF se reconstruyó dinámicamente desde el expediente estructurado; el archivo PDF no se almacena.",
+                "El PDF se reconstruyó dinámicamente desde el expediente estructurado; "
+                        + "la orden, las dispensaciones y los POE se incorporan en un único archivo.",
                 font(8, Font.ITALIC, BaseColor.DARK_GRAY)));
         document.close();
         return output.toByteArray();

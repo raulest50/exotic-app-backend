@@ -4,7 +4,7 @@ CREATE TABLE control_idempotencia (
     accion VARCHAR(80) NOT NULL,
     recurso VARCHAR(180) NOT NULL,
     clave VARCHAR(200) NOT NULL,
-    huella_payload CHAR(64) NOT NULL,
+    huella_payload VARCHAR(64) NOT NULL,
     respuesta_json TEXT NULL,
     creada_en TIMESTAMP NOT NULL,
     completada_en TIMESTAMP NULL,
