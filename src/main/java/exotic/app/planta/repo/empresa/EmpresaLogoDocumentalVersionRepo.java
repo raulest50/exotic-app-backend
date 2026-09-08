@@ -15,6 +15,8 @@ public interface EmpresaLogoDocumentalVersionRepo extends JpaRepository<EmpresaL
 
     Optional<EmpresaLogoDocumentalVersion> findFirstByEstadoOrderByVersionDesc(EmpresaLogoDocumentalVersion.Estado estado);
 
+    Optional<EmpresaLogoDocumentalVersion> findFirstBySha256IgnoreCase(String sha256);
+
     @Query("""
             SELECT
                 logo.id AS id,

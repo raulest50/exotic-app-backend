@@ -65,6 +65,17 @@ public class EmpresaLogoDocumentalService {
     }
 
     @Transactional(readOnly = true)
+    public EmpresaLogoDocumentalVersion getVersionPorSha256(String sha256) {
+        if (sha256 == null || sha256.isBlank()) {
+            throw new IllegalArgumentException("El hash del logo documental es obligatorio.");
+        }
+        return repo.findFirstBySha256IgnoreCase(sha256.trim())
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No existe una version de logo documental con el hash solicitado."
+                ));
+    }
+
+    @Transactional(readOnly = true)
     public EmpresaLogoDocumentalVersion resolveVersion(Long versionId) {
         if (versionId == null) {
             return getVigente();

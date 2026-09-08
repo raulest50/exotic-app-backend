@@ -7,6 +7,7 @@ import exotic.app.planta.model.calidad.*;
 import exotic.app.planta.model.controles.PuntoExigenciaControl;
 import exotic.app.planta.model.controles.ControlRequerido;
 import exotic.app.planta.model.controles.dto.BloqueoControlDTO;
+import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
@@ -28,6 +29,7 @@ import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.*;
 import exotic.app.planta.repo.usuarios.FirmaVisualUsuarioVersionRepo;
 import exotic.app.planta.service.controles.ControlWorkflowService;
+import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -48,8 +50,8 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v4";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v4";
+    public static final String ESQUEMA_VERSION = "batch-record-v5";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v5";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
     private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
             EnumSet.of(
@@ -78,6 +80,7 @@ public class BatchRecordService {
     private final Clock applicationClock;
     private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
     private final ControlWorkflowService controlWorkflowService;
+    private final EmpresaLogoDocumentalService empresaLogoDocumentalService;
 
     public BatchRecord crearParaOrdenProduccion(
             OrdenProduccion orden,
@@ -1528,6 +1531,13 @@ public class BatchRecordService {
         root.put("codigo", record.getCodigo());
         root.put("estado", record.getEstado().name());
         root.put("revisionDocumental", record.getRevisionDocumental());
+
+        EmpresaLogoDocumentalVersion logoDocumental = empresaLogoDocumentalService.getVigente();
+        Map<String, Object> marcaDocumental = new TreeMap<>();
+        marcaDocumental.put("logoVersionId", logoDocumental.getId());
+        marcaDocumental.put("logoVersion", logoDocumental.getVersion());
+        marcaDocumental.put("logoSha256", logoDocumental.getSha256());
+        root.put("marcaDocumental", marcaDocumental);
 
         Map<String, Object> orden = new TreeMap<>();
         if (record.getOrdenProduccion() != null) {
