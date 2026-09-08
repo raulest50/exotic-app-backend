@@ -3,24 +3,22 @@ package exotic.app.planta.resource.controles;
 import exotic.app.planta.model.controles.dto.ControlDTOs.*;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
-import exotic.app.planta.model.users.UserAccessEvaluator;
-import exotic.app.planta.repo.usuarios.UserRepository;
+import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.controles.ControlCatalogService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/controles/catalogos")
 @RequiredArgsConstructor
 public class ControlCatalogResource {
     private final ControlCatalogService service;
-    private final UserRepository userRepository;
+    private final ModuleTabAccessGuard accessGuard;
 
     @GetMapping("/magnitudes")
     public List<CatalogoResponse> magnitudes(
@@ -65,20 +63,11 @@ public class ControlCatalogResource {
     }
 
     private User requirePlanAccess(Authentication authentication, int nivel) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-        User user = userRepository.findByUsername(authentication.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        if ("super_master".equalsIgnoreCase(user.getUsername())) return user;
-        int produccion = UserAccessEvaluator.tabNivel(
-                user, ModuloSistema.PRODUCCION, "PLANES_CONTROL_PROCESO").orElse(0);
-        int calidad = UserAccessEvaluator.tabNivel(
-                user, ModuloSistema.CALIDAD, "PLANES_CONTROL_CALIDAD").orElse(0);
-        if (Math.max(produccion, calidad) < nivel) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "No tiene nivel de administracion de catalogos de control.");
-        }
-        return user;
+        return accessGuard.requireAnyTabAccess(
+                authentication,
+                Map.of(
+                        ModuloSistema.PRODUCCION, Map.of("PLANES_CONTROL_PROCESO", nivel),
+                        ModuloSistema.CALIDAD, Map.of("PLANES_CONTROL_CALIDAD", nivel)),
+                "No tiene nivel de administracion de catalogos de control.");
     }
 }

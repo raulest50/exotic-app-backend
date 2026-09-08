@@ -97,7 +97,7 @@ public class CalidadControlUnificadoResource {
     public List<LoteControlResponse> lotes(
             Authentication auth, @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "20") int size) {
-        accessGuard.requireAnyTabAccessWithSuperMasterBypass(auth, ModuloSistema.CALIDAD,
+        accessGuard.requireAnyTabAccess(auth, ModuloSistema.CALIDAD,
                 Map.of(TAB_REGISTRO, 1, TAB_PLANES, 3),
                 "Se requiere acceso a registro o administracion de planes para buscar lotes.");
         return workflowService.buscarLotes(search, size);
@@ -202,9 +202,9 @@ public class CalidadControlUnificadoResource {
             Authentication auth, @PathVariable Long id,
             @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
             @Valid @RequestBody DesviacionResolveRequest request) {
-        User actor = accessGuard.requireTabAccessWithoutMasterBypass(
+        User actor = accessGuard.requireTabAccess(
                 auth, ModuloSistema.CALIDAD, TAB_DESVIACIONES, 2,
-                "Se requiere nivel 2 explicito para proponer la disposicion de una desviacion de Calidad.");
+                "Se requiere nivel 2 para proponer la disposicion de una desviacion de Calidad.");
         return idempotencyService.ejecutar(
                 actor, "RESOLUCION_DESVIACION_CALIDAD", "desviacion-control/" + id,
                 idempotencyKey, request, DesviacionResponse.class,
@@ -216,8 +216,8 @@ public class CalidadControlUnificadoResource {
             Authentication auth, @PathVariable Long id,
             @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
             @Valid @RequestBody DesviacionCloseRequest request) {
-        User actor = accessGuard.requireTabAccessWithoutMasterBypass(auth, ModuloSistema.CALIDAD,
-                TAB_DESVIACIONES, 3, "Se requiere nivel 3 explicito para disponer una desviacion de Calidad.");
+        User actor = accessGuard.requireTabAccess(auth, ModuloSistema.CALIDAD,
+                TAB_DESVIACIONES, 3, "Se requiere nivel 3 para disponer una desviacion de Calidad.");
         return idempotencyService.ejecutar(
                 actor, "CIERRE_DESVIACION_CALIDAD", "desviacion-control/" + id,
                 idempotencyKey, request, DesviacionResponse.class,
@@ -225,14 +225,14 @@ public class CalidadControlUnificadoResource {
     }
 
     private User requirePlan(Authentication auth, int nivel) {
-        return accessGuard.requireTabAccessWithSuperMasterBypass(
+        return accessGuard.requireTabAccess(
                 auth, ModuloSistema.CALIDAD, TAB_PLANES, nivel,
                 "No tiene el nivel requerido para administrar planes de Calidad.");
     }
 
     private User requireExact(Authentication auth, String tab, int nivel) {
-        return accessGuard.requireTabAccessWithoutMasterBypass(
+        return accessGuard.requireTabAccess(
                 auth, ModuloSistema.CALIDAD, tab, nivel,
-                "No tiene el nivel explicito requerido para operar controles de Calidad.");
+                "No tiene el nivel requerido para operar controles de Calidad.");
     }
 }

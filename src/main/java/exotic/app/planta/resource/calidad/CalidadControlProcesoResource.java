@@ -292,6 +292,9 @@ public class CalidadControlProcesoResource {
         User user = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        if (isMasterLike(user.getUsername())) {
+            return user;
+        }
         int nivel = UserAccessEvaluator.tabNivel(
                 user, ModuloSistema.CALIDAD, TAB_LIBERACION_LOTES).orElse(0);
         if (nivel < minNivel) {

@@ -92,6 +92,36 @@ public class ModuleTabAccessGuard {
         return user;
     }
 
+    /** Autoriza cuando al menos uno de los tabs alcanza su nivel; master y SuperMaster tienen bypass. */
+    public User requireAnyTabAccess(
+            Authentication authentication,
+            ModuloSistema modulo,
+            Map<String, Integer> tabsYNiveles,
+            String forbiddenMessage
+    ) {
+        return requireAnyTabAccess(
+                authentication, Map.of(modulo, tabsYNiveles), forbiddenMessage);
+    }
+
+    /**
+     * Variante para recursos compartidos que aceptan permisos de más de un módulo.
+     * Los usuarios ordinarios deben cumplir al menos uno de los niveles exactos.
+     */
+    public User requireAnyTabAccess(
+            Authentication authentication,
+            Map<ModuloSistema, Map<String, Integer>> modulosTabsYNiveles,
+            String forbiddenMessage
+    ) {
+        User user = requireAuthenticatedUser(authentication);
+        if (isMasterLike(user.getUsername())) return user;
+        boolean permitido = modulosTabsYNiveles.entrySet().stream().anyMatch(moduloEntry ->
+                moduloEntry.getValue().entrySet().stream().anyMatch(tabEntry ->
+                        UserAccessEvaluator.tabNivel(
+                                user, moduloEntry.getKey(), tabEntry.getKey()).orElse(0) >= tabEntry.getValue()));
+        if (!permitido) throw new ResponseStatusException(FORBIDDEN, forbiddenMessage);
+        return user;
+    }
+
     private User requireAuthenticatedUser(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new ResponseStatusException(UNAUTHORIZED, "No autenticado");
