@@ -1,6 +1,7 @@
 package exotic.app.planta.model.producto;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -24,6 +25,7 @@ public class Material extends Producto { // (ROH)
      * para guardar la ruta en data/fichas_tecnicas_mp/
      * del pdf con la ficha tecnica de la materia prima en cuestion
      */
+    @JsonIgnore
     private String fichaTecnicaUrl;
 
     /**

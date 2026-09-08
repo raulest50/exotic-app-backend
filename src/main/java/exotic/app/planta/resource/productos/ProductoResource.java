@@ -15,24 +15,39 @@ import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.packaging.dto.CasePackResponseDTO;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.User;
+import exotic.app.planta.model.users.UserAccessEvaluator;
+import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.productos.ProductoService;
+import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestController
 @RequestMapping("/productos")
@@ -41,6 +56,8 @@ import java.util.Optional;
 public class ProductoResource {
 
     private final ProductoService productoService;
+    private final MaterialFichaTecnicaService materialFichaTecnicaService;
+    private final UserRepository userRepository;
 
     /**
      * Endpoints Para la codificacion de materias primas, semi y terminados
@@ -176,6 +193,42 @@ public class ProductoResource {
         return productoService.findProductoById(productoId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{productoId}/ficha-tecnica/metadata")
+    public ResponseEntity<FichaTecnicaMetadataResponse> getFichaTecnicaMetadata(
+            @PathVariable String productoId,
+            Authentication authentication) {
+        requireProductosAccess(authentication, 1);
+        try {
+            return ResponseEntity.ok(new FichaTecnicaMetadataResponse(
+                    materialFichaTecnicaService.isAvailable(productoId)
+            ));
+        } catch (NoSuchElementException exception) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/{productoId}/ficha-tecnica")
+    public ResponseEntity<Resource> getFichaTecnica(
+            @PathVariable String productoId,
+            Authentication authentication) {
+        requireProductosAccess(authentication, 1);
+        try {
+            MaterialFichaTecnicaService.TechnicalSheetDownload download =
+                    materialFichaTecnicaService.load(productoId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentLength(download.contentLength());
+            headers.setContentDisposition(ContentDisposition.inline()
+                    .filename("ficha-tecnica-" + productoId + ".pdf", StandardCharsets.UTF_8)
+                    .build());
+            headers.setCacheControl(CacheControl.noStore().getHeaderValue());
+            headers.set("X-Content-Type-Options", "nosniff");
+            return new ResponseEntity<>(download.resource(), headers, HttpStatus.OK);
+        } catch (NoSuchElementException exception) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @GetMapping("/{productoId}/categoria-editability")
@@ -454,6 +507,38 @@ public class ProductoResource {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private User requireProductosAccess(Authentication authentication, int minNivel) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(UNAUTHORIZED, "No autenticado");
+        }
+
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no encontrado"));
+        if (isMasterLike(user.getUsername())) {
+            return user;
+        }
+
+        int nivel = UserAccessEvaluator.maxNivelForModulo(user, ModuloSistema.PRODUCTOS).orElse(0);
+        if (nivel < minNivel) {
+            throw new ResponseStatusException(
+                    FORBIDDEN,
+                    "No tiene permisos para consultar fichas tecnicas de productos."
+            );
+        }
+        return user;
+    }
+
+    private static boolean isMasterLike(String username) {
+        if (username == null) {
+            return false;
+        }
+        String normalized = username.toLowerCase();
+        return "master".equals(normalized) || "super_master".equals(normalized);
+    }
+
+    public record FichaTecnicaMetadataResponse(boolean disponible) {
     }
 
 }

@@ -18,7 +18,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
-import exotic.app.planta.service.commons.FileStorageService;
+import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaStorage;
 import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +32,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
@@ -63,7 +65,7 @@ public class ProductoService {
 
     private final ItemOrdenCompraRepo itemOrdenCompraRepo;
 
-    private final FileStorageService fileStorageService;
+    private final MaterialFichaTecnicaStorage materialFichaTecnicaStorage;
     private final ProductoCostoService productoCostoService;
 
     // fetch all products para el producto picker component en frontend
@@ -153,18 +155,43 @@ public class ProductoService {
         String prefijoLote = normalizeOptionalPrefijoLote(material.getPrefijoLote());
         validatePrefijoLoteDisponibleForProduct(prefijoLote, material.getProductoId());
         material.setPrefijoLote(prefijoLote);
+        String storedTechnicalSheet = null;
         try {
-            // Solo guardar la ficha técnica si se proporciona un archivo
-            if (file != null && !file.isEmpty()) {
-                String fichaTecnicaPath = fileStorageService.storeFichaTecnica(file);
-                material.setFichaTecnicaUrl(fichaTecnicaPath);
+            if (file != null) {
+                storedTechnicalSheet = materialFichaTecnicaStorage.store(file);
+                material.setFichaTecnicaUrl(storedTechnicalSheet);
+                registerTechnicalSheetRollbackCleanup(storedTechnicalSheet);
             }
             Material saved = materialRepo.save(material);
             return (Material) productoCostoService.registrarCostoInicial(
                     saved,
                     ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION)).producto();
+        } catch (IllegalArgumentException e) {
+            deleteTechnicalSheetAfterImmediateFailure(storedTechnicalSheet);
+            throw e;
         } catch (Exception e) {
+            deleteTechnicalSheetAfterImmediateFailure(storedTechnicalSheet);
             throw new RuntimeException("Error saving MateriaPrima: " + e.getMessage(), e);
+        }
+    }
+
+    private void registerTechnicalSheetRollbackCleanup(String storedReference) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    materialFichaTecnicaStorage.delete(storedReference);
+                }
+            }
+        });
+    }
+
+    private void deleteTechnicalSheetAfterImmediateFailure(String storedReference) {
+        if (storedReference != null) {
+            materialFichaTecnicaStorage.delete(storedReference);
         }
     }
 
