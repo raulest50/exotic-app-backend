@@ -50,7 +50,9 @@ public class ExportacionMaterialService {
                 row.createCell(5).setCellValue(m.getTipoUnidades() != null ? m.getTipoUnidades() : "U");
                 row.createCell(6).setCellValue(m.getCantidadUnidad());
                 row.createCell(7).setCellValue(m.getStockMinimo());
-                row.createCell(8).setCellValue(m.getFichaTecnicaUrl() != null ? m.getFichaTecnicaUrl() : "");
+                // Columna heredada conservada vacia para que la exportacion siga
+                // siendo compatible con la plantilla de carga masiva existente.
+                row.createCell(8).setCellValue("");
                 row.createCell(9).setCellValue(m.getTipoMaterial());
                 row.createCell(10).setCellValue(m.getPuntoReorden());
             }

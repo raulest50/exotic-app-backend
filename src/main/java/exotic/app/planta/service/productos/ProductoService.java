@@ -18,7 +18,7 @@ import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
-import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaStorage;
+import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaService;
 import exotic.app.planta.model.producto.costos.ProductoCostoOrigen;
 import exotic.app.planta.repo.compras.ItemOrdenCompraRepo;
 import lombok.RequiredArgsConstructor;
@@ -32,8 +32,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
@@ -65,7 +63,7 @@ public class ProductoService {
 
     private final ItemOrdenCompraRepo itemOrdenCompraRepo;
 
-    private final MaterialFichaTecnicaStorage materialFichaTecnicaStorage;
+    private final MaterialFichaTecnicaService materialFichaTecnicaService;
     private final ProductoCostoService productoCostoService;
 
     // fetch all products para el producto picker component en frontend
@@ -143,7 +141,7 @@ public class ProductoService {
      * @return
      */
     @Transactional
-    public Material saveMateriaPrimaV2(Material material, MultipartFile file) {
+    public Material saveMateriaPrimaV2(Material material, MultipartFile file, String username) {
         // Prevent accidental overwrite: if a material with the same productoId already exists, throw an exception.
         if (materialRepo.existsById(material.getProductoId())) {
             throw new IllegalArgumentException("El codigo: " + material.getProductoId() +
@@ -155,44 +153,18 @@ public class ProductoService {
         String prefijoLote = normalizeOptionalPrefijoLote(material.getPrefijoLote());
         validatePrefijoLoteDisponibleForProduct(prefijoLote, material.getProductoId());
         material.setPrefijoLote(prefijoLote);
-        String storedTechnicalSheet = null;
-        try {
-            if (file != null) {
-                storedTechnicalSheet = materialFichaTecnicaStorage.store(file);
-                material.setFichaTecnicaUrl(storedTechnicalSheet);
-                registerTechnicalSheetRollbackCleanup(storedTechnicalSheet);
-            }
-            Material saved = materialRepo.save(material);
-            return (Material) productoCostoService.registrarCostoInicial(
-                    saved,
-                    ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION)).producto();
-        } catch (IllegalArgumentException e) {
-            deleteTechnicalSheetAfterImmediateFailure(storedTechnicalSheet);
-            throw e;
-        } catch (Exception e) {
-            deleteTechnicalSheetAfterImmediateFailure(storedTechnicalSheet);
-            throw new RuntimeException("Error saving MateriaPrima: " + e.getMessage(), e);
+        Material saved = materialRepo.save(material);
+        if (file != null) {
+            materialFichaTecnicaService.crearNuevaVersion(
+                    saved.getProductoId(),
+                    file,
+                    null,
+                    username
+            );
         }
-    }
-
-    private void registerTechnicalSheetRollbackCleanup(String storedReference) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != TransactionSynchronization.STATUS_COMMITTED) {
-                    materialFichaTecnicaStorage.delete(storedReference);
-                }
-            }
-        });
-    }
-
-    private void deleteTechnicalSheetAfterImmediateFailure(String storedReference) {
-        if (storedReference != null) {
-            materialFichaTecnicaStorage.delete(storedReference);
-        }
+        return (Material) productoCostoService.registrarCostoInicial(
+                saved,
+                ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION)).producto();
     }
 
     public Page<Producto> searchP4RecetaV2(String searchTerm, String tipoBusqueda, String clasificacion, int page, int size) {
@@ -959,6 +931,7 @@ public class ProductoService {
         return productoRepo.existsById(productoId);
     }
 
+    @Transactional
     public void deleteMaterial(String productoId) {
         boolean hasOrdenCompra = itemOrdenCompraRepo.existsByMaterial_ProductoId(productoId);
         boolean hasMovimientos = transaccionAlmacenRepo.existsByProducto_ProductoId(productoId);
@@ -977,6 +950,7 @@ public class ProductoService {
             throw new IllegalStateException(message.toString());
         }
 
+        materialFichaTecnicaService.scheduleStorageCleanupAfterMaterialDeletion(productoId);
         materialRepo.deleteById(productoId);
     }
 

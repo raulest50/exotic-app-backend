@@ -217,7 +217,8 @@ public class CargaMasivaMaterialService {
                     material.setTipoUnidades(getCellValueAsString(row, 5) != null ? getCellValueAsString(row, 5).trim().toUpperCase() : "U");
                     material.setCantidadUnidad(getCellValueAsDouble(row, 6));
                     material.setStockMinimo(getCellValueAsDouble(row, 7));
-                    material.setFichaTecnicaUrl(getCellValueAsString(row, 8));
+                    // La columna heredada ficha_tecnica_url se conserva solo para
+                    // compatibilidad de formato. Las fichas se cargan como PDF desde Productos.
                     material.setTipoMaterial((int) getCellValueAsDouble(row, 9));
                     double puntoReorden = getCellValueAsDouble(row, 10);
                     material.setPuntoReorden(puntoReorden == 0 && getCellValueAsString(row, 10) == null ? -1 : puntoReorden);

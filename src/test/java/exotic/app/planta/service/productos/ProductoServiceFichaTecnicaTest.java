@@ -10,22 +10,19 @@ import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
-import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaStorage;
-import org.junit.jupiter.api.AfterEach;
+import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.io.IOException;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,39 +38,56 @@ class ProductoServiceFichaTecnicaTest {
     @Mock private TransaccionAlmacenRepo transaccionAlmacenRepo;
     @Mock private OrdenProduccionRepo ordenProduccionRepo;
     @Mock private ItemOrdenCompraRepo itemOrdenCompraRepo;
-    @Mock private MaterialFichaTecnicaStorage materialFichaTecnicaStorage;
+    @Mock private MaterialFichaTecnicaService materialFichaTecnicaService;
     @Mock private ProductoCostoService productoCostoService;
 
-    @InjectMocks
-    private ProductoService productoService;
-
-    @AfterEach
-    void clearTransactionSynchronization() {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
-    }
+    @InjectMocks private ProductoService productoService;
 
     @Test
-    void deletesStoredTechnicalSheetWhenPersistenceFails() throws IOException {
-        Material material = new Material();
-        material.setProductoId("M-1");
-        material.setInventareable(true);
-        material.setPuntoReorden(0);
+    void delegatesInitialPdfToVersionService() {
+        Material material = validMaterial("M-1");
         MockMultipartFile file = new MockMultipartFile(
                 "file", "ficha.pdf", "application/pdf", new byte[]{1}
         );
-        String storedReference = "fichas_tecnicas_mp/generated.pdf";
-        when(materialFichaTecnicaStorage.store(file)).thenReturn(storedReference);
-        when(materialRepo.save(material)).thenThrow(new RuntimeException("database failure"));
-        TransactionSynchronizationManager.initSynchronization();
-
-        assertThrows(RuntimeException.class, () -> productoService.saveMateriaPrimaV2(material, file));
-        TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
-                synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+        when(materialRepo.save(material)).thenReturn(material);
+        when(productoCostoService.registrarCostoInicial(any(), any())).thenReturn(
+                new ProductoCostoService.ResultadoCambio(material, BigDecimal.ZERO, BigDecimal.ZERO, true, 1)
         );
 
-        assertEquals(storedReference, material.getFichaTecnicaUrl());
-        verify(materialFichaTecnicaStorage, atLeastOnce()).delete(storedReference);
+        Material saved = productoService.saveMateriaPrimaV2(material, file, "creator");
+
+        assertEquals(material, saved);
+        verify(materialFichaTecnicaService).crearNuevaVersion("M-1", file, null, "creator");
+    }
+
+    @Test
+    void createsMaterialWithoutTechnicalSheet() {
+        Material material = validMaterial("M-2");
+        when(materialRepo.save(material)).thenReturn(material);
+        when(productoCostoService.registrarCostoInicial(any(), any())).thenReturn(
+                new ProductoCostoService.ResultadoCambio(material, BigDecimal.ZERO, BigDecimal.ZERO, true, 1)
+        );
+
+        productoService.saveMateriaPrimaV2(material, null, "creator");
+
+        verify(materialFichaTecnicaService, never())
+                .crearNuevaVersion(any(), any(), any(), any());
+    }
+
+    @Test
+    void schedulesTechnicalSheetCleanupWhenMaterialIsDeleted() {
+        productoService.deleteMaterial("M-3");
+
+        verify(materialFichaTecnicaService).scheduleStorageCleanupAfterMaterialDeletion("M-3");
+        verify(materialRepo).deleteById("M-3");
+    }
+
+    private static Material validMaterial(String id) {
+        Material material = new Material();
+        material.setProductoId(id);
+        material.setInventareable(true);
+        material.setPuntoReorden(0);
+        material.asignarCostoInicial(BigDecimal.ZERO);
+        return material;
     }
 }

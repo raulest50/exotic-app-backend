@@ -14,6 +14,7 @@ import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
+import exotic.app.planta.model.producto.fichatecnica.MaterialFichaTecnicaVersionResponse;
 import exotic.app.planta.model.producto.manufacturing.packaging.dto.CasePackResponseDTO;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
@@ -21,6 +22,7 @@ import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.productos.ProductoService;
 import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaService;
+import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaDuplicadaException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -78,10 +80,12 @@ public class ProductoResource {
 
     @PostMapping(value = "/save_mprima_v2", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> saveMateriaPrimaV2(
+            Authentication authentication,
             @RequestPart("materiaPrima") Material material,
             @RequestPart(value = "file", required = false) MultipartFile file) {
+        User actor = requireProductosAccess(authentication, 2);
         try {
-            Material savedMP = productoService.saveMateriaPrimaV2(material, file);
+            Material savedMP = productoService.saveMateriaPrimaV2(material, file, actor.getUsername());
             // You can customize the URI as needed.
             return ResponseEntity.created(URI.create("/productos/" + savedMP.getProductoId()))
                     .body(savedMP);
@@ -196,14 +200,12 @@ public class ProductoResource {
     }
 
     @GetMapping("/{productoId}/ficha-tecnica/metadata")
-    public ResponseEntity<FichaTecnicaMetadataResponse> getFichaTecnicaMetadata(
+    public ResponseEntity<MaterialFichaTecnicaService.FichaTecnicaMetadata> getFichaTecnicaMetadata(
             @PathVariable String productoId,
             Authentication authentication) {
         requireProductosAccess(authentication, 1);
         try {
-            return ResponseEntity.ok(new FichaTecnicaMetadataResponse(
-                    materialFichaTecnicaService.isAvailable(productoId)
-            ));
+            return ResponseEntity.ok(materialFichaTecnicaService.getMetadata(productoId));
         } catch (NoSuchElementException exception) {
             return ResponseEntity.notFound().build();
         }
@@ -217,15 +219,67 @@ public class ProductoResource {
         try {
             MaterialFichaTecnicaService.TechnicalSheetDownload download =
                     materialFichaTecnicaService.load(productoId);
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentLength(download.contentLength());
-            headers.setContentDisposition(ContentDisposition.inline()
-                    .filename("ficha-tecnica-" + productoId + ".pdf", StandardCharsets.UTF_8)
-                    .build());
-            headers.setCacheControl(CacheControl.noStore().getHeaderValue());
-            headers.set("X-Content-Type-Options", "nosniff");
-            return new ResponseEntity<>(download.resource(), headers, HttpStatus.OK);
+            return buildPdfResponse(download, "ficha-tecnica-" + productoId + ".pdf");
+        } catch (NoSuchElementException exception) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/{productoId}/ficha-tecnica/versiones")
+    public ResponseEntity<List<MaterialFichaTecnicaVersionResponse>> getFichaTecnicaVersiones(
+            @PathVariable String productoId,
+            Authentication authentication) {
+        requireProductosAccess(authentication, 1);
+        try {
+            return ResponseEntity.ok(materialFichaTecnicaService.getVersiones(productoId));
+        } catch (NoSuchElementException exception) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping(
+            value = "/{productoId}/ficha-tecnica/versiones",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<?> crearFichaTecnicaVersion(
+            @PathVariable String productoId,
+            Authentication authentication,
+            @RequestPart("archivo") MultipartFile archivo,
+            @RequestPart(value = "motivoCambio", required = false) String motivoCambio) {
+        User actor = requireProductosAccess(authentication, 3);
+        try {
+            MaterialFichaTecnicaVersionResponse created = materialFichaTecnicaService.crearNuevaVersion(
+                    productoId,
+                    archivo,
+                    motivoCambio,
+                    actor.getUsername()
+            );
+            return ResponseEntity.created(URI.create(
+                    "/productos/" + productoId + "/ficha-tecnica/versiones/" + created.id()
+            )).body(created);
+        } catch (NoSuchElementException exception) {
+            return ResponseEntity.notFound().build();
+        } catch (MaterialFichaTecnicaDuplicadaException exception) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", exception.getMessage()));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+        }
+    }
+
+    @GetMapping("/{productoId}/ficha-tecnica/versiones/{versionId}/archivo")
+    public ResponseEntity<Resource> getFichaTecnicaVersionArchivo(
+            @PathVariable String productoId,
+            @PathVariable Long versionId,
+            Authentication authentication) {
+        requireProductosAccess(authentication, 1);
+        try {
+            MaterialFichaTecnicaService.TechnicalSheetDownload download =
+                    materialFichaTecnicaService.loadVersion(productoId, versionId);
+            return buildPdfResponse(
+                    download,
+                    "ficha-tecnica-" + productoId + "-v" + download.version() + ".pdf"
+            );
         } catch (NoSuchElementException exception) {
             return ResponseEntity.notFound().build();
         }
@@ -524,7 +578,7 @@ public class ProductoResource {
         if (nivel < minNivel) {
             throw new ResponseStatusException(
                     FORBIDDEN,
-                    "No tiene permisos para consultar fichas tecnicas de productos."
+                    "No tiene el nivel de acceso requerido al modulo Productos."
             );
         }
         return user;
@@ -538,7 +592,19 @@ public class ProductoResource {
         return "master".equals(normalized) || "super_master".equals(normalized);
     }
 
-    public record FichaTecnicaMetadataResponse(boolean disponible) {
+    private static ResponseEntity<Resource> buildPdfResponse(
+            MaterialFichaTecnicaService.TechnicalSheetDownload download,
+            String filename
+    ) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentLength(download.contentLength());
+        headers.setContentDisposition(ContentDisposition.inline()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build());
+        headers.setCacheControl(CacheControl.noStore().getHeaderValue());
+        headers.set("X-Content-Type-Options", "nosniff");
+        return new ResponseEntity<>(download.resource(), headers, HttpStatus.OK);
     }
 
 }

@@ -13,9 +13,18 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface MaterialRepo extends JpaRepository<Material, String>, JpaSpecificationExecutor<Material> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT material
+            FROM Material material
+            WHERE material.productoId = :productoId
+            """)
+    Optional<Material> findByIdForUpdate(@Param("productoId") String productoId);
 
     List<Material> findByInventareableTrue();
 
