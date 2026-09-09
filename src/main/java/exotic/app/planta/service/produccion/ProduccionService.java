@@ -325,6 +325,9 @@ public class ProduccionService {
         dto.setFechaCreacion(orden.getFechaCreacion());
         dto.setFechaLanzamiento(orden.getFechaLanzamiento());
         dto.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());
+        dto.setCanceladaEn(orden.getCanceladaEn());
+        dto.setCanceladaPorUsername(orden.getCanceladaPorUsername());
+        dto.setCanceladaPorNombreCompleto(orden.getCanceladaPorNombreCompleto());
         dto.setEstadoOrden(orden.getEstadoOrden());
         dto.setPoliticaDispensacionInicio(orden.getPoliticaDispensacionInicio() != null
                 ? orden.getPoliticaDispensacionInicio().name()
@@ -413,9 +416,16 @@ public class ProduccionService {
             throw new IllegalArgumentException(
                     "Use la operación de cancelación para anular una orden de producción.");
         }
-        ordenProduccionRepo.updateEstadoOrdenById(ordenId, estadoOrden, LocalDateTime.now(applicationClock));
+        OrdenProduccion ordenProduccion = ordenProduccionRepo.findByIdForUpdate(ordenId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Orden de producción no encontrada con ID: " + ordenId));
+        if (ordenProduccion.getEstadoOrden() == -1) {
+            throw new IllegalStateException("Una orden cancelada no puede cambiar nuevamente de estado.");
+        }
 
-        OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId).orElseThrow(() -> new RuntimeException("OrdenProduccion not found"));
+        ordenProduccion.setEstadoOrden(estadoOrden);
+        ordenProduccion.setFechaFinal(LocalDateTime.now(applicationClock));
+        ordenProduccionRepo.save(ordenProduccion);
         return convertToDto(ordenProduccion);
     }
 
@@ -427,28 +437,39 @@ public class ProduccionService {
      */
     @Transactional
     public OrdenProduccionDTO cancelarOrdenProduccion(int ordenId, User actor) {
-        OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId)
-            .orElseThrow(() -> new IllegalArgumentException("Orden de producción no encontrada con ID: " + ordenId));
+        User cancelador = requireActor(actor);
+        OrdenProduccion ordenProduccion = ordenProduccionRepo.findByIdForUpdate(ordenId)
+            .orElseThrow(() -> new NoSuchElementException(
+                    "Orden de producción no encontrada con ID: " + ordenId));
 
         if (!isOrdenProduccionCancelable(ordenProduccion)) {
             throw new IllegalStateException("Solo se pueden cancelar órdenes en estado abierto (0). Estado actual: " + ordenProduccion.getEstadoOrden());
         }
 
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        String usernameSnapshot = requireUsername(cancelador);
+        String nombreSnapshot = normalizeDisplayName(cancelador.getNombreCompleto(), usernameSnapshot);
+
         ordenProduccion.setEstadoOrden(-1);
+        ordenProduccion.setCanceladaEn(ahora);
+        ordenProduccion.setCanceladaPor(cancelador);
+        ordenProduccion.setCanceladaPorUsername(usernameSnapshot);
+        ordenProduccion.setCanceladaPorNombreCompleto(nombreSnapshot);
         if (ordenProduccion.getFechaFinal() == null) {
-            ordenProduccion.setFechaFinal(LocalDateTime.now(applicationClock));
+            ordenProduccion.setFechaFinal(ahora);
         }
 
         ordenProduccionRepo.save(ordenProduccion);
-        batchRecordService.anularPorCancelacion(ordenProduccion, requireActor(actor));
+        batchRecordService.anularPorCancelacion(ordenProduccion, cancelador);
         ordenFabricacionService.cancelarVinculadasPorCancelacionOp(
-                ordenProduccion, requireActor(actor));
+                ordenProduccion, cancelador);
         return convertToDto(ordenProduccion);
     }
 
     public boolean isOrdenProduccionCancelable(int ordenId) {
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(ordenId)
-            .orElseThrow(() -> new IllegalArgumentException("Orden de producción no encontrada con ID: " + ordenId));
+            .orElseThrow(() -> new NoSuchElementException(
+                    "Orden de producción no encontrada con ID: " + ordenId));
 
         return isOrdenProduccionCancelable(ordenProduccion);
     }
@@ -718,10 +739,23 @@ public class ProduccionService {
 
     private User requireActor(User actor) {
         if (actor == null) {
-            throw new IllegalArgumentException(
-                    "Se requiere un usuario autenticado para crear el expediente digital.");
+            throw new IllegalArgumentException("Se requiere un usuario autenticado.");
         }
         return actor;
+    }
+
+    private String requireUsername(User actor) {
+        String username = actor.getUsername();
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("El usuario autenticado no tiene un username válido.");
+        }
+        return username.trim();
+    }
+
+    private String normalizeDisplayName(String nombreCompleto, String fallback) {
+        return nombreCompleto == null || nombreCompleto.isBlank()
+                ? fallback
+                : nombreCompleto.trim();
     }
 
     private void aplicarPoliticaDispensacionInicial(OrdenProduccion ordenProduccion) {

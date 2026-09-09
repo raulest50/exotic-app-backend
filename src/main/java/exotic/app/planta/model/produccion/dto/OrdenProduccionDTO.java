@@ -35,6 +35,16 @@ public class OrdenProduccionDTO {
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaLanzamiento; // fecha planeada de autorizacion
     private LocalDateTime fechaFinalPlanificada; // fecha objetivo para terminar
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private LocalDateTime canceladaEn;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String canceladaPorUsername;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String canceladaPorNombreCompleto;
+
     private int estadoOrden;        // 0: abierta, 1: en curso, 2: terminada, -1: cancelada
     private String politicaDispensacionInicio;
     private LocalDateTime fechaAplicacionPoliticaDispensacion;

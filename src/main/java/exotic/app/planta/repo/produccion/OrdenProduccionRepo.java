@@ -208,11 +208,6 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
 
     @Transactional
     @Modifying
-    @Query("UPDATE OrdenProduccion o SET o.estadoOrden = :estadoOrden, o.fechaFinal = :fechaFinal WHERE o.ordenId = :id")
-    void updateEstadoOrdenById(@Param("id") int id, @Param("estadoOrden") int estadoOrden, @Param("fechaFinal") LocalDateTime fechaFinal);
-
-    @Transactional
-    @Modifying
     @Query("UPDATE OrdenProduccion o SET o.estadoDispensacionMateriales = :estado WHERE o.ordenId = :id")
     void updateEstadoDispensacionMaterialesById(
             @Param("id") int id,

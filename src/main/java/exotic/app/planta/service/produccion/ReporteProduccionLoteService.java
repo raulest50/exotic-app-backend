@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -47,9 +48,12 @@ public class ReporteProduccionLoteService {
             BigDecimal cantidadProducida
     ) {
         BigDecimal cantidad = validarCantidad(cantidadProducida);
-        OrdenProduccion orden = seguimiento.getOrdenProduccion();
+        int ordenId = seguimiento.getOrdenProduccion().getOrdenId();
         LocalDate fechaProduccion = LocalDate.now(applicationClock);
         cierreLockService.lockFecha(fechaProduccion);
+        OrdenProduccion orden = ordenProduccionRepo.findByIdForUpdate(ordenId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Orden de producción no encontrada con ID: " + ordenId));
 
         if (orden.getEstadoOrden() == ESTADO_CANCELADA || orden.getEstadoOrden() == ESTADO_TERMINADA) {
             throw new IllegalStateException("La orden no admite nuevos reportes de produccion.");
@@ -117,7 +121,10 @@ public class ReporteProduccionLoteService {
             return;
         }
 
-        OrdenProduccion orden = reporte.getOrdenProduccion();
+        int ordenId = reporte.getOrdenProduccion().getOrdenId();
+        OrdenProduccion orden = ordenProduccionRepo.findByIdForUpdate(ordenId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Orden de producción no encontrada con ID: " + ordenId));
         if (orden.getEstadoOrden() != ESTADO_FABRICACION_COMPLETADA) {
             throw new CierreProduccionConflictException(
                     "La orden cambio de estado y el reporte pendiente no puede anularse.");

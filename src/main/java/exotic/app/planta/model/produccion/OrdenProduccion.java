@@ -7,6 +7,7 @@ import exotic.app.planta.model.empresa.JornadaLaboralVersion;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
+import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.ventas.Vendedor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -136,6 +137,25 @@ public class OrdenProduccion {
      * instante en el que realmente se termina, o almenos que se reporta
      */
     private LocalDateTime fechaFinal;
+
+    /**
+     * Auditoría estructurada de la cancelación. Los textos son snapshots para
+     * conservar lo que se mostró al momento de cancelar aunque el perfil del
+     * usuario cambie posteriormente.
+     */
+    @Column(name = "cancelada_en")
+    private LocalDateTime canceladaEn;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelada_por_id")
+    private User canceladaPor;
+
+    @Column(name = "cancelada_por_username", length = 255)
+    private String canceladaPorUsername;
+
+    @Column(name = "cancelada_por_nombre_completo", length = 255)
+    private String canceladaPorNombreCompleto;
 
     /**
      * Número de pedido comercial que origina la orden. Permite trazar el vínculo con ventas

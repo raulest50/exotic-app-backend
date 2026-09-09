@@ -6,6 +6,8 @@ import exotic.app.planta.model.produccion.dto.ODP_Data4PDF;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionBatchDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO;
 import exotic.app.planta.model.produccion.dto.OrdenProduccionDTO_save;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.produccion.ProduccionService;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.model.users.User;
@@ -27,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/produccion")
@@ -36,6 +39,7 @@ public class ProduccionResource {
     private final ProduccionService produccionService;
     private final LoteRepo loteRepo;
     private final UserRepository userRepository;
+    private final ModuleTabAccessGuard moduleTabAccessGuard;
 
     @PostMapping("/save")
     public ResponseEntity<OrdenProduccion> saveOrdenProduccion(
@@ -124,16 +128,28 @@ public class ProduccionResource {
             return ResponseEntity.ok(updatedOrden);
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", error.getMessage()));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", error.getMessage()));
         }
     }
 
     @GetMapping("/orden_produccion/{id}/is_deletable")
-    public ResponseEntity<?> isOrdenProduccionCancelable(@PathVariable int id) {
+    public ResponseEntity<?> isOrdenProduccionCancelable(
+            Authentication authentication,
+            @PathVariable int id) {
+        moduleTabAccessGuard.requireTabAccess(
+                authentication,
+                ModuloSistema.PRODUCCION,
+                "HISTORIAL",
+                2,
+                "Se requiere nivel 2 en Historial de ODP para cancelar órdenes de producción.");
         try {
             boolean cancelable = produccionService.isOrdenProduccionCancelable(id);
             return ResponseEntity.ok(Map.of("cancelable", cancelable));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -144,12 +160,20 @@ public class ProduccionResource {
     public ResponseEntity<?> cancelOrdenProduccion(
             Authentication authentication,
             @PathVariable int id) {
+        User actor = moduleTabAccessGuard.requireTabAccess(
+                authentication,
+                ModuloSistema.PRODUCCION,
+                "HISTORIAL",
+                2,
+                "Se requiere nivel 2 en Historial de ODP para cancelar órdenes de producción.");
         try {
             OrdenProduccionDTO ordenCancelada = produccionService.cancelarOrdenProduccion(
-                    id, requireAuthenticatedUser(authentication));
+                    id, actor);
             return ResponseEntity.ok(ordenCancelada);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
