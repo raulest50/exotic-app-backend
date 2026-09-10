@@ -18,6 +18,7 @@ import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.users.User;
+import exotic.app.planta.repo.inventarios.HistorialDispensacionesQuery;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
@@ -62,6 +63,7 @@ public class SalidaAlmacenService {
     private final UserRepository userRepository;
     private final ContabilidadService contabilidadService;
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
+    private final HistorialDispensacionesQuery historialDispensacionesQuery;
     private final ProduccionService produccionService;
     private final TransaccionAlmacenRepo transaccionAlmacenRepo;
     private final ProductoService productoService;
@@ -1346,7 +1348,10 @@ public class SalidaAlmacenService {
         Pageable pageable = PageRequest.of(
                 filtro.getPage(),
                 filtro.getSize(),
-                Sort.by("fechaTransaccion").descending()
+                Sort.by(
+                        Sort.Order.desc("fechaTransaccion"),
+                        Sort.Order.desc("transaccionId")
+                )
         );
 
         Integer transaccionId = null;
@@ -1396,8 +1401,7 @@ public class SalidaAlmacenService {
             }
         }
 
-        return transaccionAlmacenHeaderRepo.findDispensacionesByFiltros(
-                TransaccionAlmacen.TipoEntidadCausante.OD,
+        return historialDispensacionesQuery.buscar(
                 transaccionId,
                 ordenProduccionId,
                 loteAsignado,
