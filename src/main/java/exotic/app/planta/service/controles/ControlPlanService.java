@@ -170,7 +170,7 @@ public class ControlPlanService {
         if (version.getEstado() != EstadoVersionPlanControl.BORRADOR) {
             throw new IllegalStateException("Una version publicada o retirada es inmutable.");
         }
-        version.setProposito(limpiar(request.proposito()));
+        version.setProposito(ControlPlanPolicy.propositoInterno(ambito));
         String motivoCambio = limpiarNullable(request.motivoCambio());
         if (version.getNumero() > 1 && motivoCambio == null) {
             throw new IllegalArgumentException(
@@ -199,26 +199,20 @@ public class ControlPlanService {
         if (tieneProducto == tieneCategoria) {
             throw new IllegalArgumentException("La aplicabilidad debe seleccionar un producto o una categoria, no ambos.");
         }
-        if (ambito == AmbitoControl.PROCESO && request.momento() != MomentoControl.DURANTE_FABRICACION) {
-            throw new IllegalArgumentException("Los controles de proceso se ejecutan durante la fabricacion.");
-        }
-        if (request.puntoExigencia() == PuntoExigenciaControl.CIERRE_ETAPA
-                && (request.puntoAplicacion() != PuntoAplicacionControl.SALIDA_OPERACION
-                || request.momento() != MomentoControl.DURANTE_FABRICACION)) {
-            throw new IllegalArgumentException("CIERRE_ETAPA requiere salida de operacion durante fabricacion.");
-        }
-        if (request.momento() == MomentoControl.REVISION_FINAL
-                && (request.puntoExigencia() == PuntoExigenciaControl.CIERRE_ETAPA
-                || request.puntoExigencia() == PuntoExigenciaControl.ENVIO_CALIDAD)) {
-            throw new IllegalArgumentException("Un ensayo de revision final no puede bloquear la etapa ni su envio.");
-        }
+        String frontendNodeId = limpiarNullable(request.frontendNodeId());
+        boolean bloqueante = request.bloqueante() != null
+                ? request.bloqueante()
+                : request.puntoExigencia() != null
+                && request.puntoExigencia() != PuntoExigenciaControl.INFORMATIVO;
+        ControlPlanPolicy.validarUbicacion(
+                ambito, request.puntoAplicacion(), frontendNodeId, bloqueante);
         if (request.puntoAplicacion() == PuntoAplicacionControl.SALIDA_OPERACION
                 && (request.areaOperativaId() == null || request.procesoId() == null)) {
             throw new IllegalArgumentException("Una salida de operacion requiere area y proceso maestro.");
         }
         if (request.puntoAplicacion() == PuntoAplicacionControl.LOTE_FINAL
                 && (request.areaOperativaId() != null || request.procesoId() != null
-                || limpiarNullable(request.frontendNodeId()) != null)) {
+                || frontendNodeId != null)) {
             throw new IllegalArgumentException("Un control de lote final no referencia area, operacion ni nodo.");
         }
         AplicabilidadPlanControl entity = new AplicabilidadPlanControl();
@@ -245,9 +239,10 @@ public class ControlPlanService {
             entity.setProceso(procesoRepo.findById(request.procesoId())
                     .orElseThrow(() -> new NoSuchElementException("Proceso no encontrado.")));
         }
-        entity.setFrontendNodeId(limpiarNullable(request.frontendNodeId()));
-        entity.setMomento(request.momento());
-        entity.setPuntoExigencia(request.puntoExigencia());
+        entity.setFrontendNodeId(frontendNodeId);
+        entity.setMomento(ControlPlanPolicy.momento(ambito, request.puntoAplicacion()));
+        entity.setPuntoExigencia(ControlPlanPolicy.puntoExigencia(
+                ambito, request.puntoAplicacion(), bloqueante));
         entity.setLegadoGlobal(false);
         List<String> exclusiones = request.productosExcluidosIds() == null
                 ? List.of() : request.productosExcluidosIds();

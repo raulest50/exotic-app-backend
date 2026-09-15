@@ -146,6 +146,57 @@ class FirmaVisualUsuarioServiceTest {
     }
 
     @Test
+    void crearNuevaVersion_escalaImagenGrandeConservandoProporcion() throws IOException {
+        BufferedImage image = imagenConTrazo(4800, 1600, BufferedImage.TYPE_BYTE_BINARY);
+        FirmaVisualUsuarioVersion created = crear(new MockMultipartFile(
+                "firma",
+                "firma-grande.png",
+                "image/png",
+                imageBytes(image, "png")));
+
+        assertEquals(1200, created.getAnchoPx());
+        assertEquals(400, created.getAltoPx());
+        assertTrue(created.getTamanoBytes() <= FirmaVisualUsuarioService.MAX_STORED_SIZE_BYTES);
+        assertTrue(tienePixelesDistintos(ImageIO.read(
+                new java.io.ByteArrayInputStream(created.getContenido()))));
+    }
+
+    @Test
+    void crearNuevaVersion_submuestreaJpegGrandeAntesDelEscaladoFinal() throws IOException {
+        BufferedImage image = imagenConTrazo(4800, 1600, BufferedImage.TYPE_INT_RGB);
+        FirmaVisualUsuarioVersion created = crear(new MockMultipartFile(
+                "firma",
+                "firma-grande.jpg",
+                "image/jpeg",
+                imageBytes(image, "jpg")));
+
+        assertEquals(1200, created.getAnchoPx());
+        assertEquals(400, created.getAltoPx());
+        assertTrue(created.getTamanoBytes() <= FirmaVisualUsuarioService.MAX_STORED_SIZE_BYTES);
+        assertTrue(tienePixelesDistintos(ImageIO.read(
+                new java.io.ByteArrayInputStream(created.getContenido()))));
+    }
+
+    @Test
+    void crearNuevaVersion_aceptaEntradaMayorAUnMegabyteYLaOptimiza() throws IOException {
+        BufferedImage image = imagenRuido(1200, 800, 42L);
+        byte[] png = imageBytes(image, "png");
+        assertTrue(png.length > FirmaVisualUsuarioService.MAX_STORED_SIZE_BYTES);
+        assertTrue(png.length <= FirmaVisualUsuarioService.MAX_UPLOAD_SIZE_BYTES);
+
+        FirmaVisualUsuarioVersion created = crear(new MockMultipartFile(
+                "firma",
+                "firma-pesada.png",
+                "image/png",
+                png));
+
+        assertTrue(created.getTamanoBytes() <= FirmaVisualUsuarioService.TARGET_STORED_SIZE_BYTES);
+        assertTrue(created.getAnchoPx() <= FirmaVisualUsuarioService.TARGET_MAX_WIDTH_PX);
+        assertTrue(created.getAltoPx() <= FirmaVisualUsuarioService.TARGET_MAX_HEIGHT_PX);
+        assertArrayEquals(PNG_SIGNATURE, primerosBytes(created.getContenido(), PNG_SIGNATURE.length));
+    }
+
+    @Test
     void crearNuevaVersion_rechazaImagenUniformeJpeg() throws IOException {
         BufferedImage image = new BufferedImage(300, 100, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();
@@ -168,39 +219,88 @@ class FirmaVisualUsuarioServiceTest {
     }
 
     @Test
-    void crearNuevaVersion_rechazaEntradaSuperiorAUnMegabyte() {
+    void crearNuevaVersion_rechazaEntradaSuperiorACuatroMegabytes() {
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
                 () -> crear(new MockMultipartFile(
                         "firma",
                         "grande.jpg",
                         "image/jpeg",
-                        new byte[(int) FirmaVisualUsuarioService.MAX_FILE_SIZE_BYTES + 1])));
+                        new byte[(int) FirmaVisualUsuarioService.MAX_UPLOAD_SIZE_BYTES + 1])));
 
-        assertTrue(error.getMessage().contains("no puede superar 1 MB"));
+        assertTrue(error.getMessage().contains("no puede superar 4 MB"));
     }
 
     @Test
-    void crearNuevaVersion_rechazaPngNormalizadoSuperiorAUnMegabyte() throws IOException {
-        BufferedImage image = new BufferedImage(1000, 1000, BufferedImage.TYPE_INT_RGB);
-        Random random = new Random(42L);
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                image.setRGB(x, y, random.nextInt(0x1000000));
-            }
-        }
+    void crearNuevaVersion_reducePngNormalizadoHastaElPresupuesto() throws IOException {
+        BufferedImage image = imagenRuido(1000, 1000, 84L);
         byte[] jpeg = imageBytes(image, "jpg");
-        assertTrue(jpeg.length <= FirmaVisualUsuarioService.MAX_FILE_SIZE_BYTES);
+        assertTrue(jpeg.length <= FirmaVisualUsuarioService.MAX_UPLOAD_SIZE_BYTES);
+
+        FirmaVisualUsuarioVersion created = crear(new MockMultipartFile(
+                "firma",
+                "ruido.jpg",
+                "image/jpeg",
+                jpeg));
+
+        assertTrue(created.getTamanoBytes() <= FirmaVisualUsuarioService.TARGET_STORED_SIZE_BYTES);
+        assertTrue(created.getAnchoPx() <= 600);
+        assertTrue(created.getAltoPx() <= 600);
+    }
+
+    @Test
+    void crearNuevaVersion_rechazaImagenConMasDeVeinteMegapixeles() throws IOException {
+        BufferedImage image = new BufferedImage(5000, 4001, BufferedImage.TYPE_BYTE_BINARY);
 
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
                 () -> crear(new MockMultipartFile(
                         "firma",
-                        "ruido.jpg",
-                        "image/jpeg",
-                        jpeg)));
+                        "demasiados-pixeles.png",
+                        "image/png",
+                        imageBytes(image, "png"))));
 
-        assertTrue(error.getMessage().contains("normalizada no puede superar 1 MB"));
+        assertTrue(error.getMessage().contains("20 megapíxeles"));
+    }
+
+    @Test
+    void crearNuevaVersion_rechazaImagenConLadoSuperiorA8192Pixeles() throws IOException {
+        BufferedImage image = new BufferedImage(8193, 20, BufferedImage.TYPE_BYTE_BINARY);
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> crear(new MockMultipartFile(
+                        "firma",
+                        "lado-excesivo.png",
+                        "image/png",
+                        imageBytes(image, "png"))));
+
+        assertTrue(error.getMessage().contains("8192 px por lado"));
+    }
+
+    @Test
+    void crearNuevaVersion_conservaTransparenciaPng() throws IOException {
+        BufferedImage image = new BufferedImage(2400, 800, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setColor(Color.BLACK);
+            graphics.drawLine(10, 780, 2390, 10);
+        } finally {
+            graphics.dispose();
+        }
+
+        FirmaVisualUsuarioVersion created = crear(new MockMultipartFile(
+                "firma",
+                "transparente.png",
+                "image/png",
+                imageBytes(image, "png")));
+        BufferedImage stored = ImageIO.read(
+                new java.io.ByteArrayInputStream(created.getContenido()));
+
+        assertTrue(stored.getColorModel().hasAlpha());
+        assertEquals(0, stored.getRGB(0, 0) >>> 24);
+        assertEquals(1200, stored.getWidth());
+        assertEquals(400, stored.getHeight());
     }
 
     @Test
@@ -289,6 +389,17 @@ class FirmaVisualUsuarioServiceTest {
         return image;
     }
 
+    private static BufferedImage imagenRuido(int width, int height, long seed) {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Random random = new Random(seed);
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                image.setRGB(x, y, random.nextInt(0x1000000));
+            }
+        }
+        return image;
+    }
+
     private static byte[] imageBytes(BufferedImage image, String format) throws IOException {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             assertTrue(ImageIO.write(image, format, output));
@@ -300,6 +411,18 @@ class FirmaVisualUsuarioServiceTest {
         byte[] result = new byte[length];
         System.arraycopy(bytes, 0, result, 0, length);
         return result;
+    }
+
+    private static boolean tienePixelesDistintos(BufferedImage image) {
+        int reference = image.getRGB(0, 0);
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if (image.getRGB(x, y) != reference) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static String sha256(byte[] bytes) {

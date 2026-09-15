@@ -29,7 +29,8 @@ public final class ControlDTOs {
     public record PlanWriteRequest(
             @NotBlank @Size(max = 60) String codigo,
             @NotBlank @Size(max = 160) String nombre,
-            @NotBlank @Size(max = 120) String proposito,
+            // Compatibilidad temporal de despliegue; el servicio ignora este valor.
+            @Size(max = 120) String proposito,
             @Size(max = 500) String motivoCambio,
             @NotEmpty List<@Valid AplicabilidadWriteRequest> aplicabilidades,
             @NotEmpty List<@Valid CaracteristicaWriteRequest> caracteristicas) {}
@@ -42,8 +43,10 @@ public final class ControlDTOs {
             Integer areaOperativaId,
             Integer procesoId,
             @Size(max = 255) String frontendNodeId,
-            @NotNull MomentoControl momento,
-            @NotNull PuntoExigenciaControl puntoExigencia,
+            // Campos legados opcionales; la política nueva se infiere en el servidor.
+            MomentoControl momento,
+            PuntoExigenciaControl puntoExigencia,
+            Boolean bloqueante,
             List<String> productosExcluidosIds) {}
 
     public record CaracteristicaWriteRequest(
