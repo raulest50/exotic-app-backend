@@ -97,7 +97,7 @@ public class ProcesoControlResource {
     public List<LoteControlResponse> lotes(
             Authentication auth, @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "20") int size) {
-        accessGuard.requireAnyTabAccessWithSuperMasterBypass(auth, ModuloSistema.PRODUCCION,
+        accessGuard.requireAnyTabAccess(auth, ModuloSistema.PRODUCCION,
                 Map.of(TAB_REGISTRO, 1, TAB_PLANES, 3),
                 "Se requiere acceso a registro o administracion de planes para buscar lotes.");
         return workflowService.buscarLotes(search, size);
@@ -190,9 +190,7 @@ public class ProcesoControlResource {
             Authentication auth, @PathVariable Long id,
             @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
             @Valid @RequestBody DesviacionResolveRequest request) {
-        User actor = accessGuard.requireTabAccessWithoutMasterBypass(
-                auth, ModuloSistema.PRODUCCION, TAB_DESVIACIONES, 2,
-                "Se requiere nivel 2 explicito para disponer una desviacion de proceso.");
+        User actor = requireExact(auth, TAB_DESVIACIONES, 2);
         return idempotencyService.ejecutar(
                 actor, "RESOLUCION_DESVIACION_PROCESO", "desviacion-control/" + id,
                 idempotencyKey, request, DesviacionResponse.class,
@@ -200,14 +198,14 @@ public class ProcesoControlResource {
     }
 
     private User requirePlan(Authentication auth, int nivel) {
-        return accessGuard.requireTabAccessWithSuperMasterBypass(
+        return accessGuard.requireTabAccess(
                 auth, ModuloSistema.PRODUCCION, TAB_PLANES, nivel,
                 "No tiene el nivel requerido para administrar planes de proceso.");
     }
 
     private User requireExact(Authentication auth, String tab, int nivel) {
-        return accessGuard.requireTabAccessWithoutMasterBypass(
+        return accessGuard.requireTabAccess(
                 auth, ModuloSistema.PRODUCCION, tab, nivel,
-                "No tiene el nivel explicito requerido para operar controles de proceso.");
+                "No tiene el nivel requerido para operar controles de proceso.");
     }
 }
