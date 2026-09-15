@@ -31,4 +31,23 @@ public class InformeProduccionResource {
             return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
         }
     }
+
+    @GetMapping("/desviaciones")
+    public ResponseEntity<?> desviaciones(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size) {
+        try {
+            var rango = InformeGlobalFechaResolver.resolve(fecha, fechaDesde, fechaHasta);
+            return ResponseEntity.ok(service.obtenerDesviaciones(
+                    rango.fechaDesde(),
+                    rango.fechaHasta(),
+                    page,
+                    size));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
+    }
 }

@@ -1,6 +1,7 @@
 package exotic.app.planta.service.bi;
 
 import exotic.app.planta.model.bi.dto.InformeGlobalProduccionDTO;
+import exotic.app.planta.model.bi.dto.PaginaDesviacionesProduccionDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Producto;
@@ -40,6 +41,8 @@ import java.util.Set;
 @Transactional(readOnly = true)
 @Slf4j
 public class InformeProduccionService {
+    private static final Set<Integer> ALLOWED_DEVIATION_PAGE_SIZES = Set.of(5, 10, 20);
+
     private final TransaccionAlmacenRepo movementRepo;
     private final MasterProductionScheduleSemanalRepo mpsRepo;
     private final MpsSemanalDiaRepo mpsDayRepo;
@@ -51,20 +54,13 @@ public class InformeProduccionService {
     public InformeGlobalProduccionDTO obtenerReporte(LocalDate startDate, LocalDate endDate) {
         validateDates(startDate, endDate);
         int rangeDays = Math.toIntExact(ChronoUnit.DAYS.between(startDate, endDate) + 1);
-
-        List<Movimiento> productionMovements = findFinishedProductReceipts(
-                startDate,
-                endDate);
+        ProductionData productionData = loadProductionData(startDate, endDate);
+        List<Movimiento> productionMovements = productionData.movements();
         double previousProduction = totalProduced(
                 startDate.minusDays(rangeDays),
                 startDate.minusDays(1));
-
-        Map<String, ProductionReference> references = new LinkedHashMap<>();
-        Set<Integer> mpsIds = loadPlannedProduction(
-                startDate,
-                endDate,
-                references);
-        addActualProduction(productionMovements, references);
+        Map<String, ProductionReference> references = productionData.references();
+        Set<Integer> mpsIds = productionData.mpsIds();
 
         Map<Integer, Categoria> categories = loadCategories(references.values());
         Map<String, CategorySummary> categorySummaries = summarizeByCategory(
@@ -99,6 +95,75 @@ public class InformeProduccionService {
                 .analiticaAreas(areaAnalytics)
                 .notas(buildNotes(mpsIds, summary))
                 .build();
+    }
+
+    public PaginaDesviacionesProduccionDTO obtenerDesviaciones(
+            LocalDate startDate,
+            LocalDate endDate,
+            int requestedPage,
+            int size
+    ) {
+        validateDates(startDate, endDate);
+        validateDeviationPagination(requestedPage, size);
+
+        List<ProductionDeviation> deviations = loadProductionData(startDate, endDate)
+                .references()
+                .values()
+                .stream()
+                .map(InformeProduccionService::toProductionDeviation)
+                .filter(Objects::nonNull)
+                .sorted(InformeProduccionService::compareProductionDeviations)
+                .toList();
+
+        int sinProduccion = 0;
+        int deficit = 0;
+        int noPlaneada = 0;
+        int sobreproduccion = 0;
+        for (ProductionDeviation deviation : deviations) {
+            switch (deviation.kind()) {
+                case SIN_PRODUCCION -> sinProduccion++;
+                case DEFICIT -> deficit++;
+                case NO_PLANEADA -> noPlaneada++;
+                case SOBREPRODUCCION -> sobreproduccion++;
+            }
+        }
+
+        int totalElements = deviations.size();
+        int totalPages = totalElements == 0
+                ? 0
+                : (int) ((totalElements + (long) size - 1) / size);
+        int page = totalPages == 0
+                ? 0
+                : Math.min(requestedPage, totalPages - 1);
+        int from = (int) Math.min((long) page * size, totalElements);
+        int to = Math.min(from + size, totalElements);
+
+        return new PaginaDesviacionesProduccionDTO(
+                deviations.subList(from, to).stream()
+                        .map(ProductionDeviation::toDto)
+                        .toList(),
+                new PaginaDesviacionesProduccionDTO.CountsDTO(
+                        sinProduccion,
+                        deficit,
+                        noPlaneada,
+                        sobreproduccion),
+                page,
+                size,
+                totalElements,
+                totalPages,
+                page == 0,
+                totalPages == 0 || page >= totalPages - 1);
+    }
+
+    private ProductionData loadProductionData(LocalDate startDate, LocalDate endDate) {
+        List<Movimiento> productionMovements = findFinishedProductReceipts(startDate, endDate);
+        Map<String, ProductionReference> references = new LinkedHashMap<>();
+        Set<Integer> mpsIds = loadPlannedProduction(
+                startDate,
+                endDate,
+                references);
+        addActualProduction(productionMovements, references);
+        return new ProductionData(productionMovements, references, mpsIds);
     }
 
     private InformeGlobalProduccionDTO.AnaliticaAreasDTO buildAreaAnalyticsSafely(
@@ -403,6 +468,65 @@ public class InformeProduccionService {
         }
     }
 
+    private void validateDeviationPagination(int page, int size) {
+        if (page < 0) {
+            throw new IllegalArgumentException("La pagina no puede ser negativa.");
+        }
+        if (!ALLOWED_DEVIATION_PAGE_SIZES.contains(size)) {
+            throw new IllegalArgumentException(
+                    "El tamaño de pagina debe ser 5, 10 o 20.");
+        }
+    }
+
+    private static ProductionDeviation toProductionDeviation(ProductionReference reference) {
+        double planned = reference.plannedQuantity();
+        double produced = reference.producedQuantity();
+        double difference = produced - planned;
+        PaginaDesviacionesProduccionDTO.TipoDesviacion kind;
+
+        if (planned > 0 && produced == 0) {
+            kind = PaginaDesviacionesProduccionDTO.TipoDesviacion.SIN_PRODUCCION;
+        } else if (planned <= 0 && produced > 0) {
+            kind = PaginaDesviacionesProduccionDTO.TipoDesviacion.NO_PLANEADA;
+        } else if (planned > 0 && produced < planned) {
+            kind = PaginaDesviacionesProduccionDTO.TipoDesviacion.DEFICIT;
+        } else if (planned > 0 && produced > planned) {
+            kind = PaginaDesviacionesProduccionDTO.TipoDesviacion.SOBREPRODUCCION;
+        } else {
+            return null;
+        }
+
+        return new ProductionDeviation(
+                reference,
+                kind,
+                difference,
+                percentage(difference, planned));
+    }
+
+    private static int compareProductionDeviations(
+            ProductionDeviation left,
+            ProductionDeviation right
+    ) {
+        int impactDifference = Double.compare(
+                Math.abs(right.difference()),
+                Math.abs(left.difference()));
+        if (impactDifference != 0) return impactDifference;
+
+        int categoryDifference = String.CASE_INSENSITIVE_ORDER.compare(
+                left.reference().categoryDisplayName(),
+                right.reference().categoryDisplayName());
+        if (categoryDifference != 0) return categoryDifference;
+
+        int nameDifference = String.CASE_INSENSITIVE_ORDER.compare(
+                left.reference().productDisplayName(),
+                right.reference().productDisplayName());
+        if (nameDifference != 0) return nameDifference;
+
+        return String.CASE_INSENSITIVE_ORDER.compare(
+                Objects.toString(left.reference().productId, ""),
+                Objects.toString(right.reference().productId, ""));
+    }
+
     private static Double percentage(double numerator, double denominator) {
         return denominator <= 0 ? null : numerator * 100d / denominator;
     }
@@ -423,6 +547,28 @@ public class InformeProduccionService {
     }
 
     private record DateTimeRange(LocalDateTime start, LocalDateTime end) {
+    }
+
+    private record ProductionData(
+            List<Movimiento> movements,
+            Map<String, ProductionReference> references,
+            Set<Integer> mpsIds
+    ) {
+    }
+
+    private record ProductionDeviation(
+            ProductionReference reference,
+            PaginaDesviacionesProduccionDTO.TipoDesviacion kind,
+            double difference,
+            Double variationPct
+    ) {
+        PaginaDesviacionesProduccionDTO.DesviacionDTO toDto() {
+            return new PaginaDesviacionesProduccionDTO.DesviacionDTO(
+                    reference.toDto(),
+                    kind,
+                    difference,
+                    variationPct);
+        }
     }
 
     private record FinishedProductData(
