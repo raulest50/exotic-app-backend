@@ -41,6 +41,7 @@ public final class ControlDTOs {
             @NotNull PuntoAplicacionControl puntoAplicacion,
             Integer areaOperativaId,
             Integer procesoId,
+            @Size(max = 255) String frontendNodeId,
             @NotNull MomentoControl momento,
             @NotNull PuntoExigenciaControl puntoExigencia,
             List<String> productosExcluidosIds) {}
@@ -64,6 +65,7 @@ public final class ControlDTOs {
             TipoOrdenControl tipoOrden, PuntoAplicacionControl puntoAplicacion,
             Integer areaOperativaId, String areaOperativaNombre,
             Integer procesoId, String procesoNombre,
+            String frontendNodeId,
             MomentoControl momento, PuntoExigenciaControl puntoExigencia,
             List<String> productosExcluidosIds, boolean legadoGlobal) {}
 

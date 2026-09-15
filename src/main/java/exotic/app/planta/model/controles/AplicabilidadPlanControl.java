@@ -33,6 +33,13 @@ public class AplicabilidadPlanControl {
     private AreaOperativa areaOperativa;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "proceso_id")
     private ProcesoProduccion proceso;
+    /**
+     * Identificador estable del nodo gráfico de origen. Es opcional para
+     * conservar la semántica amplia de los planes creados antes del selector
+     * gráfico, que aplican a todas las coincidencias de área y proceso.
+     */
+    @Column(name = "frontend_node_id", length = 255)
+    private String frontendNodeId;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30)
     private MomentoControl momento;
     @Enumerated(EnumType.STRING) @Column(name = "punto_exigencia", nullable = false, length = 30)

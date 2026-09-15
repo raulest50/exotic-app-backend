@@ -677,6 +677,7 @@ public class ControlWorkflowService {
     }
 
     private boolean coincideEtapa(AplicabilidadPlanControl regla, BatchRecordEtapa etapa) {
+        if (!coincideNodoConfigurado(regla, etapa)) return false;
         if (regla.getAreaOperativa() != null
                 && regla.getAreaOperativa().getAreaId() != etapa.getAreaOperativa().getAreaId()) return false;
         if (regla.getProceso() == null) return true;
@@ -688,6 +689,19 @@ public class ControlWorkflowService {
         }
         return etapa.getOrdenFabricacionOperacion() != null
                 && Objects.equals(etapa.getOrdenFabricacionOperacion().getProcesoProduccionId(), esperado);
+    }
+
+    static boolean coincideNodoConfigurado(
+            AplicabilidadPlanControl regla, BatchRecordEtapa etapa) {
+        if (regla.getFrontendNodeId() == null) return true;
+        String frontendNodeId = null;
+        if (etapa.getSeguimientoOrdenArea() != null
+                && etapa.getSeguimientoOrdenArea().getRutaProcesoNode() != null) {
+            frontendNodeId = etapa.getSeguimientoOrdenArea().getRutaProcesoNode().getFrontendId();
+        } else if (etapa.getOrdenFabricacionOperacion() != null) {
+            frontendNodeId = etapa.getOrdenFabricacionOperacion().getFrontendNodeId();
+        }
+        return Objects.equals(regla.getFrontendNodeId(), frontendNodeId);
     }
 
     private Categoria resolverCategoria(BatchRecord record) {
@@ -815,6 +829,9 @@ public class ControlWorkflowService {
                     .filter(s -> s.getRutaProcesoNode() != null
                             && s.getRutaProcesoNode().getProcesoProduccion() != null
                             && s.getRutaProcesoNode().getProcesoProduccion().getProcesoId() == procesoId)
+                    .filter(s -> regla.getFrontendNodeId() == null
+                            || Objects.equals(regla.getFrontendNodeId(),
+                            s.getRutaProcesoNode().getFrontendId()))
                     .toList();
             return coincidencias.stream().map(seguimiento -> {
                 var nodo = seguimiento.getRutaProcesoNode();
@@ -832,6 +849,8 @@ public class ControlWorkflowService {
                 .filter(o -> o.getAreaOperativa() != null
                         && o.getAreaOperativa().getAreaId() == areaId)
                 .filter(o -> Objects.equals(o.getProcesoProduccionId(), procesoId))
+                .filter(o -> regla.getFrontendNodeId() == null
+                        || Objects.equals(regla.getFrontendNodeId(), o.getFrontendNodeId()))
                 .toList();
         return coincidencias.stream().map(operacion -> new ContextoOperacion(
                 regla.getPuntoAplicacion() + ":OF:" + operacion.getId(),

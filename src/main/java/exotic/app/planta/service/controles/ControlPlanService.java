@@ -217,8 +217,9 @@ public class ControlPlanService {
             throw new IllegalArgumentException("Una salida de operacion requiere area y proceso maestro.");
         }
         if (request.puntoAplicacion() == PuntoAplicacionControl.LOTE_FINAL
-                && (request.areaOperativaId() != null || request.procesoId() != null)) {
-            throw new IllegalArgumentException("Un control de lote final no referencia area ni operacion.");
+                && (request.areaOperativaId() != null || request.procesoId() != null
+                || limpiarNullable(request.frontendNodeId()) != null)) {
+            throw new IllegalArgumentException("Un control de lote final no referencia area, operacion ni nodo.");
         }
         AplicabilidadPlanControl entity = new AplicabilidadPlanControl();
         entity.setVersion(version);
@@ -244,6 +245,7 @@ public class ControlPlanService {
             entity.setProceso(procesoRepo.findById(request.procesoId())
                     .orElseThrow(() -> new NoSuchElementException("Proceso no encontrado.")));
         }
+        entity.setFrontendNodeId(limpiarNullable(request.frontendNodeId()));
         entity.setMomento(request.momento());
         entity.setPuntoExigencia(request.puntoExigencia());
         entity.setLegadoGlobal(false);
@@ -386,6 +388,11 @@ public class ControlPlanService {
                 || !Objects.equals(a.getProceso().getProcesoId(), b.getProceso().getProcesoId()))) {
             return false;
         }
+        if (a.getPuntoAplicacion() == PuntoAplicacionControl.SALIDA_OPERACION
+                && a.getFrontendNodeId() != null && b.getFrontendNodeId() != null
+                && !Objects.equals(a.getFrontendNodeId(), b.getFrontendNodeId())) {
+            return false;
+        }
         if (a.getTipoOrden() != TipoOrdenControl.AMBAS
                 && b.getTipoOrden() != TipoOrdenControl.AMBAS
                 && a.getTipoOrden() != b.getTipoOrden()) return false;
@@ -460,6 +467,7 @@ public class ControlPlanService {
                 item.getAreaOperativa() == null ? null : item.getAreaOperativa().getNombre(),
                 item.getProceso() == null ? null : item.getProceso().getProcesoId(),
                 item.getProceso() == null ? null : item.getProceso().getNombre(),
+                item.getFrontendNodeId(),
                 item.getMomento(), item.getPuntoExigencia(),
                 item.getProductosExcluidos().stream().map(Producto::getProductoId).sorted().toList(),
                 item.isLegadoGlobal());
