@@ -4,16 +4,13 @@ import exotic.app.planta.model.master.configs.MasterDirective;
 import exotic.app.planta.model.master.configs.MasterDirectiveKeys;
 import exotic.app.planta.model.master.configs.dto.DTO_All_MasterDirectives;
 import exotic.app.planta.model.master.configs.dto.DTO_MasterD_Update;
-import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
 import exotic.app.planta.repo.master.configs.MasterDirectiveRepo;
-import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,11 +22,7 @@ import java.util.Optional;
 @Slf4j
 public class MasterDirectiveService {
 
-    private static final EnumSet<EstadoBatchRecord> ESTADOS_BATCH_RECORD_TERMINALES =
-            EnumSet.of(EstadoBatchRecord.CERRADO, EstadoBatchRecord.ANULADO);
-
     private final MasterDirectiveRepo masterDirectiveRepo;
-    private final BatchRecordRepo batchRecordRepo;
 
     /**
      * Obtiene todas las directivas maestras
@@ -243,8 +236,7 @@ public class MasterDirectiveService {
         }
 
         validateValorByTipo(existingDirective, newDirective.getValor());
-        validarDesactivacionBatchRecord(existingDirective, newDirective.getValor());
-        
+
         // Actualizar solo los campos permitidos
         existingDirective.setValor(normalizeValorByTipo(existingDirective, newDirective.getValor()));
         existingDirective.setResumen(newDirective.getResumen());
@@ -252,31 +244,6 @@ public class MasterDirectiveService {
         
         // Guardar y retornar la directiva actualizada
         return masterDirectiveRepo.save(existingDirective);
-    }
-
-    private void validarDesactivacionBatchRecord(
-            MasterDirective existingDirective,
-            String nuevoValor
-    ) {
-        if (!MasterDirectiveKeys.BATCH_RECORD_WORKFLOW_ENABLED.equals(
-                existingDirective.getNombre())) {
-            return;
-        }
-
-        boolean valorActual = parseBooleanOrFallback(
-                existingDirective.getValor(),
-                existingDirective.getNombre(),
-                MasterDirectiveKeys.DEFAULT_BATCH_RECORD_WORKFLOW_ENABLED);
-        boolean valorNuevo = parseBoolean(nuevoValor, existingDirective.getNombre());
-        if (!valorActual || valorNuevo) {
-            return;
-        }
-
-        long expedientesActivos = batchRecordRepo.countByEstadoNotIn(
-                ESTADOS_BATCH_RECORD_TERMINALES);
-        if (expedientesActivos > 0) {
-            throw new BatchRecordWorkflowTransitionException(expedientesActivos);
-        }
     }
 
     private void validateValorByTipo(MasterDirective directive, String valor) {

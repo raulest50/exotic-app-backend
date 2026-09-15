@@ -54,7 +54,7 @@ public class OrdenFabricacionService {
     private final UserRepository userRepository;
     private final BatchRecordRepo batchRecordRepo;
     private final VencimientoLoteService vencimientoLoteService;
-    private final BatchRecordService batchRecordService;
+    private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
     private final MasterDirectiveService masterDirectiveService;
     private final OrdenFabricacionOperacionService operacionService;
     private final OrdenFabricacionOperacionEventoRepo operacionEventoRepo;
@@ -152,6 +152,10 @@ public class OrdenFabricacionService {
     ) {
         boolean batchRecordWorkflowEnabled =
                 masterDirectiveService.lockBatchRecordWorkflowForNewOrder();
+        if (!batchRecordWorkflowEnabled) {
+            throw new IllegalStateException(
+                    "El flujo de ordenes de fabricacion esta deshabilitado por directiva maestra.");
+        }
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         if (cantidad == null || cantidad.signum() <= 0) {
             throw new IllegalArgumentException(
@@ -198,18 +202,13 @@ public class OrdenFabricacionService {
         lote.setBatchNumber(loteNumero);
         lote.setProducto(semi);
         lote.setOrdenFabricacion(orden);
-        lote.setEstadoCalidad(batchRecordWorkflowEnabled
-                ? EstadoCalidadLote.CUARENTENA
-                : EstadoCalidadLote.SIN_CLASIFICAR);
+        lote.setEstadoCalidad(EstadoCalidadLote.SIN_CLASIFICAR);
         vencimientoLoteService.copiarPoliticaVigente(semi, lote);
         loteRepo.saveAndFlush(lote);
 
-        BatchRecord record = batchRecordWorkflowEnabled
-                ? batchRecordService.crearParaOrdenFabricacion(orden, lote, actor)
-                : null;
-        operacionService.inicializar(orden, record);
-        if (record != null) batchRecordService.materializarRequisitos(orden);
-        return toResponse(orden, lote, record);
+        operacionService.inicializar(orden, null);
+        batchRecordProjectionQueueService.solicitarCreacion(orden, lote, actor);
+        return toResponse(orden, lote, null);
     }
 
     @Transactional(readOnly = true)
@@ -285,7 +284,7 @@ public class OrdenFabricacionService {
         }
         orden.setEstado(EstadoOrdenFabricacion.CANCELADA);
         ordenRepo.save(orden);
-        batchRecordService.anularPorCancelacion(orden, actor);
+        batchRecordProjectionQueueService.solicitarAnulacion(orden, actor);
         return toResponse(orden);
     }
 
@@ -319,7 +318,7 @@ public class OrdenFabricacionService {
             if (orden.getEstado() == EstadoOrdenFabricacion.CANCELADA) continue;
             orden.setEstado(EstadoOrdenFabricacion.CANCELADA);
             ordenRepo.save(orden);
-            batchRecordService.anularPorCancelacion(orden, actor);
+            batchRecordProjectionQueueService.solicitarAnulacion(orden, actor);
         }
     }
 

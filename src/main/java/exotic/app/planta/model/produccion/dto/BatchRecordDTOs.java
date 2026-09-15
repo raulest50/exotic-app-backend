@@ -29,6 +29,11 @@ public final class BatchRecordDTOs {
         private Long id;
         private String codigo;
         private EstadoBatchRecord estado;
+        private EstadoSincronizacionBatchRecord estadoSincronizacion;
+        private LocalDateTime sincronizadoEn;
+        @Builder.Default
+        private List<String> advertenciasDocumentales = new ArrayList<>();
+        private String ultimoErrorDocumental;
         private int revisionDocumental;
         private Integer ordenProduccionId;
         private Long ordenFabricacionId;

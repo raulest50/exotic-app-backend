@@ -31,7 +31,7 @@ import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
 import exotic.app.planta.service.produccion.MaterialRequirementSnapshotService;
-import exotic.app.planta.service.produccion.BatchRecordService;
+import exotic.app.planta.service.produccion.BatchRecordProjectionQueueService;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
@@ -75,7 +75,7 @@ public class DispensacionV2WorkflowService {
     private final LoteRepo loteRepo;
     private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
     private final MasterDirectiveService masterDirectiveService;
-    private final BatchRecordService batchRecordService;
+    private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
 
     @Transactional(readOnly = true)
     public List<DispensacionV2OrdenFabricacionDTOs.Option> buscarOrdenesFabricacion(
@@ -133,10 +133,8 @@ public class DispensacionV2WorkflowService {
         AreaOperativa area = requireArea(request == null ? null : request.getAreaId());
         OrdenFabricacion orden = requireOrdenFabricacion(ordenFabricacionId);
         validateOrdenFabricacion(area, orden);
-        BatchRecord record = requireBatchRecordFabricacion(orden);
         List<MaterialRequirementSnapshotService.RequirementView> requirements =
-                materialRequirementSnapshotService.leer(
-                        record.getRequerimientosMaterialesJson());
+                requerimientosOrdenFabricacion(orden);
         Set<String> productosPermitidos = requirements.stream()
                 .map(MaterialRequirementSnapshotService.RequirementView::productoId)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
@@ -175,7 +173,8 @@ public class DispensacionV2WorkflowService {
                 .createDispensacionOrdenFabricacion(
                         ordenFabricacionId, area.getAreaId(), items,
                         observaciones, currentUser);
-        batchRecordService.sincronizarConsumosOrdenFabricacion(ordenFabricacionId);
+        ordenFabricacionRepo.findById(ordenFabricacionId)
+                .ifPresent(batchRecordProjectionQueueService::solicitarActualizacion);
 
         Map<String, Double> historico = calcularHistoricoPorProducto(
                 TransaccionAlmacen.TipoEntidadCausante.OD_OF,
@@ -208,9 +207,16 @@ public class DispensacionV2WorkflowService {
         AreaOperativa area = requireArea(areaId);
         OrdenFabricacion orden = requireOrdenFabricacion(ordenFabricacionId);
         validateOrdenFabricacion(area, orden);
-        BatchRecord record = requireBatchRecordFabricacion(orden);
-        Map<String, MaterialAccumulator> requirements = buildMaterialesDesdeSnapshot(
-                record.getRequerimientosMaterialesJson());
+        Map<String, MaterialAccumulator> requirements = new LinkedHashMap<>();
+        requerimientosOrdenFabricacion(orden).forEach(requirement -> addMaterial(
+                requirements,
+                requirement.productoId(),
+                requirement.productoNombre(),
+                normalizeUnidad(requirement.unidadMedida(), "U"),
+                requirement.tipoProducto(),
+                requirement.inventareable(),
+                requirement.consumoDirecto(),
+                requirement.cantidad().doubleValue()));
         Map<String, Double> historico = calcularHistoricoPorProducto(
                 TransaccionAlmacen.TipoEntidadCausante.OD_OF,
                 Math.toIntExact(ordenFabricacionId));
@@ -275,12 +281,24 @@ public class DispensacionV2WorkflowService {
         }
     }
 
-    private BatchRecord requireBatchRecordFabricacion(OrdenFabricacion orden) {
-        return batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
-                        orden.getOrdenFabricacionId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "La OF no tiene un expediente con materiales congelados."));
+    private List<MaterialRequirementSnapshotService.RequirementView>
+    requerimientosOrdenFabricacion(OrdenFabricacion orden) {
+        BatchRecord record = batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
+                orden.getOrdenFabricacionId()).orElse(null);
+        if (record != null && record.getRequerimientosMaterialesJson() != null) {
+            try {
+                return materialRequirementSnapshotService.leer(
+                        record.getRequerimientosMaterialesJson());
+            } catch (RuntimeException error) {
+                log.warn(
+                        "[DISP_V2][OF_SNAPSHOT_FALLBACK] ordenFabricacionId={} reason={}",
+                        orden.getOrdenFabricacionId(), error.getMessage());
+            }
+        }
+        String snapshotOperativo = materialRequirementSnapshotService.construirJson(
+                orden.getSemiTerminado(), orden.getManufacturingVersion(),
+                orden.getCantidadPlanificada());
+        return materialRequirementSnapshotService.leer(snapshotOperativo);
     }
 
     private DispensacionV2OrdenFabricacionDTOs.Option toOrdenFabricacionOption(
@@ -428,10 +446,7 @@ public class DispensacionV2WorkflowService {
                     draft.dispensacionDTO(),
                     currentUser.getId()
             );
-            if (masterDirectiveService.isBatchRecordWorkflowEnabled()) {
-                batchRecordService.sincronizarConsumosOrdenProduccion(
-                        draft.orden().getOrdenId());
-            }
+            batchRecordProjectionQueueService.solicitarActualizacion(draft.orden());
             log.info(
                     "[DISP_V2][FINALIZACION_PERSIST_COMPLETE] ordenProduccionId={} transaccionId={}",
                     draft.orden().getOrdenId(),
@@ -785,7 +800,13 @@ public class DispensacionV2WorkflowService {
             BatchRecord record = batchRecordRepo.findByOrdenProduccion_OrdenId(
                     orden.getOrdenId()).orElse(null);
             if (record != null && record.getRequerimientosMaterialesJson() != null) {
-                return buildMaterialesDesdeSnapshot(record.getRequerimientosMaterialesJson());
+                try {
+                    return buildMaterialesDesdeSnapshot(record.getRequerimientosMaterialesJson());
+                } catch (RuntimeException error) {
+                    log.warn(
+                            "[DISP_V2][OP_SNAPSHOT_FALLBACK] ordenProduccionId={} reason={}",
+                            orden.getOrdenId(), error.getMessage());
+                }
             }
         }
         return buildMaterialesRequeridos(terminado, orden.getCantidadProducir());

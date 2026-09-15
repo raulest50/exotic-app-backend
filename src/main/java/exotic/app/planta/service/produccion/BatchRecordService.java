@@ -25,8 +25,11 @@ import exotic.app.planta.repo.calidad.ControlProcesoEjecucionRepo;
 import exotic.app.planta.repo.calidad.ControlProcesoPlantillaRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
+import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.*;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionEventoRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.repo.usuarios.FirmaVisualUsuarioVersionRepo;
 import exotic.app.planta.service.controles.ControlWorkflowService;
 import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
@@ -71,6 +74,9 @@ public class BatchRecordService {
     private final BatchRecordConsumoRepo consumoRepo;
     private final BatchRecordDesviacionRepo desviacionRepo;
     private final SeguimientoOrdenAreaRepo seguimientoRepo;
+    private final SeguimientoOrdenAreaEventoRepo seguimientoEventoRepo;
+    private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
+    private final OrdenFabricacionOperacionEventoRepo ordenFabricacionEventoRepo;
     private final ControlProcesoPlantillaRepo plantillaRepo;
     private final ControlProcesoEjecucionRepo ejecucionRepo;
     private final FirmaVisualUsuarioVersionRepo firmaVisualRepo;
@@ -89,9 +95,9 @@ public class BatchRecordService {
     ) {
         validarCreacionBase(orden != null ? orden.getProducto() : null,
                 orden != null ? orden.getManufacturingVersion() : null, lote, creador);
-        if (batchRecordRepo.findByOrdenProduccion_OrdenId(orden.getOrdenId()).isPresent()) {
-            throw new IllegalStateException("La orden de producción ya tiene expediente digital.");
-        }
+        BatchRecord existente = batchRecordRepo.findByOrdenProduccion_OrdenId(
+                orden.getOrdenId()).orElse(null);
+        if (existente != null) return existente;
 
         BatchRecord record = new BatchRecord();
         record.setCodigo("BR-OP-" + orden.getOrdenId());
@@ -103,20 +109,8 @@ public class BatchRecordService {
         record.setUnidadMedida(unidadObligatoria(orden.getProducto().getTipoUnidades()));
         record.setCreadoPor(creador);
         record.setEstado(EstadoBatchRecord.BORRADOR);
-        String requerimientosJson = materialRequirementSnapshotService.construirJson(
-                orden.getProducto(), orden.getManufacturingVersion(),
-                BigDecimal.valueOf(orden.getCantidadProducir()));
-        record.setRequerimientosMaterialesJson(requerimientosJson);
-        if (!materialRequirementSnapshotService.requiereRegistroDispensacion(
-                requerimientosJson)) {
-            orden.setEstadoDispensacionMateriales(
-                    EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION);
-        }
-        batchRecordRepo.saveAndFlush(record);
-
-        crearEtapasDesdeSeguimiento(record, orden);
-        controlWorkflowService.materializarRequisitos(record);
-        return record;
+        record.setEstadoSincronizacion(EstadoSincronizacionBatchRecord.PENDIENTE);
+        return batchRecordRepo.saveAndFlush(record);
     }
 
     public BatchRecord crearParaOrdenFabricacion(
@@ -126,10 +120,9 @@ public class BatchRecordService {
     ) {
         validarCreacionBase(orden != null ? orden.getSemiTerminado() : null,
                 orden != null ? orden.getManufacturingVersion() : null, lote, creador);
-        if (batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
-                orden.getOrdenFabricacionId()).isPresent()) {
-            throw new IllegalStateException("La orden de fabricación ya tiene expediente digital.");
-        }
+        BatchRecord existente = batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
+                orden.getOrdenFabricacionId()).orElse(null);
+        if (existente != null) return existente;
 
         BatchRecord record = new BatchRecord();
         record.setCodigo("BR-OF-" + orden.getOrdenFabricacionId());
@@ -141,17 +134,8 @@ public class BatchRecordService {
         record.setUnidadMedida(unidadObligatoria(orden.getUnidadMedida()));
         record.setCreadoPor(creador);
         record.setEstado(EstadoBatchRecord.BORRADOR);
-        String requerimientosJson = materialRequirementSnapshotService.construirJson(
-                orden.getSemiTerminado(), orden.getManufacturingVersion(),
-                orden.getCantidadPlanificada());
-        record.setRequerimientosMaterialesJson(requerimientosJson);
-        if (!materialRequirementSnapshotService.requiereRegistroDispensacion(
-                requerimientosJson)) {
-            orden.setEstadoDispensacionMateriales(
-                    EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION);
-        }
-        batchRecordRepo.saveAndFlush(record);
-        return record;
+        record.setEstadoSincronizacion(EstadoSincronizacionBatchRecord.PENDIENTE);
+        return batchRecordRepo.saveAndFlush(record);
     }
 
     /** Materializa requisitos una vez que las etapas de una OF ya fueron creadas. */
@@ -166,6 +150,141 @@ public class BatchRecordService {
         controlWorkflowService.materializarRequisitos(record);
     }
 
+    /** Completa únicamente el snapshot documental de materiales. */
+    public void sincronizarMaterialesDocumentales(Long batchRecordId) {
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        String requerimientosJson = materialRequirementSnapshotService.construirJson(
+                record.getProductoResultado(), record.getManufacturingVersion(),
+                record.getCantidadPlanificada());
+        record.setRequerimientosMaterialesJson(requerimientosJson);
+        batchRecordRepo.saveAndFlush(record);
+    }
+
+    /** Reconstruye las etapas y eventos desde las fuentes operativas persistidas. */
+    public void sincronizarEstructuraDocumental(Long batchRecordId) {
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        EstadoBatchRecord estadoInicial = record.getEstado();
+        if (record.getOrdenProduccion() != null) {
+            crearEtapasDesdeSeguimiento(record, record.getOrdenProduccion());
+            List<Long> seguimientoIds = seguimientoRepo
+                    .findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(
+                            record.getOrdenProduccion().getOrdenId())
+                    .stream().map(SeguimientoOrdenArea::getId).toList();
+            if (!seguimientoIds.isEmpty()) {
+                seguimientoEventoRepo
+                        .findBySeguimientoOrdenArea_IdInOrderByFechaEventoAscIdAsc(
+                                seguimientoIds)
+                        .forEach(this::sincronizarEventoSeguimiento);
+            }
+        } else if (record.getOrdenFabricacion() != null) {
+            crearEtapasDesdeOperacionesFabricacion(record, record.getOrdenFabricacion());
+            ordenFabricacionOperacionRepo
+                    .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(
+                            record.getOrdenFabricacion().getOrdenFabricacionId())
+                    .stream()
+                    .flatMap(operacion -> ordenFabricacionEventoRepo
+                            .findByOperacion_IdOrderByFechaEventoAscIdAsc(operacion.getId())
+                            .stream())
+                    .sorted(Comparator
+                            .comparing(OrdenFabricacionOperacionEvento::getFechaEvento)
+                            .thenComparing(OrdenFabricacionOperacionEvento::getId))
+                    .forEach(this::sincronizarEventoFabricacion);
+        }
+        if (estadoInicial == EstadoBatchRecord.CERRADO
+                || estadoInicial == EstadoBatchRecord.ANULADO) {
+            record.setEstado(estadoInicial);
+            batchRecordRepo.save(record);
+        }
+    }
+
+    public void sincronizarConsumosDocumentales(Long batchRecordId) {
+        sincronizarConsumos(requireRecordForUpdate(batchRecordId));
+    }
+
+    public void materializarRequisitosDocumentales(Long batchRecordId) {
+        controlWorkflowService.materializarRequisitos(requireRecordForUpdate(batchRecordId));
+    }
+
+    /** Registra el resultado producido sin exigir completitud del expediente. */
+    public void registrarCantidadObtenidaDocumental(
+            Long batchRecordId,
+            BigDecimal cantidadObtenida
+    ) {
+        if (cantidadObtenida == null || cantidadObtenida.signum() <= 0) {
+            throw new IllegalArgumentException("La cantidad obtenida debe ser mayor que cero.");
+        }
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        record.setCantidadObtenida(cantidadObtenida);
+        if (record.getEstado() != EstadoBatchRecord.CERRADO
+                && record.getEstado() != EstadoBatchRecord.ANULADO
+                && record.getEstado() != EstadoBatchRecord.PENDIENTE_REVISION
+                && record.getEstado() != EstadoBatchRecord.APROBADO
+                && record.getEstado() != EstadoBatchRecord.RECHAZADO) {
+            record.setEstado(record.getCicloRevisionActual() == 0
+                    ? EstadoBatchRecord.LISTO_PARA_REVISION
+                    : EstadoBatchRecord.EN_CORRECCION);
+        }
+        batchRecordRepo.saveAndFlush(record);
+    }
+
+    public void limpiarCantidadObtenidaDocumental(Long batchRecordId) {
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        if (record.getEstado() == EstadoBatchRecord.CERRADO
+                || record.getEstado() == EstadoBatchRecord.ANULADO) {
+            return;
+        }
+        record.setCantidadObtenida(null);
+        record.setContenidoSha256(null);
+        if (record.getEstado() == EstadoBatchRecord.LISTO_PARA_REVISION) {
+            record.setEstado(EstadoBatchRecord.EN_EJECUCION);
+        }
+        batchRecordRepo.save(record);
+    }
+
+    public void cerrarDocumentalmente(Long batchRecordId, User actor) {
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        if (record.getEstado() == EstadoBatchRecord.CERRADO
+                || record.getEstado() == EstadoBatchRecord.ANULADO) {
+            return;
+        }
+        if (record.getCantidadObtenida() == null) {
+            throw new IllegalStateException(
+                    "El cierre documental requiere la cantidad obtenida registrada.");
+        }
+        crearRevision(record, TipoRevisionBatchRecord.CIERRE, actor,
+                record.getOrdenFabricacion() == null
+                        ? "Ingreso confirmado en almacén y cierre documental"
+                        : "Ingreso de lote intermedio confirmado y cierre documental");
+        record.setEstado(EstadoBatchRecord.CERRADO);
+        record.setCerradoEn(LocalDateTime.now(applicationClock));
+        batchRecordRepo.saveAndFlush(record);
+    }
+
+    public void anularDocumentalmente(Long batchRecordId, User actor) {
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        if (record.getEstado() == EstadoBatchRecord.ANULADO) return;
+        record.setEstado(EstadoBatchRecord.ANULADO);
+        record.setObservaciones(appendObservacion(
+                record.getObservaciones(),
+                "Anulado por cancelación de la orden. Usuario: " + nombreUsuario(actor)));
+        batchRecordRepo.save(record);
+    }
+
+    public void actualizarEstadoSincronizacion(
+            Long batchRecordId,
+            EstadoSincronizacionBatchRecord estado,
+            Collection<String> advertencias,
+            String ultimoError
+    ) {
+        BatchRecord record = requireRecordForUpdate(batchRecordId);
+        record.setEstadoSincronizacion(estado);
+        record.setSincronizadoEn(LocalDateTime.now(applicationClock));
+        record.setAdvertenciasDocumentales(advertencias == null || advertencias.isEmpty()
+                ? null : String.join("\n", advertencias));
+        record.setUltimoErrorDocumental(normalizarTexto(ultimoError));
+        batchRecordRepo.save(record);
+    }
+
     /** Sincroniza la evidencia operativa propia de una OF. */
     public void sincronizarEventoFabricacion(OrdenFabricacionOperacionEvento evento) {
         if (evento == null || evento.getId() == null || evento.getOperacion() == null
@@ -178,9 +297,6 @@ public class BatchRecordService {
         BatchRecord record = etapa.getBatchRecord();
         EstadoSeguimientoOrdenArea destino = EstadoSeguimientoOrdenArea.fromCode(
                 evento.getEstadoDestino());
-        if (destino == EstadoSeguimientoOrdenArea.COMPLETADO) {
-            validarGateControl(record, etapa, PuntoExigenciaControl.CIERRE_ETAPA);
-        }
         aplicarEstadoEtapaFabricacion(etapa, record, evento, destino);
         etapaRepo.saveAndFlush(etapa);
         batchRecordRepo.save(record);
@@ -391,9 +507,6 @@ public class BatchRecordService {
         BatchRecord record = etapa.getBatchRecord();
         EstadoSeguimientoOrdenArea destino = EstadoSeguimientoOrdenArea.fromCode(
                 evento.getEstadoDestino());
-        if (destino == EstadoSeguimientoOrdenArea.COMPLETADO) {
-            validarGateControl(record, etapa, PuntoExigenciaControl.CIERRE_ETAPA);
-        }
         aplicarEstadoEtapa(etapa, record, evento, destino);
         etapaRepo.saveAndFlush(etapa);
         batchRecordRepo.save(record);
@@ -848,10 +961,8 @@ public class BatchRecordService {
         String motivoNormalizado = textoObligatorio(
                 motivo, "El motivo de aprobación de la reapertura es obligatorio.");
         record.setEstado(EstadoBatchRecord.DEVUELTO_PRODUCCION);
-        record.getLoteResultado().setEstadoCalidad(EstadoCalidadLote.CUARENTENA);
         controlWorkflowService.prepararRevalidacionCalidad(
                 record, record.getCicloRevisionActual() + 1);
-        loteRepo.save(record.getLoteResultado());
         batchRecordRepo.saveAndFlush(record);
 
         solicitud.setEstado(EstadoSolicitudReaperturaRechazo.APROBADA);
@@ -884,13 +995,7 @@ public class BatchRecordService {
     public void anularPorCancelacion(OrdenProduccion orden, User actor) {
         if (orden == null) return;
         batchRecordRepo.findByOrdenProduccion_OrdenId(orden.getOrdenId()).ifPresent(record -> {
-            if (record.getEstado() == EstadoBatchRecord.CERRADO
-                    || record.getEstado() == EstadoBatchRecord.APROBADO) {
-                throw new IllegalStateException("No se puede cancelar una orden con lote liberado o cerrado.");
-            }
             record.setEstado(EstadoBatchRecord.ANULADO);
-            record.getLoteResultado().setEstadoCalidad(EstadoCalidadLote.BLOQUEADO);
-            loteRepo.save(record.getLoteResultado());
             record.setObservaciones(appendObservacion(
                     record.getObservaciones(),
                     "Anulado por cancelación de la OP. Usuario: " + nombreUsuario(actor)));
@@ -902,13 +1007,7 @@ public class BatchRecordService {
         if (orden == null || orden.getOrdenFabricacionId() == null) return;
         batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
                 orden.getOrdenFabricacionId()).ifPresent(record -> {
-            if (record.getEstado() == EstadoBatchRecord.CERRADO) {
-                throw new IllegalStateException(
-                        "No se puede cancelar una orden de fabricación con expediente cerrado.");
-            }
             record.setEstado(EstadoBatchRecord.ANULADO);
-            record.getLoteResultado().setEstadoCalidad(EstadoCalidadLote.BLOQUEADO);
-            loteRepo.save(record.getLoteResultado());
             record.setObservaciones(appendObservacion(
                     record.getObservaciones(),
                     "Anulado por cancelación de la OF. Usuario: " + nombreUsuario(actor)));
@@ -923,34 +1022,15 @@ public class BatchRecordService {
         if (record == null) {
             return; // Compatibilidad con órdenes históricas anteriores al expediente digital.
         }
-        if (record.getEstado() != EstadoBatchRecord.APROBADO
-                || record.getLoteResultado().getEstadoCalidad() != EstadoCalidadLote.LIBERADO) {
-            throw new IllegalStateException(
-                    "El lote debe estar liberado por Calidad antes de ingresar a almacén.");
-        }
-        record.setEstado(EstadoBatchRecord.CERRADO);
-        record.setCerradoEn(LocalDateTime.now(applicationClock));
-        batchRecordRepo.saveAndFlush(record);
-        crearRevision(record, TipoRevisionBatchRecord.CIERRE, actor,
-                "Ingreso confirmado en almacén y cierre del expediente");
+        cerrarDocumentalmente(record.getId(), actor);
     }
 
     public void cerrarPorIngresoAlmacen(OrdenFabricacion orden, User actor) {
         if (orden == null || orden.getOrdenFabricacionId() == null) return;
         BatchRecord record = batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
                         orden.getOrdenFabricacionId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "La orden de fabricación no tiene expediente digital."));
-        if (record.getEstado() != EstadoBatchRecord.APROBADO
-                || record.getLoteResultado().getEstadoCalidad() != EstadoCalidadLote.LIBERADO) {
-            throw new IllegalStateException(
-                    "El lote debe estar liberado por Calidad antes de ingresar a almacén.");
-        }
-        record.setEstado(EstadoBatchRecord.CERRADO);
-        record.setCerradoEn(LocalDateTime.now(applicationClock));
-        batchRecordRepo.saveAndFlush(record);
-        crearRevision(record, TipoRevisionBatchRecord.CIERRE, actor,
-                "Ingreso de lote intermedio confirmado y cierre del expediente");
+                .orElse(null);
+        if (record != null) cerrarDocumentalmente(record.getId(), actor);
     }
 
     @Transactional(readOnly = true)
@@ -1109,6 +1189,14 @@ public class BatchRecordService {
                 .orElseThrow(() -> new NoSuchElementException("Expediente digital no encontrado."));
     }
 
+    private BatchRecord requireRecordForUpdate(Long id) {
+        if (id == null) {
+            throw new IllegalArgumentException("El identificador del expediente es obligatorio.");
+        }
+        return batchRecordRepo.findByIdForUpdate(id)
+                .orElseThrow(() -> new NoSuchElementException("Expediente digital no encontrado."));
+    }
+
     private void crearEtapasDesdeSeguimiento(BatchRecord record, OrdenProduccion orden) {
         List<SeguimientoOrdenArea> seguimientos = seguimientoRepo
                 .findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(orden.getOrdenId())
@@ -1119,6 +1207,10 @@ public class BatchRecordService {
                 .toList();
         int secuencia = 0;
         for (SeguimientoOrdenArea seguimiento : seguimientos) {
+            if (etapaRepo.findBySeguimientoOrdenArea_Id(seguimiento.getId()).isPresent()) {
+                secuencia++;
+                continue;
+            }
             BatchRecordEtapa etapa = new BatchRecordEtapa();
             etapa.setBatchRecord(record);
             etapa.setAreaOperativa(seguimiento.getAreaOperativa());
@@ -1133,6 +1225,41 @@ public class BatchRecordService {
                     seguimiento.getAreaOperativa().getAreaId()));
             etapaRepo.save(etapa);
             record.getEtapas().add(etapa);
+        }
+    }
+
+    private void crearEtapasDesdeOperacionesFabricacion(
+            BatchRecord record,
+            OrdenFabricacion orden
+    ) {
+        List<OrdenFabricacionOperacion> operaciones = ordenFabricacionOperacionRepo
+                .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(
+                        orden.getOrdenFabricacionId());
+        for (OrdenFabricacionOperacion operacion : operaciones) {
+            BatchRecordEtapa existente = etapaRepo
+                    .findByOrdenFabricacionOperacion_Id(operacion.getId()).orElse(null);
+            if (existente != null) {
+                if (operacion.getBatchRecordEtapa() == null) {
+                    operacion.setBatchRecordEtapa(existente);
+                    ordenFabricacionOperacionRepo.save(operacion);
+                }
+                continue;
+            }
+            BatchRecordEtapa etapa = new BatchRecordEtapa();
+            etapa.setBatchRecord(record);
+            etapa.setAreaOperativa(operacion.getAreaOperativa());
+            etapa.setOrdenFabricacionOperacion(operacion);
+            etapa.setNombre(operacion.getProcesoNombre());
+            etapa.setSecuencia(operacion.getPosicionSecuencia());
+            etapa.setEstado(mapEstado(operacion.getEstadoEnum()));
+            etapa.setIniciadaEn(operacion.getEstadoEnum() == EstadoSeguimientoOrdenArea.EN_PROCESO
+                    ? operacion.getFechaEstadoActual() : null);
+            etapa.setControlProcesoPlantilla(plantillaVigente(
+                    operacion.getAreaOperativa().getAreaId()));
+            etapaRepo.saveAndFlush(etapa);
+            record.getEtapas().add(etapa);
+            operacion.setBatchRecordEtapa(etapa);
+            ordenFabricacionOperacionRepo.save(operacion);
         }
     }
 
@@ -1268,8 +1395,6 @@ public class BatchRecordService {
         }
         record.setCantidadObtenida(null);
         record.setContenidoSha256(null);
-        record.getLoteResultado().setEstadoCalidad(EstadoCalidadLote.CUARENTENA);
-        loteRepo.save(record.getLoteResultado());
         batchRecordRepo.saveAndFlush(record);
 
         BatchRecordCorreccion correccion = new BatchRecordCorreccion();
@@ -1321,8 +1446,6 @@ public class BatchRecordService {
                 : EstadoBatchRecord.EN_EJECUCION);
         record.setCantidadObtenida(null);
         record.setContenidoSha256(null);
-        record.getLoteResultado().setEstadoCalidad(EstadoCalidadLote.CUARENTENA);
-        loteRepo.save(record.getLoteResultado());
         batchRecordRepo.saveAndFlush(record);
 
         BatchRecordCorreccion correccion = new BatchRecordCorreccion();
@@ -2046,6 +2169,10 @@ public class BatchRecordService {
                 .id(record.getId())
                 .codigo(record.getCodigo())
                 .estado(record.getEstado())
+                .estadoSincronizacion(record.getEstadoSincronizacion())
+                .sincronizadoEn(record.getSincronizadoEn())
+                .advertenciasDocumentales(lineasDocumentales(record.getAdvertenciasDocumentales()))
+                .ultimoErrorDocumental(record.getUltimoErrorDocumental())
                 .revisionDocumental(record.getRevisionDocumental())
                 .ordenProduccionId(record.getOrdenProduccion() == null
                         ? null : record.getOrdenProduccion().getOrdenId())
@@ -2258,6 +2385,14 @@ public class BatchRecordService {
                         ? null : decision.getCicloRevision().getNumero())
                 .alcanceDevolucionJson(decision.getAlcanceDevolucionJson())
                 .build();
+    }
+
+    private List<String> lineasDocumentales(String contenido) {
+        if (contenido == null || contenido.isBlank()) return List.of();
+        return contenido.lines()
+                .map(String::trim)
+                .filter(linea -> !linea.isEmpty())
+                .toList();
     }
 
     private BatchRecordDTOs.CicloRevision toCicloRevisionDTO(CicloRevisionBatchRecord ciclo) {

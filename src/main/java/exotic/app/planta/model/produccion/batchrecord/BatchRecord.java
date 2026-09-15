@@ -111,6 +111,21 @@ public class BatchRecord {
     @Column(columnDefinition = "TEXT")
     private String observaciones;
 
+    /** Estado técnico de la proyección. No representa disposición de Calidad. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_sincronizacion", nullable = false, length = 20)
+    private EstadoSincronizacionBatchRecord estadoSincronizacion =
+            EstadoSincronizacionBatchRecord.ACTUALIZADO;
+
+    @Column(name = "sincronizado_en")
+    private LocalDateTime sincronizadoEn;
+
+    @Column(name = "advertencias_documentales", columnDefinition = "TEXT")
+    private String advertenciasDocumentales;
+
+    @Column(name = "ultimo_error_documental", columnDefinition = "TEXT")
+    private String ultimoErrorDocumental;
+
     @OneToMany(mappedBy = "batchRecord", fetch = FetchType.LAZY)
     @OrderBy("registradoEn ASC, id ASC")
     private List<BatchRecordConsumo> consumos = new ArrayList<>();
@@ -157,8 +172,9 @@ public class BatchRecord {
         if (codigo == null || codigo.isBlank()) {
             throw new IllegalStateException("El código del batch record es obligatorio.");
         }
-        if (estado == null || creadoPor == null) {
-            throw new IllegalStateException("El estado y el usuario creador del batch record son obligatorios.");
+        if (estado == null || estadoSincronizacion == null || creadoPor == null) {
+            throw new IllegalStateException(
+                    "El estado documental, la sincronización y el usuario creador son obligatorios.");
         }
         if (loteResultado == null || productoResultado == null || manufacturingVersion == null) {
             throw new IllegalStateException(

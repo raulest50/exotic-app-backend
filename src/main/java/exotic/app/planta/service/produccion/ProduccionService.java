@@ -79,7 +79,7 @@ public class ProduccionService {
     private final VencimientoLoteService vencimientoLoteService;
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final UserRepository userRepository;
-    private final BatchRecordService batchRecordService;
+    private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
     private final OrdenFabricacionAutoGenerationService ordenFabricacionAutoGenerationService;
     private final OrdenFabricacionService ordenFabricacionService;
     private final Clock applicationClock;
@@ -115,8 +115,7 @@ public class ProduccionService {
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-        Lote lote = crearLoteProduccion(
-                loteNumero, savedOrden, producto, batchRecordWorkflowEnabled);
+        Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
         savedOrden.setLoteAsignado(lote.getBatchNumber());
         ordenProduccionRepo.save(savedOrden);
 
@@ -124,10 +123,10 @@ public class ProduccionService {
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
         User creador = requireActor(actor);
         if (batchRecordWorkflowEnabled) {
-            batchRecordService.crearParaOrdenProduccion(
+            batchRecordProjectionQueueService.solicitarCreacion(
                     savedOrden, lote, creador);
+            ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
         }
-        ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
 
         return savedOrden;
     }
@@ -176,17 +175,17 @@ public class ProduccionService {
 
             OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-            Lote lote = crearLoteProduccion(
-                    loteNumero, savedOrden, producto, batchRecordWorkflowEnabled);
+            Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
             savedOrden.setLoteAsignado(lote.getBatchNumber());
             ordenProduccionRepo.save(savedOrden);
 
             // Inicializar seguimiento por áreas operativas
             seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
             if (batchRecordWorkflowEnabled) {
-                batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+                batchRecordProjectionQueueService.solicitarCreacion(
+                        savedOrden, lote, creador);
+                ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
             }
-            ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
 
             savedOrdenes.add(savedOrden);
         }
@@ -460,7 +459,8 @@ public class ProduccionService {
         }
 
         ordenProduccionRepo.save(ordenProduccion);
-        batchRecordService.anularPorCancelacion(ordenProduccion, cancelador);
+        batchRecordProjectionQueueService.solicitarAnulacion(
+                ordenProduccion, cancelador);
         ordenFabricacionService.cancelarVinculadasPorCancelacionOp(
                 ordenProduccion, cancelador);
         return convertToDto(ordenProduccion);
@@ -675,24 +675,23 @@ public class ProduccionService {
 
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
-        Lote lote = crearLoteProduccion(
-                loteNumero, savedOrden, producto, batchRecordWorkflowEnabled);
+        Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
         savedOrden.setLoteAsignado(lote.getBatchNumber());
         ordenProduccionRepo.save(savedOrden);
 
         seguimientoOrdenAreaService.inicializarSeguimiento(savedOrden);
         if (batchRecordWorkflowEnabled) {
-            batchRecordService.crearParaOrdenProduccion(savedOrden, lote, creador);
+            batchRecordProjectionQueueService.solicitarCreacion(
+                    savedOrden, lote, creador);
+            ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
         }
-        ordenFabricacionAutoGenerationService.generarParaOrden(savedOrden, creador);
         return savedOrden;
     }
 
     private Lote crearLoteProduccion(
             String batchNumber,
             OrdenProduccion ordenProduccion,
-            Producto producto,
-            boolean batchRecordWorkflowEnabled
+            Producto producto
     ) {
         Lote loteExistente = loteRepo.findByBatchNumber(batchNumber);
         if (loteExistente != null) {
@@ -705,9 +704,7 @@ public class ProduccionService {
         lote.setBatchNumber(batchNumber);
         lote.setOrdenProduccion(ordenProduccion);
         lote.setProducto(producto);
-        lote.setEstadoCalidad(batchRecordWorkflowEnabled
-                ? EstadoCalidadLote.CUARENTENA
-                : EstadoCalidadLote.SIN_CLASIFICAR);
+        lote.setEstadoCalidad(EstadoCalidadLote.SIN_CLASIFICAR);
         vencimientoLoteService.copiarPoliticaVigente(producto, lote);
         if (lote.getVidaUtilCantidadAplicada() == null
                 || lote.getVidaUtilUnidadAplicada() == null) {

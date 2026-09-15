@@ -53,7 +53,7 @@ class ProduccionServiceCancelacionTest {
     @Mock private VencimientoLoteService vencimientoLoteService;
     @Mock private ManufacturingVersionRepo manufacturingVersionRepo;
     @Mock private UserRepository userRepository;
-    @Mock private BatchRecordService batchRecordService;
+    @Mock private BatchRecordProjectionQueueService batchRecordProjectionQueueService;
     @Mock private OrdenFabricacionAutoGenerationService ordenFabricacionAutoGenerationService;
     @Mock private OrdenFabricacionService ordenFabricacionService;
     @Mock private Clock applicationClock;
@@ -84,7 +84,7 @@ class ProduccionServiceCancelacionTest {
         assertEquals(esperado, result.getCanceladaEn());
         assertEquals("aprobador.mps", result.getCanceladaPorUsername());
         assertEquals("Ana Pérez", result.getCanceladaPorNombreCompleto());
-        verify(batchRecordService).anularPorCancelacion(orden, actor);
+        verify(batchRecordProjectionQueueService).solicitarAnulacion(orden, actor);
         verify(ordenFabricacionService).cancelarVinculadasPorCancelacionOp(orden, actor);
     }
 
@@ -117,7 +117,7 @@ class ProduccionServiceCancelacionTest {
         assertTrue(error.getMessage().contains("estado abierto"));
         assertEquals("primer.usuario", orden.getCanceladaPorUsername());
         verify(ordenProduccionRepo, never()).save(any());
-        verify(batchRecordService, never()).anularPorCancelacion(
+        verify(batchRecordProjectionQueueService, never()).solicitarAnulacion(
                 any(OrdenProduccion.class), any(User.class));
         verify(ordenFabricacionService, never()).cancelarVinculadasPorCancelacionOp(any(), any());
     }

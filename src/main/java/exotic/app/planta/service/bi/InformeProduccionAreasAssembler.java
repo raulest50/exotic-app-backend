@@ -757,13 +757,13 @@ public class InformeProduccionAreasAssembler {
 
             List<String> reasons = new ArrayList<>();
             if (noOutputWithWork) {
-                reasons.add("Hay trabajo listo, pero no se registraron salidas en el periodo.");
+                reasons.add("Hay trabajo pendiente, pero no se registraron salidas en el período.");
             }
             if (currentMetrics.getDiasBacklog() != null
                     && currentMetrics.getDiasBacklog() >= 1d) {
                 reasons.add(String.format(
                         java.util.Locale.ROOT,
-                        "El backlog equivale a %.1f dias al ritmo actual.",
+                        "Completar el trabajo pendiente tomaría aproximadamente %.1f días al ritmo actual.",
                         currentMetrics.getDiasBacklog()
                 ));
             }

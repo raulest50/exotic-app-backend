@@ -57,7 +57,8 @@ public class OrdenFabricacionOperacionService {
     private final ControlProcesoPlantillaRepo plantillaRepo;
     private final LoteRepo loteRepo;
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
-    private final BatchRecordService batchRecordService;
+    private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
+    private final PoliticaIngresoCalidadLote politicaIngresoCalidadLote;
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
 
@@ -233,24 +234,21 @@ public class OrdenFabricacionOperacionService {
             LocalDate fechaProduccion = LocalDate.now(applicationClock);
             lote.setProductionDate(fechaProduccion);
             lote.setExpirationDate(request.getFechaVencimiento());
-            BatchRecord expediente = batchRecordRepo
-                    .findByOrdenFabricacion_OrdenFabricacionId(
-                            orden.getOrdenFabricacionId())
-                    .orElse(null);
-            lote.setEstadoCalidad(expediente == null
-                    ? EstadoCalidadLote.SIN_CLASIFICAR
-                    : EstadoCalidadLote.CUARENTENA);
             loteRepo.save(lote);
 
-            orden.setEstado(expediente == null
+            PoliticaIngresoCalidadLote.Evaluacion evaluacionIngreso =
+                    politicaIngresoCalidadLote.evaluar(lote);
+            orden.setEstado(evaluacionIngreso.permitido()
                     ? EstadoOrdenFabricacion.CERRADA
                     : EstadoOrdenFabricacion.FABRICACION_COMPLETADA);
             orden.setFechaFinal(ahora);
             ordenRepo.saveAndFlush(orden);
-            if (expediente == null) {
+            batchRecordProjectionQueueService.solicitarPreparacion(
+                    orden, obtenida, actor);
+            if (evaluacionIngreso.permitido()) {
                 crearEntradaResultado(orden, lote, obtenida, actor);
-            } else {
-                batchRecordService.prepararRevisionCalidad(orden, obtenida);
+                batchRecordProjectionQueueService.solicitarCierre(
+                        orden, obtenida, actor);
             }
         }
         return toResponse(operacion);
@@ -273,15 +271,8 @@ public class OrdenFabricacionOperacionService {
                 || orden.getEstado() == EstadoOrdenFabricacion.CANCELADA) {
             throw new IllegalStateException("Una OF cerrada o cancelada no admite correcciones.");
         }
-        boolean expedienteEnCorreccion = batchRecordService.estaDevueltoAProduccion(orden);
-        boolean correccionCalidad = orden.getEstado() == EstadoOrdenFabricacion.FABRICACION_COMPLETADA
-                && expedienteEnCorreccion;
-        if (expedienteEnCorreccion) {
-            batchRecordService.validarCorreccionPermitida(operacion);
-        }
         if (orden.getEstado() != EstadoOrdenFabricacion.LIBERADA
-                && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION
-                && !correccionCalidad) {
+                && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION) {
             throw new IllegalStateException(
                     "Solo una OF liberada o en ejecucion admite correcciones operativas.");
         }
@@ -333,11 +324,9 @@ public class OrdenFabricacionOperacionService {
                 TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA, revertido,
                 ahora);
         if (destino == EstadoSeguimientoOrdenArea.EN_PROCESO
-                && (orden.getEstado() == EstadoOrdenFabricacion.LIBERADA
-                || correccionCalidad)) {
+                && orden.getEstado() == EstadoOrdenFabricacion.LIBERADA) {
             orden.setEstado(EstadoOrdenFabricacion.EN_EJECUCION);
             if (orden.getFechaInicio() == null) orden.setFechaInicio(ahora);
-            if (correccionCalidad) orden.setFechaFinal(null);
             ordenRepo.save(orden);
         }
         return toResponse(operacion);
@@ -527,7 +516,8 @@ public class OrdenFabricacionOperacionService {
         evento.setUsuario(actor);
         evento.setNota(truncate(normalize(nota), 500));
         eventoRepo.saveAndFlush(evento);
-        batchRecordService.sincronizarEventoFabricacion(evento);
+        batchRecordProjectionQueueService.solicitarActualizacion(
+                evento.getOperacion().getOrdenFabricacion());
         return evento;
     }
 
@@ -544,23 +534,28 @@ public class OrdenFabricacionOperacionService {
                     "La OF debe tener su fabricación completada antes de la liberación.");
         }
         BatchRecord record = batchRecordRepo.findByOrdenFabricacion_OrdenFabricacionId(
-                        ordenFabricacionId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "La OF no tiene expediente digital."));
-        if (record.getEstado() != EstadoBatchRecord.APROBADO
-                || record.getLoteResultado().getEstadoCalidad() != EstadoCalidadLote.LIBERADO) {
-            throw new IllegalStateException(
-                    "El lote intermedio debe estar liberado por Calidad.");
+                        ordenFabricacionId).orElse(null);
+        Lote lote = record == null
+                ? loteRepo.findByOrdenFabricacion_OrdenFabricacionId(ordenFabricacionId)
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("La OF no tiene lote de resultado."))
+                : record.getLoteResultado();
+        PoliticaIngresoCalidadLote.Evaluacion evaluacion =
+                politicaIngresoCalidadLote.evaluar(lote);
+        if (!evaluacion.permitido()) {
+            throw new IllegalStateException(evaluacion.motivo());
         }
-        Lote lote = record.getLoteResultado();
+        BigDecimal cantidad = record == null || record.getCantidadObtenida() == null
+                ? orden.getCantidadPlanificada()
+                : record.getCantidadObtenida();
         int entidadId = Math.toIntExact(ordenFabricacionId);
         if (transaccionRepo.countByTipoEntidadCausanteAndIdEntidadCausante(
                 TransaccionAlmacen.TipoEntidadCausante.OF, entidadId) == 0) {
-            crearEntradaResultado(orden, lote, record.getCantidadObtenida(), actor);
+            crearEntradaResultado(orden, lote, cantidad, actor);
         }
         orden.setEstado(EstadoOrdenFabricacion.CERRADA);
         ordenRepo.saveAndFlush(orden);
-        batchRecordService.cerrarPorIngresoAlmacen(orden, actor);
+        batchRecordProjectionQueueService.solicitarCierre(orden, cantidad, actor);
     }
 
     private void crearEntradaResultado(

@@ -6,9 +6,6 @@ import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.model.produccion.CierreProduccion;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.ReporteProduccionLote;
-import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
-import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
-import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.produccion.dto.CierreProduccionRequestDTO;
 import exotic.app.planta.model.produccion.dto.CierreProduccionResponseDTO;
 import exotic.app.planta.model.users.User;
@@ -17,7 +14,6 @@ import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.repo.produccion.CierreProduccionRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.ReporteProduccionLoteRepo;
-import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,8 +47,8 @@ public class CierreProduccionService {
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final ProduccionCierreLockService cierreLockService;
     private final VencimientoLoteService vencimientoLoteService;
-    private final BatchRecordRepo batchRecordRepo;
-    private final BatchRecordService batchRecordService;
+    private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
+    private final PoliticaIngresoCalidadLote politicaIngresoCalidadLote;
     private final Clock applicationClock;
 
     @Transactional(rollbackFor = Exception.class)
@@ -114,10 +110,7 @@ public class CierreProduccionService {
             }
 
             Lote lote = reporte.getLote();
-            BatchRecord batchRecord = batchRecordRepo
-                    .findByOrdenProduccion_OrdenId(orden.getOrdenId())
-                    .orElse(null);
-            validarLiberacionCalidad(batchRecord, lote, reporte, solicitado);
+            validarPoliticaIngresoCalidad(lote);
             if (lote.getOrdenProduccion() == null
                     || lote.getOrdenProduccion().getOrdenId() != orden.getOrdenId()
                     || (orden.getLoteAsignado() != null
@@ -133,12 +126,6 @@ public class CierreProduccionService {
             }
             vencimientoLoteService.validarFechaConfirmada(
                     reporte.getFechaProduccion(), solicitado.getFechaVencimiento());
-            if (lote.getExpirationDate() != null
-                    && !lote.getExpirationDate().equals(solicitado.getFechaVencimiento())) {
-                throw new CierreProduccionConflictException(
-                        "El lote " + lote.getBatchNumber() + " tiene una fecha de vencimiento diferente.");
-            }
-
             BigDecimal cantidadConfirmada = normalizarCantidad(solicitado.getCantidadConfirmada());
             TransaccionAlmacen transaccion = crearTransaccion(orden, lote, cantidadConfirmada, actor);
             transaccionRepo.save(transaccion);
@@ -160,7 +147,8 @@ public class CierreProduccionService {
                 orden.setFechaFinal(ahora);
             }
             ordenProduccionRepo.save(orden);
-            batchRecordService.cerrarPorIngresoAlmacen(orden, actor);
+            batchRecordProjectionQueueService.solicitarCierre(
+                    orden, cantidadConfirmada, actor);
         }
 
         reporteRepo.saveAll(pendientes);
@@ -212,30 +200,11 @@ public class CierreProduccionService {
         }
     }
 
-    private void validarLiberacionCalidad(
-            BatchRecord batchRecord,
-            Lote lote,
-            ReporteProduccionLote reporte,
-            CierreProduccionRequestDTO.ItemDTO solicitado
-    ) {
-        if (batchRecord == null) {
-            return; // Compatibilidad con reportes históricos anteriores al expediente digital.
-        }
-        if (batchRecord.getEstado() != EstadoBatchRecord.APROBADO
-                || lote.getEstadoCalidad() != EstadoCalidadLote.LIBERADO) {
-            throw new CierreProduccionConflictException(
-                    "El lote " + lote.getBatchNumber()
-                            + " todavía no ha sido liberado por Calidad.");
-        }
-        BigDecimal cantidadConfirmada = normalizarCantidad(solicitado.getCantidadConfirmada());
-        if (cantidadConfirmada.compareTo(reporte.getCantidadReportada()) != 0) {
-            throw new CierreProduccionConflictException(
-                    "La cantidad de un lote liberado no puede corregirse durante el ingreso a almacén.");
-        }
-        if (lote.getExpirationDate() == null
-                || !lote.getExpirationDate().equals(solicitado.getFechaVencimiento())) {
-            throw new CierreProduccionConflictException(
-                    "La fecha de vencimiento liberada por Calidad no puede modificarse en almacén.");
+    private void validarPoliticaIngresoCalidad(Lote lote) {
+        PoliticaIngresoCalidadLote.Evaluacion evaluacion =
+                politicaIngresoCalidadLote.evaluar(lote);
+        if (!evaluacion.permitido()) {
+            throw new CierreProduccionConflictException(evaluacion.motivo());
         }
     }
 
