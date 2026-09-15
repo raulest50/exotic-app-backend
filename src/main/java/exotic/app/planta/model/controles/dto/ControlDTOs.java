@@ -32,7 +32,8 @@ public final class ControlDTOs {
             // Compatibilidad temporal de despliegue; el servicio ignora este valor.
             @Size(max = 120) String proposito,
             @Size(max = 500) String motivoCambio,
-            @NotEmpty List<@Valid AplicabilidadWriteRequest> aplicabilidades,
+            @Size(min = 1, max = 1, message = "El plan debe tener exactamente una aplicabilidad.")
+            List<@Valid AplicabilidadWriteRequest> aplicabilidades,
             @NotEmpty List<@Valid CaracteristicaWriteRequest> caracteristicas) {}
 
     public record AplicabilidadWriteRequest(
@@ -63,14 +64,21 @@ public final class ControlDTOs {
             BigDecimal limiteSuperior,
             Boolean valorBooleanoEsperado) {}
 
+    public record ProductoControlOption(
+            String productoId, String nombre, String tipoProducto,
+            Integer categoriaId, String categoriaNombre) {}
+
     public record AplicabilidadResponse(
-            Long id, String productoId, Integer categoriaId,
+            Long id, String productoId, String productoNombre,
+            Integer categoriaId, String categoriaNombre,
             TipoOrdenControl tipoOrden, PuntoAplicacionControl puntoAplicacion,
             Integer areaOperativaId, String areaOperativaNombre,
             Integer procesoId, String procesoNombre,
             String frontendNodeId,
             MomentoControl momento, PuntoExigenciaControl puntoExigencia,
-            List<String> productosExcluidosIds, boolean legadoGlobal) {}
+            List<String> productosExcluidosIds,
+            List<ProductoControlOption> productosExcluidos,
+            boolean legadoGlobal) {}
 
     public record CaracteristicaResponse(
             Long id, String nombre, TipoCaracteristicaControl tipo,

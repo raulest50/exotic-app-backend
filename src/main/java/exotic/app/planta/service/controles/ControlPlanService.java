@@ -217,6 +217,7 @@ public class ControlPlanService {
         }
         AplicabilidadPlanControl entity = new AplicabilidadPlanControl();
         entity.setVersion(version);
+        Categoria categoriaSeleccionada = null;
         if (tieneProducto) {
             Producto producto = productoRepo.findById(request.productoId().trim())
                     .orElseThrow(() -> new NoSuchElementException("Producto no encontrado."));
@@ -226,8 +227,9 @@ public class ControlPlanService {
             }
             entity.setProducto(producto);
         } else {
-            entity.setCategoria(categoriaRepo.findById(request.categoriaId())
-                    .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada.")));
+            categoriaSeleccionada = categoriaRepo.findById(request.categoriaId())
+                    .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada."));
+            entity.setCategoria(categoriaSeleccionada);
         }
         entity.setTipoOrden(request.tipoOrden());
         entity.setPuntoAplicacion(request.puntoAplicacion());
@@ -249,9 +251,20 @@ public class ControlPlanService {
         if (!exclusiones.isEmpty() && !tieneCategoria) {
             throw new IllegalArgumentException("Las exclusiones solo aplican a reglas por categoria.");
         }
-        for (String id : new LinkedHashSet<>(exclusiones)) {
-            entity.getProductosExcluidos().add(productoRepo.findById(id)
-                    .orElseThrow(() -> new NoSuchElementException("Producto excluido no encontrado: " + id)));
+        LinkedHashSet<String> idsExcluidos = new LinkedHashSet<>();
+        for (String id : exclusiones) {
+            idsExcluidos.add(limpiar(id));
+        }
+        for (String id : idsExcluidos) {
+            Producto productoExcluido = productoRepo.findById(id)
+                    .orElseThrow(() -> new NoSuchElementException("Producto excluido no encontrado: " + id));
+            if (!(productoExcluido instanceof Terminado terminado)
+                    || terminado.getCategoria() == null
+                    || !Objects.equals(terminado.getCategoria().getCategoriaId(), categoriaSeleccionada.getCategoriaId())) {
+                throw new IllegalArgumentException(
+                        "El producto excluido " + id + " no pertenece a la categoria seleccionada.");
+            }
+            entity.getProductosExcluidos().add(productoExcluido);
         }
         return entity;
     }
@@ -336,14 +349,19 @@ public class ControlPlanService {
 
     private void validarRequest(AmbitoControl ambito, PlanWriteRequest request) {
         Objects.requireNonNull(ambito, "El ambito de la fachada es obligatorio.");
-        if (request == null || request.aplicabilidades() == null || request.aplicabilidades().isEmpty()
-                || request.caracteristicas() == null || request.caracteristicas().isEmpty()) {
-            throw new IllegalArgumentException("El plan requiere aplicabilidad y caracteristicas.");
+        if (request == null || request.aplicabilidades() == null || request.aplicabilidades().size() != 1) {
+            throw new IllegalArgumentException("El plan debe tener exactamente una aplicabilidad y una ubicacion.");
+        }
+        if (request.caracteristicas() == null || request.caracteristicas().isEmpty()) {
+            throw new IllegalArgumentException("El plan requiere al menos una caracteristica.");
         }
     }
 
     private void validarVersionPublicable(AmbitoControl ambito, VersionPlanControl version) {
-        if (version.getAplicabilidades().isEmpty() || version.getCaracteristicas().isEmpty()) {
+        if (version.getAplicabilidades().size() != 1) {
+            throw new IllegalStateException("La version debe tener exactamente una aplicabilidad y una ubicacion.");
+        }
+        if (version.getCaracteristicas().isEmpty()) {
             throw new IllegalStateException("La version no tiene una configuracion completa.");
         }
         if (version.getCaracteristicas().stream().anyMatch(CaracteristicaPlanControl::isRequiereDepuracion)) {
@@ -456,7 +474,9 @@ public class ControlPlanService {
     public AplicabilidadResponse toResponse(AplicabilidadPlanControl item) {
         return new AplicabilidadResponse(item.getId(),
                 item.getProducto() == null ? null : item.getProducto().getProductoId(),
+                item.getProducto() == null ? null : item.getProducto().getNombre(),
                 item.getCategoria() == null ? null : item.getCategoria().getCategoriaId(),
+                item.getCategoria() == null ? null : item.getCategoria().getCategoriaNombre(),
                 item.getTipoOrden(), item.getPuntoAplicacion(),
                 item.getAreaOperativa() == null ? null : item.getAreaOperativa().getAreaId(),
                 item.getAreaOperativa() == null ? null : item.getAreaOperativa().getNombre(),
@@ -465,7 +485,20 @@ public class ControlPlanService {
                 item.getFrontendNodeId(),
                 item.getMomento(), item.getPuntoExigencia(),
                 item.getProductosExcluidos().stream().map(Producto::getProductoId).sorted().toList(),
+                item.getProductosExcluidos().stream()
+                        .sorted(Comparator.comparing(Producto::getProductoId))
+                        .map(this::toProductoControlOption)
+                        .toList(),
                 item.isLegadoGlobal());
+    }
+
+    private ProductoControlOption toProductoControlOption(Producto producto) {
+        Categoria categoria = producto instanceof Terminado terminado ? terminado.getCategoria() : null;
+        return new ProductoControlOption(
+                producto.getProductoId(), producto.getNombre(),
+                producto instanceof Terminado ? "T" : "S",
+                categoria == null ? null : categoria.getCategoriaId(),
+                categoria == null ? null : categoria.getCategoriaNombre());
     }
 
     public CaracteristicaResponse toResponse(CaracteristicaPlanControl item) {

@@ -7,6 +7,7 @@ import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.controles.ControlCatalogService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +20,18 @@ import java.util.Map;
 public class ControlCatalogResource {
     private final ControlCatalogService service;
     private final ModuleTabAccessGuard accessGuard;
+
+    @GetMapping("/productos")
+    public Page<ProductoControlOption> productos(
+            Authentication auth,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "NOMBRE") String tipoBusqueda,
+            @RequestParam(required = false) Integer categoriaId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        requirePlanAccess(auth, 1);
+        return service.buscarProductos(search, tipoBusqueda, categoriaId, page, size);
+    }
 
     @GetMapping("/magnitudes")
     public List<CatalogoResponse> magnitudes(
