@@ -19,6 +19,7 @@ public interface OrdenFabricacionOperacionRepo
 
     @EntityGraph(attributePaths = {
             "ordenFabricacion", "ordenFabricacion.semiTerminado", "areaOperativa",
+            "areaOperativa.responsableArea",
             "poeDocumentoVersion", "poeDocumentoVersion.proceso"
     })
     List<OrdenFabricacionOperacion> findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(

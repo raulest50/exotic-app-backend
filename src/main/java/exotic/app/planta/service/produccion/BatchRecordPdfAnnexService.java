@@ -8,7 +8,6 @@ import com.itextpdf.text.Chunk;
 import com.itextpdf.text.Document;
 import com.itextpdf.text.Element;
 import com.itextpdf.text.Font;
-import com.itextpdf.text.Image;
 import com.itextpdf.text.PageSize;
 import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.Phrase;
@@ -22,18 +21,10 @@ import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.PdfStamper;
 import com.itextpdf.text.pdf.PdfWriter;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
+import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import lombok.RequiredArgsConstructor;
-import org.apache.poi.xwpf.usermodel.IBodyElement;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFPicture;
-import org.apache.poi.xwpf.usermodel.XWPFRun;
-import org.apache.poi.xwpf.usermodel.XWPFTable;
-import org.apache.poi.xwpf.usermodel.XWPFTableCell;
-import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
@@ -61,6 +52,7 @@ public class BatchRecordPdfAnnexService {
     private static final BaseColor LIGHT = new BaseColor(235, 241, 245);
 
     private final ProcesoProduccionDocumentoService procesoDocumentoService;
+    private final ProcesoProduccionDocumentoPdfService procesoDocumentoPdfService;
     private final ObjectMapper objectMapper;
 
     public byte[] componer(byte[] expedientePrincipal, JsonNode root) {
@@ -76,9 +68,8 @@ public class BatchRecordPdfAnnexService {
             }
             for (PoeCargado poe : poes) {
                 partes.add(crearPortadaPoe(poe));
-                partes.add(PDF_CONTENT_TYPE.equalsIgnoreCase(poe.contentType())
-                        ? poe.contenido()
-                        : convertirDocx(poe));
+                partes.add(procesoDocumentoPdfService.convertirARepresentacionPdf(
+                        poe.contenido(), poe.fileName(), poe.contentType()));
             }
 
             byte[] combinado = combinar(partes);
@@ -373,79 +364,6 @@ public class BatchRecordPdfAnnexService {
                 font(9, Font.NORMAL, BaseColor.DARK_GRAY)));
         document.close();
         return output.toByteArray();
-    }
-
-    private byte[] convertirDocx(PoeCargado poe) throws Exception {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        Document document = new Document(PageSize.A4, 42, 42, 48, 42);
-        PdfWriter.getInstance(document, output);
-        document.open();
-        Paragraph notice = new Paragraph(
-                "Representación PDF del archivo DOCX: " + poe.fileName(),
-                font(8, Font.ITALIC, BaseColor.DARK_GRAY));
-        notice.setSpacingAfter(10);
-        document.add(notice);
-
-        try (XWPFDocument word = new XWPFDocument(new ByteArrayInputStream(poe.contenido()))) {
-            for (IBodyElement element : word.getBodyElements()) {
-                if (element instanceof XWPFParagraph paragraph) {
-                    agregarParrafoDocx(document, paragraph);
-                } else if (element instanceof XWPFTable table) {
-                    agregarTablaDocx(document, table);
-                }
-            }
-        }
-        document.close();
-        return output.toByteArray();
-    }
-
-    private void agregarParrafoDocx(Document document, XWPFParagraph source) throws Exception {
-        String text = source.getText();
-        boolean heading = source.getStyle() != null
-                && source.getStyle().toLowerCase(Locale.ROOT).contains("heading");
-        if (text != null && !text.isBlank()) {
-            Paragraph paragraph = new Paragraph(
-                    text,
-                    font(heading ? 12 : 9, heading ? Font.BOLD : Font.NORMAL,
-                            heading ? PRIMARY : BaseColor.BLACK));
-            paragraph.setSpacingAfter(heading ? 6 : 3);
-            document.add(paragraph);
-        }
-        for (XWPFRun run : source.getRuns()) {
-            for (XWPFPicture picture : run.getEmbeddedPictures()) {
-                try {
-                    Image image = Image.getInstance(picture.getPictureData().getData());
-                    image.scaleToFit(500, 650);
-                    image.setAlignment(Element.ALIGN_CENTER);
-                    document.add(image);
-                } catch (Exception ignored) {
-                    document.add(new Paragraph(
-                            "[Imagen del DOCX no compatible con la conversión PDF]",
-                            font(7, Font.ITALIC, BaseColor.GRAY)));
-                }
-            }
-        }
-    }
-
-    private void agregarTablaDocx(Document document, XWPFTable source) throws Exception {
-        int columns = source.getRows().stream()
-                .mapToInt(row -> row.getTableCells().size())
-                .max().orElse(1);
-        PdfPTable table = new PdfPTable(columns);
-        table.setWidthPercentage(100);
-        for (XWPFTableRow row : source.getRows()) {
-            for (XWPFTableCell cell : row.getTableCells()) {
-                PdfPCell target = new PdfPCell(new Phrase(
-                        cell.getText(), font(8, Font.NORMAL, BaseColor.BLACK)));
-                target.setPadding(4);
-                table.addCell(target);
-            }
-            for (int missing = row.getTableCells().size(); missing < columns; missing++) {
-                table.addCell(new PdfPCell(new Phrase("")));
-            }
-        }
-        table.setSpacingAfter(6);
-        document.add(table);
     }
 
     private byte[] combinar(List<byte[]> partes) throws Exception {

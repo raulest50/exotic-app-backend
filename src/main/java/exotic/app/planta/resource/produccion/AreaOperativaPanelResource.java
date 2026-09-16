@@ -11,7 +11,7 @@ import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO;
 import exotic.app.planta.service.produccion.AreaOperativaPoeService;
 import exotic.app.planta.service.produccion.AreaOperativaRuidoMuestraService;
-import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
+import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
 import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerationService;
@@ -112,7 +112,7 @@ public class AreaOperativaPanelResource {
             @PathVariable Long ordenFabricacionId,
             @PathVariable Long operacionId
     ) {
-        ProcesoProduccionDocumentoService.DescargaDocumento descarga =
+        ProcesoProduccionDocumentoPdfService.DocumentoPdf descarga =
                 areaOperativaPoeService.getDescargaFabricacion(
                         ordenFabricacionId, operacionId,
                         getCurrentUser(authentication).getId());
@@ -152,7 +152,7 @@ public class AreaOperativaPanelResource {
         User user = getCurrentUser(authentication);
 
         try {
-            ProcesoProduccionDocumentoService.DescargaDocumento descarga =
+            ProcesoProduccionDocumentoPdfService.DocumentoPdf descarga =
                     areaOperativaPoeService.getDescarga(ordenId, seguimientoId, user.getId());
             return buildDocumentoResponse(descarga);
         } catch (AccessDeniedException e) {
@@ -171,16 +171,11 @@ public class AreaOperativaPanelResource {
     }
 
     private ResponseEntity<Resource> buildDocumentoResponse(
-            ProcesoProduccionDocumentoService.DescargaDocumento descarga) {
+            ProcesoProduccionDocumentoPdfService.DocumentoPdf descarga) {
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType(descarga.contentType()));
+        headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentLength(descarga.contentLength());
-        ContentDisposition disposition = MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(
-                descarga.contentType())
-                ? ContentDisposition.inline()
-                .filename(descarga.fileName(), StandardCharsets.UTF_8)
-                .build()
-                : ContentDisposition.attachment()
+        ContentDisposition disposition = ContentDisposition.inline()
                 .filename(descarga.fileName(), StandardCharsets.UTF_8)
                 .build();
         headers.setContentDisposition(disposition);

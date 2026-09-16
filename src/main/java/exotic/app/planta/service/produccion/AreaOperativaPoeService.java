@@ -6,6 +6,7 @@ import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
+import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -22,8 +23,9 @@ public class AreaOperativaPoeService {
     private final SeguimientoOrdenAreaRepo seguimientoOrdenAreaRepo;
     private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
     private final ProcesoProduccionDocumentoService procesoDocumentoService;
+    private final ProcesoProduccionDocumentoPdfService procesoDocumentoPdfService;
 
-    public ProcesoProduccionDocumentoService.DescargaDocumento getDescarga(
+    public ProcesoProduccionDocumentoPdfService.DocumentoPdf getDescarga(
             int ordenId,
             Long seguimientoId,
             Long userId
@@ -55,13 +57,10 @@ public class AreaOperativaPoeService {
             );
         }
 
-        return procesoDocumentoService.getDescarga(
-                documento.getProceso().getProcesoId(),
-                documento.getId()
-        );
+        return renderizarDocumento(documento);
     }
 
-    public ProcesoProduccionDocumentoService.DescargaDocumento getDescargaFabricacion(
+    public ProcesoProduccionDocumentoPdfService.DocumentoPdf getDescargaFabricacion(
             Long ordenFabricacionId,
             Long operacionId,
             Long userId
@@ -84,7 +83,15 @@ public class AreaOperativaPoeService {
             throw new NoSuchElementException(
                     "La operacion no tiene una version de POE congelada.");
         }
-        return procesoDocumentoService.getDescarga(
-                documento.getProceso().getProcesoId(), documento.getId());
+        return renderizarDocumento(documento);
+    }
+
+    private ProcesoProduccionDocumentoPdfService.DocumentoPdf renderizarDocumento(
+            ProcesoProduccionDocumentoVersion documento
+    ) {
+        ProcesoProduccionDocumentoService.DescargaDocumento descarga =
+                procesoDocumentoService.getDescarga(
+                        documento.getProceso().getProcesoId(), documento.getId());
+        return procesoDocumentoPdfService.renderizar(descarga);
     }
 }

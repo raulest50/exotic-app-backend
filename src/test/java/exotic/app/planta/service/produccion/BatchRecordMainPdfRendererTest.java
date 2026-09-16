@@ -10,6 +10,7 @@ import exotic.app.planta.repo.produccion.batchrecord.BatchRecordFirmaRepo;
 import exotic.app.planta.repo.usuarios.FirmaVisualUsuarioVersionRepo;
 import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
+import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 
@@ -212,7 +213,10 @@ class BatchRecordMainPdfRendererTest {
                         (long) mainPdf.length,
                         poeHash));
         BatchRecordPdfAnnexService annexService =
-                new BatchRecordPdfAnnexService(documentService, objectMapper);
+                new BatchRecordPdfAnnexService(
+                        documentService,
+                        new ProcesoProduccionDocumentoPdfService(),
+                        objectMapper);
 
         byte[] completePdf = annexService.componer(mainPdf, root);
         PdfReader mainReader = new PdfReader(mainPdf);

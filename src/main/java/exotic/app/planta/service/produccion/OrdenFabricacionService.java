@@ -254,7 +254,9 @@ public class OrdenFabricacionService {
             throw new AccessDeniedException(
                     "La OF no pertenece a un area operativa a cargo del usuario.");
         }
-        return toResponse(requireEntity(id));
+        OrdenFabricacionDTOs.Response response = toResponse(requireEntity(id));
+        response.setOperaciones(operacionService.listarOperativo(id, userId));
+        return response;
     }
 
     @Transactional(readOnly = true)

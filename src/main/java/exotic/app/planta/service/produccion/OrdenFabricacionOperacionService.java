@@ -441,6 +441,24 @@ public class OrdenFabricacionOperacionService {
     }
 
     @Transactional(readOnly = true)
+    public List<OrdenFabricacionDTOs.OperacionResponse> listarOperativo(
+            Long ordenFabricacionId,
+            Long userId
+    ) {
+        return operacionRepo
+                .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(
+                        ordenFabricacionId)
+                .stream()
+                .map(operacion -> toResponse(
+                        operacion,
+                        operacion.getAreaOperativa().getResponsableArea() != null
+                                && Objects.equals(
+                                operacion.getAreaOperativa().getResponsableArea().getId(),
+                                userId)))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public boolean esResponsableDeAlgunaOperacion(Long ordenFabricacionId, Long userId) {
         return ordenFabricacionId != null && userId != null
                 && operacionRepo
@@ -751,8 +769,16 @@ public class OrdenFabricacionOperacionService {
 
     public OrdenFabricacionDTOs.OperacionResponse toResponse(
             OrdenFabricacionOperacion operacion) {
+        return toResponse(operacion, true);
+    }
+
+    private OrdenFabricacionDTOs.OperacionResponse toResponse(
+            OrdenFabricacionOperacion operacion,
+            boolean incluirPoe
+    ) {
         BatchRecordEtapa etapa = operacion.getBatchRecordEtapa();
-        ProcesoProduccionDocumentoVersion poe = operacion.getPoeDocumentoVersion();
+        ProcesoProduccionDocumentoVersion poe = incluirPoe
+                ? operacion.getPoeDocumentoVersion() : null;
         return OrdenFabricacionDTOs.OperacionResponse.builder()
                 .id(operacion.getId())
                 .ordenFabricacionId(operacion.getOrdenFabricacion().getOrdenFabricacionId())
