@@ -120,6 +120,10 @@ public final class ControlDTOs {
              Long ultimaEjecucionId, LocalDateTime ultimaEjecucionFecha,
              List<CaracteristicaResponse> caracteristicas) {}
 
+    public record EnsayoPendienteOption(
+            Long planId, String codigo, String nombre,
+            List<MomentoControl> momentos) {}
+
     public record LecturaWriteRequest(
             @NotNull @Positive Integer indiceUnidad,
             BigDecimal valorNumerico,

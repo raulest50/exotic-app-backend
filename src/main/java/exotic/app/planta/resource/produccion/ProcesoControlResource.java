@@ -85,7 +85,7 @@ public class ProcesoControlResource {
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         requireExact(auth, TAB_REGISTRO, 1);
         return executionService.pendientes(
-                AmbitoControl.PROCESO, loteId, batchRecordId, batchRecordEtapaId, areaId,
+                AmbitoControl.PROCESO, null, loteId, batchRecordId, batchRecordEtapaId, areaId,
                 tipoOrden, momento, estado, vencimientoDesde, vencimientoHasta, search, page, size);
     }
 

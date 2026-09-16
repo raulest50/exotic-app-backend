@@ -70,7 +70,8 @@ public class CalidadControlUnificadoResource {
 
     @GetMapping("/pendientes")
     public Page<PendienteResponse> pendientes(
-            Authentication auth, @RequestParam(required = false) Long loteId,
+            Authentication auth, @RequestParam(required = false) Long planId,
+            @RequestParam(required = false) Long loteId,
             @RequestParam(required = false) Long batchRecordId,
             @RequestParam(required = false) Long batchRecordEtapaId,
             @RequestParam(required = false) Integer areaId,
@@ -85,8 +86,20 @@ public class CalidadControlUnificadoResource {
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         requireExact(auth, TAB_REGISTRO, 1);
         return executionService.pendientes(
-                AmbitoControl.CALIDAD, loteId, batchRecordId, batchRecordEtapaId, areaId,
+                AmbitoControl.CALIDAD, planId, loteId, batchRecordId, batchRecordEtapaId, areaId,
                 tipoOrden, momento, estado, vencimientoDesde, vencimientoHasta, search, page, size);
+    }
+
+    @GetMapping("/pendientes/opciones-ensayo")
+    public Page<EnsayoPendienteOption> opcionesEnsayoPendiente(
+            Authentication auth,
+            @RequestParam(required = false) Integer areaId,
+            @RequestParam(required = false) TipoOrdenControl tipoOrden,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        requireExact(auth, TAB_REGISTRO, 1);
+        return executionService.opcionesEnsayoCalidad(areaId, tipoOrden, search, page, size);
     }
 
     @PostMapping("/ejecuciones")

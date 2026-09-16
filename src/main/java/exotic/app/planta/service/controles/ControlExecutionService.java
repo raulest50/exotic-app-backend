@@ -38,7 +38,7 @@ public class ControlExecutionService {
 
     @Transactional(readOnly = true)
     public Page<PendienteResponse> pendientes(
-            AmbitoControl ambito, Long loteId, Long batchRecordId, Long batchRecordEtapaId,
+            AmbitoControl ambito, Long planId, Long loteId, Long batchRecordId, Long batchRecordEtapaId,
             Integer areaId,
             TipoOrdenControl tipoOrden, MomentoControl momento,
             List<EstadoControlRequerido> estados, LocalDate vencimientoDesde,
@@ -53,10 +53,35 @@ public class ControlExecutionService {
                 EstadoControlRequerido.POR_REVALIDAR) : estados;
         return requeridoRepo.buscarPendientes(ambito,
                         filtroEstados, loteId, batchRecordId, batchRecordEtapaId, areaId,
-                        tipoOrden, momento, vencimientoDesde, vencimientoHasta,
+                        tipoOrden, planId, momento, vencimientoDesde, vencimientoHasta,
                         limpiarNullable(search),
                         PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "creadoEn")))
                 .map(this::toPendiente);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EnsayoPendienteOption> opcionesEnsayoCalidad(
+            Integer areaId, TipoOrdenControl tipoOrden, String search, int page, int size) {
+        validarPaginacion(page, size);
+        List<EstadoControlRequerido> estados = List.of(
+                EstadoControlRequerido.PENDIENTE,
+                EstadoControlRequerido.NO_CONFORME,
+                EstadoControlRequerido.POR_REVALIDAR);
+        return requeridoRepo.buscarOpcionesEnsayoPendiente(
+                        estados, areaId, tipoOrden, limpiarNullable(search),
+                        PageRequest.of(page, size))
+                .map(item -> {
+                    List<MomentoControl> momentos = new ArrayList<>(2);
+                    if (item.getControlesIntermedios() != null && item.getControlesIntermedios() > 0) {
+                        momentos.add(MomentoControl.DURANTE_FABRICACION);
+                    }
+                    if (item.getControlesProductoTerminado() != null
+                            && item.getControlesProductoTerminado() > 0) {
+                        momentos.add(MomentoControl.REVISION_FINAL);
+                    }
+                    return new EnsayoPendienteOption(
+                            item.getPlanId(), item.getCodigo(), item.getNombre(), List.copyOf(momentos));
+                });
     }
 
     @Transactional
