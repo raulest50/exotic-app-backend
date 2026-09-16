@@ -4,9 +4,6 @@ import exotic.app.planta.model.calidad.ControlProcesoEjecucion;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
-import exotic.app.planta.model.produccion.batchrecord.BatchRecordFirma;
-import exotic.app.planta.model.produccion.batchrecord.BatchRecordRevision;
-import exotic.app.planta.model.users.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -40,13 +37,6 @@ public class ControlRequerido {
     @Column(name = "requiere_repeticion", nullable = false) private boolean requiereRepeticion;
     @Column(name = "requiere_revalidacion", nullable = false) private boolean requiereRevalidacion;
     @Column(name = "creado_en", nullable = false, updatable = false) private LocalDateTime creadoEn;
-    @Column(name = "agregado_excepcionalmente", nullable = false) private boolean agregadoExcepcionalmente;
-    @Column(name = "motivo_adicion", length = 500) private String motivoAdicion;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "agregado_por_id") private User agregadoPor;
-    @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "revision_adicion_id")
-    private BatchRecordRevision revisionAdicion;
-    @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "firma_adicion_id")
-    private BatchRecordFirma firmaAdicion;
     @Column(name = "plan_codigo_snapshot", nullable = false, length = 60) private String planCodigoSnapshot;
     @Column(name = "plan_nombre_snapshot", nullable = false, length = 160) private String planNombreSnapshot;
     @Enumerated(EnumType.STRING) @Column(name = "ambito_snapshot", nullable = false, length = 20)

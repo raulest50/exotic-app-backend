@@ -8,20 +8,30 @@ import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.parser.PdfTextExtractor;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordFirmaRepo;
 import exotic.app.planta.repo.usuarios.FirmaVisualUsuarioVersionRepo;
+import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 
+import javax.imageio.ImageIO;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyLong;
 
 class BatchRecordMainPdfRendererTest {
 
@@ -34,6 +44,11 @@ class BatchRecordMainPdfRendererTest {
     void rendersHumanReportAndOmitsTechnicalAuditFields() throws Exception {
         BatchRecordFirmaRepo firmaRepo = mock(BatchRecordFirmaRepo.class);
         FirmaVisualUsuarioVersionRepo visualRepo = mock(FirmaVisualUsuarioVersionRepo.class);
+        FirmaVisualUsuarioVersion visualSignature = new FirmaVisualUsuarioVersion();
+        visualSignature.setId(170L);
+        visualSignature.setVersion(3);
+        visualSignature.setContenido(qaSignature());
+        when(visualRepo.findById(anyLong())).thenReturn(Optional.of(visualSignature));
         BatchRecordMainPdfRenderer renderer =
                 new BatchRecordMainPdfRenderer(firmaRepo, visualRepo, objectMapper);
         JsonNode root = completeCanonicalRecord();
@@ -43,14 +58,14 @@ class BatchRecordMainPdfRendererTest {
                         "a".repeat(64),
                         false,
                         null,
-                        "batch-record-pdf-v5",
+                        "batch-record-pdf-v6",
                         new BatchRecordMainPdfRenderer.LogoDocumental(
                                 qaLogo(), 2, "logo-sha"));
 
         byte[] pdf = renderer.render(root, context);
         Path qaDirectory = Path.of("build", "reports", "pdf-qa");
         Files.createDirectories(qaDirectory);
-        Files.write(qaDirectory.resolve("batch-record-v5-sample.pdf"), pdf);
+        Files.write(qaDirectory.resolve("batch-record-v6-sample.pdf"), pdf);
 
         PdfReader reader = new PdfReader(pdf);
         try {
@@ -66,17 +81,27 @@ class BatchRecordMainPdfRendererTest {
             assertThat(text)
                     .contains("EXPEDIENTE DIGITAL DE FABRICACIÓN")
                     .contains("1. Resumen del lote")
-                    .contains("2. Conciliación de materiales")
+                    .contains("2. Materiales y dispensaciones")
+                    .contains("2.1 Conciliación de materiales")
+                    .contains("2.2 Registro detallado de dispensaciones")
                     .contains("3. Ejecución por etapas")
                     .contains("4. Controles de proceso y calidad")
-                    .contains("5. Desviaciones")
-                    .contains("6. Correcciones y trazabilidad excepcional")
+                    .contains("5. Cronología de observaciones, correcciones y desviaciones")
+                    .contains("6. Revisión y trazabilidad excepcional")
                     .contains("7. Decisiones de Calidad")
                     .contains("8. Firmas y aprobaciones")
                     .contains("Champú Reparación Intensiva")
                     .contains("Agua purificada")
                     .contains("Mezcla")
                     .contains("Control de pH")
+                    .contains("Fecha y hora")
+                    .contains("Marta Bodega")
+                    .contains("@mbodega")
+                    .contains("Julián Líder")
+                    .contains("recepción no confirmada")
+                    .contains("Firma visual · versión 3")
+                    .contains("Ajustar secuencia antes del arranque")
+                    .contains("Corrección administrativa de producción")
                     .contains("Diferencia")
                     .contains("No representa por sí sola una conclusión de conformidad")
                     .contains("Laura Calidad");
@@ -85,7 +110,6 @@ class BatchRecordMainPdfRendererTest {
                     .doesNotContain("10.1.2.3")
                     .doesNotContain("SECRET-USER-AGENT")
                     .doesNotContain("123456789")
-                    .doesNotContain("usuario.interno")
                     .doesNotContain("firma-hash-interno")
                     .doesNotContain("Vendedor Que No Debe Aparecer")
                     .doesNotContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -135,7 +159,7 @@ class BatchRecordMainPdfRendererTest {
                         "b".repeat(64),
                         false,
                         null,
-                        "batch-record-pdf-v5",
+                        "batch-record-pdf-v6",
                         new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha"));
 
         byte[] pdf = renderer.render(root, context);
@@ -171,7 +195,7 @@ class BatchRecordMainPdfRendererTest {
                         "a".repeat(64),
                         false,
                         null,
-                        "batch-record-pdf-v5",
+                        "batch-record-pdf-v6",
                         new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha")));
         String poeHash = HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(mainPdf));
@@ -212,7 +236,7 @@ class BatchRecordMainPdfRendererTest {
     private JsonNode completeCanonicalRecord() throws Exception {
         JsonNode root = objectMapper.readTree("""
                 {
-                  "esquemaVersion": "batch-record-v5",
+                  "esquemaVersion": "batch-record-v6",
                   "registradoEn": "2026-09-07T09:30:00",
                   "codigo": "BR-OP-901",
                   "estado": "CERRADO",
@@ -273,7 +297,51 @@ class BatchRecordMainPdfRendererTest {
                     {"id": 2, "productoId": "MP-01", "productoNombre": "Agua purificada", "loteOrigen": "AG-1", "cantidad": -1, "unidad": "kg", "movimientoId": 802},
                     {"id": 3, "productoId": "MP-X", "productoNombre": "Ajuste no planificado", "loteOrigen": "AX-2", "cantidad": 0.5, "unidad": "kg", "movimientoId": 803}
                   ],
-                  "dispensaciones": [{"transaccionId": 3001}, {"transaccionId": 3002}],
+                  "dispensaciones": [{
+                    "transaccionId": 3001,
+                    "tipo": "OD",
+                    "fechaTransaccion": "2026-09-07T06:45:00",
+                    "estadoContable": "APLICADA",
+                    "observaciones": "Material preparado para fabricación",
+                    "usuariosRealizadores": [{"id": 70, "nombre": "Marta Bodega", "username": "mbodega", "firmaVisualVersionId": 170}],
+                    "recepcionesAsignadas": [{
+                      "areaId": 4,
+                      "areaNombre": "Fabricación",
+                      "estadoRecepcion": "ASIGNADO_AUTOMATICAMENTE_SIN_CONFIRMACION",
+                      "receptorAsignado": {"id": 71, "nombre": "Julián Líder", "username": "jlider", "firmaVisualVersionId": 171}
+                    }],
+                    "movimientos": [{
+                      "movimientoId": 801,
+                      "productoId": "MP-01",
+                      "productoNombre": "Agua purificada",
+                      "loteOrigen": "AG-1",
+                      "cantidad": 8,
+                      "unidad": "kg",
+                      "areaOperativa": "Fabricación",
+                      "fechaMovimiento": "2026-09-07T06:46:00"
+                    }]
+                  }, {"transaccionId": 3002}],
+                  "cronologiaProceso": [{
+                    "fuenteTipo": "MPS",
+                    "fuenteId": 44,
+                    "fechaHora": null,
+                    "categoria": "OBSERVACION_MPS",
+                    "titulo": "Observación de planificación MPS",
+                    "detalle": "Ajustar secuencia antes del arranque",
+                    "actor": {}
+                  }, {
+                    "fuenteTipo": "EVENTO_AREA_OPERATIVA",
+                    "fuenteId": 501,
+                    "fechaHora": "2026-09-07T09:20:00",
+                    "categoria": "CORRECCION_ADMINISTRATIVA",
+                    "titulo": "Corrección administrativa de producción",
+                    "detalle": "Se corrigió la hora informada por el área",
+                    "area": "Fabricación",
+                    "etapa": "Mezcla",
+                    "estadoOrigen": "EN_PROCESO",
+                    "estadoDestino": "COMPLETADO",
+                    "actor": {"id": 80, "nombre": "Pedro Producción", "username": "pproduccion", "firmaVisualVersionId": 180}
+                  }],
                   "controles": [{"id": 888, "resultado": "NO_CONFORME", "userAgent": "LEGACY-SECRET"}],
                   "controlesUnificados": {"requisitos": [{
                     "id": 900,
@@ -365,5 +433,26 @@ class BatchRecordMainPdfRendererTest {
     private byte[] qaLogo() throws Exception {
         Path officialLogo = Path.of("..", "exotic-app-frontend", "public", "logo_novum.png");
         return Files.exists(officialLogo) ? Files.readAllBytes(officialLogo) : TEST_LOGO;
+    }
+
+    private byte[] qaSignature() throws Exception {
+        BufferedImage image = new BufferedImage(250, 70, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setColor(Color.BLACK);
+            graphics.setStroke(new BasicStroke(3.2f, BasicStroke.CAP_ROUND,
+                    BasicStroke.JOIN_ROUND));
+            graphics.drawPolyline(
+                    new int[]{12, 42, 69, 91, 118, 145, 173, 205, 238},
+                    new int[]{52, 20, 48, 14, 51, 24, 46, 18, 43},
+                    9);
+        } finally {
+            graphics.dispose();
+        }
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", output);
+        return output.toByteArray();
     }
 }

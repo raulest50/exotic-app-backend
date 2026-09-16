@@ -272,10 +272,6 @@ public class ControlExecutionService {
                  item.getProcesoIdSnapshot(), item.getProcesoNombreSnapshot(),
                  item.getMomentoSnapshot(), item.getPuntoExigenciaSnapshot(),
                  item.isRequiereRepeticion(), item.isRequiereRevalidacion(),
-                 item.isAgregadoExcepcionalmente(), item.getMotivoAdicion(),
-                 item.getAgregadoPor() == null ? null : item.getAgregadoPor().getUsername(),
-                 item.getRevisionAdicion() == null ? null : item.getRevisionAdicion().getId(),
-                 item.getFirmaAdicion() == null ? null : item.getFirmaAdicion().getId(),
                  ultima == null ? null : ultima.getId(), ultima == null ? null : ultima.getFechaRegistro(),
                  item.getVersionPlan().getCaracteristicas().stream().map(planService::toResponse).toList());
     }
@@ -435,10 +431,6 @@ public class ControlExecutionService {
                  r.getBatchRecordEtapa() == null ? null : r.getBatchRecordEtapa().getNombre(),
                  r.getAreaOperativaIdSnapshot(), r.getAreaOperativaNombreSnapshot(),
                  r.getProcesoIdSnapshot(), r.getProcesoNombreSnapshot(),
-                 r.isAgregadoExcepcionalmente(), r.getMotivoAdicion(),
-                 r.getAgregadoPor() == null ? null : r.getAgregadoPor().getUsername(),
-                 r.getRevisionAdicion() == null ? null : r.getRevisionAdicion().getId(),
-                 r.getFirmaAdicion() == null ? null : r.getFirmaAdicion().getId(),
                  item.getUsuario().getUsername(), item.getUsuario().getNombreCompleto(), item.getFechaRegistro(),
                 item.getResultado(), item.getObservaciones(), item.getMotivoRepeticion(),
                 desviacionRepo.findByEjecucionOrigen_Id(item.getId())

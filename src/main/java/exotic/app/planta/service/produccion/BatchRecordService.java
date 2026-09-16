@@ -5,13 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import exotic.app.planta.model.calidad.*;
 import exotic.app.planta.model.controles.PuntoExigenciaControl;
-import exotic.app.planta.model.controles.ControlRequerido;
 import exotic.app.planta.model.controles.dto.BloqueoControlDTO;
 import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
 import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.*;
 import exotic.app.planta.model.produccion.batchrecord.*;
 import exotic.app.planta.model.produccion.dto.BatchRecordDTOs;
@@ -53,8 +53,8 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v5";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v5";
+    public static final String ESQUEMA_VERSION = "batch-record-v6";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v6";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
     private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
             EnumSet.of(
@@ -798,51 +798,6 @@ public class BatchRecordService {
         evidencia.setRevision(revision);
         evidencia.setFirma(firma);
         return decisionRepo.save(evidencia);
-    }
-
-    /** Emite la revisión y firma vinculables a una adición excepcional ya persistida. */
-    public BatchRecordFirma registrarAdicionExcepcionalControl(
-            ControlRequerido requisito,
-            User actor,
-            String motivo,
-            String ipOrigen,
-            String userAgent
-    ) {
-        validarIdentidadAuditable(actor);
-        if (requisito == null || requisito.getId() == null
-                || requisito.getBatchRecord() == null
-                || requisito.getBatchRecord().getId() == null
-                || !requisito.isAgregadoExcepcionalmente()) {
-            throw new IllegalArgumentException(
-                    "Se requiere un control excepcional persistido y vinculado a un expediente.");
-        }
-        if (!mismoUsuario(actor, requisito.getAgregadoPor())) {
-            throw new IllegalStateException(
-                    "La firma debe corresponder al usuario que agregó el control excepcional.");
-        }
-        String motivoNormalizado = textoObligatorio(
-                motivo, "El motivo de la adición excepcional es obligatorio.");
-        BatchRecord record = batchRecordRepo.findByIdForUpdate(
-                        requisito.getBatchRecord().getId())
-                .orElseThrow(() -> new NoSuchElementException(
-                        "Expediente digital no encontrado."));
-        BatchRecordRevision revision = crearRevision(
-                record,
-                TipoRevisionBatchRecord.ADICION_CONTROL_REQUERIDO,
-                actor,
-                motivoNormalizado);
-        return registrarFirmaRevision(
-                record,
-                revision,
-                actor,
-                AlcanceFirmaBatchRecord.ADICION_CONTROL_REQUERIDO,
-                DecisionFirmaBatchRecord.CONFIRMA,
-                "Confirmo la adición excepcional del control requerido "
-                        + requisito.getId() + " al expediente.",
-                motivoNormalizado,
-                "Administrador de planes de control",
-                ipOrigen,
-                userAgent);
     }
 
     public SolicitudReaperturaRechazo solicitarReaperturaRechazo(
@@ -1748,10 +1703,14 @@ public class BatchRecordService {
         root.put("etapas", etapas.stream().map(this::mapEtapaCanonica).toList());
         root.put("consumos", consumos.stream().map(this::mapConsumoCanonico).toList());
         root.put("dispensaciones", mapDispensacionesCanonicas(consumos));
-        root.put("controles", ejecucionRepo.findByBatchRecord_IdOrderByFechaRegistroAscIdAsc(record.getId())
-                .stream().map(this::mapControlCanonico).toList());
-        root.put("controlesUnificados",
-                controlWorkflowService.documentoCanonicoPorBatchRecord(record.getId()));
+        List<ControlProcesoEjecucion> controles =
+                ejecucionRepo.findByBatchRecord_IdOrderByFechaRegistroAscIdAsc(record.getId());
+        root.put("controles", controles.stream().map(this::mapControlCanonico).toList());
+        Map<String, Object> controlesUnificados =
+                controlWorkflowService.documentoCanonicoPorBatchRecord(record.getId());
+        enriquecerFirmasVisualesControles(controlesUnificados);
+        root.put("controlesUnificados", controlesUnificados);
+        root.put("cronologiaProceso", mapCronologiaProcesoCanonica(record, etapas));
         root.put("desviaciones", desviacionRepo.findByBatchRecord_IdOrderByDetectadaEnAscIdAsc(record.getId())
                 .stream().map(this::mapDesviacionCanonica).toList());
         root.put("correcciones", correccionRepo.findByBatchRecord_IdOrderByCorregidaEnAscIdAsc(record.getId())
@@ -1834,7 +1793,7 @@ public class BatchRecordService {
         data.put("areaNombre", ejecucion.getPlantilla().getAreaOperativa().getNombre());
         data.put("resultado", ejecucion.getResultado() == null ? null : ejecucion.getResultado().name());
         data.put("fechaRegistro", ejecucion.getFechaRegistro());
-        data.put("registradoPor", identidadUsuario(ejecucion.getUsuario()));
+        data.put("registradoPor", identidadUsuarioConFirmaVisual(ejecucion.getUsuario()));
         data.put("observaciones", ejecucion.getObservaciones());
         data.put("muestras", ejecucion.getMuestras().stream()
                 .sorted(Comparator
@@ -1873,7 +1832,7 @@ public class BatchRecordService {
         data.put("estado", desviacion.getEstado().name());
         data.put("ocurridaEn", desviacion.getOcurridaEn());
         data.put("detectadaEn", desviacion.getDetectadaEn());
-        data.put("detectadaPor", identidadUsuario(desviacion.getDetectadaPor()));
+        data.put("detectadaPor", identidadUsuarioConFirmaVisual(desviacion.getDetectadaPor()));
         data.put("origen", desviacion.getOrigen() == null ? null : desviacion.getOrigen().name());
         data.put("accionInmediata", desviacion.getAccionInmediata());
         data.put("evaluacionImpacto", desviacion.getEvaluacionImpacto());
@@ -1882,7 +1841,7 @@ public class BatchRecordService {
         data.put("resolucion", desviacion.getResolucion());
         data.put("resueltaEn", desviacion.getResueltaEn());
         data.put("resueltaPor", desviacion.getResueltaPor() == null
-                ? null : identidadUsuario(desviacion.getResueltaPor()));
+                ? null : identidadUsuarioConFirmaVisual(desviacion.getResueltaPor()));
         return data;
     }
 
@@ -1904,7 +1863,7 @@ public class BatchRecordService {
         data.put("valorNuevo", correccion.getValorNuevo());
         data.put("motivo", correccion.getMotivo());
         data.put("corregidaEn", correccion.getCorregidaEn());
-        data.put("corregidaPor", identidadUsuario(correccion.getCorregidaPor()));
+        data.put("corregidaPor", identidadUsuarioConFirmaVisual(correccion.getCorregidaPor()));
         return data;
     }
 
@@ -1962,14 +1921,39 @@ public class BatchRecordService {
                 ? List.of()
                 : transaccion.getUsuariosResponsables().stream()
                 .sorted(Comparator.comparing(User::getId, Comparator.nullsLast(Long::compareTo)))
-                .map(this::identidadUsuario)
+                .map(this::identidadUsuarioConFirmaVisual)
                 .toList());
         data.put("usuarioAprobador", identidadUsuario(transaccion.getUsuarioAprobador()));
+        data.put("recepcionesAsignadas", mapRecepcionesAsignadas(consumos));
         data.put("movimientos", consumos.stream()
                 .sorted(Comparator.comparingInt(value -> value.getMovimiento().getMovimientoId()))
                 .map(this::mapMovimientoDispensacionCanonica)
                 .toList());
         return data;
+    }
+
+    private List<Map<String, Object>> mapRecepcionesAsignadas(
+            List<BatchRecordConsumo> consumos
+    ) {
+        Map<Integer, AreaOperativa> areasDestino = new TreeMap<>();
+        for (BatchRecordConsumo consumo : consumos) {
+            Movimiento movimiento = consumo.getMovimiento();
+            if (movimiento != null && movimiento.getAreaOperativa() != null) {
+                AreaOperativa area = movimiento.getAreaOperativa();
+                areasDestino.putIfAbsent(area.getAreaId(), area);
+            }
+        }
+        return areasDestino.values().stream().map(area -> {
+            Map<String, Object> recepcion = new TreeMap<>();
+            recepcion.put("areaId", area.getAreaId());
+            recepcion.put("areaNombre", area.getNombre());
+            recepcion.put("receptorAsignado",
+                    identidadUsuarioConFirmaVisual(area.getResponsableArea()));
+            recepcion.put("estadoRecepcion", area.getResponsableArea() == null
+                    ? "SIN_RESPONSABLE_CONFIGURADO"
+                    : "ASIGNADO_AUTOMATICAMENTE_SIN_CONFIRMACION");
+            return recepcion;
+        }).toList();
     }
 
     private Map<String, Object> mapMovimientoDispensacionCanonica(
@@ -2530,6 +2514,265 @@ public class BatchRecordService {
             throw new IllegalStateException(
                     "No se pudo proteger el contenido de la etapa de fabricacion.", exception);
         }
+    }
+
+    private List<Map<String, Object>> mapCronologiaProcesoCanonica(
+            BatchRecord record,
+            List<BatchRecordEtapa> etapas
+    ) {
+        List<Map<String, Object>> eventos = new ArrayList<>();
+        Set<Long> eventosSeguimientoIncluidos = new HashSet<>();
+        Set<Long> eventosFabricacionIncluidos = new HashSet<>();
+
+        agregarEventoCronologia(eventos, "EXPEDIENTE", record.getId(), null,
+                "OBSERVACION_EXPEDIENTE", "Observación general del expediente",
+                record.getObservaciones(), null, null, null, null, null);
+
+        if (record.getOrdenProduccion() != null) {
+            OrdenProduccion orden = record.getOrdenProduccion();
+            if (orden.getMpsLotePlanificado() != null
+                    && orden.getMpsLotePlanificado().getMpsItem() != null) {
+                MpsSemanalItem item = orden.getMpsLotePlanificado().getMpsItem();
+                agregarEventoCronologia(eventos, "MPS", item.getId(), null,
+                        "OBSERVACION_MPS", "Observación de planificación MPS",
+                        item.getObservacion(), null, null, null, null, null);
+            }
+            agregarEventoCronologia(eventos, "ORDEN_PRODUCCION",
+                    (long) orden.getOrdenId(), null,
+                    "OBSERVACION_ORDEN", "Observación de la orden de producción",
+                    orden.getObservaciones(), orden.getAreaOperativa(), null,
+                    null, null, null);
+
+            List<Long> seguimientoIds = seguimientoRepo
+                    .findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(
+                            orden.getOrdenId())
+                    .stream().map(SeguimientoOrdenArea::getId).toList();
+            if (!seguimientoIds.isEmpty()) {
+                for (SeguimientoOrdenAreaEvento evento : seguimientoEventoRepo
+                        .findBySeguimientoOrdenArea_IdInOrderByFechaEventoAscIdAsc(
+                                seguimientoIds)) {
+                    if (textoVacio(evento.getNota())) continue;
+                    eventos.add(mapEventoSeguimientoCanonico(evento));
+                    eventosSeguimientoIncluidos.add(evento.getId());
+                }
+            }
+        } else if (record.getOrdenFabricacion() != null) {
+            OrdenFabricacion orden = record.getOrdenFabricacion();
+            agregarEventoCronologia(eventos, "ORDEN_FABRICACION",
+                    orden.getOrdenFabricacionId(), null,
+                    "OBSERVACION_ORDEN", "Observación de la orden de fabricación",
+                    orden.getObservaciones(), null, null,
+                    null, null, null);
+            for (OrdenFabricacionOperacion operacion : ordenFabricacionOperacionRepo
+                    .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(
+                            orden.getOrdenFabricacionId())) {
+                for (OrdenFabricacionOperacionEvento evento : ordenFabricacionEventoRepo
+                        .findByOperacion_IdOrderByFechaEventoAscIdAsc(operacion.getId())) {
+                    if (textoVacio(evento.getNota())) continue;
+                    eventos.add(mapEventoFabricacionCanonico(evento));
+                    eventosFabricacionIncluidos.add(evento.getId());
+                }
+            }
+        }
+
+        for (BatchRecordEtapa etapa : etapas) {
+            if (textoVacio(etapa.getObservaciones())) continue;
+            Long eventoSeguimientoId = etapa.getSeguimientoEventoOrigen() == null
+                    ? null : etapa.getSeguimientoEventoOrigen().getId();
+            Long eventoFabricacionId = etapa.getOrdenFabricacionEventoOrigen() == null
+                    ? null : etapa.getOrdenFabricacionEventoOrigen().getId();
+            if ((eventoSeguimientoId != null
+                    && eventosSeguimientoIncluidos.contains(eventoSeguimientoId))
+                    || (eventoFabricacionId != null
+                    && eventosFabricacionIncluidos.contains(eventoFabricacionId))) {
+                continue;
+            }
+            agregarEventoCronologia(eventos, "ETAPA", etapa.getId(),
+                    etapa.getCompletadaEn() == null
+                            ? etapa.getIniciadaEn() : etapa.getCompletadaEn(),
+                    "OBSERVACION_AREA", "Observación de etapa: " + etapa.getNombre(),
+                    etapa.getObservaciones(), etapa.getAreaOperativa().getNombre(),
+                    identidadUsuarioConFirmaVisual(etapa.getReportadaPor()),
+                    etapa.getNombre(), null, null);
+        }
+
+        eventos.sort(Comparator
+                .comparing((Map<String, Object> evento) ->
+                                (LocalDateTime) evento.get("fechaHora"),
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(evento -> Objects.toString(evento.get("fuenteTipo"), ""))
+                .thenComparing(evento -> Objects.toString(evento.get("fuenteId"), "")));
+        return eventos;
+    }
+
+    private Map<String, Object> mapEventoSeguimientoCanonico(
+            SeguimientoOrdenAreaEvento evento
+    ) {
+        SeguimientoOrdenArea seguimiento = evento.getSeguimientoOrdenArea();
+        Map<String, Object> data = eventoCronologiaBase(
+                "EVENTO_AREA_OPERATIVA", evento.getId(), evento.getFechaEvento(),
+                categoriaEvento(evento.getActorTipo(), evento.getTipoEvento()),
+                tituloEvento(evento.getActorTipo(), evento.getTipoEvento()),
+                evento.getNota(), seguimiento.getAreaOperativa().getNombre(),
+                identidadUsuarioConFirmaVisual(evento.getUsuario()));
+        data.put("etapa", seguimiento.getRutaProcesoNode() == null
+                ? null : seguimiento.getRutaProcesoNode().getLabel());
+        data.put("estadoOrigen", descripcionEstadoSeguimiento(evento.getEstadoOrigen()));
+        data.put("estadoDestino", descripcionEstadoSeguimiento(evento.getEstadoDestino()));
+        return data;
+    }
+
+    private Map<String, Object> mapEventoFabricacionCanonico(
+            OrdenFabricacionOperacionEvento evento
+    ) {
+        OrdenFabricacionOperacion operacion = evento.getOperacion();
+        Map<String, Object> data = eventoCronologiaBase(
+                "EVENTO_AREA_OPERATIVA_OF", evento.getId(), evento.getFechaEvento(),
+                categoriaEvento(evento.getActorTipo(), evento.getTipoEvento()),
+                tituloEvento(evento.getActorTipo(), evento.getTipoEvento()),
+                evento.getNota(), operacion.getAreaOperativa().getNombre(),
+                identidadUsuarioConFirmaVisual(evento.getUsuario()));
+        data.put("etapa", operacion.getProcesoNombre());
+        data.put("estadoOrigen", descripcionEstadoSeguimiento(evento.getEstadoOrigen()));
+        data.put("estadoDestino", descripcionEstadoSeguimiento(evento.getEstadoDestino()));
+        return data;
+    }
+
+    private void agregarEventoCronologia(
+            List<Map<String, Object>> eventos,
+            String fuenteTipo,
+            Long fuenteId,
+            LocalDateTime fechaHora,
+            String categoria,
+            String titulo,
+            String detalle,
+            String area,
+            Map<String, Object> actor,
+            String etapa,
+            String estadoOrigen,
+            String estadoDestino
+    ) {
+        if (textoVacio(detalle)) return;
+        Map<String, Object> data = eventoCronologiaBase(
+                fuenteTipo, fuenteId, fechaHora, categoria, titulo, detalle, area, actor);
+        data.put("etapa", etapa);
+        data.put("estadoOrigen", estadoOrigen);
+        data.put("estadoDestino", estadoDestino);
+        eventos.add(data);
+    }
+
+    private Map<String, Object> eventoCronologiaBase(
+            String fuenteTipo,
+            Long fuenteId,
+            LocalDateTime fechaHora,
+            String categoria,
+            String titulo,
+            String detalle,
+            String area,
+            Map<String, Object> actor
+    ) {
+        Map<String, Object> data = new TreeMap<>();
+        data.put("fuenteTipo", fuenteTipo);
+        data.put("fuenteId", fuenteId);
+        data.put("fechaHora", fechaHora);
+        data.put("categoria", categoria);
+        data.put("titulo", titulo);
+        data.put("detalle", detalle);
+        data.put("area", area);
+        data.put("actor", actor == null ? Map.of() : actor);
+        return data;
+    }
+
+    private String categoriaEvento(
+            ActorTipoEventoSeguimiento actorTipo,
+            TipoEventoSeguimiento tipoEvento
+    ) {
+        if (tipoEvento == TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA) {
+            return "CORRECCION_ADMINISTRATIVA";
+        }
+        return actorTipo == ActorTipoEventoSeguimiento.SYSTEM
+                ? "EVENTO_SISTEMA" : "OBSERVACION_AREA";
+    }
+
+    private String tituloEvento(
+            ActorTipoEventoSeguimiento actorTipo,
+            TipoEventoSeguimiento tipoEvento
+    ) {
+        if (tipoEvento == TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA) {
+            return "Corrección administrativa de producción";
+        }
+        return actorTipo == ActorTipoEventoSeguimiento.SYSTEM
+                ? "Evento del sistema" : "Observación de área operativa";
+    }
+
+    private String descripcionEstadoSeguimiento(Integer estado) {
+        if (estado == null) return null;
+        try {
+            return EstadoSeguimientoOrdenArea.fromCode(estado).name();
+        } catch (IllegalArgumentException ignored) {
+            return "ESTADO_" + estado;
+        }
+    }
+
+    private boolean textoVacio(String value) {
+        return value == null || value.isBlank();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void enriquecerFirmasVisualesControles(Map<String, Object> documento) {
+        Object requisitos = documento.get("requisitos");
+        if (!(requisitos instanceof List<?> lista)) return;
+        for (Object requisitoValue : lista) {
+            if (!(requisitoValue instanceof Map<?, ?> requisitoRaw)) continue;
+            Map<String, Object> requisito = (Map<String, Object>) requisitoRaw;
+            enriquecerFirmasEnLista(requisito.get("ejecuciones"), "usuario");
+            enriquecerFirmasEnLista(requisito.get("revalidaciones"), "confirmadaPor");
+            Object desviaciones = requisito.get("desviaciones");
+            if (!(desviaciones instanceof List<?> listaDesviaciones)) continue;
+            for (Object desviacionValue : listaDesviaciones) {
+                if (!(desviacionValue instanceof Map<?, ?> desviacionRaw)) continue;
+                Map<String, Object> desviacion = (Map<String, Object>) desviacionRaw;
+                enriquecerFirmaVisualIdentidad(desviacion.get("abiertaPor"));
+                enriquecerFirmaVisualIdentidad(desviacion.get("resueltaPor"));
+                enriquecerFirmaVisualIdentidad(desviacion.get("cerradaPor"));
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void enriquecerFirmasEnLista(Object value, String identityKey) {
+        if (!(value instanceof List<?> lista)) return;
+        for (Object itemValue : lista) {
+            if (!(itemValue instanceof Map<?, ?> itemRaw)) continue;
+            Map<String, Object> item = (Map<String, Object>) itemRaw;
+            enriquecerFirmaVisualIdentidad(item.get(identityKey));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void enriquecerFirmaVisualIdentidad(Object value) {
+        if (!(value instanceof Map<?, ?> identityRaw)) return;
+        Map<String, Object> identity = (Map<String, Object>) identityRaw;
+        Object idValue = identity.get("id");
+        if (!(idValue instanceof Number number)) return;
+        firmaVisualRepo.findFirstByTitularIdAndEstadoOrderByVersionDesc(
+                        number.longValue(), FirmaVisualUsuarioVersion.Estado.VIGENTE)
+                .ifPresent(firma -> {
+                    identity.put("firmaVisualVersionId", firma.getId());
+                    identity.put("firmaVisualContexto", "PERFIL_VIGENTE_AL_EMITIR_REVISION");
+                });
+    }
+
+    private Map<String, Object> identidadUsuarioConFirmaVisual(User user) {
+        if (user == null) return Map.of();
+        Map<String, Object> data = new TreeMap<>(identidadUsuario(user));
+        firmaVisualRepo.findFirstByTitularIdAndEstadoOrderByVersionDesc(
+                        user.getId(), FirmaVisualUsuarioVersion.Estado.VIGENTE)
+                .ifPresent(firma -> {
+                    data.put("firmaVisualVersionId", firma.getId());
+                    data.put("firmaVisualContexto", "PERFIL_VIGENTE_AL_EMITIR_REVISION");
+                });
+        return data;
     }
 
     private Map<String, Object> identidadUsuario(User user) {

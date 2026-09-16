@@ -88,10 +88,4 @@ public interface ControlRequeridoRepo extends JpaRepository<ControlRequerido, Lo
             Long batchRecordId, Long versionId, Long etapaId);
     boolean existsByBatchRecord_IdAndVersionPlan_IdAndBatchRecordEtapaIsNull(
             Long batchRecordId, Long versionId);
-    boolean existsByLote_IdAndVersionPlan_IdAndPuntoAplicacionSnapshotAndAreaOperativaIdSnapshotAndProcesoIdSnapshotAndRutaNodoIdSnapshotAndOrdenFabricacionOperacionIdSnapshotAndOrigen(
-            Long loteId, Long versionId, PuntoAplicacionControl puntoAplicacion,
-            Integer areaId, Integer procesoId, Long rutaNodoId, Long operacionFabricacionId,
-            OrigenControlRequerido origen);
-    List<ControlRequerido> findByLote_IdAndOrigenAndAmbitoSnapshotOrderByIdAsc(
-            Long loteId, OrigenControlRequerido origen, AmbitoControl ambito);
 }

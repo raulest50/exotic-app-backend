@@ -7,7 +7,6 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.controles.*;
 import jakarta.validation.Valid;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/produccion/controles-proceso")
@@ -30,8 +28,6 @@ public class ProcesoControlResource {
     private final ControlPlanService planService;
     private final ControlExecutionService executionService;
     private final ControlDeviationService deviationService;
-    private final ControlWorkflowService workflowService;
-    private final ControlRequeridoExcepcionalService excepcionalService;
     private final ControlIdempotencyService idempotencyService;
     private final ModuleTabAccessGuard accessGuard;
 
@@ -91,55 +87,6 @@ public class ProcesoControlResource {
         return executionService.pendientes(
                 AmbitoControl.PROCESO, loteId, batchRecordId, batchRecordEtapaId, areaId,
                 tipoOrden, momento, estado, vencimientoDesde, vencimientoHasta, search, page, size);
-    }
-
-    @GetMapping("/lotes")
-    public List<LoteControlResponse> lotes(
-            Authentication auth, @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "20") int size) {
-        accessGuard.requireAnyTabAccess(auth, ModuloSistema.PRODUCCION,
-                Map.of(TAB_REGISTRO, 1, TAB_PLANES, 3),
-                "Se requiere acceso a registro o administracion de planes para buscar lotes.");
-        return workflowService.buscarLotes(search, size);
-    }
-
-    @PostMapping("/pendientes/independientes")
-    public List<PendienteResponse> resolverIndependientes(
-            Authentication auth, @Valid @RequestBody IndependienteWriteRequest request) {
-        requireExact(auth, TAB_REGISTRO, 2);
-        return workflowService.resolverIndependientes(AmbitoControl.PROCESO, request.loteId())
-                .stream().map(executionService::toPendiente).toList();
-    }
-
-    @PostMapping("/requisitos/excepcionales")
-    public PendienteResponse agregarExcepcional(
-            Authentication auth, HttpServletRequest servletRequest,
-            @RequestHeader(ControlIdempotencyService.HEADER) String idempotencyKey,
-            @Valid @RequestBody AdicionExcepcionalWriteRequest request) {
-        User actor = requirePlan(auth, 3);
-        return idempotencyService.ejecutar(
-                actor, "ADICION_EXCEPCIONAL_PROCESO",
-                "batch-record/" + request.batchRecordId(), idempotencyKey, request,
-                PendienteResponse.class,
-                () -> executionService.toPendiente(excepcionalService.agregarFirmado(
-                        AmbitoControl.PROCESO, actor, request, servletRequest.getRemoteAddr(),
-                        servletRequest.getHeader("User-Agent"))));
-    }
-
-    @GetMapping("/requisitos/excepcionales/opciones")
-    public List<OpcionAdicionExcepcionalResponse> opcionesExcepcionales(
-            Authentication auth, @RequestParam Long batchRecordId,
-            @RequestParam(required = false) Long batchRecordEtapaId) {
-        requirePlan(auth, 3);
-        return workflowService.opcionesAdicionExcepcional(
-                AmbitoControl.PROCESO, batchRecordId, batchRecordEtapaId);
-    }
-
-    @GetMapping("/requisitos/excepcionales/etapas")
-    public List<EtapaAdicionExcepcionalResponse> etapasExcepcionales(
-            Authentication auth, @RequestParam Long batchRecordId) {
-        requirePlan(auth, 3);
-        return workflowService.etapasAdicionExcepcional(AmbitoControl.PROCESO, batchRecordId);
     }
 
     @PostMapping("/ejecuciones")

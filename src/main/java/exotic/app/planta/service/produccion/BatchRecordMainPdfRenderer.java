@@ -42,6 +42,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -280,13 +281,14 @@ class BatchRecordMainPdfRenderer {
         document.add(metrics);
 
         String observations = text(root.path("observaciones"), "");
-        if (!observations.isBlank()) {
+        if (!observations.isBlank() && !hasChronologySource(root, "EXPEDIENTE")) {
             addNarrative(document, "Observaciones generales", observations);
         }
     }
 
     private void addMaterialReconciliation(Document document, JsonNode root) throws Exception {
-        addSectionTitle(document, "2. Conciliación de materiales");
+        addSectionTitle(document, "2. Materiales y dispensaciones");
+        document.add(subsection("2.1 Conciliación de materiales"));
         document.add(note(
                 "La diferencia corresponde a consumo neto documentado menos cantidad planificada. "
                         + "No representa por sí sola una conclusión de conformidad."));
@@ -325,26 +327,227 @@ class BatchRecordMainPdfRenderer {
 
         if (lines.isEmpty()) {
             document.add(noRecords("No se registraron requerimientos ni consumos de materiales."));
+        } else {
+            PdfPTable table = new PdfPTable(new float[]{1.05f, 2.55f, 1.05f, 1.15f, 1.15f, 1.7f});
+            table.setWidthPercentage(100);
+            table.setHeaderRows(1);
+            table.setSplitLate(false);
+            for (String header : List.of(
+                    "Código", "Material", "Planificado", "Documentado", "Diferencia", "Lotes de origen")) {
+                header(table, header);
+            }
+            for (MaterialLine line : lines.values()) {
+                cell(table, line.code);
+                cell(table, line.name + (line.plannedPresent ? "" : " (no planificado)"));
+                cell(table, line.plannedPresent ? number(line.planned) + unitSuffix(line.unit) : "No planificado");
+                cell(table, number(line.actual) + unitSuffix(line.unit));
+                cell(table, number(line.actual.subtract(line.planned)) + unitSuffix(line.unit));
+                cell(table, line.lots.isEmpty() ? "Sin lote físico registrado" : String.join(", ", line.lots));
+            }
+            document.add(table);
+        }
+        addDispensations(document, root.path("dispensaciones"));
+    }
+
+    private void addDispensations(Document document, JsonNode dispensations) throws Exception {
+        document.add(subsection("2.2 Registro detallado de dispensaciones"));
+        document.add(note(
+                "El receptor corresponde al responsable configurado para el área destino al emitir "
+                        + "la revisión. Esta asignación no confirma electrónicamente la recepción."));
+        if (!dispensations.isArray() || dispensations.isEmpty()) {
+            document.add(noRecords("No se registraron dispensaciones relacionadas."));
             return;
         }
 
-        PdfPTable table = new PdfPTable(new float[]{1.05f, 2.55f, 1.05f, 1.15f, 1.15f, 1.7f});
-        table.setWidthPercentage(100);
-        table.setHeaderRows(1);
-        table.setSplitLate(false);
-        for (String header : List.of(
-                "Código", "Material", "Planificado", "Documentado", "Diferencia", "Lotes de origen")) {
-            header(table, header);
+        int index = 1;
+        for (JsonNode dispensation : dispensations) {
+            Paragraph label = new Paragraph(
+                    "Dispensación " + index++ + " · Transacción "
+                            + text(dispensation.path("transaccionId"), "sin número"),
+                    font(9.4f, Font.BOLD, CHARCOAL));
+            label.setSpacingBefore(8);
+            label.setSpacingAfter(4);
+
+            PdfPTable summary = new PdfPTable(new float[]{1.0f, 2.0f, 1.0f, 2.0f});
+            summary.setWidthPercentage(100);
+            pair(summary, "Fecha y hora",
+                    formatDate(text(dispensation.path("fechaTransaccion"), "")));
+            pair(summary, "Tipo",
+                    humanEnum(text(dispensation.path("tipo"), "No registra")));
+            pair(summary, "Estado contable",
+                    humanEnum(text(dispensation.path("estadoContable"), "No registra")));
+            pair(summary, "Área(s) destino", dispensationAreas(dispensation));
+            PdfPCell headerContent = new PdfPCell();
+            headerContent.setBorder(Rectangle.NO_BORDER);
+            headerContent.setPadding(0);
+            headerContent.addElement(label);
+            headerContent.addElement(summary);
+            PdfPTable headerBlock = new PdfPTable(1);
+            headerBlock.setWidthPercentage(100);
+            headerBlock.setSplitRows(false);
+            headerBlock.setSplitLate(true);
+            headerBlock.addCell(headerContent);
+            document.add(headerBlock);
+            addNarrativeIfPresent(document, "Observaciones", dispensation.path("observaciones"));
+
+            JsonNode movements = dispensation.path("movimientos");
+            if (!movements.isArray() || movements.isEmpty()) {
+                document.add(noRecords("No hay movimientos detallados en esta revisión."));
+            } else {
+                PdfPTable table = new PdfPTable(new float[]{1.3f, 2.4f, 1.0f, 1.0f, 1.45f});
+                table.setWidthPercentage(100);
+                table.setHeaderRows(1);
+                table.setSplitLate(false);
+                for (String header : List.of(
+                        "Fecha y hora", "Material", "Lote", "Cantidad", "Área destino")) {
+                    header(table, header);
+                }
+                for (JsonNode movement : movements) {
+                    String movementDate = text(movement.path("fechaMovimiento"),
+                            text(dispensation.path("fechaTransaccion"), ""));
+                    cell(table, formatDate(movementDate));
+                    cell(table, text(movement.path("productoNombre"), "Material sin nombre")
+                            + lineBreak(text(movement.path("productoId"), "")));
+                    cell(table, text(movement.path("loteOrigen"), "Sin lote"));
+                    cell(table, quantity(movement.path("cantidad"), movement.path("unidad")));
+                    cell(table, text(movement.path("areaOperativa"), "No registra"));
+                }
+                document.add(table);
+            }
+            addDispensationParticipants(document, dispensation);
         }
-        for (MaterialLine line : lines.values()) {
-            cell(table, line.code);
-            cell(table, line.name + (line.plannedPresent ? "" : " (no planificado)"));
-            cell(table, line.plannedPresent ? number(line.planned) + unitSuffix(line.unit) : "No planificado");
-            cell(table, number(line.actual) + unitSuffix(line.unit));
-            cell(table, number(line.actual.subtract(line.planned)) + unitSuffix(line.unit));
-            cell(table, line.lots.isEmpty() ? "Sin lote físico registrado" : String.join(", ", line.lots));
+    }
+
+    private void addDispensationParticipants(Document document, JsonNode dispensation)
+            throws Exception {
+        Paragraph title = subsection("Responsables vinculados · Transacción "
+                + text(dispensation.path("transaccionId"), "sin número"));
+        title.setSpacingBefore(5);
+        document.add(title);
+        PdfPTable participants = new PdfPTable(2);
+        participants.setWidthPercentage(100);
+        participants.setSplitLate(false);
+        int cells = 0;
+
+        List<JsonNode> dispensers = new ArrayList<>();
+        JsonNode configuredDispensers = dispensation.path("usuariosRealizadores");
+        if (configuredDispensers.isArray()) {
+            configuredDispensers.forEach(dispensers::add);
         }
-        document.add(table);
+        if (dispensers.isEmpty()) {
+            Set<String> seen = new LinkedHashSet<>();
+            JsonNode movements = dispensation.path("movimientos");
+            if (movements.isArray()) {
+                for (JsonNode movement : movements) {
+                    JsonNode person = movement.path("registradoPor");
+                    String key = text(person.path("id"), text(person.path("username"), ""));
+                    if (person.isObject() && !person.isEmpty() && seen.add(key)) {
+                        dispensers.add(person);
+                    }
+                }
+            }
+        }
+        if (dispensers.isEmpty()) {
+            participants.addCell(participantCell(
+                    "Dispensó", objectMapper.createObjectNode(),
+                    "Responsable no registrado en esta revisión."));
+            cells++;
+        } else {
+            for (JsonNode dispenser : dispensers) {
+                participants.addCell(participantCell(
+                        "Dispensó", dispenser,
+                        "Firma visual del perfil congelada al emitir la revisión."));
+                cells++;
+            }
+        }
+
+        JsonNode receptions = dispensation.path("recepcionesAsignadas");
+        if (!receptions.isArray() || receptions.isEmpty()) {
+            participants.addCell(participantCell(
+                    "Recibe", objectMapper.createObjectNode(),
+                    "Receptor no registrado en esta revisión."));
+            cells++;
+        } else {
+            for (JsonNode reception : receptions) {
+                String area = text(reception.path("areaNombre"), "Área sin identificar");
+                String status = text(reception.path("estadoRecepcion"), "");
+                String note = "Área: " + area + ". "
+                        + ("ASIGNADO_AUTOMATICAMENTE_SIN_CONFIRMACION".equals(status)
+                        ? "Responsable asignado automáticamente; recepción no confirmada."
+                        : humanEnum(status));
+                participants.addCell(participantCell(
+                        "Recibe (asignado)", reception.path("receptorAsignado"), note));
+                cells++;
+            }
+        }
+        if (cells % 2 != 0) participants.addCell(emptyParticipantCell());
+        document.add(participants);
+    }
+
+    private PdfPCell participantCell(String role, JsonNode person, String note) throws Exception {
+        PdfPCell cell = new PdfPCell();
+        cell.setBorderColor(BORDER);
+        cell.setPadding(6);
+        cell.addElement(new Paragraph(role, font(7.2f, Font.BOLD, GOLD)));
+        String name = person(person);
+        String username = text(person.path("username"), "");
+        cell.addElement(new Paragraph(
+                name + (username.isBlank() ? "" : "\n@" + username),
+                font(8.1f, Font.BOLD, CHARCOAL)));
+        FirmaVisualUsuarioVersion visual = visualSignature(person);
+        if (visual != null && visual.getContenido() != null && visual.getContenido().length > 0) {
+            try {
+                Image image = Image.getInstance(visual.getContenido());
+                image.scaleToFit(105, 38);
+                image.setSpacingBefore(3);
+                cell.addElement(image);
+                cell.addElement(new Paragraph(
+                        "Firma visual · versión " + visual.getVersion(),
+                        font(6.2f, Font.ITALIC, MUTED)));
+            } catch (Exception ignored) {
+                cell.addElement(new Paragraph(
+                        "Firma visual no representable; versión conservada en el expediente.",
+                        font(6.2f, Font.ITALIC, MUTED)));
+            }
+        } else {
+            cell.addElement(new Paragraph(
+                    "Firma visual no registrada en esta revisión.",
+                    font(6.2f, Font.ITALIC, MUTED)));
+        }
+        cell.addElement(new Paragraph(note, font(6.3f, Font.ITALIC, MUTED)));
+        return cell;
+    }
+
+    private PdfPCell emptyParticipantCell() {
+        PdfPCell cell = new PdfPCell(new Phrase(""));
+        cell.setBorderColor(BORDER);
+        return cell;
+    }
+
+    private FirmaVisualUsuarioVersion visualSignature(JsonNode person) {
+        if (!person.path("firmaVisualVersionId").canConvertToLong()) return null;
+        var result = firmaVisualRepo.findById(
+                person.path("firmaVisualVersionId").longValue());
+        return result == null ? null : result.orElse(null);
+    }
+
+    private String dispensationAreas(JsonNode dispensation) {
+        Set<String> areas = new LinkedHashSet<>();
+        JsonNode receptions = dispensation.path("recepcionesAsignadas");
+        if (receptions.isArray()) {
+            for (JsonNode reception : receptions) {
+                String area = text(reception.path("areaNombre"), "");
+                if (!area.isBlank()) areas.add(area);
+            }
+        }
+        JsonNode movements = dispensation.path("movimientos");
+        if (movements.isArray()) {
+            for (JsonNode movement : movements) {
+                String area = text(movement.path("areaOperativa"), "");
+                if (!area.isBlank()) areas.add(area);
+            }
+        }
+        return areas.isEmpty() ? "No registra" : String.join(", ", areas);
     }
 
     private void addStages(Document document, JsonNode root) throws Exception {
@@ -371,7 +574,7 @@ class BatchRecordMainPdfRenderer {
             cell(table, person(stage.path("reportadaPor")));
             cell(table, poeLabel(stage.path("poe")));
             String observations = text(stage.path("observaciones"), "");
-            if (!observations.isBlank()) {
+            if (!hasCanonicalChronology(root) && !observations.isBlank()) {
                 PdfPCell observationsCell = new PdfPCell(new Phrase(
                         "Observaciones: " + observations, font(7.4f, Font.ITALIC, MUTED)));
                 observationsCell.setColspan(6);
@@ -551,94 +754,359 @@ class BatchRecordMainPdfRenderer {
     }
 
     private void addDeviations(Document document, JsonNode root) throws Exception {
-        addSectionTitle(document, "5. Desviaciones");
-        JsonNode general = root.path("desviaciones");
-        List<ControlDeviation> controlDeviations = controlDeviations(root);
-        boolean hasGeneral = general.isArray() && !general.isEmpty();
-        if (!hasGeneral && controlDeviations.isEmpty()) {
-            document.add(noRecords("No se registraron desviaciones."));
+        addSectionTitle(document, "5. Cronología de observaciones, correcciones y desviaciones");
+        document.add(note(
+                "La línea de tiempo reúne observaciones ya capturadas durante la planificación, "
+                        + "la orden, las áreas operativas, los controles y la revisión del expediente. "
+                        + "Una firma visual de perfil identifica al usuario, pero no sustituye una "
+                        + "confirmación electrónica del evento."));
+        List<TimelineEntry> entries = timelineEntries(root);
+        if (entries.isEmpty()) {
+            document.add(noRecords(
+                    "No se registraron observaciones, correcciones ni desviaciones."));
             return;
         }
 
-        if (hasGeneral) {
-            int index = 1;
-            for (JsonNode deviation : general) {
-                Paragraph label = new Paragraph(
-                        "Desviación " + index++ + " · "
-                                + text(deviation.path("codigo"), "Sin código") + " · "
-                                + humanEnum(text(deviation.path("estado"), "Sin estado")),
-                        font(9.5f, Font.BOLD, statusColor(text(deviation.path("estado"), ""))));
-                label.setSpacingBefore(7);
-                document.add(label);
-                PdfPTable table = new PdfPTable(new float[]{1.15f, 2.0f, 1.15f, 2.0f});
-                table.setWidthPercentage(100);
-                pair(table, "Ocurrida", formatDate(text(deviation.path("ocurridaEn"), "")));
-                pair(table, "Detectada", formatDate(text(deviation.path("detectadaEn"), "")));
-                pair(table, "Detectada por", person(deviation.path("detectadaPor")));
-                pair(table, "Origen", humanEnum(text(deviation.path("origen"), "No registra")));
-                document.add(table);
-                addNarrativeIfPresent(document, "Descripción", deviation.path("descripcion"));
-                addNarrativeIfPresent(document, "Acción inmediata", deviation.path("accionInmediata"));
-                addNarrativeIfPresent(document, "Evaluación de impacto", deviation.path("evaluacionImpacto"));
-                addNarrativeIfPresent(document, "Causa raíz", deviation.path("causaRaiz"));
-                addNarrativeIfPresent(document, "Acciones correctivas y preventivas",
-                        deviation.path("accionesCorrectivasPreventivas"));
-                addNarrativeIfPresent(document, "Resolución", deviation.path("resolucion"));
-            }
-        }
-
-        for (ControlDeviation item : controlDeviations) {
-            JsonNode deviation = item.deviation();
-            Paragraph label = new Paragraph(
-                    "Desviación de control · " + item.controlName() + " · "
-                            + humanEnum(text(deviation.path("estado"), "Sin estado")),
-                    font(9.5f, Font.BOLD, statusColor(text(deviation.path("estado"), ""))));
-            label.setSpacingBefore(7);
-            document.add(label);
-            PdfPTable table = new PdfPTable(new float[]{1.15f, 2.0f, 1.15f, 2.0f});
-            table.setWidthPercentage(100);
-            pair(table, "Ámbito", humanEnum(text(deviation.path("ambito"), "No registra")));
-            pair(table, "Disposición", humanEnum(text(deviation.path("disposicion"), "Pendiente")));
-            pair(table, "Abierta", formatDate(text(deviation.path("abiertaEn"), "")));
-            pair(table, "Abierta por", person(deviation.path("abiertaPor")));
-            pair(table, "Cerrada", formatDate(text(deviation.path("cerradaEn"), "")));
-            pair(table, "Cerrada por", person(deviation.path("cerradaPor")));
-            document.add(table);
-            addNarrativeIfPresent(document, "Investigación", deviation.path("investigacion"));
-            addNarrativeIfPresent(document, "Resolución", deviation.path("resolucion"));
-            addNarrativeIfPresent(document, "Justificación de la disposición",
-                    deviation.path("justificacionDisposicion"));
+        for (TimelineEntry entry : entries) {
+            PdfPTable timelineEntry = new PdfPTable(new float[]{1.15f, 0.22f, 5.63f});
+            timelineEntry.setWidthPercentage(100);
+            timelineEntry.setSplitRows(false);
+            timelineEntry.setSplitLate(true);
+            addTimelineRow(timelineEntry, entry);
+            document.add(timelineEntry);
         }
     }
 
+    private List<TimelineEntry> timelineEntries(JsonNode root) {
+        List<TimelineEntry> entries = new ArrayList<>();
+        Set<String> keys = new LinkedHashSet<>();
+        JsonNode canonical = root.path("cronologiaProceso");
+        if (canonical.isArray()) {
+            for (JsonNode event : canonical) {
+                addTimelineEntry(entries, keys, new TimelineEntry(
+                        text(event.path("fechaHora"), ""),
+                        text(event.path("categoria"), "OBSERVACION"),
+                        text(event.path("titulo"), "Observación de proceso"),
+                        text(event.path("detalle"), ""),
+                        text(event.path("area"), ""),
+                        text(event.path("etapa"), ""),
+                        event.path("actor"),
+                        transition(event),
+                        text(event.path("fuenteTipo"), "EVENTO") + ":"
+                                + text(event.path("fuenteId"), "")));
+            }
+        }
+
+        if (!canonical.isArray() || canonical.isEmpty()) {
+            JsonNode order = root.path("orden");
+            String orderObservation = text(order.path("observaciones"), "");
+            if (!orderObservation.isBlank()) {
+                addTimelineEntry(entries, keys, new TimelineEntry(
+                        text(order.path("fechaCreacion"), ""), "OBSERVACION_ORDEN",
+                        "Observación de la orden", orderObservation,
+                        text(order.path("areaOperativa"), ""), "",
+                        order.path("creadaPor"), "", "ORDEN:OBSERVACION"));
+            }
+            JsonNode stages = root.path("etapas");
+            if (stages.isArray()) {
+                for (JsonNode stage : stages) {
+                    String observation = text(stage.path("observaciones"), "");
+                    if (observation.isBlank()) continue;
+                    addTimelineEntry(entries, keys, new TimelineEntry(
+                            text(stage.path("completadaEn"),
+                                    text(stage.path("iniciadaEn"), "")),
+                            "OBSERVACION_AREA",
+                            "Observación de etapa: " + text(stage.path("nombre"), "Etapa"),
+                            observation, text(stage.path("areaNombre"), ""),
+                            text(stage.path("nombre"), ""), stage.path("reportadaPor"),
+                            "", "ETAPA:" + text(stage.path("id"), "")));
+                }
+            }
+        }
+
+        addControlObservations(entries, keys, root);
+        addGeneralDeviations(entries, keys, root.path("desviaciones"));
+        addControlDeviations(entries, keys, root);
+        addCorrections(entries, keys, root.path("correcciones"));
+        entries.sort(Comparator
+                .comparing((TimelineEntry entry) -> parseTimelineDate(entry.date()),
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(TimelineEntry::key));
+        return entries;
+    }
+
+    private void addControlObservations(
+            List<TimelineEntry> entries,
+            Set<String> keys,
+            JsonNode root
+    ) {
+        JsonNode unified = root.path("controlesUnificados").path("requisitos");
+        if (unified.isArray() && !unified.isEmpty()) {
+            for (JsonNode control : unified) {
+                JsonNode executions = control.path("ejecuciones");
+                if (!executions.isArray()) continue;
+                for (JsonNode execution : executions) {
+                    String observation = text(execution.path("observaciones"), "");
+                    if (observation.isBlank()) continue;
+                    addTimelineEntry(entries, keys, new TimelineEntry(
+                            text(execution.path("fechaRegistro"), ""),
+                            "OBSERVACION_CONTROL",
+                            "Control: " + text(control.path("planNombre"), "Sin nombre"),
+                            observation, text(control.path("areaNombre"), ""),
+                            text(control.path("etapaNombre"),
+                                    text(control.path("nodoNombre"), "")),
+                            execution.path("usuario"),
+                            humanEnum(text(execution.path("resultado"), "")),
+                            "CONTROL_UNIFICADO:" + text(execution.path("id"), "")));
+                }
+            }
+            return;
+        }
+        JsonNode legacy = root.path("controles");
+        if (!legacy.isArray()) return;
+        for (JsonNode control : legacy) {
+            String observation = text(control.path("observaciones"), "");
+            if (observation.isBlank()) continue;
+            addTimelineEntry(entries, keys, new TimelineEntry(
+                    text(control.path("fechaRegistro"), ""), "OBSERVACION_CONTROL",
+                    "Observación de control", observation,
+                    text(control.path("areaNombre"), ""), "",
+                    control.path("registradoPor"),
+                    humanEnum(text(control.path("resultado"), "")),
+                    "CONTROL_LEGACY:" + text(control.path("id"), "")));
+        }
+    }
+
+    private void addGeneralDeviations(
+            List<TimelineEntry> entries,
+            Set<String> keys,
+            JsonNode deviations
+    ) {
+        if (!deviations.isArray()) return;
+        for (JsonNode deviation : deviations) {
+            String detail = narrativeDetail(List.of(
+                    narrativePart("Descripción", deviation.path("descripcion")),
+                    narrativePart("Acción inmediata", deviation.path("accionInmediata")),
+                    narrativePart("Impacto", deviation.path("evaluacionImpacto")),
+                    narrativePart("Causa raíz", deviation.path("causaRaiz")),
+                    narrativePart("Acciones", deviation.path("accionesCorrectivasPreventivas")),
+                    narrativePart("Resolución", deviation.path("resolucion"))));
+            addTimelineEntry(entries, keys, new TimelineEntry(
+                    text(deviation.path("ocurridaEn"),
+                            text(deviation.path("detectadaEn"), "")),
+                    "DESVIACION", "Desviación "
+                    + text(deviation.path("codigo"), "sin código"), detail, "", "",
+                    deviation.path("detectadaPor"),
+                    humanEnum(text(deviation.path("estado"), ""))
+                            + lineBreak(humanEnum(text(deviation.path("origen"), ""))),
+                    "DESVIACION:" + text(deviation.path("id"), "")));
+        }
+    }
+
+    private void addControlDeviations(
+            List<TimelineEntry> entries,
+            Set<String> keys,
+            JsonNode root
+    ) {
+        for (ControlDeviation item : controlDeviations(root)) {
+            JsonNode deviation = item.deviation();
+            String detail = narrativeDetail(List.of(
+                    narrativePart("Investigación", deviation.path("investigacion")),
+                    narrativePart("Resolución", deviation.path("resolucion")),
+                    narrativePart("Disposición", deviation.path("justificacionDisposicion"))));
+            addTimelineEntry(entries, keys, new TimelineEntry(
+                    text(deviation.path("abiertaEn"), ""), "DESVIACION_CONTROL",
+                    "Desviación de control: " + item.controlName(), detail, "", "",
+                    deviation.path("abiertaPor"),
+                    humanEnum(text(deviation.path("estado"), ""))
+                            + lineBreak(humanEnum(text(deviation.path("disposicion"), ""))),
+                    "DESVIACION_CONTROL:" + text(deviation.path("id"), "")));
+        }
+    }
+
+    private void addCorrections(
+            List<TimelineEntry> entries,
+            Set<String> keys,
+            JsonNode corrections
+    ) {
+        if (!corrections.isArray()) return;
+        for (JsonNode correction : corrections) {
+            addTimelineEntry(entries, keys, new TimelineEntry(
+                    text(correction.path("corregidaEn"), ""), "CORRECCION",
+                    "Corrección del expediente",
+                    text(correction.path("motivo"), "No registra")
+                            + "\n" + safeChange(correction.path("valorAnterior"),
+                            correction.path("valorNuevo")),
+                    "", "", correction.path("corregidaPor"), "",
+                    "CORRECCION:" + text(correction.path("id"), "")));
+        }
+    }
+
+    private void addTimelineEntry(
+            List<TimelineEntry> entries,
+            Set<String> keys,
+            TimelineEntry entry
+    ) {
+        if (entry.detail().isBlank() || !keys.add(entry.key())) return;
+        entries.add(entry);
+    }
+
+    private void addTimelineRow(PdfPTable timeline, TimelineEntry entry) throws Exception {
+        PdfPCell date = new PdfPCell(new Phrase(timelineDate(entry.date()),
+                font(7.1f, Font.BOLD, MUTED)));
+        date.setBorder(Rectangle.NO_BORDER);
+        date.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        date.setVerticalAlignment(Element.ALIGN_TOP);
+        date.setPaddingTop(7);
+        date.setPaddingRight(5);
+        timeline.addCell(date);
+
+        PdfPCell rail = new PdfPCell(new Phrase("•", font(12, Font.BOLD, timelineColor(entry))));
+        rail.setBorder(Rectangle.LEFT);
+        rail.setBorderColor(GOLD);
+        rail.setBorderWidthLeft(1.5f);
+        rail.setPaddingLeft(-2);
+        rail.setPaddingTop(3);
+        rail.setVerticalAlignment(Element.ALIGN_TOP);
+        timeline.addCell(rail);
+
+        PdfPCell content = new PdfPCell();
+        content.setBorder(Rectangle.BOX);
+        content.setBorderColor(BORDER);
+        content.setPadding(6);
+        content.setPaddingBottom(7);
+        Paragraph heading = new Paragraph();
+        heading.setLeading(10);
+        heading.add(new Chunk(entry.title(), font(8.4f, Font.BOLD, CHARCOAL)));
+        heading.add(new Chunk("  " + humanEnum(entry.category()),
+                font(6.5f, Font.BOLD, timelineColor(entry))));
+        content.addElement(heading);
+        String location = timelineLocation(entry);
+        if (!location.isBlank()) {
+            content.addElement(new Paragraph(location, font(6.7f, Font.ITALIC, MUTED)));
+        }
+        Paragraph detail = new Paragraph(entry.detail(), font(7.5f, Font.NORMAL, CHARCOAL));
+        detail.setLeading(9.4f);
+        detail.setSpacingBefore(2);
+        content.addElement(detail);
+        String actor = personWithUsername(entry.actor());
+        if (!actor.isBlank()) {
+            content.addElement(new Paragraph("Registró: " + actor,
+                    font(6.8f, Font.BOLD, CHARCOAL)));
+        }
+        FirmaVisualUsuarioVersion visual = visualSignature(entry.actor());
+        if (visual != null && visual.getContenido() != null && visual.getContenido().length > 0) {
+            try {
+                Image image = Image.getInstance(visual.getContenido());
+                image.scaleToFit(78, 27);
+                image.setSpacingBefore(2);
+                content.addElement(image);
+                content.addElement(new Paragraph(
+                        "Firma visual de perfil · v" + visual.getVersion(),
+                        font(5.8f, Font.ITALIC, MUTED)));
+            } catch (Exception ignored) {
+                content.addElement(new Paragraph(
+                        "Firma visual conservada, no representable en esta vista.",
+                        font(5.8f, Font.ITALIC, MUTED)));
+            }
+        }
+        timeline.addCell(content);
+    }
+
+    private String transition(JsonNode event) {
+        String origin = text(event.path("estadoOrigen"), "");
+        String destination = text(event.path("estadoDestino"), "");
+        if (origin.isBlank() && destination.isBlank()) return "";
+        if (origin.isBlank()) return "Estado: " + humanEnum(destination);
+        return humanEnum(origin) + " → " + humanEnum(destination);
+    }
+
+    private String narrativePart(String label, JsonNode value) {
+        String content = text(value, "");
+        return content.isBlank() ? "" : label + ": " + content;
+    }
+
+    private String narrativeDetail(List<String> parts) {
+        return parts.stream().filter(value -> value != null && !value.isBlank())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("Detalle no registrado.");
+    }
+
+    private LocalDateTime parseTimelineDate(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return OffsetDateTime.parse(raw.trim()).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Continúa con fecha y hora local.
+        }
+        try {
+            return LocalDateTime.parse(raw.trim());
+        } catch (DateTimeParseException ignored) {
+            // Continúa con fecha simple.
+        }
+        try {
+            return LocalDate.parse(raw.trim()).atStartOfDay();
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
+    }
+
+    private String timelineDate(String raw) {
+        if (raw == null || raw.isBlank()) return "Sin fecha\nexacta";
+        String formatted = formatDate(raw);
+        int separator = formatted.indexOf(' ');
+        return separator > 0
+                ? formatted.substring(0, separator) + "\n" + formatted.substring(separator + 1)
+                : formatted;
+    }
+
+    private BaseColor timelineColor(TimelineEntry entry) {
+        String category = entry.category().toUpperCase(LOCALE_ES_CO);
+        if (category.contains("DESVIACION")) return DANGER;
+        if (category.contains("CORRECCION")) return WARNING;
+        if (category.contains("CONTROL")) return SUCCESS;
+        return GOLD;
+    }
+
+    private String timelineLocation(TimelineEntry entry) {
+        List<String> values = new ArrayList<>();
+        if (!entry.area().isBlank()) values.add("Área: " + entry.area());
+        if (!entry.stage().isBlank()) values.add("Etapa: " + entry.stage());
+        if (!entry.status().isBlank()) values.add(entry.status());
+        return String.join(" · ", values);
+    }
+
+    private String personWithUsername(JsonNode person) {
+        if (!person.isObject() || person.isEmpty()) return "";
+        String name = personName(text(person.path("nombre"), ""));
+        String username = text(person.path("username"), "");
+        if (name.isBlank() && username.isBlank()) return "";
+        return valueOr(name, "Nombre no registrado")
+                + (username.isBlank() ? "" : " (@" + username + ")");
+    }
+
+    private boolean hasCanonicalChronology(JsonNode root) {
+        return root.path("cronologiaProceso").isArray()
+                && !root.path("cronologiaProceso").isEmpty();
+    }
+
+    private boolean hasChronologySource(JsonNode root, String source) {
+        JsonNode chronology = root.path("cronologiaProceso");
+        if (!chronology.isArray()) return false;
+        for (JsonNode event : chronology) {
+            if (source.equals(text(event.path("fuenteTipo"), ""))) return true;
+        }
+        return false;
+    }
+
     private void addExceptionalTrace(Document document, JsonNode root) throws Exception {
-        addSectionTitle(document, "6. Correcciones y trazabilidad excepcional");
-        JsonNode corrections = root.path("correcciones");
+        addSectionTitle(document, "6. Revisión y trazabilidad excepcional");
         JsonNode cycles = root.path("ciclosRevision");
         JsonNode returnedSections = root.path("seccionesCorreccion");
         JsonNode reopenings = root.path("solicitudesReapertura");
-        if (isEmptyArray(corrections) && isEmptyArray(cycles)
-                && isEmptyArray(returnedSections) && isEmptyArray(reopenings)) {
-            document.add(noRecords("No se registraron correcciones ni eventos excepcionales."));
+        if (isEmptyArray(cycles) && isEmptyArray(returnedSections) && isEmptyArray(reopenings)) {
+            document.add(noRecords("No se registraron ciclos de revisión ni reaperturas excepcionales."));
             return;
-        }
-
-        if (!isEmptyArray(corrections)) {
-            Paragraph subtitle = subsection("Correcciones y entradas tardías");
-            document.add(subtitle);
-            PdfPTable table = new PdfPTable(new float[]{1.15f, 1.45f, 2.35f, 2.35f});
-            table.setWidthPercentage(100);
-            table.setHeaderRows(1);
-            for (String header : List.of("Fecha", "Responsable", "Motivo", "Cambio registrado")) {
-                header(table, header);
-            }
-            for (JsonNode correction : corrections) {
-                cell(table, formatDate(text(correction.path("corregidaEn"), "")));
-                cell(table, person(correction.path("corregidaPor")));
-                cell(table, text(correction.path("motivo"), "No registra"));
-                cell(table, safeChange(correction.path("valorAnterior"), correction.path("valorNuevo")));
-            }
-            document.add(table);
         }
 
         if (!isEmptyArray(cycles)) {
@@ -1248,6 +1716,19 @@ class BatchRecordMainPdfRenderer {
     }
 
     private record ControlDeviation(String controlName, JsonNode deviation) {
+    }
+
+    private record TimelineEntry(
+            String date,
+            String category,
+            String title,
+            String detail,
+            String area,
+            String stage,
+            JsonNode actor,
+            String status,
+            String key
+    ) {
     }
 
     private final class MainPageHeaderEvent extends PdfPageEventHelper {

@@ -117,32 +117,8 @@ public final class ControlDTOs {
              Integer procesoId, String procesoNombre,
              MomentoControl momento, PuntoExigenciaControl puntoExigencia,
              boolean requiereRepeticion, boolean requiereRevalidacion,
-             boolean agregadoExcepcionalmente, String motivoAdicion,
-             String agregadoPor, Long revisionAdicionId, Long firmaAdicionId,
              Long ultimaEjecucionId, LocalDateTime ultimaEjecucionFecha,
              List<CaracteristicaResponse> caracteristicas) {}
-
-    public record IndependienteWriteRequest(@NotNull Long loteId) {}
-
-    public record LoteControlResponse(
-            Long id, String lote, String productoId, String productoNombre,
-            TipoOrdenControl tipoOrden, Long batchRecordId, String batchRecordCodigo) {}
-
-    public record AdicionExcepcionalWriteRequest(
-            @NotNull Long batchRecordId,
-            @NotNull Long planId,
-            Long batchRecordEtapaId,
-            @NotBlank @Size(max = 500) String motivo) {}
-
-    public record OpcionAdicionExcepcionalResponse(
-            Long planId, String planCodigo, String planNombre,
-            Long versionId, Integer versionNumero, String proposito,
-            PuntoAplicacionControl puntoAplicacion, MomentoControl momento,
-            PuntoExigenciaControl puntoExigencia) {}
-
-    public record EtapaAdicionExcepcionalResponse(
-            Long id, Integer secuencia, String nombre,
-            Integer areaId, String areaNombre) {}
 
     public record LecturaWriteRequest(
             @NotNull @Positive Integer indiceUnidad,
@@ -185,8 +161,6 @@ public final class ControlDTOs {
             Long batchRecordEtapaId, String etapaNombre,
             Integer areaOperativaId, String areaOperativaNombre,
              Integer procesoId, String procesoNombre,
-             boolean agregadoExcepcionalmente, String motivoAdicion,
-             String agregadoPor, Long revisionAdicionId, Long firmaAdicionId,
              String usuarioUsername, String usuarioNombreCompleto,
             LocalDateTime fechaRegistro, ResultadoEjecucionControl resultado,
             String observaciones, String motivoRepeticion, Long desviacionId) {}

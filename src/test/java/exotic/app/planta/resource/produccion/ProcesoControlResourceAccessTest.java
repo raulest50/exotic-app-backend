@@ -7,16 +7,12 @@ import exotic.app.planta.service.controles.ControlDeviationService;
 import exotic.app.planta.service.controles.ControlExecutionService;
 import exotic.app.planta.service.controles.ControlIdempotencyService;
 import exotic.app.planta.service.controles.ControlPlanService;
-import exotic.app.planta.service.controles.ControlRequeridoExcepcionalService;
-import exotic.app.planta.service.controles.ControlWorkflowService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.Authentication;
-
-import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -32,8 +28,6 @@ class ProcesoControlResourceAccessTest {
     @Mock private ControlPlanService planService;
     @Mock private ControlExecutionService executionService;
     @Mock private ControlDeviationService deviationService;
-    @Mock private ControlWorkflowService workflowService;
-    @Mock private ControlRequeridoExcepcionalService excepcionalService;
     @Mock private ControlIdempotencyService idempotencyService;
     @Mock private ModuleTabAccessGuard accessGuard;
     @Mock private Authentication authentication;
@@ -46,8 +40,6 @@ class ProcesoControlResourceAccessTest {
                 planService,
                 executionService,
                 deviationService,
-                workflowService,
-                excepcionalService,
                 idempotencyService,
                 accessGuard);
     }
@@ -101,24 +93,5 @@ class ProcesoControlResourceAccessTest {
         verify(accessGuard, never()).requireTabAccessWithoutMasterBypass(
                 eq(authentication), eq(ModuloSistema.PRODUCCION),
                 anyString(), anyInt(), anyString());
-    }
-
-    @Test
-    void busquedaDeLotesUsaLaReglaMultipleConBypassMasterLike() {
-        User actor = User.builder().username("master").build();
-        Map<String, Integer> requiredTabs = Map.of(
-                ProcesoControlResource.TAB_REGISTRO, 1,
-                ProcesoControlResource.TAB_PLANES, 3);
-        when(accessGuard.requireAnyTabAccess(
-                authentication, ModuloSistema.PRODUCCION, requiredTabs,
-                "Se requiere acceso a registro o administracion de planes para buscar lotes."))
-                .thenReturn(actor);
-
-        resource.lotes(authentication, null, 20);
-
-        verify(accessGuard).requireAnyTabAccess(
-                authentication, ModuloSistema.PRODUCCION, requiredTabs,
-                "Se requiere acceso a registro o administracion de planes para buscar lotes.");
-        verify(workflowService).buscarLotes(null, 20);
     }
 }

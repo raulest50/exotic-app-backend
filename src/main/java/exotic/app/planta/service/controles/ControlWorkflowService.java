@@ -8,9 +8,6 @@ import exotic.app.planta.model.controles.dto.ControlRequeridoRevisionDTO;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
-import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
-import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
-import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.Terminado;
@@ -18,11 +15,6 @@ import exotic.app.planta.repo.controles.ControlRequeridoRepo;
 import exotic.app.planta.repo.controles.DesviacionControlRepo;
 import exotic.app.planta.repo.controles.VersionPlanControlRepo;
 import exotic.app.planta.repo.controles.RevalidacionControlRepo;
-import exotic.app.planta.repo.inventarios.LoteRepo;
-import exotic.app.planta.repo.produccion.batchrecord.BatchRecordEtapaRepo;
-import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
-import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
-import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.model.users.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,10 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.time.LocalDateTime;
-import org.springframework.data.domain.PageRequest;
-import exotic.app.planta.model.controles.dto.ControlDTOs.LoteControlResponse;
-import exotic.app.planta.model.controles.dto.ControlDTOs.OpcionAdicionExcepcionalResponse;
-import exotic.app.planta.model.controles.dto.ControlDTOs.EtapaAdicionExcepcionalResponse;
 
 @Service
 @RequiredArgsConstructor
@@ -41,11 +29,6 @@ public class ControlWorkflowService {
     private final VersionPlanControlRepo versionRepo;
     private final ControlRequeridoRepo requeridoRepo;
     private final DesviacionControlRepo desviacionRepo;
-    private final LoteRepo loteRepo;
-    private final BatchRecordRepo batchRecordRepo;
-    private final BatchRecordEtapaRepo etapaRepo;
-    private final SeguimientoOrdenAreaRepo seguimientoRepo;
-    private final OrdenFabricacionOperacionRepo operacionFabricacionRepo;
     private final RevalidacionControlRepo revalidacionRepo;
 
     /** Materializa una sola vez los planes vigentes que coinciden con el contexto congelado. */
@@ -238,11 +221,7 @@ public class ControlWorkflowService {
                             r.getBatchRecordEtapa() == null ? null : r.getBatchRecordEtapa().getNombre(),
                             r.getAreaOperativaIdSnapshot(), r.getAreaOperativaNombreSnapshot(),
                             r.isRequiereRepeticion(),
-                            r.isRequiereRevalidacion(), r.isAgregadoExcepcionalmente(),
-                            r.getMotivoAdicion(),
-                            r.getAgregadoPor() == null ? null : r.getAgregadoPor().getUsername(),
-                            r.getRevisionAdicion() == null ? null : r.getRevisionAdicion().getId(),
-                            r.getFirmaAdicion() == null ? null : r.getFirmaAdicion().getId(),
+                            r.isRequiereRevalidacion(),
                             ultima == null ? null : ultima.getId(),
                             ultima == null ? null : ultima.getResultado(),
                             ultima == null ? null : ultima.getFechaRegistro(),
@@ -283,11 +262,13 @@ public class ControlWorkflowService {
         data.put("cicloRevisionNumero", r.getCicloRevisionNumero());
         data.put("requiereRepeticion", r.isRequiereRepeticion());
         data.put("requiereRevalidacion", r.isRequiereRevalidacion());
-        data.put("agregadoExcepcionalmente", r.isAgregadoExcepcionalmente());
-        data.put("motivoAdicion", r.getMotivoAdicion());
-        data.put("agregadoPor", identidad(r.getAgregadoPor()));
-        data.put("revisionAdicion", r.getRevisionAdicion() == null ? null : r.getRevisionAdicion().getId());
-        data.put("firmaAdicion", r.getFirmaAdicion() == null ? null : r.getFirmaAdicion().getId());
+        // Claves retiradas conservadas con su valor neutro para que el esquema
+        // documental y los hashes de expedientes existentes sigan estables.
+        data.put("agregadoExcepcionalmente", false);
+        data.put("motivoAdicion", null);
+        data.put("agregadoPor", null);
+        data.put("revisionAdicion", null);
+        data.put("firmaAdicion", null);
         data.put("puntoAplicacion", nombre(r.getPuntoAplicacionSnapshot()));
         data.put("momento", nombre(r.getMomentoSnapshot()));
         data.put("puntoExigencia", nombre(r.getPuntoExigenciaSnapshot()));
@@ -432,171 +413,6 @@ public class ControlWorkflowService {
         return value == null ? null : value.toPlainString();
     }
 
-    @Transactional
-    public List<ControlRequerido> resolverIndependientes(AmbitoControl ambito, Long loteId) {
-        Lote lote = loteRepo.findById(loteId)
-                .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
-        if (lote.getOrdenProduccion() == null && lote.getOrdenFabricacion() == null) {
-            throw new IllegalArgumentException("Solo se admiten lotes originados en OP u OF.");
-        }
-        if (batchRecordRepo.findByLoteResultado_Id(loteId).isPresent()) {
-            throw new IllegalStateException(
-                    "El lote ya tiene Batch Record; sus controles deben ejecutarse desde el expediente.");
-        }
-        Producto producto = resolverProducto(lote);
-        Categoria categoria = resolverCategoria(lote);
-        TipoOrdenControl tipo = lote.getOrdenFabricacion() == null ? TipoOrdenControl.OP : TipoOrdenControl.OF;
-        for (VersionPlanControl version : versionesEfectivas(fechaReferencia(lote))) {
-            if (version.getPlan().getAmbito() != ambito) continue;
-            Set<String> deduplicadas = new HashSet<>();
-            List<AplicabilidadPlanControl> reglasOrdenadas = version.getAplicabilidades().stream()
-                    .sorted(ordenAplicabilidad())
-                    .toList();
-            for (AplicabilidadPlanControl regla : reglasOrdenadas) {
-                if (!coincideProducto(regla, producto, categoria) || !coincideTipo(regla, tipo)) continue;
-                for (ContextoOperacion contexto : resolverContextosIndependientes(lote, regla)) {
-                    String clave = contexto.clave();
-                    if (!deduplicadas.add(clave)) continue;
-                    if (requeridoRepo
-                            .existsByLote_IdAndVersionPlan_IdAndPuntoAplicacionSnapshotAndAreaOperativaIdSnapshotAndProcesoIdSnapshotAndRutaNodoIdSnapshotAndOrdenFabricacionOperacionIdSnapshotAndOrigen(
-                                    loteId, version.getId(), regla.getPuntoAplicacion(),
-                                    regla.getAreaOperativa() == null ? null : regla.getAreaOperativa().getAreaId(),
-                                    regla.getProceso() == null ? null : regla.getProceso().getProcesoId(),
-                                    contexto.rutaNodoId(), contexto.operacionFabricacionId(),
-                                    OrigenControlRequerido.INDEPENDIENTE)) continue;
-                    Long manufacturingVersionId = resolverManufacturingVersionId(lote);
-                    if (manufacturingVersionId == null) {
-                        throw new IllegalStateException(
-                                "El lote no tiene una version de manufactura verificable; depure su origen antes de registrar controles nuevos.");
-                    }
-                    ControlRequerido item = baseRequisito(version, regla, lote, producto, categoria, tipo);
-                    item.setOrigen(OrigenControlRequerido.INDEPENDIENTE);
-                    item.setManufacturingVersionIdSnapshot(manufacturingVersionId);
-                    item.setRutaVersionIdSnapshot(contexto.rutaVersionId());
-                    item.setRutaNodoIdSnapshot(contexto.rutaNodoId());
-                    item.setOrdenFabricacionOperacionIdSnapshot(contexto.operacionFabricacionId());
-                    item.setFrontendNodeIdSnapshot(contexto.frontendNodeId());
-                    item.setNodoNombreSnapshot(contexto.nodoNombre());
-                    requeridoRepo.save(item);
-                }
-            }
-        }
-        requeridoRepo.flush();
-        return requeridoRepo.findByLote_IdAndOrigenAndAmbitoSnapshotOrderByIdAsc(
-                loteId, OrigenControlRequerido.INDEPENDIENTE, ambito);
-    }
-
-    @Transactional(readOnly = true)
-    public List<LoteControlResponse> buscarLotes(String search, int size) {
-        if (size < 1 || size > 100) {
-            throw new IllegalArgumentException("El tamano de busqueda debe estar entre 1 y 100.");
-        }
-        String filtro = search == null || search.trim().isEmpty() ? null : search.trim();
-        return loteRepo.searchLotesManufactura(filtro, PageRequest.of(0, size)).stream().map(lote -> {
-            Producto producto = resolverProducto(lote);
-            BatchRecord record = batchRecordRepo.findByLoteResultado_Id(lote.getId()).orElse(null);
-            return new LoteControlResponse(lote.getId(), lote.getBatchNumber(),
-                    producto == null ? null : producto.getProductoId(),
-                    producto == null ? null : producto.getNombre(),
-                    lote.getOrdenFabricacion() == null ? TipoOrdenControl.OP : TipoOrdenControl.OF,
-                    record == null ? null : record.getId(), record == null ? null : record.getCodigo());
-        }).toList();
-    }
-
-    /** Adicion auditable; la version vigente y la regla aplicable siempre se resuelven en servidor. */
-    @Transactional(readOnly = true)
-    public List<OpcionAdicionExcepcionalResponse> opcionesAdicionExcepcional(
-            AmbitoControl ambito, Long batchRecordId, Long etapaId) {
-        BatchRecord record = batchRecordRepo.findById(batchRecordId)
-                .orElseThrow(() -> new NoSuchElementException("Batch record no encontrado."));
-        validarEstadoAdicionExcepcional(record, ambito);
-        BatchRecordEtapa etapa = etapaId == null ? null : etapaRepo
-                .findByIdAndBatchRecord_Id(etapaId, batchRecordId)
-                .orElseThrow(() -> new IllegalArgumentException("La etapa no pertenece al expediente."));
-        Producto producto = record.getProductoResultado();
-        Categoria categoria = resolverCategoria(record);
-        TipoOrdenControl tipo = tipoOrden(record);
-        Map<Long, OpcionAdicionExcepcionalResponse> opciones = new LinkedHashMap<>();
-        versionRepo.findByEstado(EstadoVersionPlanControl.VIGENTE).stream()
-                .filter(v -> v.getPlan().getAmbito() == ambito)
-                .sorted(Comparator.comparing(v -> v.getPlan().getCodigo()))
-                .forEach(version -> version.getAplicabilidades().stream()
-                        .filter(a -> coincideProducto(a, producto, categoria) && coincideTipo(a, tipo))
-                        .filter(a -> etapa == null
-                                ? a.getPuntoAplicacion() == PuntoAplicacionControl.LOTE_FINAL
-                                : a.getPuntoAplicacion() == PuntoAplicacionControl.SALIDA_OPERACION
-                                && coincideEtapa(a, etapa))
-                        .sorted(ordenAplicabilidad())
-                        .findFirst().ifPresent(regla -> opciones.putIfAbsent(version.getPlan().getId(),
-                                new OpcionAdicionExcepcionalResponse(version.getPlan().getId(),
-                                        version.getPlan().getCodigo(), version.getPlan().getNombre(),
-                                        version.getId(), version.getNumero(), version.getProposito(),
-                                        regla.getPuntoAplicacion(), regla.getMomento(),
-                                        regla.getPuntoExigencia()))));
-        return List.copyOf(opciones.values());
-    }
-
-    @Transactional(readOnly = true)
-    public List<EtapaAdicionExcepcionalResponse> etapasAdicionExcepcional(
-            AmbitoControl ambito, Long batchRecordId) {
-        BatchRecord record = batchRecordRepo.findById(batchRecordId)
-                .orElseThrow(() -> new NoSuchElementException("Batch record no encontrado."));
-        validarEstadoAdicionExcepcional(record, ambito);
-        return etapaRepo.findByBatchRecord_IdOrderBySecuenciaAscIdAsc(batchRecordId).stream()
-                .map(e -> new EtapaAdicionExcepcionalResponse(e.getId(), e.getSecuencia(), e.getNombre(),
-                        e.getAreaOperativa().getAreaId(), e.getAreaOperativa().getNombre()))
-                .toList();
-    }
-
-    @Transactional
-    public ControlRequerido agregarExcepcional(
-            AmbitoControl ambito, User actor, Long batchRecordId, Long planId,
-            Long etapaId, String motivo) {
-        String motivoLimpio = motivo == null ? null : motivo.trim();
-        if (motivoLimpio == null || motivoLimpio.isEmpty()) {
-            throw new IllegalArgumentException("El motivo de la adicion excepcional es obligatorio.");
-        }
-        BatchRecord record = batchRecordRepo.findByIdForUpdate(batchRecordId)
-                .orElseThrow(() -> new NoSuchElementException("Batch record no encontrado."));
-        validarEstadoAdicionExcepcional(record, ambito);
-        VersionPlanControl version = versionRepo
-                .findFirstByPlan_IdAndEstado(planId, EstadoVersionPlanControl.VIGENTE)
-                .filter(v -> v.getPlan().getAmbito() == ambito)
-                .orElseThrow(() -> new NoSuchElementException("El plan no tiene version vigente en este ambito."));
-        BatchRecordEtapa etapa = etapaId == null ? null : etapaRepo
-                .findByIdAndBatchRecord_Id(etapaId, batchRecordId)
-                .orElseThrow(() -> new IllegalArgumentException("La etapa no pertenece al expediente."));
-        Producto producto = record.getProductoResultado();
-        Categoria categoria = resolverCategoria(record);
-        TipoOrdenControl tipo = tipoOrden(record);
-        List<AplicabilidadPlanControl> candidatas = version.getAplicabilidades().stream()
-                .filter(a -> coincideProducto(a, producto, categoria) && coincideTipo(a, tipo))
-                .filter(a -> etapa == null
-                        ? a.getPuntoAplicacion() == PuntoAplicacionControl.LOTE_FINAL
-                        : a.getPuntoAplicacion() == PuntoAplicacionControl.SALIDA_OPERACION
-                        && coincideEtapa(a, etapa))
-                .sorted(ordenAplicabilidad())
-                .toList();
-        if (candidatas.isEmpty()) {
-            throw new IllegalArgumentException("El plan vigente no aplica al punto solicitado del expediente.");
-        }
-        AplicabilidadPlanControl regla = candidatas.getFirst();
-        ControlRequerido item = nuevoRequisito(record, etapa, version, regla, producto, categoria, tipo);
-        item.setAgregadoExcepcionalmente(true);
-        item.setMotivoAdicion(motivoLimpio);
-        item.setAgregadoPor(actor);
-        if (ambito == AmbitoControl.PROCESO
-                && (record.getEstado() == EstadoBatchRecord.DEVUELTO_PRODUCCION
-                || record.getEstado() == EstadoBatchRecord.EN_CORRECCION)) {
-            // En correccion la bandeja y la ejecucion solo admiten los controles
-            // seleccionados para el ciclo vigente. Una adicion excepcional debe
-            // incorporarse a ese mismo alcance para no quedar invisible e inejecutable.
-            item.setRequiereRepeticion(true);
-            item.setCicloRevisionNumero(Math.toIntExact(record.getCicloRevisionActual()));
-        }
-        return requeridoRepo.saveAndFlush(item);
-    }
-
     private ControlRequerido nuevoRequisito(
             BatchRecord record, BatchRecordEtapa etapa, VersionPlanControl version,
             AplicabilidadPlanControl regla, Producto producto, Categoria categoria,
@@ -715,34 +531,6 @@ public class ControlWorkflowService {
         return null;
     }
 
-    private Categoria resolverCategoria(Lote lote) {
-        Producto producto = resolverProducto(lote);
-        if (producto instanceof Terminado terminado) return terminado.getCategoria();
-        if (lote.getOrdenFabricacion() != null
-                && lote.getOrdenFabricacion().getOrdenProduccionOrigen() != null
-                && lote.getOrdenFabricacion().getOrdenProduccionOrigen().getProducto()
-                instanceof Terminado terminadoOrigen) {
-            return terminadoOrigen.getCategoria();
-        }
-        return null;
-    }
-
-    private Producto resolverProducto(Lote lote) {
-        if (lote.getProducto() != null) return lote.getProducto();
-        if (lote.getOrdenProduccion() != null) return lote.getOrdenProduccion().getProducto();
-        return lote.getOrdenFabricacion() == null ? null : lote.getOrdenFabricacion().getSemiTerminado();
-    }
-
-    private Long resolverManufacturingVersionId(Lote lote) {
-        if (lote.getOrdenProduccion() != null && lote.getOrdenProduccion().getManufacturingVersion() != null) {
-            return lote.getOrdenProduccion().getManufacturingVersion().getId();
-        }
-        if (lote.getOrdenFabricacion() != null && lote.getOrdenFabricacion().getManufacturingVersion() != null) {
-            return lote.getOrdenFabricacion().getManufacturingVersion().getId();
-        }
-        return null;
-    }
-
     /**
      * La version aplicable queda determinada por la fecha de creacion de la
      * orden/lote, no por la fecha en que un usuario abre la bandeja. Esto evita
@@ -780,99 +568,12 @@ public class ControlWorkflowService {
                 : record.getOrdenProduccion().getFechaCreacion();
     }
 
-    private LocalDateTime fechaReferencia(Lote lote) {
-        if (lote.getOrdenFabricacion() != null) return lote.getOrdenFabricacion().getFechaCreacion();
-        return lote.getOrdenProduccion() == null ? null : lote.getOrdenProduccion().getFechaCreacion();
-    }
-
-    private void validarEstadoAdicionExcepcional(BatchRecord record, AmbitoControl ambito) {
-        EstadoBatchRecord estado = record.getEstado();
-        if (estado == EstadoBatchRecord.APROBADO || estado == EstadoBatchRecord.RECHAZADO
-                || estado == EstadoBatchRecord.CERRADO || estado == EstadoBatchRecord.ANULADO) {
-            throw new IllegalStateException(
-                    "Un expediente terminal no admite requisitos nuevos por una via lateral.");
-        }
-        if (ambito == AmbitoControl.PROCESO
-                && estado != EstadoBatchRecord.EN_EJECUCION
-                && estado != EstadoBatchRecord.DEVUELTO_PRODUCCION
-                && estado != EstadoBatchRecord.EN_CORRECCION) {
-            throw new IllegalStateException(
-                    "Un requisito de proceso solo puede agregarse durante fabricacion o correccion.");
-        }
-        if (ambito == AmbitoControl.CALIDAD
-                && estado != EstadoBatchRecord.EN_EJECUCION
-                && estado != EstadoBatchRecord.PENDIENTE_REVISION) {
-            throw new IllegalStateException(
-                    "Un requisito de Calidad solo puede agregarse durante fabricacion o revision de Calidad.");
-        }
-    }
-
-    /**
-     * Resuelve cada punto operativo real del lote. Una regla de salida se materializa
-     * una vez por cada nodo u operacion concreta que coincida con area+proceso; la clave
-     * de contexto permite deduplicar reglas superpuestas sin perder salidas repetidas.
-     */
-    private List<ContextoOperacion> resolverContextosIndependientes(
-            Lote lote, AplicabilidadPlanControl regla) {
-        if (regla.getPuntoAplicacion() == PuntoAplicacionControl.LOTE_FINAL) {
-            return List.of(ContextoOperacion.loteFinal());
-        }
-        int areaId = regla.getAreaOperativa().getAreaId();
-        int procesoId = regla.getProceso().getProcesoId();
-        if (lote.getOrdenProduccion() != null) {
-            List<SeguimientoOrdenArea> coincidencias = seguimientoRepo
-                    .findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(
-                            lote.getOrdenProduccion().getOrdenId())
-                    .stream()
-                    .filter(s -> s.getAreaOperativa() != null
-                            && s.getAreaOperativa().getAreaId() == areaId)
-                    .filter(s -> s.getRutaProcesoNode() != null
-                            && s.getRutaProcesoNode().getProcesoProduccion() != null
-                            && s.getRutaProcesoNode().getProcesoProduccion().getProcesoId() == procesoId)
-                    .filter(s -> regla.getFrontendNodeId() == null
-                            || Objects.equals(regla.getFrontendNodeId(),
-                            s.getRutaProcesoNode().getFrontendId()))
-                    .toList();
-            return coincidencias.stream().map(seguimiento -> {
-                var nodo = seguimiento.getRutaProcesoNode();
-                return new ContextoOperacion(
-                        regla.getPuntoAplicacion() + ":OP:" + nodo.getId(),
-                        nodo.getRutaProcesoCatVersion() == null ? null
-                                : nodo.getRutaProcesoCatVersion().getId(),
-                        nodo.getId(), null, nodo.getFrontendId(), nodo.getLabel());
-            }).toList();
-        }
-        List<OrdenFabricacionOperacion> coincidencias = operacionFabricacionRepo
-                .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(
-                        lote.getOrdenFabricacion().getOrdenFabricacionId())
-                .stream()
-                .filter(o -> o.getAreaOperativa() != null
-                        && o.getAreaOperativa().getAreaId() == areaId)
-                .filter(o -> Objects.equals(o.getProcesoProduccionId(), procesoId))
-                .filter(o -> regla.getFrontendNodeId() == null
-                        || Objects.equals(regla.getFrontendNodeId(), o.getFrontendNodeId()))
-                .toList();
-        return coincidencias.stream().map(operacion -> new ContextoOperacion(
-                regla.getPuntoAplicacion() + ":OF:" + operacion.getId(),
-                null, null, operacion.getId(), operacion.getFrontendNodeId(),
-                operacion.getProcesoNombre())).toList();
-    }
-
     private Comparator<AplicabilidadPlanControl> ordenAplicabilidad() {
         return Comparator
                 .comparing((AplicabilidadPlanControl a) -> a.getProducto() == null ? 1 : 0)
                 .thenComparing(a -> a.getTipoOrden() == TipoOrdenControl.AMBAS ? 1 : 0)
                 .thenComparing(AplicabilidadPlanControl::getId,
                         Comparator.nullsLast(Comparator.naturalOrder()));
-    }
-
-    private record ContextoOperacion(
-            String clave, Long rutaVersionId, Long rutaNodoId,
-            Long operacionFabricacionId, String frontendNodeId, String nodoNombre) {
-        private static ContextoOperacion loteFinal() {
-            return new ContextoOperacion(PuntoAplicacionControl.LOTE_FINAL.name(),
-                    null, null, null, null, null);
-        }
     }
 
     private TipoOrdenControl tipoOrden(BatchRecord record) {
