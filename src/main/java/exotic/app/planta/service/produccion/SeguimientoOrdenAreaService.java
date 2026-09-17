@@ -533,11 +533,9 @@ public class SeguimientoOrdenAreaService {
                     PageRequest.of(0, prefixSize)
             );
             List<OrdenFabricacionOperacion> completedFabricacion = incluirFabricacion
-                    ? ordenFabricacionOperacionRepo.findCompletadasPorResponsable(
+                    ? ordenFabricacionOperacionRepo.findCompletadasHistoricasPorResponsable(
                             userId,
                             EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
-                            null,
-                            null,
                             searchPattern)
                     : List.of();
             List<SeguimientoOrdenAreaDTO> combined = new ArrayList<>(
@@ -582,7 +580,7 @@ public class SeguimientoOrdenAreaService {
                             periodEndDate.plusDays(1).atStartOfDay()
                     );
             List<OrdenFabricacionOperacion> completedFabricacion = incluirFabricacion
-                    ? ordenFabricacionOperacionRepo.findCompletadasPorResponsable(
+                    ? ordenFabricacionOperacionRepo.findCompletadasPorResponsableEnRango(
                             userId,
                             EstadoSeguimientoOrdenArea.COMPLETADO.getCode(),
                             periodStartDate.atStartOfDay(),

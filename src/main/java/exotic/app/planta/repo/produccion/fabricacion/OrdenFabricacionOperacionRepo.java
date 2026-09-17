@@ -72,8 +72,6 @@ public interface OrdenFabricacionOperacionRepo
             SELECT o FROM OrdenFabricacionOperacion o
             WHERE o.areaOperativa.responsableArea.id = :userId
               AND o.estado = :estado
-              AND (:desde IS NULL OR o.fechaCompletado >= :desde)
-              AND (:hasta IS NULL OR o.fechaCompletado < :hasta)
               AND (:search = ''
                    OR LOWER(COALESCE(o.ordenFabricacion.semiTerminado.productoId, '')) LIKE :search
                    OR LOWER(COALESCE(o.ordenFabricacion.semiTerminado.nombre, '')) LIKE :search
@@ -83,7 +81,30 @@ public interface OrdenFabricacionOperacionRepo
                                 AND LOWER(l.batchNumber) LIKE :search))
             ORDER BY o.fechaCompletado DESC, o.id DESC
             """)
-    List<OrdenFabricacionOperacion> findCompletadasPorResponsable(
+    List<OrdenFabricacionOperacion> findCompletadasHistoricasPorResponsable(
+            @Param("userId") Long userId,
+            @Param("estado") int estado,
+            @Param("search") String search);
+
+    @EntityGraph(attributePaths = {
+            "ordenFabricacion", "ordenFabricacion.semiTerminado", "areaOperativa"
+    })
+    @Query("""
+            SELECT o FROM OrdenFabricacionOperacion o
+            WHERE o.areaOperativa.responsableArea.id = :userId
+              AND o.estado = :estado
+              AND o.fechaCompletado >= :desde
+              AND o.fechaCompletado < :hasta
+              AND (:search = ''
+                   OR LOWER(COALESCE(o.ordenFabricacion.semiTerminado.productoId, '')) LIKE :search
+                   OR LOWER(COALESCE(o.ordenFabricacion.semiTerminado.nombre, '')) LIKE :search
+                   OR LOWER(COALESCE(o.procesoNombre, '')) LIKE :search
+                   OR EXISTS (SELECT l.id FROM Lote l
+                              WHERE l.ordenFabricacion = o.ordenFabricacion
+                                AND LOWER(l.batchNumber) LIKE :search))
+            ORDER BY o.fechaCompletado DESC, o.id DESC
+            """)
+    List<OrdenFabricacionOperacion> findCompletadasPorResponsableEnRango(
             @Param("userId") Long userId,
             @Param("estado") int estado,
             @Param("desde") LocalDateTime desde,
