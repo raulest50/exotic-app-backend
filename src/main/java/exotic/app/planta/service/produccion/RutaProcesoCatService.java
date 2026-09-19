@@ -23,6 +23,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -99,12 +101,14 @@ public class RutaProcesoCatService {
                     return rutaProcesoCatRepo.save(newRuta);
                 });
 
-        rutaProcesoCatVersionRepo.findByCategoriaIdAndEstadoForUpdate(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE)
-                .ifPresent(vigente -> {
-                    vigente.setEstado(RutaProcesoCatVersion.Estado.RETIRADA);
-                    vigente.setVigenteHasta(now);
-                    rutaProcesoCatVersionRepo.save(vigente);
-                });
+        Optional<RutaProcesoCatVersion> vigenteOpt = rutaProcesoCatVersionRepo
+                .findByCategoriaIdAndEstadoForUpdate(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE);
+        validateBaseVersion(dto, vigenteOpt.orElse(null));
+        vigenteOpt.ifPresent(vigente -> {
+            vigente.setEstado(RutaProcesoCatVersion.Estado.RETIRADA);
+            vigente.setVigenteHasta(now);
+            rutaProcesoCatVersionRepo.save(vigente);
+        });
 
         RutaProcesoCatVersion nuevaVersion = new RutaProcesoCatVersion();
         nuevaVersion.setRutaProcesoCat(ruta);
@@ -114,6 +118,7 @@ public class RutaProcesoCatService {
         nuevaVersion.setCreadoEn(now);
         nuevaVersion.setCreadoPor(normalizeText(username));
         nuevaVersion.setMotivoCambio(normalizeText(dto.getMotivoCambio()));
+        nuevaVersion.setLayoutRevision(0);
 
         Map<String, RutaProcesoNode> nodeMap = new HashMap<>();
         for (RutaProcesoNodeDTO nodeDto : dto.getNodes()) {
@@ -175,6 +180,100 @@ public class RutaProcesoCatService {
         return toDTO(rutaProcesoCatVersionRepo.save(nuevaVersion));
     }
 
+    public RutaProcesoCatDTO updateLayout(
+            int categoriaId,
+            Long versionId,
+            RutaProcesoLayoutUpdateDTO layout,
+            String username
+    ) {
+        if (versionId == null) {
+            throw new IllegalArgumentException("La versión de ruta es obligatoria.");
+        }
+        if (layout == null) {
+            throw new IllegalArgumentException("La disposición visual no puede estar vacía.");
+        }
+        if (layout.getLayoutRevision() == null || layout.getLayoutRevision() < 0) {
+            throw new IllegalArgumentException("La revisión visual es obligatoria y no puede ser negativa.");
+        }
+
+        List<RutaProcesoNodePositionDTO> requestedNodes = Optional.ofNullable(layout.getNodes())
+                .orElse(Collections.emptyList());
+        if (requestedNodes.isEmpty()) {
+            throw new IllegalArgumentException("La disposición debe incluir todos los nodos de la ruta.");
+        }
+
+        Map<String, RutaProcesoNodePositionDTO> requestedById = new LinkedHashMap<>();
+        for (RutaProcesoNodePositionDTO requested : requestedNodes) {
+            if (requested == null) {
+                throw new IllegalArgumentException("La disposición contiene un nodo vacío.");
+            }
+            String nodeId = normalizeId(requested.getId());
+            if (nodeId == null) {
+                throw new IllegalArgumentException("Todos los nodos deben tener un identificador válido.");
+            }
+            if (requested.getPosicionX() == null || requested.getPosicionY() == null
+                    || !Double.isFinite(requested.getPosicionX())
+                    || !Double.isFinite(requested.getPosicionY())) {
+                throw new IllegalArgumentException("Las coordenadas de los nodos deben ser números finitos.");
+            }
+            requested.setId(nodeId);
+            requested.setPosicionX(normalizeCoordinate(requested.getPosicionX()));
+            requested.setPosicionY(normalizeCoordinate(requested.getPosicionY()));
+            if (requestedById.put(nodeId, requested) != null) {
+                throw new IllegalArgumentException("La disposición contiene identificadores de nodo duplicados.");
+            }
+        }
+
+        RutaProcesoCatVersion vigente = rutaProcesoCatVersionRepo
+                .findByCategoriaIdAndEstadoForUpdate(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE)
+                .orElseThrow(() -> new IllegalStateException(
+                        "La categoría ya no tiene una versión vigente para actualizar."));
+
+        if (!Objects.equals(vigente.getId(), versionId)) {
+            throw new IllegalStateException(
+                    "La versión vigente cambió mientras se editaba la disposición. Recargue la ruta.");
+        }
+        if (vigente.getLayoutRevision() != layout.getLayoutRevision()) {
+            throw new IllegalStateException(
+                    "La disposición visual fue actualizada por otro usuario. Recargue la ruta.");
+        }
+
+        Map<String, RutaProcesoNode> persistedById = new LinkedHashMap<>();
+        for (RutaProcesoNode node : vigente.getNodes()) {
+            String nodeId = normalizeId(node.getFrontendId());
+            if (nodeId == null || persistedById.put(nodeId, node) != null) {
+                throw new IllegalStateException(
+                        "La versión vigente contiene identificadores de nodo inválidos o duplicados.");
+            }
+        }
+        if (!persistedById.keySet().equals(requestedById.keySet())) {
+            throw new IllegalArgumentException(
+                    "La disposición debe contener exactamente los nodos de la versión vigente.");
+        }
+
+        boolean changed = false;
+        for (Map.Entry<String, RutaProcesoNode> entry : persistedById.entrySet()) {
+            RutaProcesoNodePositionDTO requested = requestedById.get(entry.getKey());
+            RutaProcesoNode node = entry.getValue();
+            double persistedX = normalizeCoordinate(node.getPosicionX());
+            double persistedY = normalizeCoordinate(node.getPosicionY());
+            if (Double.compare(persistedX, requested.getPosicionX()) != 0
+                    || Double.compare(persistedY, requested.getPosicionY()) != 0) {
+                node.setPosicionX(requested.getPosicionX());
+                node.setPosicionY(requested.getPosicionY());
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            vigente.setLayoutRevision(vigente.getLayoutRevision() + 1);
+            vigente.setLayoutActualizadoEn(AppTime.now());
+            vigente.setLayoutActualizadoPor(normalizeText(username));
+        }
+
+        return toDTO(vigente);
+    }
+
     public void deleteRuta(int categoriaId) {
         LocalDateTime now = AppTime.now();
         rutaProcesoCatVersionRepo.findByCategoriaIdAndEstadoForUpdate(categoriaId, RutaProcesoCatVersion.Estado.VIGENTE)
@@ -209,6 +308,9 @@ public class RutaProcesoCatService {
         dto.setCreadoEn(version.getCreadoEn());
         dto.setCreadoPor(version.getCreadoPor());
         dto.setMotivoCambio(version.getMotivoCambio());
+        dto.setLayoutRevision(version.getLayoutRevision());
+        dto.setLayoutActualizadoEn(version.getLayoutActualizadoEn());
+        dto.setLayoutActualizadoPor(version.getLayoutActualizadoPor());
 
         Map<Integer, ProcesoProduccionDocumentoVersion> poeVigentePorProceso =
                 findPoeVigentePorProceso(version.getNodes().stream()
@@ -228,6 +330,25 @@ public class RutaProcesoCatService {
         dto.setEdges(edgeDtos);
 
         return dto;
+    }
+
+    private void validateBaseVersion(RutaProcesoCatDTO dto, RutaProcesoCatVersion vigente) {
+        if (dto.getVersionId() == null) {
+            return;
+        }
+        if (vigente == null || !Objects.equals(vigente.getId(), dto.getVersionId())) {
+            throw new IllegalStateException(
+                    "La versión vigente cambió mientras se editaba la ruta. Recargue antes de guardar.");
+        }
+        if (dto.getLayoutRevision() != null
+                && vigente.getLayoutRevision() != dto.getLayoutRevision()) {
+            throw new IllegalStateException(
+                    "La disposición visual cambió mientras se editaba la ruta. Recargue antes de guardar.");
+        }
+    }
+
+    private double normalizeCoordinate(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     private RutaProcesoNodeDTO toNodeDTO(
@@ -471,8 +592,24 @@ public class RutaProcesoCatService {
         private LocalDateTime creadoEn;
         private String creadoPor;
         private String motivoCambio;
+        private Integer layoutRevision;
+        private LocalDateTime layoutActualizadoEn;
+        private String layoutActualizadoPor;
         private List<RutaProcesoNodeDTO> nodes = new ArrayList<>();
         private List<RutaProcesoEdgeDTO> edges = new ArrayList<>();
+    }
+
+    @lombok.Data
+    public static class RutaProcesoLayoutUpdateDTO {
+        private Integer layoutRevision;
+        private List<RutaProcesoNodePositionDTO> nodes = new ArrayList<>();
+    }
+
+    @lombok.Data
+    public static class RutaProcesoNodePositionDTO {
+        private String id;
+        private Double posicionX;
+        private Double posicionY;
     }
 
     @lombok.Data

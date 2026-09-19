@@ -48,6 +48,15 @@ public class RutaProcesoCatVersion {
     @Column(name = "motivo_cambio", columnDefinition = "TEXT")
     private String motivoCambio;
 
+    @Column(name = "layout_revision", nullable = false)
+    private int layoutRevision = 0;
+
+    @Column(name = "layout_actualizado_en")
+    private LocalDateTime layoutActualizadoEn;
+
+    @Column(name = "layout_actualizado_por", length = 120)
+    private String layoutActualizadoPor;
+
     @OneToMany(mappedBy = "rutaProcesoCatVersion", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id ASC")
     private List<RutaProcesoNode> nodes = new ArrayList<>();

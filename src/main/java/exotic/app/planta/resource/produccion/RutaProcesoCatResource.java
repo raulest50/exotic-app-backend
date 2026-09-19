@@ -6,6 +6,7 @@ import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.produccion.RutaProcesoCatService;
 import exotic.app.planta.service.produccion.RutaProcesoCatService.ProcesoRutaOptionDTO;
 import exotic.app.planta.service.produccion.RutaProcesoCatService.RutaProcesoCatDTO;
+import exotic.app.planta.service.produccion.RutaProcesoCatService.RutaProcesoLayoutUpdateDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -86,6 +87,33 @@ public class RutaProcesoCatResource {
             log.warn("Conflicto al versionar ruta de proceso para categoria {}: {}", categoriaId, e.getMessage());
             return ResponseEntity.status(409)
                     .body(new ErrorResponse("Conflicto al versionar ruta de proceso", e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{categoriaId}/versiones/{versionId}/layout")
+    public ResponseEntity<?> updateLayout(
+            Authentication authentication,
+            @PathVariable int categoriaId,
+            @PathVariable Long versionId,
+            @RequestBody RutaProcesoLayoutUpdateDTO dto
+    ) {
+        try {
+            requirePlanningAccess(authentication);
+            String username = authentication != null && authentication.isAuthenticated()
+                    ? authentication.getName()
+                    : null;
+            return ResponseEntity.ok(
+                    rutaProcesoCatService.updateLayout(categoriaId, versionId, dto, username));
+        } catch (IllegalArgumentException e) {
+            log.warn("Disposición visual inválida para categoria {}, versión {}: {}",
+                    categoriaId, versionId, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse("Disposición visual inválida", e.getMessage()));
+        } catch (IllegalStateException e) {
+            log.warn("Conflicto al actualizar disposición para categoria {}, versión {}: {}",
+                    categoriaId, versionId, e.getMessage());
+            return ResponseEntity.status(409)
+                    .body(new ErrorResponse("Conflicto al actualizar disposición", e.getMessage()));
         }
     }
 
