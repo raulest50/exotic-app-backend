@@ -525,7 +525,7 @@ public class ControlPlanService {
                 plan.getCreadoEn(), plan.getVersiones().stream().map(this::toResponse).toList());
     }
 
-    private VersionResponse toResponse(VersionPlanControl version) {
+    VersionResponse toResponse(VersionPlanControl version) {
         return new VersionResponse(version.getId(), version.getNumero(), version.getEstado(),
                 version.getProposito(), version.getMotivoCambio(), version.getResponsableEjecucion(),
                 version.getResponsableRevision(), version.getResponsableDisposicion(), version.getCreadaEn(),

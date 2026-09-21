@@ -209,7 +209,7 @@ public class ControlExecutionService {
         return ejecucionRepo.buscar(ambito, loteId, batchRecordId, limpiarNullable(search), resultado,
                         desde == null ? null : desde.atStartOfDay(),
                         hasta == null ? null : hasta.plusDays(1).atStartOfDay(),
-                        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "fechaRegistro")))
+                        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "fechaRegistro", "id")))
                 .map(this::toResumen);
     }
 

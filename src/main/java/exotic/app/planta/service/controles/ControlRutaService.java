@@ -4,10 +4,12 @@ import exotic.app.planta.model.controles.AplicabilidadPlanControl;
 import exotic.app.planta.model.controles.EstadoVersionPlanControl;
 import exotic.app.planta.model.controles.TipoOrdenControl;
 import exotic.app.planta.model.controles.dto.ControlRutaResumen;
+import exotic.app.planta.model.controles.dto.ControlDTOs.PlanResponse;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.repo.controles.AplicabilidadPlanControlRepo;
+import exotic.app.planta.repo.controles.VersionPlanControlRepo;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,19 @@ public class ControlRutaService {
     private final AplicabilidadPlanControlRepo aplicabilidadRepo;
     private final ProductoRepo productoRepo;
     private final CategoriaRepo categoriaRepo;
+    private final VersionPlanControlRepo versionRepo;
+    private final ControlPlanService planService;
+
+    /** Consulta transversal de la configuración publicada; nunca expone borradores ni otras versiones. */
+    public PlanResponse detalleVigente(Long planId, Integer numero) {
+        var version = versionRepo.findFirstByPlan_IdAndEstado(planId, EstadoVersionPlanControl.VIGENTE)
+                .filter(item -> item.getNumero().equals(numero))
+                .orElseThrow(() -> new NoSuchElementException(
+                        "La versión indicada ya no está vigente o no existe. Actualice los indicadores de la ruta."));
+        var plan = version.getPlan();
+        return new PlanResponse(plan.getId(), plan.getCodigo(), plan.getNombre(), plan.getAmbito(),
+                plan.getCreadoEn(), List.of(planService.toResponse(version)));
+    }
 
     public List<ControlRutaResumen> listar(Integer categoriaId, String productoId) {
         String productoBuscado = productoId == null || productoId.isBlank() ? null : productoId.trim();

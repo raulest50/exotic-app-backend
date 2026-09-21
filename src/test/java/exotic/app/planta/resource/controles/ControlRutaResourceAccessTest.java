@@ -41,4 +41,23 @@ class ControlRutaResourceAccessTest {
         assertThrows(ResponseStatusException.class, () -> resource.listar(authentication, 7, null));
         verifyNoInteractions(service);
     }
+
+    @Test
+    void detalleUsaLosMismosPermisosDeLecturaDeLosTresDiagramas() {
+        resource.detalle(authentication, 12L, 3);
+
+        verify(guard).requireAnyTabAccess(eq(authentication), eq(Map.of(
+                ModuloSistema.PRODUCCION, Map.of("PARAMETROS_POR_CATEGORIA", 1, "PLANES_CONTROL_PROCESO", 1),
+                ModuloSistema.CALIDAD, Map.of("PLANES_CONTROL_CALIDAD", 1))), anyString());
+        verify(service).detalleVigente(12L, 3);
+    }
+
+    @Test
+    void noExponeMedicionesSinPermisoDeLectura() {
+        when(guard.requireAnyTabAccess(eq(authentication), anyMap(), anyString()))
+                .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN));
+
+        assertThrows(ResponseStatusException.class, () -> resource.detalle(authentication, 12L, 3));
+        verifyNoInteractions(service);
+    }
 }

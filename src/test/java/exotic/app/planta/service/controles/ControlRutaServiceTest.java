@@ -1,19 +1,24 @@
 package exotic.app.planta.service.controles;
 
 import exotic.app.planta.model.controles.*;
+import exotic.app.planta.model.controles.dto.ControlDTOs.VersionResponse;
 import exotic.app.planta.model.producto.Categoria;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.repo.controles.AplicabilidadPlanControlRepo;
+import exotic.app.planta.repo.controles.VersionPlanControlRepo;
 import exotic.app.planta.repo.producto.CategoriaRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,7 +29,52 @@ class ControlRutaServiceTest {
     @Mock private AplicabilidadPlanControlRepo aplicabilidadRepo;
     @Mock private ProductoRepo productoRepo;
     @Mock private CategoriaRepo categoriaRepo;
+    @Mock private VersionPlanControlRepo versionRepo;
+    @Mock private ControlPlanService planService;
     @InjectMocks private ControlRutaService service;
+
+    @ParameterizedTest
+    @EnumSource(AmbitoControl.class)
+    void detalleExponeSoloLaVersionVigenteIndicada(AmbitoControl ambito) {
+        var vigente = regla(12L, ambito, null).getVersion();
+        var borrador = new VersionPlanControl();
+        borrador.setNumero(2);
+        borrador.setEstado(EstadoVersionPlanControl.BORRADOR);
+        borrador.setPlan(vigente.getPlan());
+        vigente.getPlan().getVersiones().addAll(List.of(vigente, borrador));
+        var detalle = new VersionResponse(100L, 1, EstadoVersionPlanControl.VIGENTE,
+                "Inspección", null, "Operario", null, null, null, null, null, List.of(), List.of());
+        when(versionRepo.findFirstByPlan_IdAndEstado(12L, EstadoVersionPlanControl.VIGENTE))
+                .thenReturn(Optional.of(vigente));
+        when(planService.toResponse(vigente)).thenReturn(detalle);
+
+        var result = service.detalleVigente(12L, 1);
+
+        assertEquals(12L, result.id());
+        assertEquals(ambito, result.ambito());
+        assertEquals(List.of(detalle), result.versiones());
+        verify(planService, never()).toResponse(borrador);
+    }
+
+    @Test
+    void noSustituyeLaVersionDelIndicadorPorOtraVigente() {
+        var vigente = regla(12L, AmbitoControl.CALIDAD, null).getVersion();
+        vigente.setNumero(2);
+        when(versionRepo.findFirstByPlan_IdAndEstado(12L, EstadoVersionPlanControl.VIGENTE))
+                .thenReturn(Optional.of(vigente));
+
+        assertThrows(NoSuchElementException.class, () -> service.detalleVigente(12L, 1));
+        verifyNoInteractions(planService);
+    }
+
+    @Test
+    void noExponeDetalleDePlanesSinVersionVigente() {
+        when(versionRepo.findFirstByPlan_IdAndEstado(12L, EstadoVersionPlanControl.VIGENTE))
+                .thenReturn(Optional.empty());
+
+        assertThrows(NoSuchElementException.class, () -> service.detalleVigente(12L, 1));
+        verifyNoInteractions(planService);
+    }
 
     @Test
     void productoExcluidoNoMuestraElControlDeSuCategoria() {
