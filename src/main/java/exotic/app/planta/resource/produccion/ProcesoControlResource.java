@@ -38,6 +38,22 @@ public class ProcesoControlResource {
         return planService.listar(AmbitoControl.PROCESO, search);
     }
 
+    @GetMapping("/planes/resumen")
+    public Page<PlanResumenResponse> resumenPlanes(
+            Authentication auth, @RequestParam(required = false) String search,
+            @RequestParam(required = false) EstadoVersionPlanControl estado,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size) {
+        requirePlan(auth, 1);
+        return planService.listarResumenes(AmbitoControl.PROCESO, search, estado, page, size);
+    }
+
+    @GetMapping("/planes/{planId}/versiones/{versionId}")
+    public PlanVersionDetalleResponse detalleVersion(
+            Authentication auth, @PathVariable Long planId, @PathVariable Long versionId) {
+        requirePlan(auth, 1);
+        return planService.detalleVersion(AmbitoControl.PROCESO, planId, versionId);
+    }
+
     @GetMapping("/planes/{planId}")
     public PlanResponse detallePlan(Authentication auth, @PathVariable Long planId) {
         requirePlan(auth, 1);

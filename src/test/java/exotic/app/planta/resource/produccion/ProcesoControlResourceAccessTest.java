@@ -1,5 +1,7 @@
 package exotic.app.planta.resource.produccion;
 
+import exotic.app.planta.model.controles.AmbitoControl;
+import exotic.app.planta.model.controles.EstadoVersionPlanControl;
 import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.security.ModuleTabAccessGuard;
@@ -13,13 +15,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.AccessDeniedException;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +38,30 @@ class ProcesoControlResourceAccessTest {
     @Mock private Authentication authentication;
 
     private ProcesoControlResource resource;
+
+    @Test
+    void resumenYDetalleDeVersionExigenLecturaDePlanes() {
+        resource.resumenPlanes(authentication, "peso", EstadoVersionPlanControl.VIGENTE, 1, 10);
+        resource.detalleVersion(authentication, 7L, 71L);
+        verify(accessGuard, times(2)).requireTabAccess(
+                authentication, ModuloSistema.PRODUCCION, ProcesoControlResource.TAB_PLANES, 1,
+                "No tiene el nivel requerido para administrar planes de proceso.");
+        verify(planService).listarResumenes(AmbitoControl.PROCESO, "peso", EstadoVersionPlanControl.VIGENTE, 1, 10);
+        verify(planService).detalleVersion(AmbitoControl.PROCESO, 7L, 71L);
+    }
+
+    @Test
+    void deniegaLasNuevasConsultasSinPermisoDePlanes() {
+        when(accessGuard.requireTabAccess(
+                authentication, ModuloSistema.PRODUCCION, ProcesoControlResource.TAB_PLANES, 1,
+                "No tiene el nivel requerido para administrar planes de proceso."))
+                .thenThrow(new AccessDeniedException("Sin permiso"));
+        assertThrows(AccessDeniedException.class,
+                () -> resource.resumenPlanes(authentication, null, null, 0, 10));
+        assertThrows(AccessDeniedException.class,
+                () -> resource.detalleVersion(authentication, 7L, 71L));
+        verifyNoInteractions(planService);
+    }
 
     @BeforeEach
     void setUp() {

@@ -104,6 +104,20 @@ public final class ControlDTOs {
             Long id, String codigo, String nombre, AmbitoControl ambito,
             LocalDateTime creadoEn, List<VersionResponse> versiones) {}
 
+    public record VersionPlanReferencia(Long id, Integer numero, EstadoVersionPlanControl estado) {}
+
+    public record VersionPlanResumen(
+            Long id, Integer numero, EstadoVersionPlanControl estado,
+            LocalDateTime creadaEn, LocalDateTime publicadaEn, LocalDateTime retiradaEn,
+            Integer cantidadAplicabilidades, Integer cantidadCaracteristicas) {}
+
+    public record PlanResumenResponse(
+            Long id, String codigo, String nombre, AmbitoControl ambito, LocalDateTime creadoEn,
+            VersionPlanReferencia borrador, VersionPlanReferencia vigente, VersionPlanReferencia ultimaRetirada,
+            List<VersionPlanResumen> versiones) {}
+
+    public record PlanVersionDetalleResponse(PlanResumenResponse plan, VersionResponse version) {}
+
     public record PendienteResponse(
             Long controlRequeridoId, EstadoControlRequerido estado,
             Long planId, String planCodigo, String planNombre,

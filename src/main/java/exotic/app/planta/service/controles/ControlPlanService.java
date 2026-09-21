@@ -16,11 +16,15 @@ import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -52,6 +56,63 @@ public class ControlPlanService {
     @Transactional(readOnly = true)
     public PlanResponse detalle(AmbitoControl ambito, Long planId) {
         return toResponse(requirePlan(ambito, planId));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PlanResumenResponse> listarResumenes(
+            AmbitoControl ambito, String search, EstadoVersionPlanControl estado, int page, int size) {
+        if (page < 0 || size < 1 || size > 50) {
+            throw new IllegalArgumentException("La pagina debe ser mayor o igual a cero y el tamano debe estar entre 1 y 50.");
+        }
+        String filtro = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        var estados = estado == null ? List.of(EstadoVersionPlanControl.values()) : List.of(estado);
+        var planes = planRepo.findResumenes(ambito, filtro, estados, PageRequest.of(page, size));
+        if (planes.isEmpty()) return new PageImpl<>(List.of(), planes.getPageable(), planes.getTotalElements());
+
+        var ids = planes.getContent().stream().map(PlanControlRepo.ResumenPlan::getId).toList();
+        var versiones = versionRepo.findResumenes(ids, estados).stream()
+                .collect(Collectors.groupingBy(VersionPlanControlRepo.ResumenVersion::getPlanId));
+        var referencias = referenciasPorPlan(ids);
+        return planes.map(p -> {
+            var refs = referencias.getOrDefault(p.getId(), List.of());
+            return new PlanResumenResponse(p.getId(), p.getCodigo(), p.getNombre(), p.getAmbito(), p.getCreadoEn(),
+                    referencia(refs, EstadoVersionPlanControl.BORRADOR),
+                    referencia(refs, EstadoVersionPlanControl.VIGENTE),
+                    referencia(refs, EstadoVersionPlanControl.RETIRADA),
+                    versiones.getOrDefault(p.getId(), List.of()).stream().map(v -> new VersionPlanResumen(
+                            v.getId(), v.getNumero(), v.getEstado(), v.getCreadaEn(), v.getPublicadaEn(), v.getRetiradaEn(),
+                            v.getCantidadAplicabilidades(), v.getCantidadCaracteristicas())).toList());
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public PlanVersionDetalleResponse detalleVersion(AmbitoControl ambito, Long planId, Long versionId) {
+        VersionPlanControl version = requireVersion(ambito, planId, versionId);
+        PlanControl plan = version.getPlan();
+        var refs = referenciasPorPlan(List.of(planId)).getOrDefault(planId, List.of());
+        VersionResponse detalle = toResponse(version);
+        var resumenVersion = new VersionPlanResumen(version.getId(), version.getNumero(), version.getEstado(),
+                version.getCreadaEn(), version.getPublicadaEn(), version.getRetiradaEn(),
+                detalle.aplicabilidades().size(), detalle.caracteristicas().size());
+        var resumenPlan = new PlanResumenResponse(plan.getId(), plan.getCodigo(), plan.getNombre(), plan.getAmbito(),
+                plan.getCreadoEn(), referencia(refs, EstadoVersionPlanControl.BORRADOR),
+                referencia(refs, EstadoVersionPlanControl.VIGENTE), referencia(refs, EstadoVersionPlanControl.RETIRADA),
+                List.of(resumenVersion));
+        return new PlanVersionDetalleResponse(resumenPlan, detalle);
+    }
+
+    private Map<Long, List<VersionPlanControlRepo.ReferenciaVersion>> referenciasPorPlan(Collection<Long> ids) {
+        return versionRepo.findReferencias(ids,
+                        List.of(EstadoVersionPlanControl.BORRADOR, EstadoVersionPlanControl.VIGENTE),
+                        EstadoVersionPlanControl.RETIRADA).stream()
+                .collect(Collectors.groupingBy(VersionPlanControlRepo.ReferenciaVersion::getPlanId));
+    }
+
+    private VersionPlanReferencia referencia(
+            List<VersionPlanControlRepo.ReferenciaVersion> refs, EstadoVersionPlanControl estado) {
+        return refs.stream().filter(v -> v.getEstado() == estado)
+                .map(v -> new VersionPlanReferencia(v.getId(), v.getNumero(), v.getEstado()))
+                .findFirst().orElse(null);
     }
 
     @Transactional
