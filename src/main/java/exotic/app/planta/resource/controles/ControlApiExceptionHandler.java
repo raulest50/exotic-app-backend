@@ -21,7 +21,8 @@ import java.util.NoSuchElementException;
 @RestControllerAdvice(assignableTypes = {
         ProcesoControlResource.class,
         CalidadControlUnificadoResource.class,
-        ControlCatalogResource.class
+        ControlCatalogResource.class,
+        ControlRutaResource.class
 })
 public class ControlApiExceptionHandler {
     public record ApiError(String title, String message, LocalDateTime timestamp,
