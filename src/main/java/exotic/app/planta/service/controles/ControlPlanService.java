@@ -124,7 +124,9 @@ public class ControlPlanService {
                     vigente.setEstado(EstadoVersionPlanControl.RETIRADA);
                     vigente.setRetiradaEn(instanteVigencia);
                     vigente.setRetiradaPor(actor);
-                    versionRepo.save(vigente);
+                    // Liberar el índice único de VIGENTE antes de activar la nueva versión.
+                    // El flush conserva la misma transacción: si la publicación falla, todo se revierte.
+                    versionRepo.saveAndFlush(vigente);
                 });
         version.setEstado(EstadoVersionPlanControl.VIGENTE);
         version.setPublicadaEn(instanteVigencia);
