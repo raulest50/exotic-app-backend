@@ -55,6 +55,9 @@ public class ComprasService {
     private final TerminadoRepo terminadoRepo;
 
     private final OrdenCompraRepo ordenCompraRepo;
+    private final OcmCierreConfigService ocmCierreConfigService;
+    private final OcmCierreService ocmCierreService;
+    private final RecepcionCompletaOcmService recepcionCompletaOcmService;
 
     private final EmailService emailService;
 
@@ -113,6 +116,10 @@ public class ComprasService {
         }
         ordenCompraMateriales.setProveedor(optProveedor.get());
         ordenCompraMateriales.setEstado(0);
+        ordenCompraMateriales.setFechaRecepcionCompleta(null);
+        ordenCompraMateriales.setFechaCierre(null);
+        ordenCompraMateriales.setOrigenCierre(null);
+        ordenCompraMateriales.setUsuarioCierreUsername(null);
         ordenCompraMateriales.setUsuarioCreador(usuarioCreador);
         ordenCompraMateriales.setUsuarioCreadorUsername(usuarioCreador.getUsername());
         ordenCompraMateriales.setUsuarioLiberador(null);
@@ -157,8 +164,13 @@ public class ComprasService {
 
     @Transactional
     public OrdenCompraMateriales cancelOrdenCompra(int ordenCompraId) {
-        OrdenCompraMateriales orden = ordenCompraRepo.findById(ordenCompraId)
+        OrdenCompraMateriales orden = ordenCompraRepo.findByOrdenCompraIdForUpdate(ordenCompraId)
                 .orElseThrow(() -> new RuntimeException("OrdenCompraMateriales not found with id: " + ordenCompraId));
+
+        if (orden.getEstado() == 3) {
+            throw new IllegalStateException("La OCM ya está cerrada y no se puede cancelar.");
+        }
+        if (orden.getEstado() == -1) return orden;
 
         // Verificar si la orden ya fue enviada al proveedor (estado 2)
         if (orden.getEstado() == 2) {
@@ -322,7 +334,7 @@ public class ComprasService {
         log.info("Iniciando actualización de estado para orden de compra ID: {}, nuevo estado: {}", ordenCompraId, ue.getNewEstado());
         validateAuditUser(usuarioActor);
 
-        OrdenCompraMateriales orden = ordenCompraRepo.findById(ordenCompraId)
+        OrdenCompraMateriales orden = ordenCompraRepo.findByOrdenCompraIdForUpdate(ordenCompraId)
                 .orElseThrow(() -> new RuntimeException("OrdenCompraMateriales not found with id: " + ordenCompraId));
 
         validateEstadoTransition(orden.getEstado(), ue.getNewEstado());
@@ -410,7 +422,11 @@ public class ComprasService {
         }
 
         // Actualizar el estado solo después de que todo el proceso haya sido exitoso
-        orden.setEstado(ue.getNewEstado());
+        if (ue.getNewEstado() == 3) {
+            ocmCierreService.registrarCierre(orden, OrigenCierreOcm.MANUAL, usuarioActor.getUsername());
+        } else {
+            orden.setEstado(ue.getNewEstado());
+        }
         return ordenCompraRepo.save(orden);
     }
 
@@ -421,6 +437,9 @@ public class ComprasService {
     }
 
     private void validateEstadoTransition(int estadoActual, int nuevoEstado) {
+        if ((estadoActual == 3 || estadoActual == -1) && nuevoEstado != estadoActual) {
+            throw new IllegalStateException("No se puede cambiar el estado de una OCM cerrada o cancelada.");
+        }
         if (nuevoEstado == 1 && estadoActual != 0) {
             throw new IllegalStateException(
                     "Solo se puede liberar una orden de compra que esté pendiente de liberación."
@@ -654,8 +673,10 @@ public class ComprasService {
         }
 
         // Verificar que la orden de compra existe
-        OrdenCompraMateriales ordenExistente = ordenCompraRepo.findById(ordenCompraId)
+        var cierreConfig = ocmCierreConfigService.bloquearParaOperacion();
+        OrdenCompraMateriales ordenExistente = ordenCompraRepo.findByOrdenCompraIdForUpdate(ordenCompraId)
                 .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada con ID: " + ordenCompraId));
+        boolean completaAntes = recepcionCompletaOcmService.estaCompleta(ordenExistente);
 
         // Verificar que el proveedor existe
         Proveedor proveedor = proveedorRepo.findById(ordenCompraMateriales.getProveedor().getId().trim())
@@ -705,6 +726,7 @@ public class ComprasService {
             ordenExistente.getItemsOrdenCompra().add(nuevoItem);
         }
 
+        ocmCierreService.actualizarRecepcion(ordenExistente, completaAntes, cierreConfig);
         // Guardar y retornar la orden actualizada
         return ordenCompraRepo.save(ordenExistente);
     }
@@ -764,12 +786,14 @@ public class ComprasService {
      * @throws RuntimeException Si la orden no existe, no está en estado 2, o no tiene transacciones
      */
     @Transactional
-    public OrdenCompraMateriales closeOrdenCompra(int ordenCompraId) {
+    public OrdenCompraMateriales closeOrdenCompra(int ordenCompraId, User usuarioActor) {
+        validateAuditUser(usuarioActor);
         log.info("Iniciando cierre de orden de compra ID: {}", ordenCompraId);
 
-        OrdenCompraMateriales orden = ordenCompraRepo.findById(ordenCompraId)
+        OrdenCompraMateriales orden = ordenCompraRepo.findByOrdenCompraIdForUpdate(ordenCompraId)
                 .orElseThrow(() -> new RuntimeException("OrdenCompraMateriales not found with id: " + ordenCompraId));
 
+        if (orden.getEstado() == 3) return orden;
         // Verificar que la orden esté en estado 2 (pendiente ingreso almacén)
         if (orden.getEstado() != 2) {
             throw new RuntimeException("No se puede cerrar la orden de compra ID: " + ordenCompraId +
@@ -792,7 +816,7 @@ public class ComprasService {
                 ordenCompraId, transacciones.size());
 
         // Cambiar el estado a cerrado exitosamente (3)
-        orden.setEstado(3);
+        ocmCierreService.registrarCierre(orden, OrigenCierreOcm.MANUAL, usuarioActor.getUsername());
         OrdenCompraMateriales ordenCerrada = ordenCompraRepo.save(orden);
 
         log.info("Orden de compra ID: {} cerrada exitosamente.", ordenCompraId);

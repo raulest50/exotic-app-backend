@@ -31,6 +31,9 @@ import exotic.app.planta.repo.producto.MaterialRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.contabilidad.ContabilidadService;
+import exotic.app.planta.service.compras.OcmCierreConfigService;
+import exotic.app.planta.service.compras.OcmCierreService;
+import exotic.app.planta.service.compras.RecepcionCompletaOcmService;
 import exotic.app.planta.service.produccion.ProduccionService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -88,6 +91,9 @@ public class MovimientosService {
     private final ProduccionService produccionService;
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final Clock applicationClock;
+    private final OcmCierreConfigService ocmCierreConfigService;
+    private final OcmCierreService ocmCierreService;
+    private final RecepcionCompletaOcmService recepcionCompletaOcmService;
 
 
 
@@ -644,6 +650,7 @@ public class MovimientosService {
                 return ResponseEntity.badRequest().body("El ID de la orden de compra de materiales es invalido.");
             }
 
+            var cierreConfig = ocmCierreConfigService.bloquearParaOperacion();
             OrdenCompraMateriales ordenCompraPersistida = ordenCompraRepo.findByOrdenCompraIdForUpdate(ordenCompraId)
                     .orElse(null);
             if (ordenCompraPersistida == null) {
@@ -680,6 +687,7 @@ public class MovimientosService {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
             }
 
+            boolean completaAntes = recepcionCompletaOcmService.estaCompleta(ordenCompraPersistida);
             LocalDate fechaIngreso = LocalDate.now(applicationClock);
 
             // Create the DocIngresoAlmacenOC entity using the DTO constructor.
@@ -761,12 +769,10 @@ public class MovimientosService {
             }
 
             // Persist the entity.
-            transaccionAlmacenHeaderRepo.save(ingresoOCM);
+            transaccionAlmacenHeaderRepo.saveAndFlush(ingresoOCM);
+            ocmCierreService.actualizarRecepcion(ordenCompraPersistida, completaAntes, cierreConfig);
 
-            // Ya no se cierra la orden para permitir recepciones parciales.
-            OrdenCompraMateriales oc = ingresoOCM_dta.getOrdenCompraMateriales();
-            //oc.setEstado(3);
-            //ordenCompraRepo.save(oc);
+            OrdenCompraMateriales oc = ordenCompraPersistida;
 
             // Para transacciones de tipo OCM (ingreso de materiales por orden de compra)
             // NO crear asiento automático, se hará manualmente desde el módulo de pagos

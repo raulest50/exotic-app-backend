@@ -78,6 +78,23 @@ public class OrdenCompraMateriales {
 
     private LocalDateTime fechaVencimiento;
 
+    @Column(name = "fecha_recepcion_completa")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime fechaRecepcionCompleta;
+
+    @Column(name = "fecha_cierre")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime fechaCierre;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origen_cierre", length = 40)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private OrigenCierreOcm origenCierre;
+
+    @Column(name = "usuario_cierre_username", length = 120)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String usuarioCierreUsername;
+
     /**
      * Reference to the supplier (Proveedor) using the surrogate key.
      * This relationship uses the internal pk field rather than the business identifier

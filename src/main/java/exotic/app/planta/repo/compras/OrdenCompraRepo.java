@@ -89,6 +89,25 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
     @Query("SELECT orden FROM OrdenCompraMateriales orden WHERE orden.ordenCompraId = :ordenCompraId")
     Optional<OrdenCompraMateriales> findByOrdenCompraIdForUpdate(@Param("ordenCompraId") Integer ordenCompraId);
 
+    @Query("SELECT o.ordenCompraId FROM OrdenCompraMateriales o WHERE o.estado = 2 AND o.ordenCompraId > :afterId ORDER BY o.ordenCompraId")
+    List<Integer> findOpenIdsAfter(@Param("afterId") int afterId, Pageable pageable);
+
+    @Query("""
+            SELECT DISTINCT o FROM OrdenCompraMateriales o
+            LEFT JOIN FETCH o.proveedor LEFT JOIN FETCH o.itemsOrdenCompra i LEFT JOIN FETCH i.material
+            WHERE o.ordenCompraId IN :ids
+            """)
+    List<OrdenCompraMateriales> findWithItemsByIds(@Param("ids") List<Integer> ids);
+
+    @Query("""
+            SELECT o.ordenCompraId FROM OrdenCompraMateriales o
+            WHERE o.estado = 2 AND o.ordenCompraId > :afterId
+              AND o.fechaRecepcionCompleta >= :activation AND o.fechaRecepcionCompleta <= :dueBefore
+            ORDER BY o.ordenCompraId
+            """)
+    List<Integer> findAutomaticClosureIds(@Param("activation") LocalDateTime activation,
+            @Param("dueBefore") LocalDateTime dueBefore, @Param("afterId") int afterId, Pageable pageable);
+
     /**
      * Verifica si existe al menos una orden de compra con el estado especificado
      * @param estado el estado a buscar
@@ -133,16 +152,21 @@ public interface OrdenCompraRepo extends JpaRepository<OrdenCompraMateriales, In
         SELECT 
             oc.orden_compra_id as ordenCompraId,
             CASE 
-                WHEN COALESCE(SUM(ioc.cantidad), 0) = 0 THEN 0.0
-                ELSE (COALESCE(SUM(m.cantidad), 0.0) / SUM(ioc.cantidad)) * 100.0
+                WHEN COALESCE(ioc.cantidad, 0) = 0 THEN 0.0
+                ELSE (COALESCE(rec.cantidad, 0.0) / ioc.cantidad) * 100.0
             END as porcentajeRecibido
         FROM orden_compra oc
-        LEFT JOIN item_orden_compra ioc ON ioc.orden_compra_id = oc.orden_compra_id
-        LEFT JOIN transaccion_almacen ta ON ta.tipo_entidad_causante = 0 
-            AND ta.id_entidad_causante = oc.orden_compra_id
-        LEFT JOIN movimientos m ON m.transaccion_id = ta.transaccion_id
+        LEFT JOIN (
+            SELECT orden_compra_id, CAST(SUM(cantidad) AS numeric) AS cantidad
+            FROM item_orden_compra WHERE orden_compra_id IN :ordenIds GROUP BY orden_compra_id
+        ) ioc ON ioc.orden_compra_id = oc.orden_compra_id
+        LEFT JOIN (
+            SELECT ta.id_entidad_causante, SUM(m.cantidad) AS cantidad
+            FROM transaccion_almacen ta JOIN movimientos m ON m.transaccion_id = ta.transaccion_id
+            WHERE ta.tipo_entidad_causante = 0 AND ta.id_entidad_causante IN :ordenIds
+            GROUP BY ta.id_entidad_causante
+        ) rec ON rec.id_entidad_causante = oc.orden_compra_id
         WHERE oc.orden_compra_id IN :ordenIds
-        GROUP BY oc.orden_compra_id
         """, nativeQuery = true)
     List<Object[]> calcularPorcentajesRecibidos(@Param("ordenIds") List<Integer> ordenIds);
 

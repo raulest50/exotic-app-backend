@@ -6,6 +6,8 @@ import exotic.app.planta.model.inventarios.dto.ConsolidadoOCMResponseDTO;
 import exotic.app.planta.model.inventarios.dto.MovimientoDetalleDTO;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.service.inventarios.IngresoAlmacenService;
+import exotic.app.planta.service.compras.OcmCierreService;
+import exotic.app.planta.model.compras.dto.OcmCierreDTOs.EstadoRecepcion;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,13 @@ import java.util.Map;
 public class IngresoMaterialesAlmacenResource {
 
     private final IngresoAlmacenService ingresoAlmacenService;
+    private final OcmCierreService ocmCierreService;
+
+    @GetMapping("/ocm/{ordenCompraId}/estado-recepcion")
+    public EstadoRecepcion consultarEstadoRecepcion(@PathVariable int ordenCompraId) {
+        return ocmCierreService.consultarEstado(ordenCompraId);
+    }
+
     private final TransaccionAlmacenHeaderRepo transaccionAlmacenHeaderRepo;
 
     @GetMapping("ocms_pendientes_ingreso")

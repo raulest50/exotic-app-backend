@@ -229,6 +229,10 @@ public class MasterDirectiveService {
         }
         
         MasterDirective existingDirective = existingDirectiveOpt.get();
+
+        if (MasterDirectiveKeys.CIERRE_AUTOMATICO_OCM.equals(existingDirective.getNombre())) {
+            throw new IllegalArgumentException("Use la configuración específica de cierre de OCM para modificar esta directiva.");
+        }
         
         // Verificar que no se está cambiando el nombre (que es único)
         if (!existingDirective.getNombre().equals(newDirective.getNombre())) {

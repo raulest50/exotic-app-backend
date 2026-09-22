@@ -15,6 +15,10 @@ public interface MasterDirectiveRepo extends JpaRepository<MasterDirective, Long
     // Consultas personalizadas si son necesarias
     Optional<MasterDirective> findByNombre(String nombre);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT directive FROM MasterDirective directive WHERE directive.nombre = :nombre")
+    Optional<MasterDirective> findByNombreForUpdate(@Param("nombre") String nombre);
+
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("SELECT directive FROM MasterDirective directive WHERE directive.nombre = :nombre")
     Optional<MasterDirective> findByNombreForShare(@Param("nombre") String nombre);

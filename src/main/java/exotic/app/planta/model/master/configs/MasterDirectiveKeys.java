@@ -2,6 +2,8 @@ package exotic.app.planta.model.master.configs;
 
 public final class MasterDirectiveKeys {
 
+    public static final String CIERRE_AUTOMATICO_OCM = "CIERRE_AUTOMATICO_OCM";
+
     public static final String LIMITE_RECEPCIONES_PARCIALES_OCM = "LIMITE_RECEPCIONES_PARCIALES_OCM";
     public static final String DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION = "DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION";
     public static final String ENABLE_MASTER_SUPERMASTER_DIRECTIVES_ACCESS = "ENABLE_MASTER_SUPERMASTER_DIRECTIVES_ACCESS";

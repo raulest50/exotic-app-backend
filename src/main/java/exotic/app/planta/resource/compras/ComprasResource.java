@@ -26,6 +26,7 @@ import java.util.Map;
 import jakarta.validation.Valid;
 
 import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestController
@@ -99,8 +100,12 @@ public class ComprasResource {
 
     @PutMapping("/orden_compra/{ordenCompraId}/cancel")
     public ResponseEntity<OrdenCompraMateriales> cancelOrdenCompra(@PathVariable int ordenCompraId) {
-        OrdenCompraMateriales updated = compraService.cancelOrdenCompra(ordenCompraId);
-        return ResponseEntity.ok(updated);
+        try {
+            OrdenCompraMateriales updated = compraService.cancelOrdenCompra(ordenCompraId);
+            return ResponseEntity.ok(updated);
+        } catch (IllegalStateException error) {
+            throw new ResponseStatusException(CONFLICT, error.getMessage());
+        }
     }
 
 
@@ -196,9 +201,10 @@ public class ComprasResource {
 
 
     @PutMapping("/orden_compra/{ordenCompraId}/close")
-    public ResponseEntity<?> closeOrdenCompra(@PathVariable int ordenCompraId) {
+    public ResponseEntity<?> closeOrdenCompra(@PathVariable int ordenCompraId, Authentication authentication) {
+        User usuarioActor = requireAuthenticatedUser(authentication);
         try {
-            OrdenCompraMateriales ordenCerrada = compraService.closeOrdenCompra(ordenCompraId);
+            OrdenCompraMateriales ordenCerrada = compraService.closeOrdenCompra(ordenCompraId, usuarioActor);
             return ResponseEntity.ok(ordenCerrada);
         } catch (RuntimeException e) {
             log.error("Error al cerrar orden de compra ID {}: {}", ordenCompraId, e.getMessage());

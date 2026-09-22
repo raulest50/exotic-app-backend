@@ -20,6 +20,19 @@ import java.util.Collection;
 import java.util.List;
 
 public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Integer> {
+    // Read each receipt separately: sum decimal quantities without floating-point accumulation.
+    @Query("""
+            SELECT t.idEntidadCausante AS entityId, m.producto.productoId AS productId, m.cantidad AS quantity
+            FROM Movimiento m JOIN m.transaccionAlmacen t
+            WHERE t.tipoEntidadCausante = :causante AND t.idEntidadCausante IN :ids
+              AND m.tipoMovimiento = :tipo AND m.almacen = :almacen AND m.cantidad > 0
+            """)
+    List<EntityProductQuantityProjection> findReceiptQuantities(
+            @Param("causante") TransaccionAlmacen.TipoEntidadCausante causante,
+            @Param("tipo") Movimiento.TipoMovimiento tipo,
+            @Param("almacen") Movimiento.Almacen almacen,
+            @Param("ids") Collection<Integer> ids);
+
     interface EntityProductQuantityProjection {
         int getEntityId();
         String getProductId();
