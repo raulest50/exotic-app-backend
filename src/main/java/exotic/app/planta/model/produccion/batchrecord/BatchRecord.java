@@ -12,6 +12,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.Hibernate;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
@@ -188,7 +189,7 @@ public class BatchRecord {
             throw new IllegalStateException("El lote de resultado pertenece a otro producto.");
         }
         if (ordenProduccion != null) {
-            if (!(productoResultado instanceof Terminado)) {
+            if (!(Hibernate.unproxy(productoResultado) instanceof Terminado)) {
                 throw new IllegalStateException(
                         "Una orden de producción con batch record debe generar un producto terminado.");
             }

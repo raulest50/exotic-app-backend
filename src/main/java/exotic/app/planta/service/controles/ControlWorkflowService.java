@@ -17,6 +17,7 @@ import exotic.app.planta.repo.controles.VersionPlanControlRepo;
 import exotic.app.planta.repo.controles.RevalidacionControlRepo;
 import exotic.app.planta.model.users.User;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -521,10 +522,12 @@ public class ControlWorkflowService {
     }
 
     private Categoria resolverCategoria(BatchRecord record) {
-        if (record.getProductoResultado() instanceof Terminado terminado) return terminado.getCategoria();
+        if (Hibernate.unproxy(record.getProductoResultado()) instanceof Terminado terminado) {
+            return terminado.getCategoria();
+        }
         if (record.getOrdenFabricacion() != null
                 && record.getOrdenFabricacion().getOrdenProduccionOrigen() != null
-                && record.getOrdenFabricacion().getOrdenProduccionOrigen().getProducto()
+                && Hibernate.unproxy(record.getOrdenFabricacion().getOrdenProduccionOrigen().getProducto())
                 instanceof Terminado terminadoOrigen) {
             return terminadoOrigen.getCategoria();
         }

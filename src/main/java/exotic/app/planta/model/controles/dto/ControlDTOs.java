@@ -22,6 +22,8 @@ public final class ControlDTOs {
 
     public record EstadoCatalogoRequest(@NotNull Boolean activo) {}
 
+    public record CodigoPlanDisponibilidadResponse(String codigoNormalizado, boolean disponible) {}
+
     public record CatalogoResponse(
             Long id, String codigo, String nombre, String dimension,
             String simbolo, boolean activo, boolean usado) {}

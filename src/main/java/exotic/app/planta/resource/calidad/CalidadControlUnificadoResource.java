@@ -38,6 +38,13 @@ public class CalidadControlUnificadoResource {
         return planService.listar(AmbitoControl.CALIDAD, search);
     }
 
+    @GetMapping("/planes/disponibilidad-codigo")
+    public CodigoPlanDisponibilidadResponse disponibilidadCodigo(
+            Authentication auth, @RequestParam String codigo) {
+        requirePlan(auth, 2);
+        return planService.disponibilidadCodigo(codigo);
+    }
+
     @GetMapping("/planes/resumen")
     public Page<PlanResumenResponse> resumenPlanes(
             Authentication auth, @RequestParam(required = false) String search,

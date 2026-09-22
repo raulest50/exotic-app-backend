@@ -71,6 +71,25 @@ class CalidadControlUnificadoResourceAccessTest {
     }
 
     @Test
+    void disponibilidadExigeNivelDeCreacionDePlanes() {
+        resource.disponibilidadCodigo(authentication, "ENSAYO-1");
+        verify(accessGuard).requireTabAccess(authentication, ModuloSistema.CALIDAD,
+                CalidadControlUnificadoResource.TAB_PLANES, 2,
+                "No tiene el nivel requerido para administrar planes de Calidad.");
+        verify(planService).disponibilidadCodigo("ENSAYO-1");
+    }
+
+    @Test
+    void disponibilidadNoConsultaCodigosSinPermiso() {
+        when(accessGuard.requireTabAccess(authentication, ModuloSistema.CALIDAD,
+                CalidadControlUnificadoResource.TAB_PLANES, 2,
+                "No tiene el nivel requerido para administrar planes de Calidad."))
+                .thenThrow(new AccessDeniedException("Sin permiso"));
+        assertThrows(AccessDeniedException.class, () -> resource.disponibilidadCodigo(authentication, "ENSAYO-1"));
+        verifyNoInteractions(planService);
+    }
+
+    @Test
     void opcionesDeEnsayoUsanElPermisoDeRegistroConBypassMasterLike() {
         User actor = User.builder().username("master").build();
         when(accessGuard.requireTabAccess(

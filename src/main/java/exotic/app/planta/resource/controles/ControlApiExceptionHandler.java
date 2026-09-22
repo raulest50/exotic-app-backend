@@ -1,10 +1,12 @@
 package exotic.app.planta.resource.controles;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import exotic.app.planta.config.AppTime;
 import exotic.app.planta.model.controles.dto.BloqueoControlDTO;
 import exotic.app.planta.resource.calidad.CalidadControlUnificadoResource;
 import exotic.app.planta.resource.produccion.ProcesoControlResource;
 import exotic.app.planta.service.controles.ControlBloqueoException;
+import exotic.app.planta.service.controles.CodigoPlanDuplicadoException;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
@@ -26,7 +28,19 @@ import java.util.NoSuchElementException;
 })
 public class ControlApiExceptionHandler {
     public record ApiError(String title, String message, LocalDateTime timestamp,
-                           List<BloqueoControlDTO> bloqueos) {}
+                           List<BloqueoControlDTO> bloqueos,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) String field) {
+        public ApiError(String title, String message, LocalDateTime timestamp, List<BloqueoControlDTO> bloqueos) {
+            this(title, message, timestamp, bloqueos, null, null);
+        }
+    }
+
+    @ExceptionHandler(CodigoPlanDuplicadoException.class)
+    public ResponseEntity<ApiError> codigoDuplicado(CodigoPlanDuplicadoException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiError(
+                "Código en uso", ex.getMessage(), AppTime.now(), List.of(), "PLAN_CODE_ALREADY_EXISTS", "codigo"));
+    }
 
     @ExceptionHandler(ControlBloqueoException.class)
     public ResponseEntity<ApiError> bloqueo(ControlBloqueoException ex) {
@@ -41,7 +55,12 @@ public class ControlApiExceptionHandler {
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .orElse("El payload no es valido.")
                 : ex.getMessage();
-        return respuesta(HttpStatus.BAD_REQUEST, "Solicitud invalida", mensaje, List.of());
+        String field = ex instanceof MethodArgumentNotValidException validation
+                ? validation.getBindingResult().getFieldErrors().stream().findFirst()
+                    .map(error -> error.getField()).orElse(null)
+                : null;
+        return ResponseEntity.badRequest().body(new ApiError(
+                "Solicitud invalida", mensaje, AppTime.now(), List.of(), null, field));
     }
 
     @ExceptionHandler(NoSuchElementException.class)

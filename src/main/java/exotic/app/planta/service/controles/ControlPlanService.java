@@ -16,6 +16,7 @@ import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -115,12 +116,21 @@ public class ControlPlanService {
                 .findFirst().orElse(null);
     }
 
+    @Transactional(readOnly = true)
+    public CodigoPlanDisponibilidadResponse disponibilidadCodigo(String valor) {
+        if (valor == null || valor.isBlank() || valor.length() > 60) {
+            throw new IllegalArgumentException("El código debe tener entre 1 y 60 caracteres.");
+        }
+        String codigo = normalizarCodigo(valor);
+        return new CodigoPlanDisponibilidadResponse(codigo, !planRepo.existsByCodigoIgnoreCase(codigo));
+    }
+
     @Transactional
     public PlanResponse crear(AmbitoControl ambito, User actor, PlanWriteRequest request) {
         validarRequest(ambito, request);
         String codigo = normalizarCodigo(request.codigo());
         if (planRepo.existsByCodigoIgnoreCase(codigo)) {
-            throw new IllegalArgumentException("Ya existe un plan con ese codigo.");
+            throw new CodigoPlanDuplicadoException();
         }
         PlanControl plan = new PlanControl();
         plan.setCodigo(codigo);
@@ -128,7 +138,13 @@ public class ControlPlanService {
         plan.setAmbito(ambito);
         plan.setCreadoEn(AppTime.now());
         plan.setCreadoPor(actor);
-        planRepo.saveAndFlush(plan);
+        try {
+            planRepo.saveAndFlush(plan);
+        } catch (DataIntegrityViolationException ex) {
+            // No consultar después del flush fallido: la transacción debe revertirse.
+            if (CodigoPlanDuplicadoException.correspondeA(ex)) throw new CodigoPlanDuplicadoException(ex);
+            throw ex;
+        }
 
         VersionPlanControl version = nuevaVersion(plan, actor, 1);
         reemplazarContenido(version, ambito, request);

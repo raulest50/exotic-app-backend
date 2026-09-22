@@ -11,6 +11,7 @@ import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVer
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,7 @@ public class MaterialRequirementSnapshotService {
         Map<String, Requirement> requirements = new LinkedHashMap<>();
         expandirDispensables(version, cantidadOrden, requirements,
                 new LinkedHashSet<>(Set.of(productoResultado.getProductoId())));
-        if (productoResultado instanceof Terminado) {
+        if (Hibernate.unproxy(productoResultado) instanceof Terminado) {
             agregarEmpaque(version, cantidadOrden, requirements);
         }
         try {
@@ -230,9 +231,9 @@ public class MaterialRequirementSnapshotService {
     }
 
     private Producto requireProducto(String productoId) {
-        return productoRepo.findById(productoId)
+        return (Producto) Hibernate.unproxy(productoRepo.findById(productoId)
                 .orElseThrow(() -> new IllegalStateException(
-                        "La receta congelada referencia un producto inexistente: " + productoId));
+                        "La receta congelada referencia un producto inexistente: " + productoId)));
     }
 
     private String unidadObligatoria(Producto producto) {
