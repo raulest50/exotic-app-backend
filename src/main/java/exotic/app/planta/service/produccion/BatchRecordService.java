@@ -1172,7 +1172,10 @@ public class BatchRecordService {
             etapa.setSeguimientoOrdenArea(seguimiento);
             etapa.setNombre(nombreEtapa(seguimiento));
             etapa.setSecuencia(secuencia++);
-            etapa.setEstado(mapEstado(seguimiento.getEstadoEnum()));
+            // El historial se reproduce después de crear la estructura. Un cierre
+            // solo es válido cuando su evento aporta fechas y responsable.
+            etapa.setEstado(seguimiento.getEstadoEnum() == EstadoSeguimientoOrdenArea.COMPLETADO
+                    ? EstadoBatchRecordEtapa.PENDIENTE : mapEstado(seguimiento.getEstadoEnum()));
             etapa.setIniciadaEn(seguimiento.getEstadoEnum() == EstadoSeguimientoOrdenArea.EN_PROCESO
                     ? seguimiento.getFechaEstadoActual()
                     : null);
@@ -1206,7 +1209,8 @@ public class BatchRecordService {
             etapa.setOrdenFabricacionOperacion(operacion);
             etapa.setNombre(operacion.getProcesoNombre());
             etapa.setSecuencia(operacion.getPosicionSecuencia());
-            etapa.setEstado(mapEstado(operacion.getEstadoEnum()));
+            etapa.setEstado(operacion.getEstadoEnum() == EstadoSeguimientoOrdenArea.COMPLETADO
+                    ? EstadoBatchRecordEtapa.PENDIENTE : mapEstado(operacion.getEstadoEnum()));
             etapa.setIniciadaEn(operacion.getEstadoEnum() == EstadoSeguimientoOrdenArea.EN_PROCESO
                     ? operacion.getFechaEstadoActual() : null);
             etapa.setControlProcesoPlantilla(plantillaVigente(
