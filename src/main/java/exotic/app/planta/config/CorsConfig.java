@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
+import exotic.app.planta.service.controles.ControlIdempotencyService;
 
 
 import java.util.List;
@@ -40,6 +41,7 @@ public class CorsConfig {
                 ACCEPT,
                 AUTHORIZATION,
                 IF_NONE_MATCH,
+                ControlIdempotencyService.HEADER,
                 "x-requested-with",
                 "Access-Control-Request-Method",
                 "Access-Control-Request-Headers",

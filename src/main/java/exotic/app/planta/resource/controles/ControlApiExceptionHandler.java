@@ -7,12 +7,14 @@ import exotic.app.planta.resource.calidad.CalidadControlUnificadoResource;
 import exotic.app.planta.resource.produccion.ProcesoControlResource;
 import exotic.app.planta.service.controles.ControlBloqueoException;
 import exotic.app.planta.service.controles.CodigoPlanDuplicadoException;
+import exotic.app.planta.service.controles.ControlIdempotencyService;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
@@ -61,6 +63,17 @@ public class ControlApiExceptionHandler {
                 : null;
         return ResponseEntity.badRequest().body(new ApiError(
                 "Solicitud invalida", mensaje, AppTime.now(), List.of(), null, field));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiError> cabeceraRequerida(MissingRequestHeaderException ex) {
+        boolean missingRequestKey = ControlIdempotencyService.HEADER.equalsIgnoreCase(ex.getHeaderName());
+        String message = missingRequestKey
+                ? "No se pudo identificar la solicitud de guardado. Actualice la página e intente nuevamente."
+                : "Falta información requerida en la solicitud. Actualice la página e intente nuevamente.";
+        return ResponseEntity.badRequest().body(new ApiError(
+                "Solicitud incompleta", message, AppTime.now(), List.of(),
+                missingRequestKey ? "IDEMPOTENCY_KEY_REQUIRED" : null, null));
     }
 
     @ExceptionHandler(NoSuchElementException.class)
