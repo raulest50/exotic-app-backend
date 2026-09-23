@@ -54,7 +54,7 @@ import java.util.*;
 public class BatchRecordService {
 
     public static final String ESQUEMA_VERSION = "batch-record-v6";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v6";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v7";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
     private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
             EnumSet.of(

@@ -59,14 +59,14 @@ class BatchRecordMainPdfRendererTest {
                         "a".repeat(64),
                         false,
                         null,
-                        "batch-record-pdf-v6",
+                        BatchRecordService.PLANTILLA_PDF_VERSION,
                         new BatchRecordMainPdfRenderer.LogoDocumental(
-                                qaLogo(), 2, "logo-sha"));
+                                qaLogo(), 2, "logo-sha"), 0);
 
         byte[] pdf = renderer.render(root, context);
         Path qaDirectory = Path.of("build", "reports", "pdf-qa");
         Files.createDirectories(qaDirectory);
-        Files.write(qaDirectory.resolve("batch-record-v6-sample.pdf"), pdf);
+        Files.write(qaDirectory.resolve("batch-record-v7-sample.pdf"), pdf);
 
         PdfReader reader = new PdfReader(pdf);
         try {
@@ -160,8 +160,8 @@ class BatchRecordMainPdfRendererTest {
                         "b".repeat(64),
                         false,
                         null,
-                        "batch-record-pdf-v6",
-                        new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha"));
+                        BatchRecordService.PLANTILLA_PDF_VERSION,
+                        new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha"), 0);
 
         byte[] pdf = renderer.render(root, context);
         PdfReader reader = new PdfReader(pdf);
@@ -196,8 +196,8 @@ class BatchRecordMainPdfRendererTest {
                         "a".repeat(64),
                         false,
                         null,
-                        "batch-record-pdf-v6",
-                        new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha")));
+                        BatchRecordService.PLANTILLA_PDF_VERSION,
+                        new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha"), 0));
         String poeHash = HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(mainPdf));
         ((com.fasterxml.jackson.databind.node.ObjectNode) root.path("etapas").get(0).path("poe"))
@@ -205,20 +205,21 @@ class BatchRecordMainPdfRendererTest {
 
         ProcesoProduccionDocumentoService documentService =
                 mock(ProcesoProduccionDocumentoService.class);
-        when(documentService.getDescarga(12, 500L)).thenReturn(
-                new ProcesoProduccionDocumentoService.DescargaDocumento(
-                        new ByteArrayResource(mainPdf),
-                        "poe-mezcla.pdf",
-                        "application/pdf",
-                        (long) mainPdf.length,
-                        poeHash));
+        when(documentService.consultarParaAnexo(12, 500L)).thenReturn(
+                new ProcesoProduccionDocumentoService.ConsultaDocumento(
+                        new ProcesoProduccionDocumentoService.DescargaDocumento(
+                                new ByteArrayResource(mainPdf),
+                                "poe-mezcla.pdf",
+                                "application/pdf",
+                                (long) mainPdf.length,
+                                poeHash), null));
         BatchRecordPdfAnnexService annexService =
                 new BatchRecordPdfAnnexService(
                         documentService,
                         new ProcesoProduccionDocumentoPdfService(),
                         objectMapper);
 
-        byte[] completePdf = annexService.componer(mainPdf, root);
+        byte[] completePdf = annexService.componer(mainPdf, root, annexService.preparar(root));
         PdfReader mainReader = new PdfReader(mainPdf);
         PdfReader completeReader = new PdfReader(completePdf);
         try {

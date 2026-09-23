@@ -7,6 +7,10 @@ plugins {
 group = "exotic-app"
 version = "v1"
 
+// Commons Compress 1.28 requires newer Commons runtimes than the Spring Boot 3.2 BOM selects.
+extra["commons-lang3.version"] = "3.18.0"
+extra["commons-codec.version"] = "1.19.0"
+
 java {
 	sourceCompatibility = JavaVersion.VERSION_21
 }
@@ -30,6 +34,7 @@ dependencies {
 
 	// added for endpoint that implements bulk load reading uploaded excel file
 	implementation("org.apache.poi:poi-ooxml:5.4.0")
+	implementation("org.apache.commons:commons-compress:1.28.0")
 
 	implementation("org.postgresql:postgresql")
 

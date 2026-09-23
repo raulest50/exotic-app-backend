@@ -14,12 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.sql.DataSource;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -33,7 +30,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,6 +47,7 @@ public class BackupTotalExportService {
     private final String datasourceUsername;
     private final String datasourcePassword;
     private final PgDumpExecutableResolver pgDumpExecutableResolver;
+    private final BackupV2ArchiveService backupV2ArchiveService;
 
     private final ConcurrentMap<String, BackupJob> jobsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, String> activeJobByUserId = new ConcurrentHashMap<>();
@@ -63,13 +60,15 @@ public class BackupTotalExportService {
             @Value("${spring.datasource.url}") String datasourceUrl,
             @Value("${spring.datasource.username}") String datasourceUsername,
             @Value("${spring.datasource.password}") String datasourcePassword,
-            PgDumpExecutableResolver pgDumpExecutableResolver
+            PgDumpExecutableResolver pgDumpExecutableResolver,
+            BackupV2ArchiveService backupV2ArchiveService
     ) {
         this.dataSource = dataSource;
         this.datasourceUrl = datasourceUrl;
         this.datasourceUsername = datasourceUsername;
         this.datasourcePassword = datasourcePassword;
         this.pgDumpExecutableResolver = pgDumpExecutableResolver;
+        this.backupV2ArchiveService = backupV2ArchiveService;
         this.backupExecutor = Executors.newSingleThreadExecutor(new BackupThreadFactory());
     }
 
@@ -90,6 +89,10 @@ public class BackupTotalExportService {
     }
 
     public BackupTotalJobResponseDTO createJob(User user) {
+        return createJob(user, false);
+    }
+
+    public synchronized BackupTotalJobResponseDTO createJob(User user, boolean v2) {
         cleanupExpiredJobsInternal(false);
 
         String activeJobId = activeJobByUserId.get(user.getId());
@@ -107,10 +110,11 @@ public class BackupTotalExportService {
         String jobId = UUID.randomUUID().toString();
         LocalDateTime requestedAt = AppTime.now();
         String dbName = sanitizeForFilename(extractDbName(datasourceUrl));
-        String filename = "backup_total_%s_%s.dump".formatted(dbName, FILE_TS_FORMAT.format(requestedAt));
+        String filename = "backup_total_%s_%s_%s%s".formatted(dbName, FILE_TS_FORMAT.format(requestedAt),
+                jobId, v2 ? "_v2.zip" : ".dump");
         Path filePath = backupDir.resolve(filename);
 
-        BackupJob job = new BackupJob(jobId, user.getId(), user.getUsername(), filename, filePath, requestedAt);
+        BackupJob job = new BackupJob(jobId, user.getId(), user.getUsername(), filename, filePath, requestedAt, v2);
         jobsById.put(jobId, job);
         activeJobByUserId.put(user.getId(), jobId);
 
@@ -169,65 +173,18 @@ public class BackupTotalExportService {
         LocalDateTime startedAt = AppTime.now();
 
         try {
-            String pgDumpExecutable = pgDumpExecutableResolver.resolveExecutable();
-            PgDumpRuntimeValidation validation = validatePgDumpRuntime(pgDumpExecutable);
-            if (!validation.compatible()) {
-                markJobError(job, validation.errorCode(), validation.message(), null);
-                return;
+            if (job.v2) {
+                job.message = "Generando respaldo V2: PostgreSQL y todas las versiones de POE...";
+                backupV2ArchiveService.exportArchive(job.filePath, this::writeDump);
+            } else {
+                writeDump(job.filePath, null);
             }
 
-            JdbcConnectionInfo connectionInfo = extractConnectionInfo(datasourceUrl);
-            List<String> command = new ArrayList<>();
-            command.add(pgDumpExecutable);
-            command.add("--format=custom");
-            command.add("--verbose");
-            command.add("--no-password");
-            command.add("--file=" + job.filePath.toAbsolutePath());
-            command.add("--host=" + connectionInfo.host());
-            command.add("--port=" + connectionInfo.port());
-            command.add("--username=" + datasourceUsername);
-            command.add("--dbname=" + connectionInfo.dbName());
-
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
-            processBuilder.redirectErrorStream(true);
-            if (datasourcePassword != null && !datasourcePassword.isBlank()) {
-                processBuilder.environment().put("PGPASSWORD", datasourcePassword);
-            }
-
-            log.info("Iniciando backup total PostgreSQL. jobId={}, user={}, file={}",
-                    job.jobId, job.ownerUsername, job.filePath.toAbsolutePath());
-
-            Process process = processBuilder.start();
-            StreamCapture streamCapture = new StreamCapture(process.getInputStream());
-            Thread captureThread = new Thread(streamCapture, "pg-dump-output-" + job.jobId);
-            captureThread.setDaemon(true);
-            captureThread.start();
-
-            boolean finished = process.waitFor(PG_DUMP_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-            captureThread.join(TimeUnit.SECONDS.toMillis(2));
-            String processOutput = streamCapture.output();
-
-            if (!finished) {
-                process.destroyForcibly();
-                markJobError(job, "PG_DUMP_TIMEOUT", "La generación del backup tardó demasiado y fue cancelada.", processOutput);
-                return;
-            }
-
-            int exitCode = process.exitValue();
-            if (exitCode != 0) {
-                markJobError(job, "PG_DUMP_FAILED", "No fue posible generar el backup total de la base de datos.", processOutput);
-                return;
-            }
-
-            if (!Files.exists(job.filePath) || Files.size(job.filePath) <= 0) {
-                markJobError(job, "BACKUP_FILE_MISSING", "El backup finalizó sin producir un archivo descargable.", processOutput);
-                return;
-            }
-
-            job.status = JobStatus.LISTO;
+            job.message = job.v2 ? "Respaldo V2 listo: base de datos y POE. No incluye otros tipos de archivos." : null;
             job.readyAt = AppTime.now();
             job.expiresAt = job.readyAt.plus(JOB_TTL);
             long sizeBytes = Files.size(job.filePath);
+            job.status = JobStatus.LISTO;
 
             log.info("Backup total PostgreSQL completado. jobId={}, user={}, durationSeconds={}, sizeBytes={}",
                     job.jobId,
@@ -237,7 +194,9 @@ public class BackupTotalExportService {
         } catch (PgDumpExecutableResolver.PgDumpResolutionException e) {
             markJobError(job, e.getErrorCode(), e.getMessage(), null);
         } catch (IOException e) {
-            markJobError(job, "PG_DUMP_EXECUTION_ERROR", "No fue posible ejecutar pg_dump en el servidor.", e.getMessage());
+            markJobError(job, "PG_DUMP_EXECUTION_ERROR", job.v2
+                    ? "No fue posible generar el respaldo V2. Revise la disponibilidad de los POE, el espacio y las herramientas PostgreSQL."
+                    : "No fue posible ejecutar pg_dump en el servidor.", e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             markJobError(job, "PG_DUMP_INTERRUPTED", "La generación del backup fue interrumpida.", e.getMessage());
@@ -247,6 +206,24 @@ public class BackupTotalExportService {
             markJobError(job, "BACKUP_UNKNOWN_ERROR", "Ocurrió un error inesperado al generar el backup.", e.getMessage());
         } finally {
             activeJobByUserId.remove(job.ownerUserId, job.jobId);
+        }
+    }
+
+    // Shared by V1 and V2; V2 supplies the snapshot used to read its document inventory.
+    void writeDump(Path destination, String snapshot) throws IOException, InterruptedException {
+        String executable = pgDumpExecutableResolver.resolveExecutable();
+        PgDumpRuntimeValidation validation = validatePgDumpRuntime(executable);
+        if (!validation.compatible()) {
+            throw new PgDumpExecutableResolver.PgDumpResolutionException(validation.errorCode(), validation.message());
+        }
+        JdbcConnectionInfo connection = extractConnectionInfo(datasourceUrl);
+        List<String> command = new ArrayList<>(List.of(executable, "--format=custom", "--no-password",
+                "--file=" + destination.toAbsolutePath(), "--host=" + connection.host(),
+                "--port=" + connection.port(), "--username=" + datasourceUsername, "--dbname=" + connection.dbName()));
+        if (snapshot != null) command.add("--snapshot=" + snapshot);
+        BackupProcessRunner.run(command, datasourcePassword, Duration.ofMinutes(PG_DUMP_TIMEOUT_MINUTES));
+        if (!Files.isRegularFile(destination) || Files.size(destination) == 0) {
+            throw new IOException("El backup finalizo sin producir un archivo descargable.");
         }
     }
 
@@ -291,25 +268,7 @@ public class BackupTotalExportService {
     }
 
     private String executeCommandAndCaptureOutput(List<String> command) throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start();
-
-        String output;
-        try (InputStream processInput = process.getInputStream()) {
-            output = new String(processInput.readAllBytes(), StandardCharsets.UTF_8).trim();
-        }
-
-        boolean finished = process.waitFor(1, TimeUnit.MINUTES);
-        if (!finished) {
-            process.destroyForcibly();
-            throw new IOException("El comando tardó demasiado en responder: " + command.get(0));
-        }
-
-        if (process.exitValue() != 0) {
-            throw new IOException("El comando devolvió código " + process.exitValue() + ": " + output);
-        }
-        return output;
+        return BackupProcessRunner.run(command, null, Duration.ofMinutes(1));
     }
 
     private Integer parsePgDumpMajorVersion(String versionOutput) {
@@ -329,12 +288,12 @@ public class BackupTotalExportService {
     }
 
     private void markJobError(BackupJob job, String errorCode, String message, String technicalDetails) {
-        job.status = JobStatus.ERROR;
         job.errorCode = errorCode;
         job.message = message;
         job.readyAt = null;
         job.expiresAt = AppTime.now().plus(JOB_TTL);
         deleteFileQuietly(job.filePath);
+        job.status = JobStatus.ERROR;
 
         if (technicalDetails == null || technicalDetails.isBlank()) {
             log.error("Backup total PostgreSQL falló. jobId={}, user={}, errorCode={}, message={}",
@@ -457,6 +416,7 @@ public class BackupTotalExportService {
         private final String filename;
         private final Path filePath;
         private final LocalDateTime requestedAt;
+        private final boolean v2;
 
         private volatile JobStatus status = JobStatus.PENDIENTE;
         private volatile LocalDateTime readyAt;
@@ -464,13 +424,14 @@ public class BackupTotalExportService {
         private volatile String errorCode;
         private volatile String message;
 
-        private BackupJob(String jobId, Long ownerUserId, String ownerUsername, String filename, Path filePath, LocalDateTime requestedAt) {
+        private BackupJob(String jobId, Long ownerUserId, String ownerUsername, String filename, Path filePath, LocalDateTime requestedAt, boolean v2) {
             this.jobId = jobId;
             this.ownerUserId = ownerUserId;
             this.ownerUsername = ownerUsername;
             this.filename = filename;
             this.filePath = filePath;
             this.requestedAt = requestedAt;
+            this.v2 = v2;
         }
 
         private boolean isActive() {
@@ -491,25 +452,4 @@ public class BackupTotalExportService {
         }
     }
 
-    private static final class StreamCapture implements Runnable {
-        private final InputStream inputStream;
-        private final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-        private StreamCapture(InputStream inputStream) {
-            this.inputStream = inputStream;
-        }
-
-        @Override
-        public void run() {
-            try (InputStream in = inputStream; ByteArrayOutputStream out = outputStream) {
-                in.transferTo(out);
-            } catch (IOException ignored) {
-                // Si el proceso termina abruptamente, el output parcial sigue siendo suficiente.
-            }
-        }
-
-        private String output() {
-            return outputStream.toString(StandardCharsets.UTF_8);
-        }
-    }
 }

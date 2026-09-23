@@ -51,6 +51,30 @@ public class ImportacionDatosResource {
         }
     }
 
+    @PostMapping("/backup-total-v2/jobs")
+    public ResponseEntity<BackupTotalImportJobResponseDTO> crearImportacionTotalV2(
+            Authentication authentication, @RequestParam("file") MultipartFile file
+    ) {
+        try {
+            User currentUser = requireAuthorizedUser(authentication);
+            return ResponseEntity.accepted().body(backupTotalImportService.createJob(currentUser, file, true));
+        } catch (UnsupportedOperationException e) {
+            throw new ResponseStatusException(FORBIDDEN, e.getMessage());
+        }
+    }
+
+    @GetMapping("/backup-total-v2/jobs/{jobId}")
+    public ResponseEntity<BackupTotalImportJobResponseDTO> consultarImportacionTotalV2(
+            Authentication authentication, @PathVariable String jobId
+    ) {
+        return consultarImportacionTotal(authentication, jobId);
+    }
+
+    @DeleteMapping("/backup-total-v2/jobs/{jobId}")
+    public ResponseEntity<Void> eliminarImportacionTotalV2(Authentication authentication, @PathVariable String jobId) {
+        return eliminarImportacionTotal(authentication, jobId);
+    }
+
     @PostMapping("/password-sanitization/reset")
     public ResponseEntity<PasswordSanitizationResetResponse> resetNonProductionPasswords(
             Authentication authentication

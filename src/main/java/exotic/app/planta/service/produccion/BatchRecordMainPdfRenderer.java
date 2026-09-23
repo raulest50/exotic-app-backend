@@ -88,7 +88,8 @@ class BatchRecordMainPdfRenderer {
             boolean borrador,
             BatchRecordRevision revision,
             String plantillaAplicada,
-            LogoDocumental logo
+            LogoDocumental logo,
+            int anexosNoDisponibles
     ) {
     }
 
@@ -185,6 +186,17 @@ class BatchRecordMainPdfRenderer {
         subtitle.setAlignment(Element.ALIGN_CENTER);
         subtitle.setSpacingAfter(15);
         document.add(subtitle);
+
+        if (context.anexosNoDisponibles() > 0) {
+            Paragraph warning = new Paragraph(
+                    BatchRecordPdfAnnexService.AVISO_INCOMPLETO + "\n"
+                            + context.anexosNoDisponibles() + " POE no incorporado(s). "
+                            + "Consulte los motivos en el índice y las páginas de los anexos afectados.",
+                    font(10, Font.BOLD, DANGER));
+            warning.setAlignment(Element.ALIGN_CENTER);
+            warning.setSpacingAfter(12);
+            document.add(warning);
+        }
 
         PdfPTable status = new PdfPTable(1);
         status.setWidthPercentage(72);
@@ -1285,7 +1297,11 @@ class BatchRecordMainPdfRenderer {
                 "DOCUMENTOS RELACIONADOS",
                 font(8.5f, Font.BOLD, CHARCOAL)));
         cell.addElement(new Paragraph(
-                "A continuación se incorpora el índice documental y, sin modificación, "
+                context.anexosNoDisponibles() > 0
+                        ? "A continuación se incorpora el índice, la orden, las dispensaciones y los POE disponibles. "
+                        + "Los anexos no incorporados se identifican con una advertencia. "
+                        + "Estas incidencias pertenecen a esta representación y no modifican la revisión ni sus firmas."
+                        : "A continuación se incorpora el índice documental y, sin modificación, "
                         + "la orden, las dispensaciones y los POE relacionados.",
                 font(8, Font.NORMAL, CHARCOAL)));
         cell.addElement(new Paragraph(

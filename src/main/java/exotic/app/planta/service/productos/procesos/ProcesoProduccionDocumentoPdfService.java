@@ -2,6 +2,7 @@ package exotic.app.planta.service.productos.procesos;
 
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Element;
 import com.itextpdf.text.Font;
 import com.itextpdf.text.Image;
@@ -12,6 +13,9 @@ import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.PdfWriter;
+import org.apache.poi.EmptyFileException;
+import org.apache.poi.UnsupportedFileFormatException;
+import org.apache.poi.ooxml.POIXMLException;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -25,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -65,7 +70,7 @@ public class ProcesoProduccionDocumentoPdfService {
             String contentType
     ) {
         if (contenido == null || contenido.length == 0) {
-            throw new IllegalStateException("El archivo fuente del POE esta vacio.");
+            throw new RepresentacionNoDisponibleException("El archivo fuente del POE esta vacio.");
         }
         if (PDF_CONTENT_TYPE.equalsIgnoreCase(contentType)) {
             validarPdf(contenido);
@@ -74,7 +79,7 @@ public class ProcesoProduccionDocumentoPdfService {
         if (DOCX_CONTENT_TYPE.equalsIgnoreCase(contentType)) {
             return convertirDocx(contenido, nombreArchivo);
         }
-        throw new IllegalStateException("El formato del POE no admite representacion PDF.");
+        throw new RepresentacionNoDisponibleException("El formato del POE no admite representacion PDF.");
     }
 
     private void validarIntegridad(byte[] contenido, String sha256Esperado) {
@@ -100,15 +105,16 @@ public class ProcesoProduccionDocumentoPdfService {
             PdfReader reader = new PdfReader(contenido);
             try {
                 if (reader.getNumberOfPages() < 1) {
-                    throw new IllegalStateException("El PDF del POE no contiene paginas.");
+                    throw new RepresentacionNoDisponibleException("El PDF del POE no contiene paginas.");
+                }
+                if (reader.isEncrypted()) {
+                    throw new RepresentacionNoDisponibleException("El PDF del POE esta cifrado.");
                 }
             } finally {
                 reader.close();
             }
-        } catch (IllegalStateException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("El archivo del POE no es un PDF valido.", exception);
+        } catch (IOException exception) {
+            throw new RepresentacionNoDisponibleException("El archivo del POE no es un PDF valido.", exception);
         }
     }
 
@@ -137,13 +143,14 @@ public class ProcesoProduccionDocumentoPdfService {
             byte[] pdf = output.toByteArray();
             validarPdf(pdf);
             return pdf;
-        } catch (Exception exception) {
-            throw new IllegalStateException(
+        } catch (IOException | DocumentException | POIXMLException
+                 | UnsupportedFileFormatException | EmptyFileException exception) {
+            throw new RepresentacionNoDisponibleException(
                     "No fue posible convertir el POE DOCX a una representacion PDF.", exception);
         }
     }
 
-    private void agregarParrafoDocx(Document document, XWPFParagraph source) throws Exception {
+    private void agregarParrafoDocx(Document document, XWPFParagraph source) throws DocumentException {
         String text = source.getText();
         boolean heading = source.getStyle() != null
                 && source.getStyle().toLowerCase(Locale.ROOT).contains("heading");
@@ -171,10 +178,13 @@ public class ProcesoProduccionDocumentoPdfService {
         }
     }
 
-    private void agregarTablaDocx(Document document, XWPFTable source) throws Exception {
+    private void agregarTablaDocx(Document document, XWPFTable source) throws DocumentException {
         int columns = source.getRows().stream()
                 .mapToInt(row -> row.getTableCells().size())
                 .max().orElse(1);
+        if (columns < 1) {
+            throw new RepresentacionNoDisponibleException("El POE DOCX contiene una tabla sin columnas.");
+        }
         PdfPTable table = new PdfPTable(columns);
         table.setWidthPercentage(100);
         for (XWPFTableRow row : source.getRows()) {
@@ -209,5 +219,16 @@ public class ProcesoProduccionDocumentoPdfService {
             String fileName,
             Long contentLength
     ) {
+    }
+
+    /** Solo esta clase de fallo de conversión permite omitir un anexo. */
+    public static class RepresentacionNoDisponibleException extends IllegalStateException {
+        public RepresentacionNoDisponibleException(String message) {
+            super(message);
+        }
+
+        public RepresentacionNoDisponibleException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

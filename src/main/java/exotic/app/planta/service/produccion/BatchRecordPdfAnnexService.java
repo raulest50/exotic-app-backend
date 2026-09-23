@@ -23,18 +23,22 @@ import com.itextpdf.text.pdf.PdfWriter;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Compone el expediente PDF con sus documentos relacionados. Los datos de la
@@ -43,6 +47,7 @@ import java.util.Map;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BatchRecordPdfAnnexService {
 
     private static final String PDF_CONTENT_TYPE = "application/pdf";
@@ -50,30 +55,33 @@ public class BatchRecordPdfAnnexService {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final BaseColor PRIMARY = new BaseColor(38, 74, 97);
     private static final BaseColor LIGHT = new BaseColor(235, 241, 245);
+    static final String AVISO_INCOMPLETO = "PDF con anexos incompletos";
 
     private final ProcesoProduccionDocumentoService procesoDocumentoService;
     private final ProcesoProduccionDocumentoPdfService procesoDocumentoPdfService;
     private final ObjectMapper objectMapper;
 
-    public byte[] componer(byte[] expedientePrincipal, JsonNode root) {
+    public byte[] componer(byte[] expedientePrincipal, JsonNode root, AnexosPreparados anexos) {
         try {
             List<JsonNode> dispensaciones = dispensaciones(root);
-            List<PoeCargado> poes = cargarPoes(root.path("etapas"));
             List<byte[]> partes = new ArrayList<>();
             partes.add(expedientePrincipal);
-            partes.add(crearIndice(root, dispensaciones, poes));
+            partes.add(crearIndice(root, dispensaciones, anexos.poes()));
             partes.add(crearOrden(root));
             for (JsonNode dispensacion : dispensaciones) {
                 partes.add(crearDispensacion(root, dispensacion));
             }
-            for (PoeCargado poe : poes) {
-                partes.add(crearPortadaPoe(poe));
-                partes.add(procesoDocumentoPdfService.convertirARepresentacionPdf(
-                        poe.contenido(), poe.fileName(), poe.contentType()));
+            for (PoePreparado preparado : anexos.poes()) {
+                if (preparado.cargado() == null) {
+                    partes.add(crearAvisoPoe(preparado));
+                } else {
+                    partes.add(crearPortadaPoe(preparado.cargado()));
+                    partes.add(preparado.cargado().representacionPdf());
+                }
             }
 
             byte[] combinado = combinar(partes);
-            return finalizar(combinado, root, poes);
+            return finalizar(combinado, root, anexos);
         } catch (Exception exception) {
             throw new IllegalStateException(
                     "No fue posible componer los documentos anexos del expediente.", exception);
@@ -99,65 +107,92 @@ public class BatchRecordPdfAnnexService {
         return List.of(legado);
     }
 
-    private List<PoeCargado> cargarPoes(JsonNode etapas) throws Exception {
-        if (!etapas.isArray()) return List.of();
-
-        Map<Long, PoeReferencia> referencias = new LinkedHashMap<>();
+    public AnexosPreparados preparar(JsonNode root) {
+        JsonNode etapas = root.path("etapas");
+        List<PoePreparado> result = new ArrayList<>();
+        if (!etapas.isArray()) return new AnexosPreparados(result);
+        Set<Long> documentosVistos = new LinkedHashSet<>();
         for (JsonNode etapa : etapas) {
             JsonNode poe = etapa.path("poe");
-            if (!poe.isObject()
-                    || !poe.path("documentoVersionId").canConvertToLong()
-                    || !poe.path("procesoProduccionId").canConvertToInt()) {
-                continue;
+            // Una etapa sin POE no equivale a una referencia rota.
+            if (poe.isMissingNode() || poe.isNull()) continue;
+            Long documentoId = idPositivo(poe.path("documentoVersionId"));
+            Long procesoId = idPositivo(poe.path("procesoProduccionId"));
+            Integer proceso = procesoId != null && procesoId <= Integer.MAX_VALUE
+                    ? procesoId.intValue() : null;
+            PoeReferencia referencia = new PoeReferencia(
+                    proceso, documentoId,
+                    texto(poe.path("version"), "No registrada"),
+                    texto(poe.path("procesoProduccionNombre"),
+                            texto(etapa.path("nombre"), "Proceso de producción")),
+                    texto(poe.path("nombreArchivo"), "No registrado"),
+                    texto(poe.path("sha256"), null));
+            if (documentoId == null || proceso == null) {
+                result.add(noDisponible(root, referencia,
+                        "La referencia del POE está incompleta o es inválida.", null));
+            } else if (documentosVistos.add(documentoId)) {
+                result.add(prepararPoe(root, referencia));
             }
-            long documentoVersionId = poe.path("documentoVersionId").longValue();
-            referencias.putIfAbsent(documentoVersionId, new PoeReferencia(
-                    poe.path("procesoProduccionId").intValue(),
-                    documentoVersionId,
-                    poe.path("version").asInt(),
-                    texto(poe.path("procesoProduccionNombre"), "Proceso de producción"),
-                    texto(poe.path("nombreArchivo"), "poe-" + documentoVersionId),
-                    texto(poe.path("sha256"), null)));
         }
+        return new AnexosPreparados(result);
+    }
 
-        List<PoeCargado> result = new ArrayList<>();
-        for (PoeReferencia referencia : referencias.values()) {
-            ProcesoProduccionDocumentoService.DescargaDocumento descarga =
-                    procesoDocumentoService.getDescarga(
-                            referencia.procesoId(), referencia.documentoVersionId());
-            byte[] contenido;
-            try (InputStream input = descarga.resource().getInputStream()) {
-                contenido = input.readAllBytes();
-            }
-            String hashEsperado = referencia.sha256() == null
-                    ? descarga.sha256() : referencia.sha256();
-            String hashReal = sha256(contenido);
-            if (hashEsperado == null || !hashReal.equalsIgnoreCase(hashEsperado)) {
-                throw new IllegalStateException(
-                        "El POE " + referencia.documentoVersionId()
-                                + " no coincide con el hash congelado en el expediente.");
-            }
-            String contentType = descarga.contentType();
-            if (!PDF_CONTENT_TYPE.equalsIgnoreCase(contentType)
-                    && !DOCX_CONTENT_TYPE.equalsIgnoreCase(contentType)) {
-                throw new IllegalStateException(
-                        "El formato del POE " + referencia.documentoVersionId()
-                                + " no puede incorporarse al expediente PDF.");
-            }
-            result.add(new PoeCargado(
-                    referencia,
-                    contenido,
-                    contentType,
-                    descarga.fileName(),
-                    hashReal));
+    private PoePreparado prepararPoe(JsonNode root, PoeReferencia referencia) {
+        ProcesoProduccionDocumentoService.ConsultaDocumento consulta =
+                procesoDocumentoService.consultarParaAnexo(
+                        referencia.procesoId(), referencia.documentoVersionId());
+        if (consulta.incidencia() != null) {
+            return noDisponible(root, referencia, consulta.incidencia().getMessage(), consulta.incidencia());
         }
-        return result;
+        ProcesoProduccionDocumentoService.DescargaDocumento descarga = consulta.descarga();
+        byte[] contenido;
+        try (InputStream input = descarga.resource().getInputStream()) {
+            contenido = input.readAllBytes();
+        } catch (IOException exception) {
+            return noDisponible(root, referencia, "No fue posible leer el archivo fuente del POE.", exception);
+        }
+        if (contenido.length == 0) {
+            return noDisponible(root, referencia, "El archivo fuente del POE está vacío.", null);
+        }
+        String hashEsperado = referencia.sha256() == null ? descarga.sha256() : referencia.sha256();
+        String hashReal = sha256(contenido);
+        if (hashEsperado == null || hashEsperado.isBlank()) {
+            return noDisponible(root, referencia, "El POE no tiene un hash de integridad registrado.", null);
+        }
+        if (!hashReal.equalsIgnoreCase(hashEsperado)) {
+            return noDisponible(root, referencia,
+                    "El archivo del POE no coincide con el hash de la versión documental asociada.", null);
+        }
+        String contentType = descarga.contentType();
+        if (!PDF_CONTENT_TYPE.equalsIgnoreCase(contentType) && !DOCX_CONTENT_TYPE.equalsIgnoreCase(contentType)) {
+            return noDisponible(root, referencia, "El formato del POE no admite representación PDF.", null);
+        }
+        String fileName = descarga.fileName() == null ? referencia.fileName() : descarga.fileName();
+        try {
+            byte[] pdf = procesoDocumentoPdfService.convertirARepresentacionPdf(contenido, fileName, contentType);
+            return new PoePreparado(referencia,
+                    new PoeCargado(referencia, contenido, contentType, fileName, hashReal, pdf), null);
+        } catch (ProcesoProduccionDocumentoPdfService.RepresentacionNoDisponibleException exception) {
+            return noDisponible(root, referencia, exception.getMessage(), exception);
+        }
+    }
+
+    private PoePreparado noDisponible(JsonNode root, PoeReferencia referencia, String motivo, Throwable causa) {
+        log.warn("Batch Record {}: POE no incorporado, proceso={}, documento={}, motivo={}",
+                texto(root.path("codigo"), "Sin código"), referencia.procesoId(),
+                referencia.documentoVersionId(), motivo, causa);
+        return new PoePreparado(referencia, null, motivo);
+    }
+
+    private Long idPositivo(JsonNode node) {
+        return node.isIntegralNumber() && node.canConvertToLong() && node.longValue() > 0
+                ? node.longValue() : null;
     }
 
     private byte[] crearIndice(
             JsonNode root,
             List<JsonNode> dispensaciones,
-            List<PoeCargado> poes
+            List<PoePreparado> poes
     ) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 36, 36, 48, 42);
@@ -187,17 +222,21 @@ public class BatchRecordPdfAnnexService {
                     texto(dispensacion.path("transaccionId"), "Sin ID"),
                     texto(dispensacion.path("tipo"), "Dispensación de materiales"));
         }
-        for (PoeCargado poe : poes) {
+        for (PoePreparado poe : poes) {
             row(table, Integer.toString(numero++), "POE",
-                    "Documento " + poe.referencia().documentoVersionId(),
+                    "Documento " + Objects.toString(poe.referencia().documentoVersionId(), "no registrado"),
                     poe.referencia().procesoNombre() + " - versión "
-                            + poe.referencia().version());
+                            + poe.referencia().version()
+                            + (poe.cargado() == null ? "\nNO INCORPORADO: " + poe.incidencia() : ""));
         }
         document.add(table);
         document.add(Chunk.NEWLINE);
         document.add(new Paragraph(
                 poes.isEmpty()
                         ? "El expediente no registra versiones de POE asociadas."
+                        : poes.stream().anyMatch(poe -> poe.cargado() == null)
+                        ? AVISO_INCOMPLETO + ". Los POE no incorporados se identifican con su motivo. "
+                        + "Solo los anexos validados incluyen sus páginas y archivos fuente."
                         : "Los POE se anexan con la versión y el hash registrados en la revisión. "
                         + "Los archivos fuente también quedan embebidos dentro del PDF.",
                 font(8, Font.ITALIC, BaseColor.DARK_GRAY)));
@@ -338,6 +377,30 @@ public class BatchRecordPdfAnnexService {
         return output.toByteArray();
     }
 
+    private byte[] crearAvisoPoe(PoePreparado poe) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4, 42, 42, 64, 48);
+        PdfWriter.getInstance(document, output);
+        document.open();
+        titulo(document, "ANEXO - POE NO INCORPORADO");
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        keyValue(table, "Proceso", poe.referencia().procesoNombre());
+        keyValue(table, "ID del proceso", Objects.toString(poe.referencia().procesoId(), "No registrado"));
+        keyValue(table, "Versión documental", poe.referencia().version());
+        keyValue(table, "ID de documento", Objects.toString(poe.referencia().documentoVersionId(), "No registrado"));
+        keyValue(table, "Archivo fuente", poe.referencia().fileName());
+        keyValue(table, "Motivo", poe.incidencia());
+        document.add(table);
+        document.add(Chunk.NEWLINE);
+        document.add(new Paragraph(
+                "El resto del expediente se presenta para consulta. Esta advertencia describe "
+                        + "la representación generada y no modifica la revisión, sus firmas ni el estado del lote.",
+                font(9, Font.NORMAL, BaseColor.DARK_GRAY)));
+        document.close();
+        return output.toByteArray();
+    }
+
     private byte[] crearPortadaPoe(PoeCargado poe) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 42, 42, 64, 48);
@@ -349,7 +412,7 @@ public class BatchRecordPdfAnnexService {
         table.setWidthPercentage(100);
         keyValue(table, "Proceso", poe.referencia().procesoNombre());
         keyValue(table, "ID del proceso", Integer.toString(poe.referencia().procesoId()));
-        keyValue(table, "Versión documental", Integer.toString(poe.referencia().version()));
+        keyValue(table, "Versión documental", poe.referencia().version());
         keyValue(table, "ID de documento", Long.toString(poe.referencia().documentoVersionId()));
         keyValue(table, "Archivo fuente", poe.fileName());
         keyValue(table, "Formato", poe.contentType());
@@ -386,7 +449,7 @@ public class BatchRecordPdfAnnexService {
         return output.toByteArray();
     }
 
-    private byte[] finalizar(byte[] combinado, JsonNode root, List<PoeCargado> poes)
+    private byte[] finalizar(byte[] combinado, JsonNode root, AnexosPreparados anexos)
             throws Exception {
         PdfReader reader = new PdfReader(combinado);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -402,9 +465,16 @@ public class BatchRecordPdfAnnexService {
                 ColumnText.showTextAligned(
                         stamper.getOverContent(page), Element.ALIGN_RIGHT, footer,
                         size.getRight() - 18, size.getBottom() + 10, 0);
+                if (anexos.numeroIncidencias() > 0) {
+                    ColumnText.showTextAligned(stamper.getOverContent(page), Element.ALIGN_LEFT,
+                            new Phrase(AVISO_INCOMPLETO, font(7, Font.BOLD, new BaseColor(166, 48, 48))),
+                            size.getLeft() + 18, size.getBottom() + 20, 0);
+                }
             }
 
-            for (PoeCargado poe : poes) {
+            for (PoePreparado preparado : anexos.poes()) {
+                PoeCargado poe = preparado.cargado();
+                if (poe == null) continue;
                 String attachmentName = nombreAdjunto(poe);
                 PdfFileSpecification specification = PdfFileSpecification.fileEmbedded(
                         stamper.getWriter(), null, attachmentName, poe.contenido());
@@ -414,8 +484,12 @@ public class BatchRecordPdfAnnexService {
                         specification);
             }
             Map<String, String> info = reader.getInfo();
-            info.put("Title", "Expediente completo " + texto(root.path("codigo"), ""));
-            info.put("Subject", "Batch Record con orden, dispensaciones y POE anexos");
+            info.put("Title", (anexos.numeroIncidencias() > 0
+                    ? "Expediente con anexos incompletos " : "Expediente completo ")
+                    + texto(root.path("codigo"), ""));
+            info.put("Subject", anexos.numeroIncidencias() > 0
+                    ? "Batch Record de consulta con incidencias en anexos POE"
+                    : "Batch Record con orden, dispensaciones y POE anexos");
             stamper.setMoreInfo(info);
         } finally {
             stamper.close();
@@ -537,9 +611,9 @@ public class BatchRecordPdfAnnexService {
     }
 
     private record PoeReferencia(
-            int procesoId,
-            long documentoVersionId,
-            int version,
+            Integer procesoId,
+            Long documentoVersionId,
+            String version,
             String procesoNombre,
             String fileName,
             String sha256
@@ -551,7 +625,30 @@ public class BatchRecordPdfAnnexService {
             byte[] contenido,
             String contentType,
             String fileName,
-            String sha256
+            String sha256,
+            byte[] representacionPdf
     ) {
+    }
+
+    private record PoePreparado(PoeReferencia referencia, PoeCargado cargado, String incidencia) {
+    }
+
+    /** Datos transitorios de una generación; no se persisten ni se exponen por HTTP. */
+    public static final class AnexosPreparados {
+        private final List<PoePreparado> poes;
+        private final int numeroIncidencias;
+
+        private AnexosPreparados(List<PoePreparado> poes) {
+            this.poes = List.copyOf(poes);
+            this.numeroIncidencias = (int) poes.stream().filter(poe -> poe.cargado() == null).count();
+        }
+
+        private List<PoePreparado> poes() {
+            return poes;
+        }
+
+        public int numeroIncidencias() {
+            return numeroIncidencias;
+        }
     }
 }

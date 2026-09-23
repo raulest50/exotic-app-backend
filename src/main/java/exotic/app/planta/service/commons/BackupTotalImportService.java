@@ -56,6 +56,7 @@ public class BackupTotalImportService {
     private final DangerousOperationGuard dangerousOperationGuard;
     private final DatabasePurgeService databasePurgeService;
     private final ImportedPasswordSanitizationService importedPasswordSanitizationService;
+    private final BackupV2ImportService backupV2ImportService;
 
     private final ConcurrentMap<String, ImportJob> jobsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> activeJobByUsername = new ConcurrentHashMap<>();
@@ -72,7 +73,8 @@ public class BackupTotalImportService {
             PgDumpExecutableResolver pgDumpExecutableResolver,
             DangerousOperationGuard dangerousOperationGuard,
             DatabasePurgeService databasePurgeService,
-            ImportedPasswordSanitizationService importedPasswordSanitizationService
+            ImportedPasswordSanitizationService importedPasswordSanitizationService,
+            BackupV2ImportService backupV2ImportService
     ) {
         this.dataSource = dataSource;
         this.datasourceUrl = datasourceUrl;
@@ -82,6 +84,7 @@ public class BackupTotalImportService {
         this.dangerousOperationGuard = dangerousOperationGuard;
         this.databasePurgeService = databasePurgeService;
         this.importedPasswordSanitizationService = importedPasswordSanitizationService;
+        this.backupV2ImportService = backupV2ImportService;
         this.importExecutor = Executors.newSingleThreadExecutor(new ImportThreadFactory());
     }
 
@@ -102,16 +105,25 @@ public class BackupTotalImportService {
     }
 
     public BackupTotalImportJobResponseDTO createJob(User user, MultipartFile file) {
+        return createJob(user, file, false);
+    }
+
+    public synchronized BackupTotalImportJobResponseDTO createJob(User user, MultipartFile file, boolean v2) {
         dangerousOperationGuard.assertLocalOrStagingOnly(OPERATION_NAME);
         cleanupExpiredJobsInternal(false);
 
+        String extension = v2 ? ".zip" : ".dump";
         if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe seleccionar un archivo .dump para continuar.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe seleccionar un archivo " + extension + " para continuar.");
         }
 
         String originalFilename = sanitizeForFilename(file.getOriginalFilename());
-        if (!originalFilename.toLowerCase().endsWith(".dump")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La importacion total solo acepta archivos .dump.");
+        if (!originalFilename.toLowerCase(java.util.Locale.ROOT).endsWith(extension)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta importacion total solo acepta archivos " + extension + ".");
+        }
+
+        if (v2 && file.getSize() > BackupV2ArchiveService.MAX_TOTAL_BYTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El paquete V2 supera el limite de 8 GiB.");
         }
 
         String existingGlobalJobId = activeGlobalJobId.get();
@@ -141,10 +153,11 @@ public class BackupTotalImportService {
         String jobId = UUID.randomUUID().toString();
         LocalDateTime requestedAt = AppTime.now();
         String dbName = sanitizeForFilename(extractDbName(datasourceUrl));
-        String filename = "importacion_total_%s_%s_%s".formatted(
+        String filename = "importacion_total_%s_%s_%s_%s".formatted(
                 dbName,
                 FILE_TS_FORMAT.format(requestedAt),
-                originalFilename
+                jobId,
+                originalFilename.length() > 100 ? originalFilename.substring(originalFilename.length() - 100) : originalFilename
         );
         Path dumpFilePath = importDir.resolve(filename);
 
@@ -172,7 +185,7 @@ public class BackupTotalImportService {
             );
         }
 
-        ImportJob job = new ImportJob(jobId, user.getUsername(), filename, dumpFilePath, requestedAt);
+        ImportJob job = new ImportJob(jobId, user.getUsername(), filename, dumpFilePath, requestedAt, v2);
         jobsById.put(jobId, job);
 
         importExecutor.submit(() -> runImport(job));
@@ -206,6 +219,7 @@ public class BackupTotalImportService {
     private void runImport(ImportJob job) {
         LocalDateTime startedAt = AppTime.now();
         job.startedAt = startedAt;
+        int poeCount = 0;
 
         try {
             dangerousOperationGuard.assertLocalOrStagingOnly(OPERATION_NAME);
@@ -225,59 +239,67 @@ public class BackupTotalImportService {
                 return;
             }
 
-            job.status = JobStatus.PURGANDO;
-            job.message = "Vaciando completamente el esquema actual antes de restaurar el backup...";
-            databasePurgeService.resetCurrentSchemaForFullRestore();
+            if (job.v2) {
+                poeCount = backupV2ImportService.restore(job.dumpFilePath, job.jobId, message -> {
+                    job.message = message;
+                    if (message.startsWith("Restaurando")) job.status = JobStatus.RESTAURANDO;
+                });
+            } else {
+                job.status = JobStatus.PURGANDO;
+                job.message = "Vaciando completamente el esquema actual antes de restaurar el backup...";
+                databasePurgeService.resetCurrentSchemaForFullRestore();
 
-            job.status = JobStatus.RESTAURANDO;
-            job.message = "Restaurando backup total PostgreSQL. Esto puede tardar varios minutos...";
+                job.status = JobStatus.RESTAURANDO;
+                job.message = "Restaurando backup total PostgreSQL. Esto puede tardar varios minutos...";
 
-            JdbcConnectionInfo connectionInfo = extractConnectionInfo(datasourceUrl);
-            List<String> command = new ArrayList<>();
-            command.add(pgRestoreExecutable);
-            command.add("--verbose");
-            command.add("--no-password");
-            command.add("--clean");
-            command.add("--if-exists");
-            command.add("--no-owner");
-            command.add("--no-privileges");
-            command.add("--single-transaction");
-            command.add("--exit-on-error");
-            command.add("--host=" + connectionInfo.host());
-            command.add("--port=" + connectionInfo.port());
-            command.add("--username=" + datasourceUsername);
-            command.add("--dbname=" + connectionInfo.dbName());
-            command.add(job.dumpFilePath.toAbsolutePath().toString());
+                JdbcConnectionInfo connectionInfo = extractConnectionInfo(datasourceUrl);
+                List<String> command = new ArrayList<>();
+                command.add(pgRestoreExecutable);
+                command.add("--verbose");
+                command.add("--no-password");
+                command.add("--clean");
+                command.add("--if-exists");
+                command.add("--no-owner");
+                command.add("--no-privileges");
+                command.add("--single-transaction");
+                command.add("--exit-on-error");
+                command.add("--host=" + connectionInfo.host());
+                command.add("--port=" + connectionInfo.port());
+                command.add("--username=" + datasourceUsername);
+                command.add("--dbname=" + connectionInfo.dbName());
+                command.add(job.dumpFilePath.toAbsolutePath().toString());
 
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
-            processBuilder.redirectErrorStream(true);
-            if (datasourcePassword != null && !datasourcePassword.isBlank()) {
-                processBuilder.environment().put("PGPASSWORD", datasourcePassword);
-            }
+                ProcessBuilder processBuilder = new ProcessBuilder(command);
+                processBuilder.redirectErrorStream(true);
+                if (datasourcePassword != null && !datasourcePassword.isBlank()) {
+                    processBuilder.environment().put("PGPASSWORD", datasourcePassword);
+                }
 
-            log.warn("Iniciando importacion total PostgreSQL. jobId={}, user={}, file={}",
-                    job.jobId, job.ownerUsername, job.dumpFilePath.toAbsolutePath());
+                log.warn("Iniciando importacion total PostgreSQL. jobId={}, user={}, file={}",
+                        job.jobId, job.ownerUsername, job.dumpFilePath.toAbsolutePath());
 
-            Process process = processBuilder.start();
-            StreamCapture streamCapture = new StreamCapture(process.getInputStream());
-            Thread captureThread = new Thread(streamCapture, "pg-restore-output-" + job.jobId);
-            captureThread.setDaemon(true);
-            captureThread.start();
+                Process process = processBuilder.start();
+                StreamCapture streamCapture = new StreamCapture(process.getInputStream());
+                Thread captureThread = new Thread(streamCapture, "pg-restore-output-" + job.jobId);
+                captureThread.setDaemon(true);
+                captureThread.start();
 
-            boolean finished = process.waitFor(PG_RESTORE_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-            captureThread.join(TimeUnit.SECONDS.toMillis(2));
-            String processOutput = streamCapture.output();
+                boolean finished = process.waitFor(PG_RESTORE_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+                captureThread.join(TimeUnit.SECONDS.toMillis(2));
+                String processOutput = streamCapture.output();
 
-            if (!finished) {
-                process.destroyForcibly();
-                markJobError(job, "PG_RESTORE_TIMEOUT", "La restauracion total tardo demasiado y fue cancelada.", processOutput);
-                return;
-            }
+                if (!finished) {
+                    process.destroyForcibly();
+                    markJobError(job, "PG_RESTORE_TIMEOUT", "La restauracion total tardo demasiado y fue cancelada.", processOutput);
+                    return;
+                }
 
-            int exitCode = process.exitValue();
-            if (exitCode != 0) {
-                markJobError(job, "PG_RESTORE_FAILED", "No fue posible restaurar completamente la base de datos.", processOutput);
-                return;
+                int exitCode = process.exitValue();
+                if (exitCode != 0) {
+                    markJobError(job, "PG_RESTORE_FAILED", "No fue posible restaurar completamente la base de datos.", processOutput);
+                    return;
+                }
+
             }
 
             job.message = "Saneando contrasenas importadas para entorno no productivo...";
@@ -294,10 +316,12 @@ public class BackupTotalImportService {
                 return;
             }
 
-            job.status = JobStatus.LISTO;
             job.finishedAt = AppTime.now();
             job.expiresAt = job.finishedAt.plus(JOB_TTL);
-            job.message = "La importacion total de la base de datos finalizo correctamente.";
+            job.message = job.v2
+                    ? "Importacion V2 completada: base de datos y " + poeCount + " versiones de POE. Otros archivos no fueron modificados."
+                    : "La importacion total de la base de datos finalizo correctamente.";
+            job.status = JobStatus.LISTO;
 
             log.warn("Importacion total PostgreSQL completada. jobId={}, user={}, durationSeconds={}, sanitizedUsers={}, privilegedUsersSkipped={}, invalidUsersSkipped={}",
                     job.jobId,
@@ -311,7 +335,9 @@ public class BackupTotalImportService {
         } catch (UnsupportedOperationException e) {
             markJobError(job, "IMPORT_NOT_AVAILABLE", e.getMessage(), null);
         } catch (IOException e) {
-            markJobError(job, "PG_RESTORE_EXECUTION_ERROR", "No fue posible ejecutar pg_restore en el servidor.", e.getMessage());
+            markJobError(job, "PG_RESTORE_EXECUTION_ERROR", job.v2
+                    ? "No se completo la importacion V2. Revise el paquete, el espacio disponible y las herramientas PostgreSQL. Los POE ya copiados pueden permanecer en disco."
+                    : "No fue posible ejecutar pg_restore en el servidor.", e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             markJobError(job, "PG_RESTORE_INTERRUPTED", "La restauracion total fue interrumpida.", e.getMessage());
@@ -405,11 +431,11 @@ public class BackupTotalImportService {
     }
 
     private void markJobError(ImportJob job, String errorCode, String message, String technicalDetails) {
-        job.status = JobStatus.ERROR;
         job.errorCode = errorCode;
         job.message = message;
         job.finishedAt = AppTime.now();
         job.expiresAt = job.finishedAt.plus(JOB_TTL);
+        job.status = JobStatus.ERROR;
 
         if (technicalDetails == null || technicalDetails.isBlank()) {
             log.error("Importacion total PostgreSQL fallo. jobId={}, user={}, errorCode={}, message={}",
@@ -534,6 +560,7 @@ public class BackupTotalImportService {
         private final String filename;
         private final Path dumpFilePath;
         private final LocalDateTime requestedAt;
+        private final boolean v2;
 
         private volatile JobStatus status = JobStatus.PENDIENTE;
         private volatile LocalDateTime startedAt;
@@ -542,12 +569,13 @@ public class BackupTotalImportService {
         private volatile String errorCode;
         private volatile String message;
 
-        private ImportJob(String jobId, String ownerUsername, String filename, Path dumpFilePath, LocalDateTime requestedAt) {
+        private ImportJob(String jobId, String ownerUsername, String filename, Path dumpFilePath, LocalDateTime requestedAt, boolean v2) {
             this.jobId = jobId;
             this.ownerUsername = ownerUsername;
             this.filename = filename;
             this.dumpFilePath = dumpFilePath;
             this.requestedAt = requestedAt;
+            this.v2 = v2;
         }
 
         private boolean isActive() {

@@ -56,24 +56,43 @@ public class ProcesoProduccionDocumentoService {
 
     @Transactional(readOnly = true)
     public DescargaDocumento getDescarga(Integer procesoId, Long versionId) {
+        ConsultaDocumento consulta = consultarParaAnexo(procesoId, versionId);
+        if (consulta.incidencia() != null) throw consulta.incidencia();
+        return consulta.descarga();
+    }
+
+    /**
+     * Resuelve únicamente fallos documentales esperados dentro de la transacción.
+     * Dejar escapar una excepción y capturarla en el compositor podría marcar
+     * la transacción compartida como rollback-only aun cuando el PDF sea legible.
+     */
+    @Transactional(readOnly = true)
+    public ConsultaDocumento consultarParaAnexo(Integer procesoId, Long versionId) {
         ProcesoProduccionDocumentoVersion documento = documentoRepo
                 .findByIdAndProcesoProcesoId(versionId, procesoId)
-                .orElseThrow(() -> new NoSuchElementException(
-                        "No existe la version documental solicitada para este proceso."
-                ));
+                .orElse(null);
+        if (documento == null) {
+            return new ConsultaDocumento(null, new NoSuchElementException(
+                    "No existe la version documental solicitada para este proceso."));
+        }
 
         if (documento.getStorageProvider()
                 != ProcesoProduccionDocumentoVersion.StorageProvider.LOCAL_DISK) {
-            throw new IllegalStateException("El proveedor de almacenamiento no esta soportado.");
+            return new ConsultaDocumento(null, new IllegalStateException(
+                    "El proveedor de almacenamiento no esta soportado."));
         }
 
-        return new DescargaDocumento(
-                storage.load(documento.getStorageKey()),
-                documento.getNombreArchivoOriginal(),
-                documento.getContentType(),
-                documento.getTamanoBytes(),
-                documento.getSha256()
-        );
+        try {
+            return new ConsultaDocumento(new DescargaDocumento(
+                    storage.load(documento.getStorageKey()),
+                    documento.getNombreArchivoOriginal(),
+                    documento.getContentType(),
+                    documento.getTamanoBytes(),
+                    documento.getSha256()), null);
+        } catch (ProcesoProduccionDocumentoStorage.ArchivoNoDisponibleException
+                 | ProcesoProduccionDocumentoStorage.ClaveInvalidaException exception) {
+            return new ConsultaDocumento(null, exception);
+        }
     }
 
     @Transactional
@@ -326,5 +345,14 @@ public class ProcesoProduccionDocumentoService {
             Long contentLength,
             String sha256
     ) {
+    }
+
+    /** Resultado interno; no se expone como respuesta HTTP. */
+    public record ConsultaDocumento(DescargaDocumento descarga, RuntimeException incidencia) {
+        public ConsultaDocumento {
+            if ((descarga == null) == (incidencia == null)) {
+                throw new IllegalArgumentException("La consulta debe contener una descarga o una incidencia.");
+            }
+        }
     }
 }

@@ -7,12 +7,14 @@ import exotic.app.planta.model.produccion.batchrecord.BatchRecordRevision;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRevisionRepo;
 import exotic.app.planta.service.empresa.EmpresaLogoDocumentalService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Reconstruye el PDF bajo demanda; nunca persiste el archivo generado. */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BatchRecordPdfService {
 
     /** Logo Novum aprobado para representar revisiones v2-v4 sin marca congelada. */
@@ -63,6 +65,7 @@ public class BatchRecordPdfService {
         try {
             JsonNode root = objectMapper.readTree(contenidoCanonico);
             BatchRecordMainPdfRenderer.LogoDocumental logo = resolverLogo(root);
+            BatchRecordPdfAnnexService.AnexosPreparados anexos = annexService.preparar(root);
             BatchRecordMainPdfRenderer.RenderContext context =
                     new BatchRecordMainPdfRenderer.RenderContext(
                             etiquetaRevision,
@@ -70,15 +73,18 @@ public class BatchRecordPdfService {
                             borrador,
                             revision,
                             BatchRecordService.PLANTILLA_PDF_VERSION,
-                            logo);
+                            logo,
+                            anexos.numeroIncidencias());
             byte[] pdfPrincipal = mainPdfRenderer.render(root, context);
-            byte[] pdf = annexService.componer(pdfPrincipal, root);
+            byte[] pdf = annexService.componer(pdfPrincipal, root, anexos);
             String codigo = texto(root.path("codigo"), "batch-record");
             String nombre = codigo.replaceAll("[^A-Za-z0-9._-]", "-")
                     + (borrador ? "-borrador" : "-rev-" + revision.getNumero())
                     + ".pdf";
             return new PdfResult(pdf, nombre, borrador);
         } catch (Exception exception) {
+            log.error("No fue posible generar el PDF del Batch Record {} (revisión={}, actual={})",
+                    batchRecordId, revisionNumero, actual, exception);
             throw new IllegalStateException(
                     "No fue posible reconstruir el PDF del expediente digital.", exception);
         }

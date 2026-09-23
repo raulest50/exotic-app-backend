@@ -66,6 +66,18 @@ public class PgDumpExecutableResolver {
         return restoreExecutable.toAbsolutePath().toString();
     }
 
+    public String resolvePsqlExecutable() {
+        if (!applicationRuntimeEnvironmentResolver.isLocal()) return "psql";
+        Path restore = Path.of(resolveRestoreExecutable());
+        String name = restore.getFileName().toString().toLowerCase().endsWith(".exe") ? "psql.exe" : "psql";
+        Path psql = restore.resolveSibling(name);
+        if (!Files.isRegularFile(psql)) {
+            throw new PgDumpResolutionException("PSQL_PATH_INVALID",
+                    "No se encontro psql junto al pg_dump configurado. La importacion V2 lo requiere.");
+        }
+        return psql.toAbsolutePath().toString();
+    }
+
     private Path validateConfiguredLocalPgDumpPath(
             String requiredErrorCode,
             String invalidPathErrorCode,

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -56,7 +57,7 @@ public class LocalProcesoProduccionDocumentoStorage implements ProcesoProduccion
     public Resource load(String storageKey) {
         Path path = resolveSecurely(storageKey);
         if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
-            throw new IllegalStateException("El archivo documental no esta disponible en el almacenamiento.");
+            throw new ArchivoNoDisponibleException();
         }
         return new FileSystemResource(path);
     }
@@ -72,11 +73,16 @@ public class LocalProcesoProduccionDocumentoStorage implements ProcesoProduccion
 
     private Path resolveSecurely(String storageKey) {
         if (storageKey == null || storageKey.isBlank()) {
-            throw new IllegalArgumentException("La clave de almacenamiento no puede estar vacia.");
+            throw new ClaveInvalidaException("La clave de almacenamiento no puede estar vacia.");
         }
-        Path resolved = baseDirectory.resolve(storageKey).normalize();
+        Path resolved;
+        try {
+            resolved = baseDirectory.resolve(storageKey).normalize();
+        } catch (InvalidPathException exception) {
+            throw new ClaveInvalidaException("La clave de almacenamiento no es valida.");
+        }
         if (!resolved.startsWith(baseDirectory)) {
-            throw new IllegalArgumentException("La clave de almacenamiento no es valida.");
+            throw new ClaveInvalidaException("La clave de almacenamiento no es valida.");
         }
         return resolved;
     }

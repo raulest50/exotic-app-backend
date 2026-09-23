@@ -14,4 +14,17 @@ public interface ProcesoProduccionDocumentoStorage {
 
     record StoredFile(String storageKey) {
     }
+
+    /** Fallos documentales reconocidos; los demás errores deben propagarse. */
+    class ArchivoNoDisponibleException extends IllegalStateException {
+        public ArchivoNoDisponibleException() {
+            super("El archivo documental no esta disponible en el almacenamiento.");
+        }
+    }
+
+    class ClaveInvalidaException extends IllegalArgumentException {
+        public ClaveInvalidaException(String message) {
+            super(message);
+        }
+    }
 }

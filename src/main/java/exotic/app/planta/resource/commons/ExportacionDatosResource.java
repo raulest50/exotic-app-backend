@@ -82,6 +82,26 @@ public class ExportacionDatosResource {
         return ResponseEntity.accepted().body(response);
     }
 
+    @PostMapping("/backup-total-v2/jobs")
+    public ResponseEntity<BackupTotalJobResponseDTO> crearBackupTotalV2(Authentication authentication) {
+        return ResponseEntity.accepted().body(backupTotalExportService.createJob(requireAuthorizedUser(authentication), true));
+    }
+
+    @GetMapping("/backup-total-v2/jobs/{jobId}")
+    public ResponseEntity<BackupTotalJobResponseDTO> consultarBackupTotalV2(Authentication authentication, @PathVariable String jobId) {
+        return consultarBackupTotal(authentication, jobId);
+    }
+
+    @GetMapping("/backup-total-v2/jobs/{jobId}/download")
+    public ResponseEntity<?> descargarBackupTotalV2(Authentication authentication, @PathVariable String jobId) throws IOException {
+        return descargarBackupTotal(authentication, jobId);
+    }
+
+    @DeleteMapping("/backup-total-v2/jobs/{jobId}")
+    public ResponseEntity<Void> eliminarBackupTotalV2(Authentication authentication, @PathVariable String jobId) {
+        return eliminarBackupTotal(authentication, jobId);
+    }
+
     @GetMapping("/backup-total/jobs/{jobId}")
     public ResponseEntity<BackupTotalJobResponseDTO> consultarBackupTotal(
             Authentication authentication,
@@ -101,7 +121,7 @@ public class ExportacionDatosResource {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + payload.filename() + "\"")
                 .contentLength(payload.contentLength())
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentType(payload.filename().endsWith(".zip") ? MediaType.parseMediaType("application/zip") : MediaType.APPLICATION_OCTET_STREAM)
                 .body(payload.resource());
     }
 
