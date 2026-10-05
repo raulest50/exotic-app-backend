@@ -17,6 +17,27 @@ import java.util.Optional;
 
 public interface OrdenFabricacionRepo extends JpaRepository<OrdenFabricacion, Long> {
 
+    @EntityGraph(attributePaths = {"semiTerminado"})
+    @Query("""
+            select o from OrdenFabricacion o
+            where coalesce(o.fechaLanzamiento, o.fechaCreacion) >= :desde
+              and coalesce(o.fechaLanzamiento, o.fechaCreacion) < :hasta
+              and (:areaId is null or exists (
+                  select op.id from OrdenFabricacionOperacion op
+                  where op.ordenFabricacion = o and op.areaOperativa.areaId = :areaId))
+            order by coalesce(o.fechaLanzamiento, o.fechaCreacion), o.ordenFabricacionId
+            """)
+    Page<OrdenFabricacion> findSemanaMps(@Param("desde") LocalDateTime desde,
+                                       @Param("hasta") LocalDateTime hasta,
+                                       @Param("areaId") Integer areaId,
+                                       Pageable pageable);
+
+    @Query("""
+            select count(op) > 0 from OrdenFabricacionOperacion op
+            where op.ordenFabricacion.ordenFabricacionId = :id and op.areaOperativa.areaId = :areaId
+            """)
+    boolean perteneceAlArea(@Param("id") Long id, @Param("areaId") int areaId);
+
     @EntityGraph(attributePaths = {"semiTerminado", "manufacturingVersion", "creadaPor", "responsable"})
     @Query("""
             SELECT o

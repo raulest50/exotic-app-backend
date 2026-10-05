@@ -89,6 +89,8 @@ public class AuthResource {
         Map<String, Object> areaResponsable = new HashMap<>();
         areaResponsable.put("areaId", assignmentStatus.getAreaResponsableId());
         areaResponsable.put("nombre", assignmentStatus.getAreaResponsableNombre());
+        areaResponsable.put("visibilidadMps", assignmentStatus.getVisibilidadMps());
+        areaResponsable.put("alcanceMps", assignmentStatus.getAlcanceMps());
         return areaResponsable;
     }
 

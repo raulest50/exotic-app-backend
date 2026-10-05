@@ -1,6 +1,8 @@
 package exotic.app.planta.model.users.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import exotic.app.planta.model.organizacion.AlcanceMps;
+import exotic.app.planta.model.organizacion.VisibilidadMps;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,6 +17,8 @@ public class UserAssignmentStatusDTO {
     private boolean areaResponsable;
     private Integer areaResponsableId;
     private String areaResponsableNombre;
+    private VisibilidadMps visibilidadMps;
+    private AlcanceMps alcanceMps;
     @JsonProperty("hasModuloAccesos")
     private boolean hasModuloAccesos;
     @JsonProperty("canReceiveModuloAccesos")

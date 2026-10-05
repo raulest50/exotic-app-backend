@@ -25,6 +25,14 @@ public class AreaOperativa {
 
     private String descripcion;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibilidad_mps", nullable = false, length = 20)
+    private VisibilidadMps visibilidadMps = VisibilidadMps.SOLO_OP;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "alcance_mps", nullable = false, length = 20)
+    private AlcanceMps alcanceMps = AlcanceMps.TODOS;
+
     @ManyToOne
     @JoinColumn(name = "responsable_id")
     private User responsableArea;

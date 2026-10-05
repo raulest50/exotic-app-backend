@@ -10,6 +10,7 @@ import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.MpsFabricacionSemanalRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.TerminadoRepo;
@@ -41,6 +42,10 @@ public class SemiTerService {
     private final OrdenProduccionRepo ordenProduccionRepo;
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final ObjectMapper objectMapper;
+    private final MpsFabricacionSemanalRepo mpsFabricacionSemanalRepo;
+
+    private static final String PRODUCTO_EN_MPS_OF =
+            "El semiterminado tiene propuestas en MPS OF. Retire esas propuestas antes de eliminarlo.";
 
     /**
      * Verifica si un Semiterminado o Terminado puede ser eliminado.
@@ -68,6 +73,12 @@ public class SemiTerService {
         if (!(producto instanceof SemiTerminado) && !(producto instanceof Terminado)) {
             result.put("deletable", false);
             result.put("reason", "El producto con ID: " + productoId + " no es un Semiterminado ni un Terminado");
+            return result;
+        }
+
+        if (producto instanceof SemiTerminado && mpsFabricacionSemanalRepo.existsByDetalles_SemiTerminado_ProductoId(productoId)) {
+            result.put("deletable", false);
+            result.put("reason", PRODUCTO_EN_MPS_OF);
             return result;
         }
 
@@ -158,6 +169,10 @@ public class SemiTerService {
 
         if (!(producto instanceof SemiTerminado) && !(producto instanceof Terminado)) {
             throw new IllegalStateException("Solo se pueden eliminar productos Semiterminados o Terminados");
+        }
+
+        if (producto instanceof SemiTerminado && mpsFabricacionSemanalRepo.existsByDetalles_SemiTerminado_ProductoId(productoId)) {
+            throw new IllegalStateException(PRODUCTO_EN_MPS_OF);
         }
 
         Map<String, Object> result = new HashMap<>();

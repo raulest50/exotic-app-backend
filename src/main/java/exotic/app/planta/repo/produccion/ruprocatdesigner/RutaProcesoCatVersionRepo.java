@@ -15,6 +15,14 @@ import java.util.Optional;
 public interface RutaProcesoCatVersionRepo extends JpaRepository<RutaProcesoCatVersion, Long> {
 
     @Query("""
+            select distinct v.rutaProcesoCat.categoria.categoriaId
+            from RutaProcesoCatVersion v join v.nodes n
+            where v.estado = :estado and n.areaOperativa.areaId = :areaId
+            """)
+    List<Integer> findCategoriaIdsForArea(@Param("areaId") int areaId,
+                                        @Param("estado") RutaProcesoCatVersion.Estado estado);
+
+    @Query("""
             SELECT DISTINCT version
             FROM RutaProcesoCatVersion version
             WHERE version.rutaProcesoCat.categoria.categoriaId = :categoriaId

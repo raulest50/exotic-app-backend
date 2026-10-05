@@ -22,6 +22,19 @@ import java.util.Optional;
 
 public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Integer> {
 
+    @Query("""
+            select o.ordenId from OrdenProduccion o
+            where o.ordenId in :ids and (
+                exists (select n.id from RutaProcesoNode n
+                        where n.rutaProcesoCatVersion = o.rutaProcesoCatVersion
+                        and n.areaOperativa.areaId = :areaId)
+                or (o.rutaProcesoCatVersion is null and
+                    exists (select s.id from SeguimientoOrdenArea s
+                            where s.ordenProduccion = o and s.areaOperativa.areaId = :areaId))
+            )
+            """)
+    List<Integer> findMpsOrderIdsForArea(@Param("ids") Collection<Integer> ids, @Param("areaId") int areaId);
+
     @EntityGraph(attributePaths = {"producto"})
     @Query("SELECT o FROM OrdenProduccion o WHERE o.estadoOrden <> 2 AND o.estadoOrden <> -1")
     List<OrdenProduccion> findAllOpenForBi();

@@ -10,7 +10,7 @@ import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerat
 import exotic.app.planta.service.produccion.OrdenFabricacionOperacionService;
 import exotic.app.planta.service.produccion.OrdenFabricacionService;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
-import exotic.app.planta.service.users.UserOperationalCompatibilityService;
+import exotic.app.planta.service.produccion.AreaMpsConsultaService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,7 +48,7 @@ class AreaOperativaPanelResourcePoeTest {
     @Mock
     private MasterProductionScheduleOrderGenerationService mpsOrderService;
     @Mock
-    private UserOperationalCompatibilityService compatibilityService;
+    private AreaMpsConsultaService areaMpsConsultaService;
     @Mock
     private UserRepository userRepository;
     @Mock

@@ -82,6 +82,7 @@ public class AreaProduccionService {
         AreaOperativa area = new AreaOperativa();
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
+        aplicarConfiguracionMps(area, dto);
         area.setResponsableArea(responsable);
         area.setCategoriasHabilitadas(resolveCategorias(resolveCategoriaIds(dto)));
 
@@ -125,6 +126,7 @@ public class AreaProduccionService {
 
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
+        aplicarConfiguracionMps(area, dto);
         area.setResponsableArea(responsable);
         area.setCategoriasHabilitadas(resolveCategorias(resolveCategoriaIds(dto)));
 
@@ -310,6 +312,12 @@ public class AreaProduccionService {
         }
     }
 
+    private void aplicarConfiguracionMps(AreaOperativa area, AreaProduccionDTO dto) {
+        // Clientes anteriores no deben restablecer una configuracion que no conocen.
+        if (dto.getVisibilidadMps() != null) area.setVisibilidadMps(dto.getVisibilidadMps());
+        if (dto.getAlcanceMps() != null) area.setAlcanceMps(dto.getAlcanceMps());
+    }
+
     private AreaOperativaResponseDTO toResponseDto(AreaOperativa area) {
         AreaOperativaResponseDTO.ResponsableAreaDTO responsableDto = null;
         if (area.getResponsableArea() != null) {
@@ -341,6 +349,8 @@ public class AreaProduccionService {
                 .areaId(area.getAreaId())
                 .nombre(area.getNombre())
                 .descripcion(area.getDescripcion())
+                .visibilidadMps(area.getVisibilidadMps())
+                .alcanceMps(area.getAlcanceMps())
                 .responsableArea(responsableDto)
                 .categoriasHabilitadas(categoriasDto)
                 .build();

@@ -41,6 +41,8 @@ public class UserOperationalCompatibilityService {
                 .areaResponsable(isAreaResponsable)
                 .areaResponsableId(primaryArea != null ? primaryArea.getAreaId() : null)
                 .areaResponsableNombre(primaryArea != null ? primaryArea.getNombre() : null)
+                .visibilidadMps(primaryArea != null ? primaryArea.getVisibilidadMps() : null)
+                .alcanceMps(primaryArea != null ? primaryArea.getAlcanceMps() : null)
                 .hasModuloAccesos(hasModuloAccesos)
                 .canReceiveModuloAccesos(!isAreaResponsable)
                 .canBeAreaResponsable(!hasModuloAccesos && !hasOtherAreaAssignment)

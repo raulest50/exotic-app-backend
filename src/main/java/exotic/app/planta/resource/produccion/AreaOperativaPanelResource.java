@@ -11,6 +11,7 @@ import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService;
 import exotic.app.planta.service.produccion.AreaOperativaPanelDetalleService.AreaOperativaOrdenDetalleDTO;
 import exotic.app.planta.service.produccion.AreaOperativaPoeService;
 import exotic.app.planta.service.produccion.AreaOperativaRuidoMuestraService;
+import exotic.app.planta.service.produccion.AreaMpsConsultaService;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import exotic.app.planta.resource.produccion.exceptions.MpsSemanalNotFoundException;
 import exotic.app.planta.service.produccion.MasterProductionScheduleDraftService;
@@ -18,7 +19,6 @@ import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerat
 import exotic.app.planta.service.produccion.OrdenFabricacionOperacionService;
 import exotic.app.planta.service.produccion.OrdenFabricacionService;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
-import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,8 +59,8 @@ public class AreaOperativaPanelResource {
     private final AreaOperativaRuidoMuestraService areaOperativaRuidoMuestraService;
     private final MasterProductionScheduleDraftService masterProductionScheduleDraftService;
     private final MasterProductionScheduleOrderGenerationService masterProductionScheduleOrderGenerationService;
-    private final UserOperationalCompatibilityService userOperationalCompatibilityService;
     private final UserRepository userRepository;
+    private final AreaMpsConsultaService areaMpsConsultaService;
     private final OrdenFabricacionOperacionService ordenFabricacionOperacionService;
     private final OrdenFabricacionService ordenFabricacionService;
 
@@ -295,7 +295,7 @@ public class AreaOperativaPanelResource {
             String unavailableMessage
     ) {
         try {
-            assertAreaResponsable(user);
+            areaMpsConsultaService.requireArea(user, false);
             MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
             if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -305,7 +305,7 @@ public class AreaOperativaPanelResource {
                         ));
             }
 
-            return ResponseEntity.ok(mps);
+            return ResponseEntity.ok(areaMpsConsultaService.filtrarPrograma(user, mps));
         } catch (AccessDeniedException e) {
             log.warn("Acceso denegado a {} para user {}: {}", logLabel, user.getId(), e.getMessage());
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -328,7 +328,7 @@ public class AreaOperativaPanelResource {
             String unavailableMessage
     ) {
         try {
-            assertAreaResponsable(user);
+            areaMpsConsultaService.requireArea(user, false);
             MpsSemanalDraftDTO mps = masterProductionScheduleDraftService.getByWeekStartDate(weekStartDate);
             if (mps.getEstado() != EstadoMpsSemanal.APROBADO && mps.getEstado() != EstadoMpsSemanal.CERRADO) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -340,7 +340,7 @@ public class AreaOperativaPanelResource {
 
             List<MpsSemanalOrdenProduccionListItemDTO> ordenes =
                     masterProductionScheduleOrderGenerationService.getOrdenesGeneradasPorSemana(weekStartDate);
-            return ResponseEntity.ok(ordenes);
+            return ResponseEntity.ok(areaMpsConsultaService.filtrarOrdenes(user, ordenes));
         } catch (AccessDeniedException e) {
             log.warn("Acceso denegado a {} para user {}: {}", logLabel, user.getId(), e.getMessage());
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -353,12 +353,6 @@ public class AreaOperativaPanelResource {
             log.warn("Solicitud invalida de {} para semana {}: {}", logLabel, weekStartDate, e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Solicitud invalida", e.getMessage()));
-        }
-    }
-
-    private void assertAreaResponsable(User user) {
-        if (!userOperationalCompatibilityService.isAreaResponsable(user.getId())) {
-            throw new AccessDeniedException("Solo usuarios responsables de area pueden consultar el MPS operativo.");
         }
     }
 
