@@ -227,26 +227,9 @@ public interface OrdenProduccionRepo extends JpaRepository<OrdenProduccion, Inte
             @Param("estado") EstadoDispensacionMateriales estado
     );
 
-    /**
-     * Encuentra todas las órdenes de producción en estado abierto (0) o en curso (1)
-     * 
-     * @param pageable Información de paginación
-     * @return Página de órdenes de producción
-     */
-    @EntityGraph(attributePaths = {"producto"})
-    @Query("SELECT o FROM OrdenProduccion o WHERE o.estadoOrden <> 2 AND o.estadoOrden <> -1 ORDER BY o.fechaCreacion DESC")
-    Page<OrdenProduccion> findByEstadoOrdenOpenOrInProgress(Pageable pageable);
-
     @EntityGraph(attributePaths = {"producto"})
     @Query("SELECT o FROM OrdenProduccion o WHERE o.loteAsignado LIKE %:loteAsignado%")
     Page<OrdenProduccion> findByLoteAsignadoContaining(
-            @Param("loteAsignado") String loteAsignado,
-            Pageable pageable
-    );
-
-    @EntityGraph(attributePaths = {"producto"})
-    @Query("SELECT o FROM OrdenProduccion o WHERE o.loteAsignado LIKE CONCAT('%', :loteAsignado, '%') AND o.estadoOrden <> 2 AND o.estadoOrden <> -1 ORDER BY o.fechaCreacion DESC")
-    Page<OrdenProduccion> findByLoteAsignadoContainingAndOpenOrInProgress(
             @Param("loteAsignado") String loteAsignado,
             Pageable pageable
     );

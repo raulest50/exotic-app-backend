@@ -12,15 +12,19 @@ flows:
     - POST /movimientos/save_doc_ingreso_oc
     - PUT /compras/orden_compra/{ordenCompraId}/close
   dispensacion:
-    - GET /produccion/dispensacion_odp_consulta
-    - GET /produccion/dispensacion_odp_busqueda_lote
-    - GET /salidas_almacen/orden-produccion/{ordenProduccionId}/insumos-desglosados
-    - GET /salidas_almacen/orden-produccion/{ordenProduccionId}/dispensacion-resumen
-    - GET /salidas_almacen/lotes-disponibles
-    - POST /salidas_almacen/dispensacion
-    - POST /salidas_almacen/dispensacion-reposicion-averia
+    - GET /salidas_almacen/dispensacion-v2/mps-semanal
+    - POST /salidas_almacen/dispensacion-v2/preparacion
+    - POST /salidas_almacen/dispensacion-v2/materiales-receta
+    - POST /salidas_almacen/dispensacion-v2/asignacion-lotes
+    - POST /salidas_almacen/dispensacion-v2/finalizar
+    - GET /salidas_almacen/dispensacion-v2/materiales/{productoId}/lotes-disponibles
+    - GET /salidas_almacen/dispensacion-v2/ordenes-fabricacion
+    - GET /salidas_almacen/dispensacion-v2/ordenes-fabricacion/{ordenFabricacionId}/preparacion
+    - POST /salidas_almacen/dispensacion-v2/ordenes-fabricacion/{ordenFabricacionId}/asignacion-lotes
+    - POST /salidas_almacen/dispensacion-v2/ordenes-fabricacion/{ordenFabricacionId}/finalizar
+  historial_dispensaciones:
     - POST /salidas_almacen/historial_dispensacion_filter
-    - GET /api/seguimiento-orden-area/orden/{ordenId}/progreso
+    - GET /ingresos_almacen/transaccion/{transaccionId}/movimientos
   ingreso_terminados:
     - GET /ingresos_terminados_almacen/pendientes/resumen
     - GET /ingresos_terminados_almacen/pendientes

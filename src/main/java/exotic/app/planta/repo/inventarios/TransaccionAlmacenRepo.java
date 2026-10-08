@@ -621,43 +621,6 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("cursorId") int cursorId
     );
 
-    /**
-     * Encuentra lotes con stock disponible para un producto específico,
-     * ordenados únicamente por fecha de vencimiento (primero los más próximos a vencer).
-     *
-     * @param productoId ID del producto
-     * @return Lista de objetos con [Lote, cantidadDisponible]
-     */
-    @Query(value = "SELECT l, SUM(m.cantidad) as stock_disponible " +
-                   "FROM Movimiento m " +
-                   "JOIN m.lote l " +
-                   "WHERE m.producto.productoId = :productoId " +
-                   "AND m.afectaInventario = true " +
-                   "AND m.lote IS NOT NULL " +
-                   "GROUP BY l " +
-                   "HAVING SUM(m.cantidad) > 0 " +
-                   "ORDER BY l.expirationDate ASC NULLS LAST")
-    List<Object[]> findLotesWithStockByProductoIdOrderByExpirationDate(@Param("productoId") String productoId);
-
-    /**
-     * Versión alternativa usando SQL nativo en caso de que la consulta JPQL presente problemas.
-     * Encuentra lotes con stock disponible para un producto específico,
-     * ordenados únicamente por fecha de vencimiento (primero los más próximos a vencer).
-     *
-     * @param productoId ID del producto
-     * @return Lista de objetos con [Lote, cantidadDisponible]
-     */
-    @Query(value = "SELECT l.*, SUM(m.cantidad) as stock_disponible " +
-                   "FROM lote l " +
-                   "JOIN movimientos m ON m.lote_id = l.id " +
-                   "WHERE m.producto_id = :productoId " +
-                   "AND m.afecta_inventario = TRUE " +
-                   "GROUP BY l.id, l.expiration_date, l.production_date " +
-                   "HAVING SUM(m.cantidad) > 0 " +
-                   "ORDER BY l.expiration_date ASC NULLS LAST", 
-           nativeQuery = true)
-    List<Object[]> findLotesWithStockByProductoIdNative(@Param("productoId") String productoId);
-
     @Query("""
             SELECT l, SUM(m.cantidad) as stockDisponible
             FROM Movimiento m
