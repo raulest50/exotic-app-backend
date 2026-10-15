@@ -83,7 +83,7 @@ public class ProductoResource {
             Authentication authentication,
             @RequestPart("materiaPrima") Material material,
             @RequestPart(value = "file", required = false) MultipartFile file) {
-        User actor = requireProductosAccess(authentication, 2);
+        User actor = requireProductosAccess(authentication, "CODIFICAR_MATERIAL", 2);
         try {
             Material savedMP = productoService.saveMateriaPrimaV2(material, file, actor.getUsername());
             // You can customize the URI as needed.
@@ -203,7 +203,7 @@ public class ProductoResource {
     public ResponseEntity<MaterialFichaTecnicaService.FichaTecnicaMetadata> getFichaTecnicaMetadata(
             @PathVariable String productoId,
             Authentication authentication) {
-        requireProductosAccess(authentication, 1);
+        requireProductosAccess(authentication, "CONSULTA_PRODUCTOS", 1);
         try {
             return ResponseEntity.ok(materialFichaTecnicaService.getMetadata(productoId));
         } catch (NoSuchElementException exception) {
@@ -215,7 +215,7 @@ public class ProductoResource {
     public ResponseEntity<Resource> getFichaTecnica(
             @PathVariable String productoId,
             Authentication authentication) {
-        requireProductosAccess(authentication, 1);
+        requireProductosAccess(authentication, "CONSULTA_PRODUCTOS", 1);
         try {
             MaterialFichaTecnicaService.TechnicalSheetDownload download =
                     materialFichaTecnicaService.load(productoId);
@@ -229,7 +229,7 @@ public class ProductoResource {
     public ResponseEntity<List<MaterialFichaTecnicaVersionResponse>> getFichaTecnicaVersiones(
             @PathVariable String productoId,
             Authentication authentication) {
-        requireProductosAccess(authentication, 1);
+        requireProductosAccess(authentication, "CONSULTA_PRODUCTOS", 1);
         try {
             return ResponseEntity.ok(materialFichaTecnicaService.getVersiones(productoId));
         } catch (NoSuchElementException exception) {
@@ -246,7 +246,7 @@ public class ProductoResource {
             Authentication authentication,
             @RequestPart("archivo") MultipartFile archivo,
             @RequestPart(value = "motivoCambio", required = false) String motivoCambio) {
-        User actor = requireProductosAccess(authentication, 3);
+        User actor = requireProductosAccess(authentication, "CONSULTA_PRODUCTOS", 3);
         try {
             MaterialFichaTecnicaVersionResponse created = materialFichaTecnicaService.crearNuevaVersion(
                     productoId,
@@ -272,7 +272,7 @@ public class ProductoResource {
             @PathVariable String productoId,
             @PathVariable Long versionId,
             Authentication authentication) {
-        requireProductosAccess(authentication, 1);
+        requireProductosAccess(authentication, "CONSULTA_PRODUCTOS", 1);
         try {
             MaterialFichaTecnicaService.TechnicalSheetDownload download =
                     materialFichaTecnicaService.loadVersion(productoId, versionId);
@@ -563,7 +563,7 @@ public class ProductoResource {
         }
     }
 
-    private User requireProductosAccess(Authentication authentication, int minNivel) {
+    private User requireProductosAccess(Authentication authentication, String tabId, int minNivel) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new ResponseStatusException(UNAUTHORIZED, "No autenticado");
         }
@@ -574,11 +574,12 @@ public class ProductoResource {
             return user;
         }
 
-        int nivel = UserAccessEvaluator.maxNivelForModulo(user, ModuloSistema.PRODUCTOS).orElse(0);
+        int nivel = UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, tabId)
+                .orElseGet(() -> UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "MAIN").orElse(0));
         if (nivel < minNivel) {
             throw new ResponseStatusException(
                     FORBIDDEN,
-                    "No tiene el nivel de acceso requerido al modulo Productos."
+                    "No tiene el nivel de acceso requerido a la pestaña de Productos."
             );
         }
         return user;

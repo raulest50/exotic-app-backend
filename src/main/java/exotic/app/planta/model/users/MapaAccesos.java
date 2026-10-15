@@ -17,6 +17,13 @@ public final class MapaAccesos {
         }
 
         TABS_POR_MODULO.put(ModuloSistema.USUARIOS, Set.of("GESTION_USUARIOS", "INFO_NIVELES", "NOTIFICACIONES"));
+        TABS_POR_MODULO.put(ModuloSistema.PRODUCTOS, Set.of(
+                "MAIN", // Compatibilidad con asignaciones anteriores a los tabs de Productos.
+                "CODIFICAR_MATERIAL", "CONSULTA_PRODUCTOS",
+                "CODIFICAR_TERMINADO_SEMITERMINADO", "CATEGORIAS", "CREAR_DESDE_PLANTILLA",
+                "MODIFICACIONES_PRODUCTOS", "DEFINIR_PROCESO", "CONSULTAR_PROCESOS",
+                "CREAR_RECURSO_PRODUCCION", "CONSULTAR_RECURSOS_PRODUCCION"
+        ));
         TABS_POR_MODULO.put(ModuloSistema.ACTIVOS, Set.of("INCORPORACION", "CREAR_OC_AF", "REPORTES_OC_AF", "REPORTES_ACTIVOS_FIJOS"));
         TABS_POR_MODULO.put(
                 ModuloSistema.BINTELLIGENCE,

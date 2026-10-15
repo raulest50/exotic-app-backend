@@ -232,7 +232,8 @@ public class ProcesoProduccionResource {
             return user;
         }
 
-        int nivel = UserAccessEvaluator.maxNivelForModulo(user, ModuloSistema.PRODUCTOS).orElse(0);
+        int nivel = UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "CONSULTAR_PROCESOS")
+                .orElseGet(() -> UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "MAIN").orElse(0));
         if (nivel < minNivel) {
             throw new ResponseStatusException(
                     FORBIDDEN,
