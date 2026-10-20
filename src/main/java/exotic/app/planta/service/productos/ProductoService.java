@@ -168,7 +168,22 @@ public class ProductoService {
     }
 
     public Page<Producto> searchP4RecetaV2(String searchTerm, String tipoBusqueda, String clasificacion, int page, int size) {
+        return searchP4RecetaV2(searchTerm, tipoBusqueda, clasificacion, page, size, null);
+    }
+
+    public Page<Producto> searchP4RecetaV2(String searchTerm, String tipoBusqueda, String clasificacion, int page, int size, Integer tipoMaterial) {
         Pageable pageable = PageRequest.of(page, size);
+        // Apply the subtype before pagination, preserving the legacy query when absent.
+        if ("M".equalsIgnoreCase(clasificacion) && tipoMaterial != null) {
+            Specification<Material> spec = (root, query, cb) -> cb.and(
+                    cb.equal(root.get("tipoMaterial"), tipoMaterial),
+                    "ID".equalsIgnoreCase(tipoBusqueda)
+                            ? cb.equal(root.get("productoId"), searchTerm)
+                            : cb.like(cb.lower(root.get("nombre")), "%" + searchTerm.toLowerCase(java.util.Locale.ROOT) + "%"));
+            return materialRepo.findAll(spec, PageRequest.of(page, size,
+                    org.springframework.data.domain.Sort.by("nombre", "productoId")))
+                    .map(material -> (Producto) material);
+        }
         if ("ID".equalsIgnoreCase(tipoBusqueda)) {
             String id = searchTerm;
             if ("M".equalsIgnoreCase(clasificacion)) { // return MateriaPrima list

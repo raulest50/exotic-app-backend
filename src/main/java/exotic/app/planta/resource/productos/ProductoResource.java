@@ -105,8 +105,12 @@ public class ProductoResource {
             @RequestParam String tipoBusqueda,   // "NOMBRE" or "ID"
             @RequestParam String clasificacion,  // "Terminado" or "Semiterminado"
             @RequestParam int page,
-            @RequestParam int size) {
-        Page<Producto> result = productoService.searchP4RecetaV2(searchTerm, tipoBusqueda, clasificacion, page, size);
+            @RequestParam int size,
+            @RequestParam(required = false) Integer tipoMaterial) {
+        if (tipoMaterial != null && (tipoMaterial < 1 || tipoMaterial > 2)) {
+            return ResponseEntity.badRequest().build();
+        }
+        Page<Producto> result = productoService.searchP4RecetaV2(searchTerm, tipoBusqueda, clasificacion, page, size, tipoMaterial);
         return ResponseEntity.ok(result);
     }
 
