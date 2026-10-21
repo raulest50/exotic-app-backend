@@ -40,4 +40,8 @@ public class ProcesoProduccionCompleto {
 
     @Column(name = "rendimiento_teorico")
     private double rendimientoTeorico;
+    @Column(precision = 24, scale = 12)
+    private java.math.BigDecimal cantidadSalidaReceta;
+    @Column(length = 16)
+    private String unidadSalidaReceta;
 }

@@ -6,6 +6,7 @@ import exotic.app.planta.model.producto.dto.ProductoBasicUpdateDTO;
 import exotic.app.planta.model.producto.dto.ProductoCategoriaEditabilityDTO;
 import exotic.app.planta.model.producto.dto.ProductoInventareableUpdateDTO;
 import exotic.app.planta.model.producto.dto.ProductoStockDTO;
+import exotic.app.planta.model.producto.dto.UnidadMedidaProductoDTO;
 import exotic.app.planta.model.producto.dto.search.ProductoSearchCriteria;
 import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminado;
 import exotic.app.planta.model.producto.dto.search.DTO_SearchTerminadoMps;
@@ -21,6 +22,7 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.productos.ProductoService;
+import exotic.app.planta.service.productos.UnidadMedidaProductoService;
 import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaService;
 import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaDuplicadaException;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +62,20 @@ public class ProductoResource {
     private final ProductoService productoService;
     private final MaterialFichaTecnicaService materialFichaTecnicaService;
     private final UserRepository userRepository;
+    private final UnidadMedidaProductoService unidadMedidaProductoService;
+
+    /** Catálogo de solo lectura; compatibleCon limita el resultado a la misma magnitud. */
+    @GetMapping("/unidades-medida")
+    public ResponseEntity<List<UnidadMedidaProductoDTO>> getUnidadesMedida(
+            @RequestParam(required = false) String compatibleCon) {
+        try {
+            return ResponseEntity.ok(compatibleCon == null
+                    ? unidadMedidaProductoService.listar()
+                    : unidadMedidaProductoService.listarCompatibles(compatibleCon));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
 
     /**
      * Endpoints Para la codificacion de materias primas, semi y terminados

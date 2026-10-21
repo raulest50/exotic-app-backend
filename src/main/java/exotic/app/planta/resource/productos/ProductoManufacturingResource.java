@@ -9,6 +9,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import exotic.app.planta.model.users.ModuloSistema;
+import exotic.app.planta.model.users.UserAccessEvaluator;
+import exotic.app.planta.repo.usuarios.UserRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 
 @RestController
@@ -18,6 +23,31 @@ import java.util.Map;
 public class ProductoManufacturingResource {
 
     private final ProductoManufacturingService productoManufacturingService;
+    private final UserRepository userRepository;
+
+    private void requireDesignerAccess(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        var user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) return;
+        int level = UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "PROCESS_DESIGNER")
+                .orElseGet(() -> UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "MAIN").orElse(0));
+        if (level < 2) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permiso para guardar en Process Designer.");
+    }
+
+    @PostMapping("/designer")
+    public ResponseEntity<?> createFromDesigner(@RequestBody ProductoManufacturingDTO dto, Authentication authentication) {
+        requireDesignerAccess(authentication);
+        try {
+            var saved = productoManufacturingService.createFromDesigner(dto);
+            return ResponseEntity.created(URI.create("/productos/manufacturing/" + saved.getProductoId())).body(saved);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "El código o prefijo ya está en uso, o una referencia cambió. Verifique el catálogo antes de reintentar."));
+        }
+    }
 
     @GetMapping("/{productoId}")
     public ResponseEntity<?> getProductoManufacturing(@PathVariable String productoId) {
@@ -36,7 +66,8 @@ public class ProductoManufacturingResource {
     }
 
     @PostMapping
-    public ResponseEntity<?> createProductoManufacturing(@RequestBody ProductoManufacturingDTO dto) {
+    public ResponseEntity<?> createProductoManufacturing(@RequestBody ProductoManufacturingDTO dto, Authentication authentication) {
+        if (ProductoManufacturingService.hasExplicitRecipe(dto)) requireDesignerAccess(authentication);
         try {
             log.info("[PRODUCTOS_MANUFACTURING] create start {}", manufacturingContext(dto));
             ProductoManufacturingDTO saved = productoManufacturingService.createProductoManufacturing(dto);
@@ -60,8 +91,9 @@ public class ProductoManufacturingResource {
     @PutMapping("/{productoId}")
     public ResponseEntity<?> updateProductoManufacturing(
             @PathVariable String productoId,
-            @RequestBody ProductoManufacturingDTO dto
+            @RequestBody ProductoManufacturingDTO dto, Authentication authentication
     ) {
+        if (ProductoManufacturingService.hasExplicitRecipe(dto)) requireDesignerAccess(authentication);
         try {
             log.info("[PRODUCTOS_MANUFACTURING] update start pathProductoId={} {}", productoId, manufacturingContext(dto));
             ProductoManufacturingDTO response = productoManufacturingService.updateProductoManufacturing(productoId, dto);

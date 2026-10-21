@@ -26,6 +26,11 @@ public class Insumo {
     @JoinColumn(name = "input_producto_id")
     private Producto producto;
 
+    // Compatibility coefficient, in input product units per output product unit.
     private double cantidadRequerida;
+    @Column(precision = 24, scale = 12)
+    private java.math.BigDecimal cantidadReceta;
+    @Column(length = 16)
+    private String unidadReceta;
 
 }

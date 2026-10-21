@@ -88,6 +88,9 @@ public abstract class Producto {
     @Min(value=0, message = "La Cantidad por unidad no puede ser negativa") // Cantidad por unidad
     private double cantidadUnidad;
 
+    @Column(length = 16)
+    private String unidadContenidoPorEnvase;
+
     public String getTipo_producto() {
         if (this instanceof Material) {
             return "M";

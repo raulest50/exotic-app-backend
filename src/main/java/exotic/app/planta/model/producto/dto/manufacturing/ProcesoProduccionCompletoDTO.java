@@ -15,4 +15,12 @@ public class ProcesoProduccionCompletoDTO {
     private Double rendimientoTeorico;
     private List<ProcesoFabricacionNodoDTO> nodes = new ArrayList<>();
     private List<ProcesoFabricacionEdgeDTO> edges = new ArrayList<>();
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    private java.math.BigDecimal cantidadSalidaReceta;
+    private String unidadSalidaReceta;
+
+    public ProcesoProduccionCompletoDTO(Integer id, Double rendimiento,
+            List<ProcesoFabricacionNodoDTO> nodes, List<ProcesoFabricacionEdgeDTO> edges) {
+        this(id, rendimiento, nodes, edges, null, null);
+    }
 }

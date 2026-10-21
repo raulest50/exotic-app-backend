@@ -19,6 +19,7 @@ public class ProductoManufacturingDTO {
     private Double ivaPercentual;
     private String tipoUnidades;
     private Double cantidadUnidad;
+    private String unidadContenidoPorEnvase;
     private Boolean inventareable;
     private Boolean requiereOrdenFabricacion;
     private Integer categoriaId;

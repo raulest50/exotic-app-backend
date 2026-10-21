@@ -9,6 +9,7 @@ import exotic.app.planta.model.producto.fichatecnica.MaterialFichaTecnicaVersion
 import exotic.app.planta.model.producto.fichatecnica.MaterialFichaTecnicaVersionResponse;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.productos.ProductoService;
+import exotic.app.planta.service.productos.UnidadMedidaProductoService;
 import exotic.app.planta.service.productos.fichatecnica.MaterialFichaTecnicaService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,7 @@ class ProductoResourceFichaTecnicaTest {
     @Mock private ProductoService productoService;
     @Mock private MaterialFichaTecnicaService fichaTecnicaService;
     @Mock private UserRepository userRepository;
+    @Mock private UnidadMedidaProductoService unidadMedidaProductoService;
 
     private MockMvc mockMvc;
     private ProductoResource resource;
@@ -54,7 +56,8 @@ class ProductoResourceFichaTecnicaTest {
         resource = new ProductoResource(
                 productoService,
                 fichaTecnicaService,
-                userRepository
+                userRepository,
+                unidadMedidaProductoService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(resource).build();
     }

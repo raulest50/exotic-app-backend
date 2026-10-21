@@ -23,6 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,6 +43,7 @@ public class ProductoManufacturingService {
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final ObjectMapper objectMapper;
     private final ProductoCostoService productoCostoService;
+    private final UnidadMedidaProductoService unidades;
 
     @Transactional
     public ProductoManufacturingDTO createProductoManufacturing(ProductoManufacturingDTO dto) {
@@ -54,6 +58,7 @@ public class ProductoManufacturingService {
             throw new IllegalArgumentException("Ya existe un producto con ID: " + dto.getProductoId());
         }
 
+        normalizeExplicitRecipe(dto);
         Producto producto = instantiateProducto(dto.getTipoProducto());
         log.debug("[PRODUCTOS_MANUFACTURING] service create instantiated productoId={} entityType={}", dto.getProductoId(), producto.getClass().getSimpleName());
         producto.asignarCostoInicial(java.math.BigDecimal.valueOf(defaultDouble(dto.getCosto())));
@@ -102,6 +107,12 @@ public class ProductoManufacturingService {
         dto.setProductoId(productoId);
         validateTipoCompatibility(existing, dto.getTipoProducto());
 
+        if (getProcesoProduccionCompleto(existing) != null
+                && getProcesoProduccionCompleto(existing).getCantidadSalidaReceta() != null
+                && !hasExplicitRecipe(dto)) {
+            throw new IllegalArgumentException("Esta receta tiene una salida explícita. Debe conservar sus cantidades y unidades al editarla.");
+        }
+        normalizeExplicitRecipe(dto);
         boolean originalInventareable = existing.isInventareable();
         java.math.BigDecimal requestedCosto = java.math.BigDecimal.valueOf(defaultDouble(dto.getCosto()));
         applyCommonProductFields(existing, dto);
@@ -140,6 +151,148 @@ public class ProductoManufacturingService {
         return toDTO(producto);
     }
 
+    public static boolean hasExplicitRecipe(ProductoManufacturingDTO dto) {
+        return dto != null && ((dto.getProcesoProduccionCompleto() != null
+                && (dto.getProcesoProduccionCompleto().getCantidadSalidaReceta() != null
+                || dto.getProcesoProduccionCompleto().getUnidadSalidaReceta() != null))
+                || (dto.getInsumos() != null && dto.getInsumos().stream().filter(Objects::nonNull)
+                .anyMatch(i -> i.getCantidadReceta() != null || i.getUnidadReceta() != null)));
+    }
+
+    @Transactional
+    public ProductoManufacturingDTO createFromDesigner(ProductoManufacturingDTO dto) {
+        if (!hasExplicitRecipe(dto)) throw new IllegalArgumentException("Debe indicar la salida de la receta.");
+        return createProductoManufacturing(dto);
+    }
+
+    /** Retain authored batch amounts; expose legacy coefficients to existing consumers.
+     * Product units and package content are independent: no density or package conversion.
+     * Null metadata means a historical recipe, never an inferred one-unit batch.
+     */
+    private void normalizeExplicitRecipe(ProductoManufacturingDTO dto) {
+        if (!hasExplicitRecipe(dto)) return;
+        if (dto.getProductoId() == null || !dto.getProductoId().matches("[A-Z0-9]{1,255}"))
+            throw new IllegalArgumentException("El código debe ser alfanumérico y estar en mayúsculas.");
+        if (dto.getNombre() == null || dto.getNombre().isBlank() || dto.getNombre().length() > 200)
+            throw new IllegalArgumentException("El nombre es obligatorio y admite hasta 200 caracteres.");
+        if (dto.getTipoProducto() == null || !List.of("T", "S").contains(dto.getTipoProducto()))
+            throw new IllegalArgumentException("Seleccione terminado o semiterminado.");
+        if (!positiveFinite(dto.getCantidadUnidad())) throw new IllegalArgumentException("El contenido por envase debe ser positivo.");
+        dto.setUnidadContenidoPorEnvase(catalogUnit(dto.getUnidadContenidoPorEnvase()));
+        dto.setTipoUnidades(catalogUnit(dto.getTipoUnidades()));
+        if ("T".equals(dto.getTipoProducto()) && dto.getCategoriaId() == null)
+            throw new IllegalArgumentException("El terminado requiere categoría.");
+        boolean requiereOrden = "T".equals(dto.getTipoProducto()) || Boolean.TRUE.equals(dto.getRequiereOrdenFabricacion());
+        if (requiereOrden && !Boolean.TRUE.equals(dto.getInventareable()))
+            throw new IllegalArgumentException("Un producto con orden propia debe ser inventariable.");
+        if ((requiereOrden || (dto.getPrefijoLote() != null && !dto.getPrefijoLote().isBlank()))
+                && (dto.getPrefijoLote() == null || !dto.getPrefijoLote().matches("[A-Z0-9]{1,20}")))
+            throw new IllegalArgumentException("Indique un prefijo de lote válido.");
+        if (dto.getIvaPercentual() == null || !List.of(0d, 5d, 19d).contains(dto.getIvaPercentual()))
+            throw new IllegalArgumentException("El IVA debe ser 0, 5 o 19.");
+        var recipe = dto.getProcesoProduccionCompleto();
+        if (recipe == null || recipe.getRendimientoTeorico() == null
+                || !Double.isFinite(recipe.getRendimientoTeorico()) || recipe.getRendimientoTeorico() < 0)
+            throw new IllegalArgumentException("Indique un rendimiento válido.");
+        recipe.setUnidadSalidaReceta(catalogUnit(recipe.getUnidadSalidaReceta()));
+        BigDecimal output = unidades.convertir(recipeAmount(recipe.getCantidadSalidaReceta()),
+                recipe.getUnidadSalidaReceta(), dto.getTipoUnidades());
+        if (dto.getInsumos() == null || dto.getInsumos().isEmpty())
+            throw new IllegalArgumentException("La receta debe incluir insumos.");
+        Set<String> inputIds = new HashSet<>();
+        BigDecimal cost = BigDecimal.ZERO;
+        for (var input : dto.getInsumos()) {
+            if (input == null || input.getProductoId() == null || !inputIds.add(input.getProductoId()))
+                throw new IllegalArgumentException("Hay insumos vacíos o repetidos.");
+            Producto source = productoRepo.findById(input.getProductoId())
+                    .orElseThrow(() -> new IllegalArgumentException("Insumo inexistente: " + input.getProductoId()));
+            if (!(source instanceof Material) && !(source instanceof SemiTerminado))
+                throw new IllegalArgumentException("Los insumos deben ser materiales o semiterminados.");
+            rejectRecipeCycle(source, dto.getProductoId(), new HashSet<>());
+            input.setUnidadReceta(catalogUnit(input.getUnidadReceta()));
+            BigDecimal amount = unidades.convertir(recipeAmount(input.getCantidadReceta()), input.getUnidadReceta(), source.getTipoUnidades());
+            BigDecimal coefficient = amount.divide(output, MathContext.DECIMAL128);
+            if (!positiveFinite(coefficient.doubleValue())) throw new IllegalArgumentException("La proporción excede el rango permitido.");
+            input.setCantidadRequerida(coefficient.doubleValue());
+            cost = cost.add(source.getCosto().multiply(coefficient));
+        }
+        cost = cost.setScale(6, RoundingMode.HALF_UP);
+        if (cost.signum() < 0 || cost.precision() > 19) throw new IllegalArgumentException("El costo calculado excede el rango permitido.");
+        dto.setCosto(cost.doubleValue());
+        validateExplicitGraph(recipe, inputIds);
+    }
+
+    private String catalogUnit(String code) {
+        unidades.convertir(BigDecimal.ONE, code, code);
+        return code.strip().toUpperCase(Locale.ROOT);
+    }
+
+    private static boolean positiveFinite(Double value) {
+        return value != null && Double.isFinite(value) && value > 0;
+    }
+
+    private BigDecimal recipeAmount(BigDecimal value) {
+        if (value == null || value.signum() <= 0 || value.stripTrailingZeros().scale() > 12
+                || value.precision() - value.scale() > 12)
+            throw new IllegalArgumentException("Las cantidades deben ser positivas, con hasta 12 enteros y 12 decimales.");
+        return value;
+    }
+
+    private void rejectRecipeCycle(Producto source, String outputId, Set<String> seen) {
+        if (outputId.equals(source.getProductoId())) throw new IllegalArgumentException("La receta contiene una dependencia circular de productos.");
+        if (!seen.add(source.getProductoId())) throw new IllegalArgumentException("Un semiterminado contiene una receta circular.");
+        if (source instanceof SemiTerminado semi && semi.getInsumos() != null)
+            for (Insumo child : semi.getInsumos()) rejectRecipeCycle(child.getProducto(), outputId, seen);
+        seen.remove(source.getProductoId());
+    }
+
+    private void validateExplicitGraph(ProcesoProduccionCompletoDTO recipe, Set<String> inputs) {
+        if (recipe.getNodes() == null || recipe.getEdges() == null
+                || recipe.getNodes().stream().anyMatch(Objects::isNull) || recipe.getEdges().stream().anyMatch(Objects::isNull))
+            throw new IllegalArgumentException("El diagrama está incompleto.");
+        validateProcesoDto(recipe, inputs);
+        Set<String> mapped = new HashSet<>();
+        Map<String, ProcesoFabricacionNodoDTO> nodes = new HashMap<>();
+        Map<String, Integer> incoming = new HashMap<>(), outgoing = new HashMap<>();
+        for (var node : recipe.getNodes()) {
+            if (!Double.isFinite(node.getPosicionX()) || !Double.isFinite(node.getPosicionY()))
+                throw new IllegalArgumentException("El diagrama contiene posiciones inválidas.");
+            nodes.put(node.getFrontendId(), node);
+            if (node instanceof NodoInsumoDTO input && !mapped.add(input.getInputProductoId()))
+                throw new IllegalArgumentException("Un insumo aparece varias veces en el diagrama.");
+        }
+        if (!mapped.equals(inputs) || nodes.values().stream().noneMatch(NodoProcesoDTO.class::isInstance))
+            throw new IllegalArgumentException("El diagrama debe incluir todos los insumos y al menos un proceso.");
+        Set<String> edgeIds = new HashSet<>();
+        for (var edge : recipe.getEdges()) {
+            var source = nodes.get(edge.getSourceFrontendId());
+            var target = nodes.get(edge.getTargetFrontendId());
+            if (edge.getFrontendId() == null || edge.getFrontendId().isBlank() || !edgeIds.add(edge.getFrontendId())
+                    || source == null || target == null || source == target || source instanceof NodoTargetDTO
+                    || !(target instanceof NodoProcesoDTO || (source instanceof NodoProcesoDTO && target instanceof NodoTargetDTO)))
+                throw new IllegalArgumentException("Conexión inválida en el diagrama.");
+            outgoing.merge(source.getFrontendId(), 1, Integer::sum);
+            incoming.merge(target.getFrontendId(), 1, Integer::sum);
+        }
+        for (var node : nodes.values()) {
+            int in = incoming.getOrDefault(node.getFrontendId(), 0), out = outgoing.getOrDefault(node.getFrontendId(), 0);
+            if ((node instanceof NodoInsumoDTO && (in != 0 || out != 1))
+                    || (node instanceof NodoProcesoDTO && (in < 1 || out != 1))
+                    || (node instanceof NodoTargetDTO && (in < 1 || out != 0)))
+                throw new IllegalArgumentException("Complete las entradas y salidas de todos los nodos.");
+        }
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        nodes.keySet().stream().filter(id -> !incoming.containsKey(id)).forEach(queue::add);
+        int visited = 0;
+        while (!queue.isEmpty()) {
+            String id = queue.remove(); visited++;
+            for (var edge : recipe.getEdges()) if (id.equals(edge.getSourceFrontendId())) {
+                if (incoming.merge(edge.getTargetFrontendId(), -1, Integer::sum) == 0) queue.add(edge.getTargetFrontendId());
+            }
+        }
+        if (visited != nodes.size()) throw new IllegalArgumentException("El diagrama contiene ciclos.");
+    }
+
     private Producto instantiateProducto(String tipoProducto) {
         if ("T".equalsIgnoreCase(tipoProducto)) {
             return new Terminado();
@@ -167,6 +320,7 @@ public class ProductoManufacturingService {
         producto.setIvaPercentual(defaultDouble(dto.getIvaPercentual()));
         producto.setTipoUnidades(dto.getTipoUnidades());
         producto.setCantidadUnidad(defaultDouble(dto.getCantidadUnidad()));
+        if (hasExplicitRecipe(dto)) producto.setUnidadContenidoPorEnvase(dto.getUnidadContenidoPorEnvase());
         producto.setInventareable(Boolean.TRUE.equals(dto.getInventareable()));
     }
 
@@ -199,6 +353,10 @@ public class ProductoManufacturingService {
             validatePrefijoLoteDisponible(prefijoLote, producto.getProductoId());
             semiTerminado.setPrefijoLote(prefijoLote);
             semiTerminado.setInventareable(true);
+        } else if (hasExplicitRecipe(dto)) {
+            String prefix = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
+            validatePrefijoLoteDisponible(prefix, producto.getProductoId());
+            semiTerminado.setPrefijoLote(prefix);
         }
     }
 
@@ -252,6 +410,8 @@ public class ProductoManufacturingService {
         Insumo insumo = new Insumo();
         insumo.setProducto(inputProducto);
         insumo.setCantidadRequerida(dto.getCantidadRequerida());
+        insumo.setCantidadReceta(dto.getCantidadReceta());
+        insumo.setUnidadReceta(dto.getUnidadReceta());
         return insumo;
     }
 
@@ -275,6 +435,8 @@ public class ProductoManufacturingService {
         proceso.setProducto(producto);
 
         proceso.setRendimientoTeorico(defaultDouble(procesoDto.getRendimientoTeorico()));
+        proceso.setCantidadSalidaReceta(procesoDto.getCantidadSalidaReceta());
+        proceso.setUnidadSalidaReceta(procesoDto.getUnidadSalidaReceta());
 
         List<ProcesoFabricacionNodo> managedNodes = proceso.getNodes();
         if (managedNodes == null) {
@@ -523,6 +685,7 @@ public class ProductoManufacturingService {
         dto.setIvaPercentual(producto.getIvaPercentual());
         dto.setTipoUnidades(producto.getTipoUnidades());
         dto.setCantidadUnidad(producto.getCantidadUnidad());
+        dto.setUnidadContenidoPorEnvase(producto.getUnidadContenidoPorEnvase());
         dto.setInventareable(producto.isInventareable());
         dto.setInsumos(getInsumos(producto).stream().map(this::toInsumoDTO).collect(Collectors.toList()));
         dto.setProcesoProduccionCompleto(toProcesoDTO(getProcesoProduccionCompleto(producto)));
@@ -554,7 +717,7 @@ public class ProductoManufacturingService {
                 producto != null ? producto.getCosto().doubleValue() : null,
                 producto != null ? producto.getTipoUnidades() : null,
                 insumo.getCantidadRequerida(),
-                subtotal
+                subtotal, insumo.getCantidadReceta(), insumo.getUnidadReceta()
         );
     }
 
@@ -612,7 +775,7 @@ public class ProductoManufacturingService {
                 proceso.getProcesoCompletoId(),
                 proceso.getRendimientoTeorico(),
                 nodes,
-                edges
+                edges, proceso.getCantidadSalidaReceta(), proceso.getUnidadSalidaReceta()
         );
     }
 
