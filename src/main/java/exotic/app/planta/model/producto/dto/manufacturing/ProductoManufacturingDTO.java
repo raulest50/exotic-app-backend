@@ -17,7 +17,9 @@ public class ProductoManufacturingDTO {
     private String observaciones;
     private Double costo;
     private Double ivaPercentual;
+    /** Unidad única de inventario y de cantidadSalidaReceta para terminados y semiterminados. */
     private String tipoUnidades;
+    /** En recetas explícitas solo aplica a terminados en U; 0/null cuando no aplica. */
     private Double cantidadUnidad;
     private String unidadContenidoPorEnvase;
     private Boolean inventareable;

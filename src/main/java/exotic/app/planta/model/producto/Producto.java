@@ -79,15 +79,25 @@ public abstract class Producto {
     @CreationTimestamp
     private LocalDateTime fechaCreacion;
 
-    @Column(name = "tipo_unidades", length = 4)  // L: litros, KG: kilogramos, U: unidades (por ejemplo, paquetes)
+    /**
+     * Unidad del producto en inventario (KG, G, L, ML o U).
+     * Para terminados y semiterminados también expresa cantidadSalidaReceta:
+     * la salida de fabricación y el inventario comparten una única unidad.
+     * Los insumos pueden declarar cantidades en sus propias unidades compatibles.
+     */
+    @Column(name = "tipo_unidades", length = 4)
     private String tipoUnidades;
 
     /**
-     * Contenido por unidad o contenido por embase o unidad de empaque.
+     * En Process Designer v2, contenido por envase solo para terminados en U;
+     * se expresa en unidadContenidoPorEnvase y no convierte la salida de receta.
+     * En las demás recetas explícitas vale 0 (no aplica). Se conserva en Producto
+     * por compatibilidad con los usos históricos de materiales y del diseñador v1.
      */
     @Min(value=0, message = "La Cantidad por unidad no puede ser negativa") // Cantidad por unidad
     private double cantidadUnidad;
 
+    /** Unidad del contenido por envase de un terminado en U; null cuando no aplica en v2. */
     @Column(length = 16)
     private String unidadContenidoPorEnvase;
 

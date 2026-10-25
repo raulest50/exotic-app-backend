@@ -113,6 +113,9 @@ public class ProductoManufacturingService {
             throw new IllegalArgumentException("Esta receta tiene una salida explícita. Debe conservar sus cantidades y unidades al editarla.");
         }
         normalizeExplicitRecipe(dto);
+        if (hasExplicitRecipe(dto) && !Objects.equals(existing.getTipoUnidades(), dto.getTipoUnidades())) {
+            throw new IllegalArgumentException("La unidad de salida e inventario de un producto existente no se puede cambiar desde el diseñador.");
+        }
         boolean originalInventareable = existing.isInventareable();
         java.math.BigDecimal requestedCosto = java.math.BigDecimal.valueOf(defaultDouble(dto.getCosto()));
         applyCommonProductFields(existing, dto);
@@ -153,8 +156,7 @@ public class ProductoManufacturingService {
 
     public static boolean hasExplicitRecipe(ProductoManufacturingDTO dto) {
         return dto != null && ((dto.getProcesoProduccionCompleto() != null
-                && (dto.getProcesoProduccionCompleto().getCantidadSalidaReceta() != null
-                || dto.getProcesoProduccionCompleto().getUnidadSalidaReceta() != null))
+                && dto.getProcesoProduccionCompleto().getCantidadSalidaReceta() != null)
                 || (dto.getInsumos() != null && dto.getInsumos().stream().filter(Objects::nonNull)
                 .anyMatch(i -> i.getCantidadReceta() != null || i.getUnidadReceta() != null)));
     }
@@ -166,7 +168,8 @@ public class ProductoManufacturingService {
     }
 
     /** Retain authored batch amounts; expose legacy coefficients to existing consumers.
-     * Product units and package content are independent: no density or package conversion.
+     * Recipe output is already in Producto.tipoUnidades; only input units need conversion.
+     * Package content applies only to finished products in U, without density conversion.
      * Null metadata means a historical recipe, never an inferred one-unit batch.
      */
     private void normalizeExplicitRecipe(ProductoManufacturingDTO dto) {
@@ -177,9 +180,14 @@ public class ProductoManufacturingService {
             throw new IllegalArgumentException("El nombre es obligatorio y admite hasta 200 caracteres.");
         if (dto.getTipoProducto() == null || !List.of("T", "S").contains(dto.getTipoProducto()))
             throw new IllegalArgumentException("Seleccione terminado o semiterminado.");
-        if (!positiveFinite(dto.getCantidadUnidad())) throw new IllegalArgumentException("El contenido por envase debe ser positivo.");
-        dto.setUnidadContenidoPorEnvase(catalogUnit(dto.getUnidadContenidoPorEnvase()));
         dto.setTipoUnidades(catalogUnit(dto.getTipoUnidades()));
+        if ("T".equals(dto.getTipoProducto()) && "U".equals(dto.getTipoUnidades())) {
+            if (!positiveFinite(dto.getCantidadUnidad())) throw new IllegalArgumentException("El contenido por envase debe ser positivo.");
+            dto.setUnidadContenidoPorEnvase(catalogUnit(dto.getUnidadContenidoPorEnvase()));
+        } else {
+            dto.setCantidadUnidad(0d);
+            dto.setUnidadContenidoPorEnvase(null);
+        }
         if ("T".equals(dto.getTipoProducto()) && dto.getCategoriaId() == null)
             throw new IllegalArgumentException("El terminado requiere categoría.");
         boolean requiereOrden = "T".equals(dto.getTipoProducto()) || Boolean.TRUE.equals(dto.getRequiereOrdenFabricacion());
@@ -194,9 +202,8 @@ public class ProductoManufacturingService {
         if (recipe == null || recipe.getRendimientoTeorico() == null
                 || !Double.isFinite(recipe.getRendimientoTeorico()) || recipe.getRendimientoTeorico() < 0)
             throw new IllegalArgumentException("Indique un rendimiento válido.");
-        recipe.setUnidadSalidaReceta(catalogUnit(recipe.getUnidadSalidaReceta()));
-        BigDecimal output = unidades.convertir(recipeAmount(recipe.getCantidadSalidaReceta()),
-                recipe.getUnidadSalidaReceta(), dto.getTipoUnidades());
+        // La cantidad obtenida ya usa la unidad de inventario del producto destino.
+        BigDecimal output = recipeAmount(recipe.getCantidadSalidaReceta());
         if (dto.getInsumos() == null || dto.getInsumos().isEmpty())
             throw new IllegalArgumentException("La receta debe incluir insumos.");
         Set<String> inputIds = new HashSet<>();
@@ -436,7 +443,6 @@ public class ProductoManufacturingService {
 
         proceso.setRendimientoTeorico(defaultDouble(procesoDto.getRendimientoTeorico()));
         proceso.setCantidadSalidaReceta(procesoDto.getCantidadSalidaReceta());
-        proceso.setUnidadSalidaReceta(procesoDto.getUnidadSalidaReceta());
 
         List<ProcesoFabricacionNodo> managedNodes = proceso.getNodes();
         if (managedNodes == null) {
@@ -775,7 +781,7 @@ public class ProductoManufacturingService {
                 proceso.getProcesoCompletoId(),
                 proceso.getRendimientoTeorico(),
                 nodes,
-                edges, proceso.getCantidadSalidaReceta(), proceso.getUnidadSalidaReceta()
+                edges, proceso.getCantidadSalidaReceta()
         );
     }
 
