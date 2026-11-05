@@ -137,6 +137,7 @@ public class InformesDiariosService {
     private static final String[] HEADERS_REPORTE_TERMINADOS_MOVIMIENTOS = {
             "Movimiento ID",
             "Fecha movimiento",
+            "Fecha corta",
             "Transaccion ID",
             "Orden produccion ID",
             "Producto ID",
@@ -218,7 +219,8 @@ public class InformesDiariosService {
             LocalDate fechaHasta,
             BiExcelExportOptions options) {
         List<Movimiento> movimientos = findIngresosTerminados(fechaDesde, fechaHasta);
-        return generarExcelMovimientosAlmacen(movimientos, "Ingreso producto terminado", "ingreso producto terminado", options);
+        return generarExcelMovimientosAlmacen(
+                movimientos, "Ingreso producto terminado", "ingreso producto terminado", options, false, true);
     }
 
     public InformeDiarioIngresoTerminadosReporteDTO obtenerReporteIngresoTerminados(LocalDate fecha) {
@@ -558,6 +560,7 @@ public class InformesDiariosService {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ExcelStyles styles = createExcelStyles(workbook, options);
+            CellStyle fechaCortaStyle = createFechaCortaStyle(workbook);
 
             Sheet resumenSheet = workbook.createSheet("Resumen");
             escribirResumenReporteTerminados(reporte, resumenSheet, styles);
@@ -584,7 +587,7 @@ public class InformesDiariosService {
             escribirHeader(movimientosSheet, HEADERS_REPORTE_TERMINADOS_MOVIMIENTOS);
             rowIdx = 1;
             for (InformeDiarioIngresoTerminadosReporteDTO.MovimientoDTO row : reporte.getMovimientos()) {
-                escribirFilaMovimientoTerminados(row, movimientosSheet.createRow(rowIdx++), styles);
+                escribirFilaMovimientoTerminados(row, movimientosSheet.createRow(rowIdx++), styles, fechaCortaStyle);
             }
             autosize(movimientosSheet, HEADERS_REPORTE_TERMINADOS_MOVIMIENTOS.length);
 
@@ -665,10 +668,12 @@ public class InformesDiariosService {
     private static void escribirFilaMovimientoTerminados(
             InformeDiarioIngresoTerminadosReporteDTO.MovimientoDTO dto,
             Row row,
-            ExcelStyles styles) {
+            ExcelStyles styles,
+            CellStyle fechaCortaStyle) {
         int c = 0;
         writeCell(row, c++, dto.getMovimientoId(), styles);
         writeCell(row, c++, dto.getFechaMovimiento(), styles);
+        escribirFechaCorta(row, c++, dto.getFechaMovimiento(), fechaCortaStyle);
         writeCell(row, c++, dto.getTransaccionId(), styles);
         writeCell(row, c++, dto.getOrdenProduccionId(), styles);
         writeCell(row, c++, dto.getProductoId(), styles);
@@ -721,6 +726,20 @@ public class InformesDiariosService {
         return number instanceof Double
                 || number instanceof Float
                 || number instanceof java.math.BigDecimal;
+    }
+
+    private static CellStyle createFechaCortaStyle(XSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setDataFormat(workbook.createDataFormat().getFormat("dd/mm/yyyy"));
+        return style;
+    }
+
+    private static void escribirFechaCorta(Row row, int index, LocalDateTime fecha, CellStyle style) {
+        Cell cell = row.createCell(index);
+        cell.setCellStyle(style);
+        if (fecha != null) {
+            cell.setCellValue(fecha.toLocalDate());
+        }
     }
 
     private static ExcelStyles createExcelStyles(XSSFWorkbook workbook, BiExcelExportOptions options) {
@@ -918,12 +937,29 @@ public class InformesDiariosService {
             String contextoLog,
             BiExcelExportOptions options,
             boolean incluirCausaAjuste) {
+        return generarExcelMovimientosAlmacen(
+                movimientos, nombreHoja, contextoLog, options, incluirCausaAjuste, false);
+    }
+
+    private byte[] generarExcelMovimientosAlmacen(
+            List<Movimiento> movimientos,
+            String nombreHoja,
+            String contextoLog,
+            BiExcelExportOptions options,
+            boolean incluirCausaAjuste,
+            boolean incluirFechaCorta) {
         String[] headers = incluirCausaAjuste
                 ? HEADERS_AJUSTE_ALMACEN
                 : HEADERS_MOVIMIENTO_ALMACEN;
+        if (incluirFechaCorta) {
+            List<String> headersConFechaCorta = new ArrayList<>(List.of(headers));
+            headersConFechaCorta.add(1, "Fecha corta");
+            headers = headersConFechaCorta.toArray(String[]::new);
+        }
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ExcelStyles styles = createExcelStyles(workbook, options);
+            CellStyle fechaCortaStyle = incluirFechaCorta ? createFechaCortaStyle(workbook) : null;
             Sheet sheet = workbook.createSheet(nombreHoja);
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < headers.length; i++) {
@@ -936,7 +972,8 @@ public class InformesDiariosService {
                         mov,
                         sheet.createRow(rowIdx++),
                         styles,
-                        incluirCausaAjuste);
+                        incluirCausaAjuste,
+                        fechaCortaStyle);
             }
 
             for (int i = 0; i < headers.length; i++) {
@@ -986,11 +1023,15 @@ public class InformesDiariosService {
             Movimiento mov,
             Row row,
             ExcelStyles styles,
-            boolean incluirCausaAjuste
+            boolean incluirCausaAjuste,
+            CellStyle fechaCortaStyle
     ) {
         int c = 0;
         row.createCell(c++).setCellValue(
                 mov.getFechaMovimiento() != null ? mov.getFechaMovimiento().toString() : "");
+        if (fechaCortaStyle != null) {
+            escribirFechaCorta(row, c++, mov.getFechaMovimiento(), fechaCortaStyle);
+        }
         row.createCell(c++).setCellValue(
                 mov.getProducto() != null && mov.getProducto().getProductoId() != null
                         ? mov.getProducto().getProductoId() : "");

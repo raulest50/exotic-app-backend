@@ -1,0 +1,887 @@
+{
+  "manifest_version": 1,
+  "migration_line": "schema-v1",
+  "status": "validated_on_disposable_local_database_not_deployed",
+  "created_at": "2026-11-04T16:34:58-05:00",
+  "time_zone": "America/Bogota",
+  "source": {
+    "kind": "local_docker_postgresql",
+    "container": "exotic-app-backend-db-1",
+    "database": "lacmdb",
+    "postgres_version": "18.1",
+    "pg_dump_version": "18.1",
+    "backend_commit": "80296d2995d4a8053601f089a17d7df0f6ddd9f4",
+    "source_schema_raw_sha256": "8750e4fbcfa1638ce89cd285299ec99d8db8d6d5fdd87d2f799462fec7927690",
+    "source_schema_lf_sha256": "de1f77524df04b69ff868430dce201368ad942d32a34bcf6f87d54f8d572d450",
+    "history": {
+      "baseline_version": "2",
+      "highest_successful_version": "118",
+      "rows": 115,
+      "successful_sql_migrations": 114,
+      "failed_migrations": 0,
+      "applied_sql_checksums_match_repository": true
+    },
+    "render_equivalence_verified": false
+  },
+  "capture": {
+    "mode": "schema-only",
+    "excluded": [
+      "table public.flyway_schema_history",
+      "table row data",
+      "ownership statements",
+      "ACL statements",
+      "global roles and credentials"
+    ],
+    "normalization": [
+      "psql \\restrict",
+      "SET statement_timeout = 0;",
+      "SET lock_timeout = 0;",
+      "SET idle_in_transaction_session_timeout = 0;",
+      "SET transaction_timeout = 0;",
+      "SET client_encoding = 'UTF8';",
+      "SET standard_conforming_strings = on;",
+      "SELECT pg_catalog.set_config('search_path', '', false);",
+      "SET check_function_bodies = false;",
+      "SET xmloption = content;",
+      "SET client_min_messages = warning;",
+      "SET row_security = off;",
+      "SET default_tablespace = '';",
+      "SET default_table_access_method = heap;",
+      "psql \\unrestrict"
+    ],
+    "transaction_local_settings": [
+      "search_path = public, pg_catalog",
+      "standard_conforming_strings = on",
+      "check_function_bodies = false",
+      "default_table_access_method = heap"
+    ],
+    "schema_not_pruned_from_jpa": true
+  },
+  "object_inventory": {
+    "tables": 138,
+    "sequences": 118,
+    "indexes_including_constraint_indexes": 406,
+    "constraints_by_type": {
+      "f": 291,
+      "c": 251,
+      "u": 100,
+      "p": 136,
+      "n": 806
+    },
+    "functions": 1,
+    "triggers": 1,
+    "not_valid_checks": 3,
+    "extensions": [
+      {
+        "name": "plpgsql",
+        "version": "1.0"
+      }
+    ],
+    "standalone_indexes_in_dump": 170,
+    "named_not_null_constraints_in_dump": 21,
+    "unmapped_tables_preserved": [
+      "batch_record_documento",
+      "movimiento_reserva",
+      "planificacion_produccion",
+      "planificacion_recurso"
+    ]
+  },
+  "artifacts": {
+    "src/main/resources/db/migration-v1/V001__esquema_actual_consolidado.sql": {
+      "sha256": "e77b0e9c05bd816f7a5ae8d4cf6c2c68fb7b3b2eb3d3343ef771c554cd64c690",
+      "bytes": 384820
+    },
+    "src/main/resources/db/bootstrap-v1/instalacion_nueva.sql": {
+      "sha256": "5a1c8b3875002dabc6cae7b421f00ede55dc4993aa59e4e0a479f1e5d027defd",
+      "bytes": 6484
+    },
+    "src/main/java/exotic/app/planta/config/FlywayConsolidatedConfig.java": {
+      "sha256": "7e4b1c7415020d96397fafd819abc01cbfcc9b64741ffb8a6e58bf384dd94fe4",
+      "bytes": 2567
+    },
+    "src/main/resources/application.yml": {
+      "sha256": "f32fa3bc042ff7f686de23ecd650c675a054493454a3366d17991ef63f4e2005",
+      "bytes": 2604
+    }
+  },
+  "legacy_line": {
+    "unchanged": true,
+    "default_yaml_document_matches_head": true,
+    "directory": "src/main/resources/db/migration",
+    "versioned_file_count": 116,
+    "absent_version_numbers": [
+      62,
+      69
+    ],
+    "sha256_lf_convention": "CRLF normalized to LF; UTF-8 BOM if present preserved; SHA-256 is distinct from Flyway CRC32.",
+    "files": [
+      {
+        "path": "src/main/resources/db/migration/V001__initial_schema.sql",
+        "version": 1,
+        "sha256_lf": "447e4671dc33810d20cf7b1d9ddd9a4dafc37ef84ace0dbb0f3927e3431d811a",
+        "flyway_crc32": -649859620
+      },
+      {
+        "path": "src/main/resources/db/migration/V002__schema_populated_by_hibernate.sql",
+        "version": 2,
+        "sha256_lf": "7f72a07e7290d1a2de8db4eaeedc96a3592b38f32826e53b51c779903aa54332",
+        "flyway_crc32": 2142467120
+      },
+      {
+        "path": "src/main/resources/db/migration/V003__migrate_consumo_to_dispensacion.sql",
+        "version": 3,
+        "sha256_lf": "cc4e8a9feeb621be63fa0c2ed40d5cb4efd39979fa2c6e63fda561e6e3e4c1ce",
+        "flyway_crc32": 1654927271
+      },
+      {
+        "path": "src/main/resources/db/migration/V004__add_reporte_averia_to_tipo_entidad_causante.sql",
+        "version": 4,
+        "sha256_lf": "6cfde5b621e566f405b40b1907c6653e455d27cedc6e81579b2b59dad4419928",
+        "flyway_crc32": -63701691
+      },
+      {
+        "path": "src/main/resources/db/migration/V005__add_averia_and_transferencia_to_tipo_movimiento.sql",
+        "version": 5,
+        "sha256_lf": "27f306b57a307d1237278806d942e8f2b6a0de7ada8a8ba0f9761cf44acde3a3",
+        "flyway_crc32": -1551764363
+      },
+      {
+        "path": "src/main/resources/db/migration/V006__drop_ordenes_seguimiento_tables.sql",
+        "version": 6,
+        "sha256_lf": "dd394bf37adae7436019ae1fef53a67d7ce2a5cb3f18656bc9bfddc3d9c8b5c5",
+        "flyway_crc32": -1490814383
+      },
+      {
+        "path": "src/main/resources/db/migration/V007__add_area_produccion_to_movimientos.sql",
+        "version": 7,
+        "sha256_lf": "5a0c3052f5ee23a447d1c6053237b787711632a8ef820dd5f8365a5b896b563a",
+        "flyway_crc32": -1955044299
+      },
+      {
+        "path": "src/main/resources/db/migration/V008__add_missing_transaccion_almacen_columns.sql",
+        "version": 8,
+        "sha256_lf": "5781efa33ae8360a2d1b68de0bfa75dc10d64625ccd6b9ae8f0ec06f6498acfd",
+        "flyway_crc32": -1083486630
+      },
+      {
+        "path": "src/main/resources/db/migration/V009__add_reporte_averia_almacen_to_tipo_entidad_causante.sql",
+        "version": 9,
+        "sha256_lf": "7cd4853e079ac8427fa74d513a00c8acd4db1ab92b441f6d2301d247f325dd4b",
+        "flyway_crc32": 1231778237
+      },
+      {
+        "path": "src/main/resources/db/migration/V010__add_od_ra_to_tipo_entidad_causante.sql",
+        "version": 10,
+        "sha256_lf": "9af8d57ce2709c19bfd20c279482ee0a1636acb8541c9e9f45f1ad2aa4a26a5a",
+        "flyway_crc32": -715666955
+      },
+      {
+        "path": "src/main/resources/db/migration/V011__migrate_contactos_to_relational_table.sql",
+        "version": 11,
+        "sha256_lf": "fee46da9bf275af295a543866995aff407219fba0b892c82dc7dcd970f01e5bc",
+        "flyway_crc32": -345149080
+      },
+      {
+        "path": "src/main/resources/db/migration/V012__add_maestra_notificacion.sql",
+        "version": 12,
+        "sha256_lf": "f5a91ce36da395fe51cd5a6693f03f853f81cf371de138f3370e65ea598f524f",
+        "flyway_crc32": 2071562159
+      },
+      {
+        "path": "src/main/resources/db/migration/V013__clear_orden_produccion_pedido_y_asesor.sql",
+        "version": 13,
+        "sha256_lf": "bdcf10e5e4a3175d932159d2f80c37e584bb7592ea2760a203c22be47d9b40e4",
+        "flyway_crc32": 940220357
+      },
+      {
+        "path": "src/main/resources/db/migration/V014__rename_area_produccion_to_area_operativa.sql",
+        "version": 14,
+        "sha256_lf": "7114ada084fb06b6a4c7b66765e8d43ae3fc8e4b39eece61a51f35b441c30e83",
+        "flyway_crc32": 1072006731
+      },
+      {
+        "path": "src/main/resources/db/migration/V015__add_ruta_proceso_cat_tables.sql",
+        "version": 15,
+        "sha256_lf": "93602d9bbb51936c3eaa484a21fa848a2a88f089069f11f91189e6fa976a6049",
+        "flyway_crc32": -920505384
+      },
+      {
+        "path": "src/main/resources/db/migration/V016__add_handle_config_to_ruta_proceso_node.sql",
+        "version": 16,
+        "sha256_lf": "6dcf8cf1b248f4af9407f64402912d34a8b4bc21f575d3f11931f6ae25549410",
+        "flyway_crc32": -1097983018
+      },
+      {
+        "path": "src/main/resources/db/migration/V017__modulo_accesos_and_tab_accesos.sql",
+        "version": 17,
+        "sha256_lf": "b85d7d8516452b0c718b3c77aa9f482f20bec703d9fcc69c67b12a95396f261b",
+        "flyway_crc32": -1141575058
+      },
+      {
+        "path": "src/main/resources/db/migration/V018__add_default_almacen_general.sql",
+        "version": 18,
+        "sha256_lf": "0f0b9eb7e5f29303b64e793a3ecbb17a28b88faae9dbe45c97cc809a48b38ac5",
+        "flyway_crc32": -1276875107
+      },
+      {
+        "path": "src/main/resources/db/migration/V019__refactor_manufacturing_graph.sql",
+        "version": 19,
+        "sha256_lf": "0767c5bcde08d53f82dba4ade03abe1a0fb7b08e62955cc8967985b40fd500a1",
+        "flyway_crc32": -83939162
+      },
+      {
+        "path": "src/main/resources/db/migration/V020__add_seguimiento_orden_area.sql",
+        "version": 20,
+        "sha256_lf": "95a92c80602d8cdaed22cded92244a5d63d7ad65010053e8d590dc592b8dd149",
+        "flyway_crc32": 2090505309
+      },
+      {
+        "path": "src/main/resources/db/migration/V021__enforce_unique_area_operativa_responsable.sql",
+        "version": 21,
+        "sha256_lf": "b4db7e02080b5eb0d6c491708af199320ebd926616a44ed6acd14b53b0df7987",
+        "flyway_crc32": -509901095
+      },
+      {
+        "path": "src/main/resources/db/migration/V022__grant_operaciones_criticas_bd_to_master.sql",
+        "version": 22,
+        "sha256_lf": "6a4fce821d96b0c16ec99a999c511bffa7896eb325ff59c9c8f2b3ef8724d5fa",
+        "flyway_crc32": -995861070
+      },
+      {
+        "path": "src/main/resources/db/migration/V023__consolidar_lotes_historicos_init_producto.sql",
+        "version": 23,
+        "sha256_lf": "2e0454cac18eb6f1a5d18d76585f8b431e9fe1e43e215ae98f63ff424f1baaae",
+        "flyway_crc32": -76968329
+      },
+      {
+        "path": "src/main/resources/db/migration/V024__uppercase_producto_ids.sql",
+        "version": 24,
+        "sha256_lf": "6feb4ffc8cd46c9ee3b02ee97e1d9a2a6d98dc1048ac684cc2099e43b5f8e813",
+        "flyway_crc32": -1428331413
+      },
+      {
+        "path": "src/main/resources/db/migration/V025__add_tiempo_dias_fabricacion_to_categoria.sql",
+        "version": 25,
+        "sha256_lf": "07ff7e27d1ed714f8eef9d7170c824797e00b764d925bbc316e23593e7df1ef0",
+        "flyway_crc32": 560300221
+      },
+      {
+        "path": "src/main/resources/db/migration/V026__correct_core_operational_timestamps_minus_5h.sql",
+        "version": 26,
+        "sha256_lf": "319490012385300b0d6a3aaad90477828cc34b488c25f7bbc16f73c840605763",
+        "flyway_crc32": -1837723945
+      },
+      {
+        "path": "src/main/resources/db/migration/V027__add_master_production_schedule_semanal.sql",
+        "version": 27,
+        "sha256_lf": "f37609af6b6cd727cb18189cdda9e7541d0dff5ded177830cd57a1c65588d5a7",
+        "flyway_crc32": 486178490
+      },
+      {
+        "path": "src/main/resources/db/migration/V028__evolve_seguimiento_orden_area_states.sql",
+        "version": 28,
+        "sha256_lf": "252c0c257c8273a679cee8619a4c225cf5cd74e14311e3ac9c3f148da54a8717",
+        "flyway_crc32": 1958614075
+      },
+      {
+        "path": "src/main/resources/db/migration/V029__add_capacidad_productiva_diaria_to_categoria.sql",
+        "version": 29,
+        "sha256_lf": "5253072a5506f2be9046882bb91290c1eb3e0ff2d74e17fa3cd584d001ad141d",
+        "flyway_crc32": -2145633047
+      },
+      {
+        "path": "src/main/resources/db/migration/V030__drop_legacy_proveedor_id_and_enforce_proveedor_pk.sql",
+        "version": 30,
+        "sha256_lf": "749ed898b1fd4c56429c7e8c89b1e172efd8ba6ffc2b587e53882a83b3b71aa9",
+        "flyway_crc32": -2114203765
+      },
+      {
+        "path": "src/main/resources/db/migration/V031__replace_operaciones_criticas_massive_load_tabs.sql",
+        "version": 31,
+        "sha256_lf": "5e7a3b9a8d58810d27343fa7e036be77a23f87d97188c26c552a733267d9bf3d",
+        "flyway_crc32": -429596398
+      },
+      {
+        "path": "src/main/resources/db/migration/V032__add_area_operativa_categoria_habilitada.sql",
+        "version": 32,
+        "sha256_lf": "f6f4f2646997039a64009b93ec22743c887d36b676259e705e2daa5ce286ce62",
+        "flyway_crc32": 1902303756
+      },
+      {
+        "path": "src/main/resources/db/migration/V033__add_pool_capacidad.sql",
+        "version": 33,
+        "sha256_lf": "a229f46609c22713f695255dd837744a7449236b6bdda63ef3b8d48c287a7f0a",
+        "flyway_crc32": 278833998
+      },
+      {
+        "path": "src/main/resources/db/migration/V034__allow_compras_almacen_master_directive_group.sql",
+        "version": 34,
+        "sha256_lf": "4a8fb472994b454736ea44dc6d46f3cf6d057b826f51a9d10acaf7c3d0090a98",
+        "flyway_crc32": 715616935
+      },
+      {
+        "path": "src/main/resources/db/migration/V035__extend_mps_semanal_for_drafts.sql",
+        "version": 35,
+        "sha256_lf": "47802c976e1185019d1eb57b85b3218912a88e9da6a67247aae2b16964406362",
+        "flyway_crc32": 1347496715
+      },
+      {
+        "path": "src/main/resources/db/migration/V036__add_limite_recepciones_parciales_ocm_to_proveedores.sql",
+        "version": 36,
+        "sha256_lf": "4ca2722a64a1172fd1f0713e7bfe6b9b36942eace1b57bf7f84fe997425addb8",
+        "flyway_crc32": -366339838
+      },
+      {
+        "path": "src/main/resources/db/migration/V037__backfill_limite_recepciones_parciales_ocm.sql",
+        "version": 37,
+        "sha256_lf": "fec7ff7a9183234d1dfada7b88b5345c247d2791108032ec5969e62751127e81",
+        "flyway_crc32": -1044641392
+      },
+      {
+        "path": "src/main/resources/db/migration/V038__add_aprobacion_fields_to_mps_semanal.sql",
+        "version": 38,
+        "sha256_lf": "68d0e81c72dfb445041872793ce223bcfe570d94207fd0cc4a4cd0fb8082e0bf",
+        "flyway_crc32": 268843933
+      },
+      {
+        "path": "src/main/resources/db/migration/V039__add_mps_generation_tracking_to_ordenes_produccion.sql",
+        "version": 39,
+        "sha256_lf": "a4f765d8c836fddd47590b7221f69a254df5515ea55df8368b672a25bdec372b",
+        "flyway_crc32": -411308046
+      },
+      {
+        "path": "src/main/resources/db/migration/V040__add_odp_generation_metadata_to_mps_semanal.sql",
+        "version": 40,
+        "sha256_lf": "e82d77f220c143c63987cbf30d1941f34a9d8fb5e870e2d6f1aa92dd6847622f",
+        "flyway_crc32": -2017087520
+      },
+      {
+        "path": "src/main/resources/db/migration/V041__enforce_limite_recepciones_ocm_provider_required.sql",
+        "version": 41,
+        "sha256_lf": "32fa23439bde141a582d7c734c7d2b95722d4570d0fdfddad25356281f8bc72d",
+        "flyway_crc32": -1414625146
+      },
+      {
+        "path": "src/main/resources/db/migration/V042__set_tope_global_recepciones_ocm_to_7.sql",
+        "version": 42,
+        "sha256_lf": "8cd66deeada8a6d61457c8771726cc624941b976709aa05b88333437f25c1e20",
+        "flyway_crc32": -825639432
+      },
+      {
+        "path": "src/main/resources/db/migration/V043__add_personal_horas_extra.sql",
+        "version": 43,
+        "sha256_lf": "cc322645e1fc55270e98bc4e003b29104662777767e45f8f1af2effdc8e00438",
+        "flyway_crc32": -1944429948
+      },
+      {
+        "path": "src/main/resources/db/migration/V044__add_semana_mps_to_mps_semanal.sql",
+        "version": 44,
+        "sha256_lf": "d4181c732b8c0d296e2f2180c9635eb5032997ba6a716cc598e76b12ef9e6e2d",
+        "flyway_crc32": -1909763646
+      },
+      {
+        "path": "src/main/resources/db/migration/V045__add_observaciones_mps_semanal.sql",
+        "version": 45,
+        "sha256_lf": "f884c6f944ebef5185d617a4ce4a75056aa310d717edc4aaf8be6a8d9309fd9a",
+        "flyway_crc32": -1090403671
+      },
+      {
+        "path": "src/main/resources/db/migration/V046__add_tipo_to_mps_observaciones.sql",
+        "version": 46,
+        "sha256_lf": "9dab77ad484e655c7a89330aaced52d8c536c9d572ee416cd5cd4674ffe58afa",
+        "flyway_crc32": -602330804
+      },
+      {
+        "path": "src/main/resources/db/migration/V047__normalize_mps_semanal_programacion.sql",
+        "version": 47,
+        "sha256_lf": "4d55291bcb9dbb691aa9d88d220b1bac9aa395065908d27878a1eb17db9be30c",
+        "flyway_crc32": 1906739511
+      },
+      {
+        "path": "src/main/resources/db/migration/V048__add_lead_time_metric_tables.sql",
+        "version": 48,
+        "sha256_lf": "900521a42265811abc7b3868687d7109435284bc7219f0bc75aceecbaf1e49e0",
+        "flyway_crc32": -2034042994
+      },
+      {
+        "path": "src/main/resources/db/migration/V049__add_fecha_envio_proveedor_to_orden_compra.sql",
+        "version": 49,
+        "sha256_lf": "2153933db093fa050a2f65ef6fd0946973fe286accfb3620450f81a0ea147cfc",
+        "flyway_crc32": 2014384224
+      },
+      {
+        "path": "src/main/resources/db/migration/V050__add_estado_to_lead_time_proveedor_kpi.sql",
+        "version": 50,
+        "sha256_lf": "6a5f5f1885fbc204e42b6b13a04d8c939fefca9030bbe407566233f9757301aa",
+        "flyway_crc32": 1608332886
+      },
+      {
+        "path": "src/main/resources/db/migration/V051__add_empresa_identidad_legal_version.sql",
+        "version": 51,
+        "sha256_lf": "ee1a411de192c60f3d48ccb7e3e34ba650a253a47b6524a856159f87f40af5e4",
+        "flyway_crc32": -1304268790
+      },
+      {
+        "path": "src/main/resources/db/migration/V052__backfill_empresa_identidad_legal_ocm_historicas.sql",
+        "version": 52,
+        "sha256_lf": "075062648c3823545802450b4f641f668215466e0674ce830b69fa082649d874",
+        "flyway_crc32": 149552615
+      },
+      {
+        "path": "src/main/resources/db/migration/V053__add_empresa_logo_documental_version.sql",
+        "version": 53,
+        "sha256_lf": "8fec70bfb44055c13e154f8bd239410b65749e30b64b44295f85f13b0e2d1ba7",
+        "flyway_crc32": -1616988597
+      },
+      {
+        "path": "src/main/resources/db/migration/V054__add_enable_master_supermaster_directives_access.sql",
+        "version": 54,
+        "sha256_lf": "51903ff6c5f08ebc3ccf09bd80aa96b913432d1f9761170997f68013fb73720b",
+        "flyway_crc32": -465683899
+      },
+      {
+        "path": "src/main/resources/db/migration/V055__add_boolean_super_master_directives.sql",
+        "version": 55,
+        "sha256_lf": "2a2d91994af9e96308763f1199837e66466b9eb8963a470f486b7fb5294718d4",
+        "flyway_crc32": -1645857032
+      },
+      {
+        "path": "src/main/resources/db/migration/V056__add_mps_semanal_dias_bloqueo_edicion_directive.sql",
+        "version": 56,
+        "sha256_lf": "0cd4d136d6e67d31339c952bf62f5d6f40f208957f6d339da3378169f7c07ec7",
+        "flyway_crc32": -587259100
+      },
+      {
+        "path": "src/main/resources/db/migration/V057__support_mps_semanal_aprobado_item_editing.sql",
+        "version": 57,
+        "sha256_lf": "378b70ba103edc08bcaf8ddb8b99f47142c79bd6f602823b29bbdaea3c46c7cf",
+        "flyway_crc32": 478095405
+      },
+      {
+        "path": "src/main/resources/db/migration/V058__add_area_operativa_capacity_units.sql",
+        "version": 58,
+        "sha256_lf": "d988986a0fb38526420d58f46defa036126f1345997f547ada9f58feb15d8f25",
+        "flyway_crc32": -342601601
+      },
+      {
+        "path": "src/main/resources/db/migration/V059__remove_pool_capacidad.sql",
+        "version": 59,
+        "sha256_lf": "80afc4e964dbd99ee9318e5a7898c7962110f50e8db0c138ee7437f54afa14e7",
+        "flyway_crc32": -563338758
+      },
+      {
+        "path": "src/main/resources/db/migration/V060__area_categoria_unidad_medida.sql",
+        "version": 60,
+        "sha256_lf": "a1490125a4f88aac6445ef9b63f3d4df96dcab210995eacefcfc124175a8ee70",
+        "flyway_crc32": 30726453
+      },
+      {
+        "path": "src/main/resources/db/migration/V061__add_area_operativa_ruido_muestra.sql",
+        "version": 61,
+        "sha256_lf": "9ef381246a58c431555b5a7aaa147fd7bc1456e339bc5a948b5b9e4215e1e8d3",
+        "flyway_crc32": 1495175422
+      },
+      {
+        "path": "src/main/resources/db/migration/V063__add_area_operativa_noise_directives.sql",
+        "version": 63,
+        "sha256_lf": "3e18489e6e86e48827ecfeb13aec195c8015204a54a58eb948b11aca3427419d",
+        "flyway_crc32": -987352587
+      },
+      {
+        "path": "src/main/resources/db/migration/V064__add_categoria_manufacturing_template.sql",
+        "version": 64,
+        "sha256_lf": "a952d915e882a2b1cbd31967a6354e9ebdc3f985744bd937171db16ed9500783",
+        "flyway_crc32": 1404486595
+      },
+      {
+        "path": "src/main/resources/db/migration/V065__add_mps_aprobado_agregar_terminados_directive.sql",
+        "version": 65,
+        "sha256_lf": "4635671d4d0d0aa165b8d0e99b366699953557a1159f671ba3bf0b97ca825ce8",
+        "flyway_crc32": 723317718
+      },
+      {
+        "path": "src/main/resources/db/migration/V066__alter_master_directive_ayuda_to_text.sql",
+        "version": 66,
+        "sha256_lf": "fb21e90bf8ef41b2ebf39814304202ade218b40da4b98f0018df8ff65fc2726e",
+        "flyway_crc32": 1420811810
+      },
+      {
+        "path": "src/main/resources/db/migration/V067__add_area_operativa_inactivity_alert_directives.sql",
+        "version": 67,
+        "sha256_lf": "c86e87bde08418ba4f12f16d77963c6990709174de2c0056e9350c42f8cfd19c",
+        "flyway_crc32": -515395640
+      },
+      {
+        "path": "src/main/resources/db/migration/V068__drop_legacy_familia.sql",
+        "version": 68,
+        "sha256_lf": "ef8bb5db4a809c97f6ee54d170a84c8ccc6d2d5124f0ee50f1627e5d06197953",
+        "flyway_crc32": 1227605986
+      },
+      {
+        "path": "src/main/resources/db/migration/V070__refine_area_operativa_units.sql",
+        "version": 70,
+        "sha256_lf": "2c5a91bacc7d6fc2bfaeafccd4c12f43d29e8d76b9fd91fc2b7571839a2a8b61",
+        "flyway_crc32": 859455315
+      },
+      {
+        "path": "src/main/resources/db/migration/V071__add_jornada_laboral_version.sql",
+        "version": 71,
+        "sha256_lf": "78b36e17b9a07c5b93506895c921ab88a2aaffac90f3dd5b90517e2339da864f",
+        "flyway_crc32": -1053741958
+      },
+      {
+        "path": "src/main/resources/db/migration/V072__version_ruta_proceso_cat.sql",
+        "version": 72,
+        "sha256_lf": "a0c8772e1d96f6e2f8fc78b672e208e560c8ba9de07a58bd8d01c7eb3cc8118b",
+        "flyway_crc32": -1363582841
+      },
+      {
+        "path": "src/main/resources/db/migration/V073__drop_capacidad_area_operativa.sql",
+        "version": 73,
+        "sha256_lf": "6337ce8d2d082b6453a8336c3bcd5f227e8692b38ced96ccca9535b78f7f2eb9",
+        "flyway_crc32": -1313196139
+      },
+      {
+        "path": "src/main/resources/db/migration/V074__add_tiempos_ruta_proceso.sql",
+        "version": 74,
+        "sha256_lf": "b6e60913ef4218b68366e393488335f9a9fa6880bd6249445d662f5e13ae49ff",
+        "flyway_crc32": -944407601
+      },
+      {
+        "path": "src/main/resources/db/migration/V075__add_area_operativa_panel_historico_toggle.sql",
+        "version": 75,
+        "sha256_lf": "3a3d22c2b82ac45db20d70cf11f1ffa6c848ac05deaa070f39b2ae8a8fb11831",
+        "flyway_crc32": -2010598538
+      },
+      {
+        "path": "src/main/resources/db/migration/V076__add_politica_estado_dispensacion_odp.sql",
+        "version": 76,
+        "sha256_lf": "4d6bdf0def7c9ea1b44afb260cd3b31376251c417c6c59251bd1f49931bef2bf",
+        "flyway_crc32": -760766249
+      },
+      {
+        "path": "src/main/resources/db/migration/V077__add_calidad_control_proceso.sql",
+        "version": 77,
+        "sha256_lf": "3263337e63a95ce92ed61dc670d4d1db48e4a606050dc293fc2b73534d59629d",
+        "flyway_crc32": 269403569
+      },
+      {
+        "path": "src/main/resources/db/migration/V078__add_area_operativa_admin_correction.sql",
+        "version": 78,
+        "sha256_lf": "af93692d274bd43ff9f0171bc84243977158b3adbc103f2ba96a137b69854120",
+        "flyway_crc32": 932676593
+      },
+      {
+        "path": "src/main/resources/db/migration/V079__allow_recreate_canceled_mps_item.sql",
+        "version": 79,
+        "sha256_lf": "b6c6d9e5b578932d24598d1a019ab66d0f3dd00e26334b9038d2fd65ab7d57b5",
+        "flyway_crc32": 948317517
+      },
+      {
+        "path": "src/main/resources/db/migration/V080__add_personal_sensitive_fields.sql",
+        "version": 80,
+        "sha256_lf": "0022637dfc695e4ec0d2c5b14aab6806b121257cd53b443513fdc8dd64e7a94e",
+        "flyway_crc32": 109714159
+      },
+      {
+        "path": "src/main/resources/db/migration/V081__add_reporte_y_cierre_produccion.sql",
+        "version": 81,
+        "sha256_lf": "044ca4d8103f6e4b57ba2492d99ed2112311a64f2bca5720884573fda7258933",
+        "flyway_crc32": -671273919
+      },
+      {
+        "path": "src/main/resources/db/migration/V082__index_seguimiento_completados_tablero.sql",
+        "version": 82,
+        "sha256_lf": "70996a83a91a69ca7562f45c610f12f521b5e39f62b624677180a3fbbfc866bd",
+        "flyway_crc32": -2106013138
+      },
+      {
+        "path": "src/main/resources/db/migration/V083__index_movimientos_bi_flujo_materiales.sql",
+        "version": 83,
+        "sha256_lf": "7e3ff3f9d87aab9062f1c8fe8108646469e512882d5abb11bdf96d3e1f77bd1c",
+        "flyway_crc32": 1725896124
+      },
+      {
+        "path": "src/main/resources/db/migration/V084__versionado_y_carga_masiva_costos.sql",
+        "version": 84,
+        "sha256_lf": "f997ce92a0f2cb9a7324d50d4d3357f276ba185fb300bdcab365fd76d65367e8",
+        "flyway_crc32": -608846323
+      },
+      {
+        "path": "src/main/resources/db/migration/V085__index_movimientos_informes_globales.sql",
+        "version": 85,
+        "sha256_lf": "1b03e52b51cf6d90493ec88038f03b9292a1263c00afe0953733c4527556c8ef",
+        "flyway_crc32": 1061901581
+      },
+      {
+        "path": "src/main/resources/db/migration/V086__index_pendientes_informe_inventario.sql",
+        "version": 86,
+        "sha256_lf": "04519e427b8eca48a5510fcc3d80cf8297185e139443761fecbe63e41dd3f784",
+        "flyway_crc32": 2115107065
+      },
+      {
+        "path": "src/main/resources/db/migration/V087__add_auditoria_usuarios_orden_compra.sql",
+        "version": 87,
+        "sha256_lf": "5ddace2a4236660ad0e4362ce291933ed9e560d2a241fcf23c2dc8b5c5bcf59f",
+        "flyway_crc32": -1382631648
+      },
+      {
+        "path": "src/main/resources/db/migration/V088__propagacion_costos_por_receta.sql",
+        "version": 88,
+        "sha256_lf": "539ae769b854677c01be31e18f8a2da42f67764053a5f17eb34c216531eb92a5",
+        "flyway_crc32": 1161805188
+      },
+      {
+        "path": "src/main/resources/db/migration/V089__add_consumo_directo_materiales.sql",
+        "version": 89,
+        "sha256_lf": "c14e6c43e5da7180859b10a4c1196ed515cf5429c898cc07324d16279c4f43bb",
+        "flyway_crc32": 1327699989
+      },
+      {
+        "path": "src/main/resources/db/migration/V090__add_causa_ajuste_inventario.sql",
+        "version": 90,
+        "sha256_lf": "8581976ab2220a52bfa5ded82ae37779da44859b46f5338a0beaeb0d6f7a702d",
+        "flyway_crc32": 1012538531
+      },
+      {
+        "path": "src/main/resources/db/migration/V091__add_empresa_identidad_documental_to_orden_compra_activo.sql",
+        "version": 91,
+        "sha256_lf": "40d32c2f76b75c00ed2f6304aee89ce5c633d5f6b0960ddc03676662bc38fd33",
+        "flyway_crc32": 1316162089
+      },
+      {
+        "path": "src/main/resources/db/migration/V092__add_proceso_produccion_documento_version.sql",
+        "version": 92,
+        "sha256_lf": "2f43e2219054aa0cf9b7a6438a1e24e3543b7931380c91a0ba740e82831fb184",
+        "flyway_crc32": -1783782497
+      },
+      {
+        "path": "src/main/resources/db/migration/V093__add_mision_vision_version.sql",
+        "version": 93,
+        "sha256_lf": "eb54e1d5a86d7a25a650f8cf8caeb2122cda8eba58f89e43f4d01ee955eb503c",
+        "flyway_crc32": 1212228580
+      },
+      {
+        "path": "src/main/resources/db/migration/V094__add_organigrama_estado.sql",
+        "version": 94,
+        "sha256_lf": "6aadd3638be7b2ab428ec76edf6b8c0a87ea22159eeaf2b4d32ed648e2093918",
+        "flyway_crc32": 1148422895
+      },
+      {
+        "path": "src/main/resources/db/migration/V095__add_minimal_batch_record_model.sql",
+        "version": 95,
+        "sha256_lf": "b6bbe146c61bd7dd9121c99cdff6c3b9ebb90fb08c06a2f2c08e8460d775d9df",
+        "flyway_crc32": 105729949
+      },
+      {
+        "path": "src/main/resources/db/migration/V096__add_vida_util_categoria_y_lote.sql",
+        "version": 96,
+        "sha256_lf": "5afe22c14ac7f274b133d68a46ef06bd8ff97ea75956c73073dc1c2250238c29",
+        "flyway_crc32": -1303488816
+      },
+      {
+        "path": "src/main/resources/db/migration/V097__add_firma_visual_usuario_version.sql",
+        "version": 97,
+        "sha256_lf": "881c983a01bc9a990a59e47a50694b9978e2ebcc19d8ee53db6002cba1468c37",
+        "flyway_crc32": -1951011121
+      },
+      {
+        "path": "src/main/resources/db/migration/V098__activate_batch_record_workflow.sql",
+        "version": 98,
+        "sha256_lf": "f984475e2ed0792a6d26e6093467e1fe45c38beb2351d85cabffcada210fc275",
+        "flyway_crc32": 1569150778
+      },
+      {
+        "path": "src/main/resources/db/migration/V099__link_poe_to_operational_route.sql",
+        "version": 99,
+        "sha256_lf": "00559bffdf98f47689b0130adee7aa1cb22a33bf839cfc7a6f303dacc3b45050",
+        "flyway_crc32": 640485531
+      },
+      {
+        "path": "src/main/resources/db/migration/V100__complete_manufacturing_order_workflow.sql",
+        "version": 100,
+        "sha256_lf": "69031e7f2759451f3d3ae2a5c84076c5121fee1988b7ced149580f7c4c0cf663",
+        "flyway_crc32": 261103776
+      },
+      {
+        "path": "src/main/resources/db/migration/V101__add_unified_control_engine.sql",
+        "version": 101,
+        "sha256_lf": "29b4bd4f61e9a2932fd46ca5bfc46130b043a1aeb6a8ebc34cfd93dbf0db34ef",
+        "flyway_crc32": -2000204628
+      },
+      {
+        "path": "src/main/resources/db/migration/V102__add_batch_record_quality_review_cycles.sql",
+        "version": 102,
+        "sha256_lf": "0cba45074b23443b3c738a199629644bda3387654c1acfacb560d26247fd4fa6",
+        "flyway_crc32": 1538195117
+      },
+      {
+        "path": "src/main/resources/db/migration/V103__add_control_idempotency.sql",
+        "version": 103,
+        "sha256_lf": "f916cbc0d2f75419b8bc442ac1dbc6b04045081c3cb81af3316f58db46d647f0",
+        "flyway_crc32": -1618643379
+      },
+      {
+        "path": "src/main/resources/db/migration/V104__versionar_fichas_tecnicas_material.sql",
+        "version": 104,
+        "sha256_lf": "1f741767990186bda6be8ac2bed635d117b89d03ed37e6a4125a03100b378f11",
+        "flyway_crc32": 884094815
+      },
+      {
+        "path": "src/main/resources/db/migration/V105__add_orden_produccion_cancel_audit.sql",
+        "version": 105,
+        "sha256_lf": "da19c5bcff40be0943eb6bd5ada1b679842495e7e99a4792b16c5394c7186ca3",
+        "flyway_crc32": 1428506790
+      },
+      {
+        "path": "src/main/resources/db/migration/V106__anchor_control_applicability_to_route_node.sql",
+        "version": 106,
+        "sha256_lf": "13ec1c4faf45cf01155c9568203277744f59a434823bcc2dc5bb534c388f71e6",
+        "flyway_crc32": 291895257
+      },
+      {
+        "path": "src/main/resources/db/migration/V107__make_batch_record_documentary_non_blocking.sql",
+        "version": 107,
+        "sha256_lf": "93b1f413784ff09a0496b260e77a27b79723c9203188c866388a01a49f08c483",
+        "flyway_crc32": -1038967893
+      },
+      {
+        "path": "src/main/resources/db/migration/V108__enforce_single_control_plan_location.sql",
+        "version": 108,
+        "sha256_lf": "084d3790d3c75bbeae067b6a11159bdacc0c26f6bca62de2a6d3e490fc70d706",
+        "flyway_crc32": -1489038887
+      },
+      {
+        "path": "src/main/resources/db/migration/V109__remove_independent_and_exceptional_controls.sql",
+        "version": 109,
+        "sha256_lf": "815b13af736a236ce80ed55f5aee7e89d691f6afd81db502998d1643f8114c5a",
+        "flyway_crc32": -1206038550
+      },
+      {
+        "path": "src/main/resources/db/migration/V110__add_ruta_proceso_layout_audit.sql",
+        "version": 110,
+        "sha256_lf": "b2b2dd3f226b6817bd2f2172c2e7acade6ba1b04e78c05c8da71f4228c682128",
+        "flyway_crc32": -375357168
+      },
+      {
+        "path": "src/main/resources/db/migration/V111__add_ocm_reception_completion_and_closure.sql",
+        "version": 111,
+        "sha256_lf": "0982e084b15591b507a73a1ebbb6001ae2c92d65886b0e2b0cfc62dace0732a2",
+        "flyway_crc32": 46730516
+      },
+      {
+        "path": "src/main/resources/db/migration/V112__add_mps_fabricacion_and_area_visibility.sql",
+        "version": 112,
+        "sha256_lf": "299e44c00495f16692aacecbc47f582ceaa8016a4707802eb13b6120f4b61537",
+        "flyway_crc32": -780423411
+      },
+      {
+        "path": "src/main/resources/db/migration/V113__create_monitoreo_errores.sql",
+        "version": 113,
+        "sha256_lf": "99329e0c7b6134c976d5667f36e0ec698f0c1d291fd4430fb56035962aee5563",
+        "flyway_crc32": 1377182094
+      },
+      {
+        "path": "src/main/resources/db/migration/V114__retire_legacy_dispensacion_access.sql",
+        "version": 114,
+        "sha256_lf": "b8bab704c1259a5747bc5c6ab8d974dcf109a8ff60e54cf9604eb943b196a640",
+        "flyway_crc32": -158358729
+      },
+      {
+        "path": "src/main/resources/db/migration/V115__remove_categoria_manufacturing_templates.sql",
+        "version": 115,
+        "sha256_lf": "454ceb17b3c172bed596ef67c6a6f37611bc653cebdff035c25d212389b13567",
+        "flyway_crc32": 1176068170
+      },
+      {
+        "path": "src/main/resources/db/migration/V116__catalogo_unidades_medida_producto.sql",
+        "version": 116,
+        "sha256_lf": "ee5de82bb9bcef4df5799dc762631a261835b1933a44f66bb0ff29aed61b0ad4",
+        "flyway_crc32": 653895821
+      },
+      {
+        "path": "src/main/resources/db/migration/V117__add_recipe_quantity_basis.sql",
+        "version": 117,
+        "sha256_lf": "fb727133affc4e1232bc84abf2b8793fc2fbfc2a603bce8a065273b8f1d22da7",
+        "flyway_crc32": -424938732
+      },
+      {
+        "path": "src/main/resources/db/migration/V118__use_product_unit_for_recipe_output.sql",
+        "version": 118,
+        "sha256_lf": "d390f74c27b47ff82e64d4b1ec5d6f504964847659141aae64051d9e29f381b9",
+        "flyway_crc32": -683605870
+      }
+    ]
+  },
+  "technical_bootstrap": {
+    "automatic_flyway_migration": false,
+    "installation_route": "migrate consolidated V1, apply technical bootstrap on new empty installation, then start application",
+    "restore_route": "migrate consolidated V1, restore reviewed application data excluding Flyway history, then start application; no bootstrap before restore",
+    "rows": 17,
+    "table_row_counts": {
+      "unidad_medida_producto": 5,
+      "control_unidad": 6,
+      "control_magnitud": 3,
+      "receta_costos_revision": 1,
+      "organigrama_estado": 1,
+      "area_operativa": 1
+    },
+    "sources": [
+      "V018",
+      "V088",
+      "V094",
+      "V101",
+      "V116"
+    ]
+  },
+  "verification": {
+    "build": {
+      "command": ".\\gradlew.bat build -x test --console=plain --no-daemon",
+      "result": "PASS",
+      "java": "Microsoft OpenJDK 21.0.9",
+      "gradle": "8.7",
+      "execution_context": "temporary clean copy of current tracked sources plus new consolidation files; private application*.properties excluded",
+      "application_test_suite_executed": false
+    },
+    "runtime": {
+      "status": "PASS",
+      "flyway_version": "9.22.3",
+      "jpa_entities_validated": 136,
+      "second_migrate_no_changes": true,
+      "technical_seed_rows": 17,
+      "bootstrap_idempotent": true,
+      "bootstrap_business_guard": true,
+      "legacy_history_rejected": true,
+      "baseline_only_history_rejected": true,
+      "bootstrap_lineage_guard": true,
+      "postgres_version": "18.6",
+      "postgres_image": "postgres:18-bookworm@sha256:5c4783a8cc3f0074912164f94dfa1be4e043438f0f707cf968d7af9a0d31a2c8",
+      "spring_boot_version": "3.2.5",
+      "hibernate_version": "6.4.4.Final",
+      "jdbc_version": "42.6.2",
+      "application_server_started": false,
+      "engine": "Spring Boot Flyway auto-configuration plus production schema-v1 config; Hibernate Metadata/SessionFactory validation only"
+    },
+    "structural_comparison": {
+      "status": "PASS",
+      "comparison": "source schema and V1 both restored and exported with PostgreSQL 18.6",
+      "equivalent_normalized_ddl": true,
+      "reference_normalized_sha256": "d539e83b2f196f4681f3a1c32160a4f8bedc52afe6f0757b12b51ac5c82bcdbe",
+      "recreated_normalized_sha256": "d539e83b2f196f4681f3a1c32160a4f8bedc52afe6f0757b12b51ac5c82bcdbe",
+      "source_minor_version": "18.1",
+      "validation_minor_version": "18.6",
+      "note": "Direct 18.1 versus 18.6 deparser output differs in equivalent varchar-array casts and pg_dump comments; no hand-written SQL equivalence replacement was used."
+    },
+    "disposable_database_container_removed": true,
+    "disposable_credential_file_removed": true
+  },
+  "limitations": [
+    "PostgreSQL 18 is required by the captured named NOT NULL syntax.",
+    "Flyway 9.22.3 emitted a warning: PostgreSQL 18.6 exceeds its declared tested maximum PostgreSQL 15. Passing these probes does not establish vendor support; review dependency upgrade before production.",
+    "Source schema and Flyway history have not been compared to Render.",
+    "No business data, documents, large-object contents or sequence current values were migrated.",
+    "Data restore, operational permissions, complete application startup and business flows remain unverified.",
+    "No Render or VM changes, no existing database writes, no legacy migrations removed.",
+    "Consolidated operational cutover remains separate from the historical deployment procedure."
+  ]
+}
