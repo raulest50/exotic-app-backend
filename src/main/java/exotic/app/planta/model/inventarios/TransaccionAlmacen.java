@@ -14,6 +14,7 @@
 
     import java.time.LocalDateTime;
     import java.util.List;
+    import java.util.UUID;
 
 
     /**
@@ -104,6 +105,12 @@
         @GeneratedValue(strategy = GenerationType.IDENTITY)
         @Column(unique = true, updatable = false, nullable = false)
         private int transaccionId;
+
+        @Column(name = "idempotency_key", unique = true)
+        private UUID idempotencyKey;
+
+        @Column(name = "request_hash", length = 64)
+        private String requestHash;
 
         @OneToMany(mappedBy = "transaccionAlmacen", cascade = CascadeType.ALL, orphanRemoval = true)
         @JsonManagedReference

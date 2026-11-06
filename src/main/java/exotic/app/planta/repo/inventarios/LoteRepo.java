@@ -1,18 +1,25 @@
 package exotic.app.planta.repo.inventarios;
 
 import exotic.app.planta.model.inventarios.Lote;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Repositorio para la entidad Lote.
  * Proporciona operaciones CRUD básicas para la entidad Lote.
  */
 public interface LoteRepo extends JpaRepository<Lote, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT l FROM Lote l WHERE l.id = :id")
+    Optional<Lote> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Busca un lote por su número de batch.

@@ -20,6 +20,8 @@ import java.util.Optional;
 @Repository
 public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpecificationExecutor<Terminado> {
 
+    List<Terminado> findByCategoria_CategoriaIdOrderByProductoIdAsc(Integer categoriaId);
+
     @EntityGraph(attributePaths = {"categoria", "insumos", "insumos.producto"})
     List<Terminado> findAllByOrderByProductoIdAsc();
 

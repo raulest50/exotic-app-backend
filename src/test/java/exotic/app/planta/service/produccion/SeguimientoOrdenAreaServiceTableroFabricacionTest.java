@@ -8,14 +8,17 @@ import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.repo.empresa.JornadaLaboralVersionRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
+import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaEventoRepo;
 import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
+import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
+import jakarta.persistence.EntityManager;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroOperativoDTO;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.TableroVista;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,13 +75,18 @@ class SeguimientoOrdenAreaServiceTableroFabricacionTest {
                 mock(UserRepository.class),
                 masterDirectiveService,
                 mock(BatchRecordProjectionQueueService.class),
+                mock(DespejeLineaService.class),
                 mock(ProcesoProduccionDocumentoVersionRepo.class),
                 fabricacionRepo,
                 loteRepo,
                 Clock.fixed(
                         Instant.parse("2026-07-16T14:00:00Z"),
                         ZoneId.of("America/Bogota")
-                )
+                ),
+                mock(OrdenProduccionRepo.class),
+                mock(TransaccionAlmacenRepo.class),
+                mock(MaterialRequirementSnapshotService.class),
+                mock(EntityManager.class)
         );
 
         when(seguimientoRepo.findTableroActivosByResponsableUserId(USER_ID, ACTIVE_STATES))

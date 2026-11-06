@@ -27,6 +27,12 @@ import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersio
 import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
+import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
+import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
+import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.inventarios.Movimiento;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import lombok.Data;
@@ -40,6 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -94,6 +101,10 @@ public class SeguimientoOrdenAreaService {
     private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
     private final LoteRepo loteRepo;
     private final Clock applicationClock;
+    private final OrdenProduccionRepo ordenProduccionRepo;
+    private final TransaccionAlmacenRepo movimientoRepo;
+    private final MaterialRequirementSnapshotService snapshotService;
+    private final EntityManager entityManager;
 
     /**
      * Inicializa el seguimiento para una nueva orden de produccion.
@@ -116,7 +127,10 @@ public class SeguimientoOrdenAreaService {
             return;
         }
 
-        Optional<RutaProcesoCatVersion> rutaVersionOpt = rutaProcesoCatVersionRepo.findByCategoriaIdAndEstado(
+        Optional<RutaProcesoCatVersion> rutaVersionOpt = orden.getRutaProcesoCatVersion() != null
+                ? Optional.of(orden.getRutaProcesoCatVersion())
+                : orden.getRequerimientosMaterialesJson() != null ? Optional.empty()
+                : rutaProcesoCatVersionRepo.findByCategoriaIdAndEstado(
                 categoria.getCategoriaId(),
                 RutaProcesoCatVersion.Estado.VIGENTE
         );
@@ -207,12 +221,16 @@ public class SeguimientoOrdenAreaService {
 
         log.info("Seguimiento inicializado para orden {} con {} nodos", orden.getOrdenId(), posicion);
 
-        if (seguimientoAlmacenGeneral != null && isPoliticaDispensacionNoBloqueante(orden)) {
+        boolean sinEntradasGenerales = orden.getRequerimientosMaterialesJson() != null
+                && snapshotService.requerimientosAlmacen(orden).stream().noneMatch(req ->
+                        req.inventareable() || req.consumoDirecto());
+        if (seguimientoAlmacenGeneral != null && (isPoliticaDispensacionNoBloqueante(orden) || sinEntradasGenerales)) {
             completarSeguimiento(
                     seguimientoAlmacenGeneral,
                     ActorTipoEventoSeguimiento.SYSTEM,
                     null,
-                    NOTA_DISPENSACION_NO_BLOQUEANTE
+                    sinEntradasGenerales ? "Almacen General sin requerimientos: entradas asignadas a las etapas productivas"
+                            : NOTA_DISPENSACION_NO_BLOQUEANTE
             );
             log.info("Almacen General completado automaticamente a nivel de seguimiento para orden {}", orden.getOrdenId());
         }
@@ -275,16 +293,11 @@ public class SeguimientoOrdenAreaService {
     }
 
     public SeguimientoOrdenAreaDTO reportarEnProceso(int ordenId, int areaId, Long userId, String observaciones) {
-        SeguimientoOrdenArea seguimiento = seguimientoRepo
-                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
-                        ordenId,
-                        areaId,
-                        EstadoSeguimientoOrdenArea.ESPERA.getCode())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No se encontro seguimiento en espera para orden " + ordenId + " y area " + areaId));
+        SeguimientoOrdenArea seguimiento = bloquearSeguimiento(ordenId, areaId, SeguimientoOrdenArea.ESTADO_ESPERA);
 
         User actor = requireUser(userId);
         validarUsuarioResponsableArea(seguimiento, actor);
+        validarEntradasEtapa(seguimiento);
         transicionarSeguimiento(
                 seguimiento,
                 EstadoSeguimientoOrdenArea.EN_PROCESO,
@@ -297,13 +310,7 @@ public class SeguimientoOrdenAreaService {
     }
 
     public SeguimientoOrdenAreaDTO pausarProceso(int ordenId, int areaId, Long userId, String observaciones) {
-        SeguimientoOrdenArea seguimiento = seguimientoRepo
-                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
-                        ordenId,
-                        areaId,
-                        EstadoSeguimientoOrdenArea.EN_PROCESO.getCode())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
+        SeguimientoOrdenArea seguimiento = bloquearSeguimiento(ordenId, areaId, SeguimientoOrdenArea.ESTADO_EN_PROCESO);
 
         User actor = requireUser(userId);
         validarUsuarioResponsableArea(seguimiento, actor);
@@ -328,13 +335,7 @@ public class SeguimientoOrdenAreaService {
             String observaciones,
             BigDecimal cantidadProducida
     ) {
-        SeguimientoOrdenArea seguimiento = seguimientoRepo
-                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(
-                        ordenId,
-                        areaId,
-                        EstadoSeguimientoOrdenArea.EN_PROCESO.getCode())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No se encontro seguimiento en proceso para orden " + ordenId + " y area " + areaId));
+        SeguimientoOrdenArea seguimiento = bloquearSeguimiento(ordenId, areaId, SeguimientoOrdenArea.ESTADO_EN_PROCESO);
 
         User actor = requireUser(userId);
         validarUsuarioResponsableArea(seguimiento, actor);
@@ -373,8 +374,15 @@ public class SeguimientoOrdenAreaService {
 
         User actor = requireUser(userId);
         String motivoNormalizado = normalizeMotivoCorreccion(motivo);
-        SeguimientoOrdenArea seguimiento = seguimientoRepo.findById(seguimientoId)
+        int ordenId = seguimientoRepo.findOrdenIdById(seguimientoId)
                 .orElseThrow(() -> new IllegalArgumentException("Seguimiento no encontrado: " + seguimientoId));
+        // La correccion conserva sus reglas previas (incluido estado 3 pendiente de ingreso).
+        OrdenProduccion ordenBloqueada = ordenProduccionRepo.findByIdForUpdate(ordenId)
+                .orElseThrow(() -> new IllegalArgumentException("OP no encontrada: " + ordenId));
+        entityManager.refresh(ordenBloqueada, LockModeType.PESSIMISTIC_WRITE);
+        SeguimientoOrdenArea seguimiento = seguimientoRepo.findByIdForUpdate(seguimientoId)
+                .orElseThrow(() -> new IllegalArgumentException("Seguimiento no encontrado: " + seguimientoId));
+        entityManager.refresh(seguimiento, LockModeType.PESSIMISTIC_WRITE);
 
         validarCorreccionSobreSeguimiento(seguimiento, areaId, expectedEstado);
 
@@ -389,6 +397,7 @@ public class SeguimientoOrdenAreaService {
                     "El area final debe completarse desde el tablero operativo reportando la cantidad producida.");
         }
         if (estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            validarEntradasEtapa(seguimiento);
             despejeLineaService.validarYRegistrarInicio(seguimiento, actor);
         } else {
             despejeLineaService.reconciliarCorreccion(seguimiento, actor);
@@ -466,6 +475,45 @@ public class SeguimientoOrdenAreaService {
     public void reconciliarDespejesPorCancelacion(int ordenId, User actor) {
         seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
                 .forEach(seguimiento -> despejeLineaService.reconciliarCorreccion(seguimiento, actor));
+    }
+
+    private OrdenProduccion bloquearOrden(int ordenId) {
+        OrdenProduccion orden = ordenProduccionRepo.findByIdForUpdate(ordenId)
+                .orElseThrow(() -> new IllegalArgumentException("OP no encontrada: " + ordenId));
+        entityManager.refresh(orden, LockModeType.PESSIMISTIC_WRITE);
+        if (orden.getEstadoOrden() == -1 || orden.getEstadoOrden() == 2 || orden.getEstadoOrden() == 3) {
+            throw new IllegalStateException("La OP esta cancelada, cerrada o ya completo su fabricacion.");
+        }
+        return orden;
+    }
+
+    private SeguimientoOrdenArea bloquearSeguimiento(int ordenId, int areaId, int estadoEsperado) {
+        bloquearOrden(ordenId);
+        SeguimientoOrdenArea seguimiento = seguimientoRepo
+                .findByOrdenProduccion_OrdenIdAndAreaOperativa_AreaIdAndEstado(ordenId, areaId, estadoEsperado)
+                .orElseThrow(() -> new IllegalArgumentException("No existe seguimiento en el estado solicitado para esta OP y area."));
+        entityManager.refresh(seguimiento, LockModeType.PESSIMISTIC_WRITE);
+        if (seguimiento.getEstado() != estadoEsperado) {
+            throw new IllegalStateException("La etapa cambio de estado. Recargue el tablero.");
+        }
+        return seguimiento;
+    }
+
+    private void validarEntradasEtapa(SeguimientoOrdenArea seguimiento) {
+        OrdenProduccion orden = seguimiento.getOrdenProduccion();
+        if (orden.getRequerimientosMaterialesJson() == null || isPoliticaDispensacionNoBloqueante(orden)) return;
+        var requisitos = snapshotService.requerimientosEtapa(orden, seguimiento.getRutaProcesoNode().getId());
+        if (requisitos.isEmpty()) return;
+        Map<String, BigDecimal> registrados = new HashMap<>();
+        movimientoRepo.findDispensadoPorArea(orden.getOrdenId(), seguimiento.getAreaOperativa().getAreaId(),
+                TransaccionAlmacen.TipoEntidadCausante.OD, Movimiento.TipoMovimiento.DISPENSACION)
+                .forEach(row -> registrados.put((String) row[0], BigDecimal.valueOf(((Number) row[1]).doubleValue())
+                        .setScale(4, RoundingMode.HALF_UP)));
+        List<String> pendientes = requisitos.stream().filter(req -> req.cantidad().setScale(4, RoundingMode.HALF_UP)
+                        .compareTo(registrados.getOrDefault(req.productoId(), BigDecimal.ZERO)) > 0)
+                .map(MaterialRequirementSnapshotService.RequirementView::productoId).toList();
+        if (!pendientes.isEmpty()) throw new IllegalStateException(
+                "Registre los lotes y cantidades pendientes de esta etapa antes de iniciar: " + String.join(", ", pendientes));
     }
 
     @Transactional(readOnly = true)

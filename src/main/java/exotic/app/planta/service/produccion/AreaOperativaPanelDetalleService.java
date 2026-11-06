@@ -39,6 +39,7 @@ public class AreaOperativaPanelDetalleService {
     private final AreaProduccionRepo areaProduccionRepo;
     private final ProductoService productoService;
     private final RutaProcesoEstimacionService rutaProcesoEstimacionService;
+    private final MaterialRequirementSnapshotService snapshotService;
 
     public AreaOperativaOrdenDetalleDTO getDetalleOperativoOrden(int ordenId, Long userId) {
         if (userId == null) {
@@ -81,7 +82,8 @@ public class AreaOperativaPanelDetalleService {
                 .map(seguimiento -> buildSeguimientoDTO(seguimiento, areaIdsResponsables))
                 .toList());
         dto.setRutaProceso(buildRutaProcesoDTO(orden, seguimientos, areaIdsResponsables));
-        dto.setBom(buildBomDTO(terminado, orden.getCantidadProducir()));
+        dto.setBom(orden.getRequerimientosMaterialesJson() == null
+                ? buildBomDTO(terminado, orden.getCantidadProducir()) : buildBomCongelada(orden));
         return dto;
     }
 
@@ -276,6 +278,33 @@ public class AreaOperativaPanelDetalleService {
         return dto;
     }
 
+    private BomJerarquicoDTO buildBomCongelada(OrdenProduccion orden) {
+        BomJerarquicoDTO dto = new BomJerarquicoDTO();
+        for (var req : snapshotService.leer(orden.getRequerimientosMaterialesJson())) {
+            if ("MATERIAL_EMPAQUE".equals(req.tipoProducto())) {
+                BomEmpaqueItemDTO item = new BomEmpaqueItemDTO();
+                item.setProductoId(req.productoId());
+                item.setProductoNombre(req.productoNombre());
+                item.setCantidadTotalRequerida(req.cantidad().doubleValue());
+                item.setTipoUnidades(req.unidadMedida());
+                item.setInventareable(req.inventareable());
+                dto.getEmpaque().add(item);
+            } else {
+                BomRecetaNodeDTO item = new BomRecetaNodeDTO();
+                item.setProductoId(req.productoId());
+                item.setProductoNombre(req.productoNombre());
+                item.setCantidadTotalRequerida(req.cantidad().doubleValue());
+                item.setTipoUnidades(req.unidadMedida());
+                item.setTipoProducto(req.tipoProducto());
+                item.setInventareable(req.inventareable());
+                item.setRutaProcesoNodeId(req.rutaProcesoNodeId());
+                item.setAreaOperativaId(req.areaOperativaId());
+                dto.getReceta().add(item);
+            }
+        }
+        return dto;
+    }
+
     private BomRecetaNodeDTO buildBomRecetaNode(InsumoWithStockDTO insumo, double cantidadOrden, double multiplicadorActual) {
         double cantidadTotal = insumo.getCantidadRequerida() * cantidadOrden * multiplicadorActual;
 
@@ -415,6 +444,8 @@ public class AreaOperativaPanelDetalleService {
 
     @Data
     public static class BomRecetaNodeDTO {
+        private Long rutaProcesoNodeId;
+        private Integer areaOperativaId;
         private Integer insumoId;
         private String productoId;
         private String productoNombre;

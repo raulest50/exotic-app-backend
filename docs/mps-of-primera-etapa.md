@@ -63,7 +63,8 @@ predeterminada sigue siendo `classpath:db/migration`.
 ## Alcance y verificacion
 
 La asignacion de consumos de semiterminados a areas de Ruta Proceso Categoria
-y el planificador de capacidad de marmitas pertenecen a otra iteracion.
+se desarrolla en la segunda entrega descrita a continuacion. El planificador
+de capacidad de marmitas permanece fuera de ese alcance.
 El modelo Gaphor requiere actualizacion manual: representar programacion,
 observaciones, aprobacion y emision OP/OF como flujos paralelos y sus ordenes
 correspondientes. El archivo Gaphor no se modifica con esta implementacion.
@@ -75,7 +76,99 @@ de los servicios de aprobacion, observaciones, emision y edicion, y de
 de creacion OP hacia el generador automatico OF eliminado. La sincronizacion
 con el modelo sigue pendiente hasta revisar el diagrama actualizado.
 
-### Verificacion local del 6 de noviembre de 2026
+### Segunda entrega: consumo de semiterminados por area
+
+La ruta versionada de cada categoria asigna semiterminados fisicos a sus
+nodos productivos. Cada semiterminado se incorpora en una sola etapa por
+version, y Almacen General no recibe estas asignaciones. La ruta puede
+contener la union de semiterminados de varios terminados de la categoria;
+cada OP aplica solamente los que aparecen en sus propios requerimientos.
+Las cantidades y los lotes no se configuran en la ruta. Modificar la
+asignacion es un cambio funcional y crea version; mover el dibujo conserva
+las asignaciones y solo actualiza su disposicion visual.
+
+Al crear una OP se conservan los requerimientos, cantidades, unidades y
+nodos/areas asignados en `OrdenProduccion.requerimientosMaterialesJson`.
+Un semiterminado fisico requerido sin etapa asignada impide crear la OP con
+un mensaje que identifica el producto pendiente de configurar. Las OP
+historicas mantienen ese campo nulo y siguen su circuito previo; no se
+recalculan sus entradas usando la receta o ruta vigente. La proyeccion
+documental de una OP nueva utiliza su snapshot operativo.
+
+El detalle operativo de la OP incorpora consulta de requerido, registrado y
+pendiente, y captura de cantidades desde uno o varios lotes. El servidor
+deriva OP, nodo y area a partir del seguimiento y comprueba la responsabilidad
+del usuario. Los registros nuevos corresponden a etapas en ESPERA o
+EN_PROCESO de una OP abierta. La politica de dispensacion congelada se
+conserva: NO_BLOQUEANTE permite registrar despues de iniciar; BLOQUEANTE
+comprueba los requisitos de la etapa correspondiente. Una OP sin insumos de
+dispensacion general no espera una salida vacia de Almacen General.
+
+Cada confirmacion registra una sola transaccion OD con movimientos
+DISPENSACION en GENERAL asociados al area. `BatchRecordConsumo` proyecta esos
+mismos movimientos como evidencia; no produce otra salida de inventario.
+El dispensador general excluye esas entradas para OP nuevas y el backend
+rechaza su envio por esa ruta. El cierre de la OP conserva su ingreso
+positivo de terminado, sin volver a descontar el semiterminado.
+
+El registro lleva una clave UUID y el hash de su contenido. Un reintento
+autorizado de la misma solicitud devuelve la transaccion confirmada; la
+misma clave con otro contenido devuelve conflicto. Un fallo de red conserva
+la clave y la captura hasta recuperar el resultado. El stock se valida
+dentro de la transaccion y bajo bloqueos de lotes en orden estable,
+compartidos con las salidas OP/OF. Las demandas repetidas de un producto/lote
+se suman antes de comprobar disponibilidad. Los lotes deben corresponder al
+producto y ser aptos por fecha y disposicion de calidad; no se atribuye una
+liberacion retrospectiva a los historicos SIN_CLASIFICAR.
+Estos bloqueos coordinan los tres caminos dispensadores de esta entrega;
+no se ha redisenado la concurrencia de los demas ajustes o traslados de
+inventario preexistentes.
+
+`V121__consumo_semiterminado_por_area.sql` incorpora la tabla de union
+`ruta_proceso_node_semiterminado`, el snapshot nullable de OP y los campos
+de idempotencia de `transaccion_almacen`. No crea entidades de negocio ni
+atribuye consumos historicos. El perfil opcional schema-v1 tambien necesita
+el incremento equivalente a V121, ademas de V119/V120, antes de utilizarse.
+
+La sincronizacion manual de Gaphor debe reflejar la asignacion en
+RutaProcesoCatDesigner, su pertenencia a la version de ruta y el registro
+operativo mediante el nuevo panel y servicio, conservando un unico libro de
+movimientos. No se modifican los diagramas desde esta implementacion.
+
+### Verificacion local de la segunda entrega (6 de noviembre de 2026)
+
+| Comprobacion | Resultado |
+| --- | --- |
+| Backend `gradlew.bat build -x test testClasses --offline`, Java 21 | Correcto en copia temporal sin los `application*.properties` privados. Compilaron todas las clases de prueba; ninguna suite ejecutada. |
+| Frontend `bun run vite build` | Correcto; aviso de tamano de chunks. |
+| ESLint de los diez archivos funcionales frontend afectados | Correcto, sin nuevas supresiones. |
+| Frontend lint y diagnostico TypeScript globales | Conservan errores/advertencias heredados, sin diagnosticos nuevos en los archivos funcionales de esta entrega. |
+| E2E `bun run typecheck` | Correcto; contrato de consumo ampliado, sin ejecutar la suite. |
+| Revision estatica de acceso | Sin hallazgos bloqueantes en responsable, pertenencia OP/seguimiento, reintentos y exclusion del dispensador general. |
+
+Se prepararon `ConsumoSemiterminadoAreaServiceTest` e
+`ConsumoSemiterminadoAreaIntegrationTest`, y se ampliaron las pruebas de
+snapshot y versionado/layout. Cubren permisos, estados, cantidades,
+reintentos, descuento unico, saldo compartido y persistencia. El fixture de
+integracion usa exclusivamente PostgreSQL efimero con Flyway y Hibernate
+en validacion. La compilacion y la revision estatica no acreditan esos
+comportamientos en ejecucion.
+
+Se actualizo el constructor de
+`SeguimientoOrdenAreaServiceTableroFabricacionTest` para sus dependencias
+vigentes, resolviendo el impedimento de compilacion consignado en la
+verificacion historica de la primera entrega.
+
+No se ejecutaron suites ni migraciones, ni se modificaron bases remotas.
+La validacion autenticada requiere un entorno local o staging preparado:
+configurar las asignaciones de la ruta, emitir una OP nueva y comparar su
+snapshot con una OP historica; registrar parciales desde varios lotes;
+repetir el mismo UUID tras una respuesta ambigua y comprobar un solo
+descuento; contrastar BLOQUEANTE y NO_BLOQUEANTE; y ejecutar la prueba de
+dos OP que compiten por el saldo de un lote. Aplicar V121 mediante el
+procedimiento habitual de Flyway antes de usar el nuevo codigo.
+
+### Verificacion local de la primera entrega MPS OF (6 de noviembre de 2026)
 
 | Comprobacion | Resultado |
 | --- | --- |

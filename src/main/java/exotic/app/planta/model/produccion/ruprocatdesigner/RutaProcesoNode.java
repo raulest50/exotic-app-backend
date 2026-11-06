@@ -1,12 +1,15 @@
 package exotic.app.planta.model.produccion.ruprocatdesigner;
 
 import exotic.app.planta.model.organizacion.AreaOperativa;
+import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "ruta_proceso_node")
@@ -41,6 +44,13 @@ public class RutaProcesoNode {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "proceso_produccion_id")
     private ProcesoProduccion procesoProduccion;
+
+    /** Entradas fisicas de esta etapa; cantidades y lotes pertenecen a cada OP. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "ruta_proceso_node_semiterminado",
+            joinColumns = @JoinColumn(name = "node_id"),
+            inverseJoinColumns = @JoinColumn(name = "producto_id"))
+    private Set<SemiTerminado> semiterminadosConsumidos = new LinkedHashSet<>();
 
     private String label;
 

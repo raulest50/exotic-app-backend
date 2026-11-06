@@ -4,6 +4,8 @@ import exotic.app.planta.config.AppTime;
 import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.SemiTerminado;
+import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
@@ -11,6 +13,9 @@ import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.producto.CategoriaRepo;
+import exotic.app.planta.repo.producto.TerminadoRepo;
+import exotic.app.planta.repo.producto.SemiTerminadoRepo;
+import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
@@ -41,6 +46,31 @@ public class RutaProcesoCatService {
     private final AreaProduccionRepo areaProduccionRepo;
     private final ProcesoProduccionRepo procesoProduccionRepo;
     private final ProcesoProduccionDocumentoVersionRepo procesoDocumentoVersionRepo;
+    private final TerminadoRepo terminadoRepo;
+    private final SemiTerminadoRepo semiTerminadoRepo;
+    private final ManufacturingVersionRepo manufacturingVersionRepo;
+    private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
+
+    @Transactional(readOnly = true)
+    public List<SemiterminadoRutaOptionDTO> getSemiterminadosCandidatos(int categoriaId, String search) {
+        if (!categoriaRepo.existsById(categoriaId)) {
+            throw new IllegalArgumentException("Categoria no encontrada: " + categoriaId);
+        }
+        Map<String, SemiterminadoRutaOptionDTO> candidatos = new TreeMap<>();
+        for (Terminado terminado : terminadoRepo.findByCategoria_CategoriaIdOrderByProductoIdAsc(categoriaId)) {
+            manufacturingVersionRepo.findTopByProductoOrderByVersionNumberDesc(terminado).ifPresent(version -> {
+                String json = materialRequirementSnapshotService.construirJson(terminado, version, BigDecimal.ONE);
+                materialRequirementSnapshotService.leer(json).stream()
+                        .filter(MaterialRequirementSnapshotService.RequirementView::esSemiterminadoFisico)
+                        .forEach(req -> candidatos.putIfAbsent(req.productoId(),
+                                new SemiterminadoRutaOptionDTO(req.productoId(), req.productoNombre(), req.unidadMedida())));
+            });
+        }
+        String filtro = normalizeText(search);
+        return candidatos.values().stream().filter(item -> filtro == null
+                || item.productoId().toLowerCase(Locale.ROOT).contains(filtro.toLowerCase(Locale.ROOT))
+                || item.nombre().toLowerCase(Locale.ROOT).contains(filtro.toLowerCase(Locale.ROOT))).toList();
+    }
 
     @Transactional(readOnly = true)
     public RutaProcesoCatDTO getRutaByCategoria(int categoriaId) {
@@ -92,6 +122,7 @@ public class RutaProcesoCatService {
                 .orElseThrow(() -> new IllegalArgumentException("Categoria no encontrada con ID: " + categoriaId));
 
         validateRuta(dto);
+        Map<String, SemiTerminado> semisPorId = validarSemiterminados(categoriaId, dto);
 
         LocalDateTime now = AppTime.now();
         RutaProcesoCat ruta = rutaProcesoCatRepo.findByCategoria_CategoriaId(categoriaId)
@@ -132,6 +163,9 @@ public class RutaProcesoCatService {
             node.setHasRightHandle(nodeDto.isHasRightHandle());
             node.setDuracionEstimadaMinutos(nodeDto.getDuracionEstimadaMinutos());
             node.setRequiereJornadaLaboral(nodeDto.isRequiereJornadaLaboral());
+            for (String productoId : nodeDto.getSemiterminadoIds()) {
+                node.getSemiterminadosConsumidos().add(semisPorId.get(productoId));
+            }
 
             if (nodeDto.getAreaOperativaId() != null) {
                 AreaOperativa area = areaProduccionRepo.findById(nodeDto.getAreaOperativaId())
@@ -364,6 +398,8 @@ public class RutaProcesoCatService {
         dto.setHasRightHandle(node.isHasRightHandle());
         dto.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
         dto.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
+        dto.setSemiterminadoIds(node.getSemiterminadosConsumidos().stream()
+                .map(SemiTerminado::getProductoId).sorted().toList());
 
         if (node.getAreaOperativa() != null) {
             dto.setAreaOperativaId(node.getAreaOperativa().getAreaId());
@@ -599,6 +635,43 @@ public class RutaProcesoCatService {
         private List<RutaProcesoEdgeDTO> edges = new ArrayList<>();
     }
 
+    private Map<String, SemiTerminado> validarSemiterminados(int categoriaId, RutaProcesoCatDTO dto) {
+        if (dto.getNodes().stream().allMatch(node -> node.getSemiterminadoIds() == null
+                || node.getSemiterminadoIds().isEmpty())) {
+            dto.getNodes().forEach(node -> node.setSemiterminadoIds(new ArrayList<>()));
+            return Map.of();
+        }
+        Set<String> candidatos = getSemiterminadosCandidatos(categoriaId, null).stream()
+                .map(SemiterminadoRutaOptionDTO::productoId).collect(Collectors.toSet());
+        Set<String> asignados = new HashSet<>();
+        Map<String, SemiTerminado> result = new LinkedHashMap<>();
+        for (RutaProcesoNodeDTO node : dto.getNodes()) {
+            List<String> ids = node.getSemiterminadoIds() == null ? List.of() : node.getSemiterminadoIds();
+            if (Objects.equals(node.getAreaOperativaId(), AreaOperativaInitializer.ALMACEN_GENERAL_ID)
+                    && !ids.isEmpty()) {
+                throw new IllegalArgumentException("Almacen General no admite consumos de semiterminados por etapa.");
+            }
+            List<String> normalizados = new ArrayList<>();
+            for (String raw : ids) {
+                String id = normalizeId(raw);
+                if (id == null || !candidatos.contains(id)) {
+                    throw new IllegalArgumentException("Semiterminado ajeno a las recetas de la categoria: " + raw);
+                }
+                if (!asignados.add(id)) {
+                    throw new IllegalArgumentException("El semiterminado " + id + " solo puede asignarse a una etapa por version.");
+                }
+                SemiTerminado semi = semiTerminadoRepo.findById(id).orElseThrow();
+                if (!semi.isRequiereOrdenFabricacion() || !semi.isInventareable()) {
+                    throw new IllegalArgumentException("La entrada debe ser un semiterminado inventariable con OF: " + id);
+                }
+                normalizados.add(id);
+                result.put(id, semi);
+            }
+            node.setSemiterminadoIds(normalizados);
+        }
+        return result;
+    }
+
     @lombok.Data
     public static class RutaProcesoLayoutUpdateDTO {
         private Integer layoutRevision;
@@ -628,6 +701,7 @@ public class RutaProcesoCatService {
         private boolean hasRightHandle = true;
         private int duracionEstimadaMinutos = 0;
         private boolean requiereJornadaLaboral = true;
+        private List<String> semiterminadoIds = new ArrayList<>();
     }
 
     @lombok.Data
@@ -644,4 +718,6 @@ public class RutaProcesoCatService {
         private boolean poeVigenteDisponible;
         private Integer poeVigenteVersion;
     }
+
+    public record SemiterminadoRutaOptionDTO(String productoId, String nombre, String unidadMedida) {}
 }

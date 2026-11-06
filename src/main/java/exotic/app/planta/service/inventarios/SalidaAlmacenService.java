@@ -4,6 +4,7 @@ package exotic.app.planta.service.inventarios;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
+import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.inventarios.dto.*;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Material;
@@ -16,6 +17,7 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.inventarios.HistorialDispensacionesQuery;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
+import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.produccion.OrdenProduccionRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
@@ -24,6 +26,9 @@ import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.produccion.ProduccionService;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
+import exotic.app.planta.service.produccion.MaterialRequirementSnapshotService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -33,10 +38,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.Clock;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,6 +67,10 @@ public class SalidaAlmacenService {
     private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
     private final OrdenFabricacionRepo ordenFabricacionRepo;
     private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
+    private final TransaccionAlmacenRepo movimientoRepo;
+    private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
+    private final EntityManager entityManager;
+    private final Clock applicationClock;
 
     /** Registra una dispensación de materiales cuyo documento causante es una OF. */
     @Transactional
@@ -73,6 +89,7 @@ public class SalidaAlmacenService {
         }
         OrdenFabricacion orden = ordenFabricacionRepo.findByIdForUpdate(ordenFabricacionId)
                 .orElseThrow(() -> new IllegalArgumentException("Orden de fabricacion no encontrada."));
+        entityManager.refresh(orden, LockModeType.PESSIMISTIC_WRITE);
         if (orden.getEstado() != EstadoOrdenFabricacion.LIBERADA
                 && orden.getEstado() != EstadoOrdenFabricacion.EN_EJECUCION) {
             throw new IllegalStateException(
@@ -97,7 +114,7 @@ public class SalidaAlmacenService {
         List<Movimiento> movimientos = new ArrayList<>();
         for (DispensacionItemDTO item : items) {
             if (item == null || item.getProductoId() == null || item.getProductoId().isBlank()
-                    || item.getCantidad() <= 0) {
+                    || !Double.isFinite(item.getCantidad()) || item.getCantidad() <= 0) {
                 throw new IllegalArgumentException(
                         "Cada material de la OF requiere producto y cantidad positiva.");
             }
@@ -149,6 +166,7 @@ public class SalidaAlmacenService {
             movimientos.add(movimiento);
         }
         transaccion.setMovimientosTransaccion(movimientos);
+        validarYBloquearLotes(movimientos);
         TransaccionAlmacen guardada = transaccionAlmacenHeaderRepo.saveAndFlush(transaccion);
         orden.setEstadoDispensacionMateriales(EstadoDispensacionMateriales.PARCIAL);
         ordenFabricacionRepo.save(orden);
@@ -179,8 +197,12 @@ public class SalidaAlmacenService {
             );
         }
         // Obtain the production order
-        OrdenProduccion ordenProduccion = ordenProduccionRepo.findById(dispensacionDTO.getOrdenProduccionId())
+        OrdenProduccion ordenProduccion = ordenProduccionRepo.findByIdForUpdate(dispensacionDTO.getOrdenProduccionId())
                 .orElseThrow(() -> new RuntimeException("Orden de producción no encontrada con ID: " + dispensacionDTO.getOrdenProduccionId()));
+        entityManager.refresh(ordenProduccion, LockModeType.PESSIMISTIC_WRITE);
+        if (dispensacionDTO.getItems() == null || dispensacionDTO.getItems().isEmpty()) {
+            throw new IllegalArgumentException("La dispensacion requiere al menos un material.");
+        }
         if (dispensacionV2Trace) {
             log.info(
                     "[DISP_V2][PERSIST_ORDER_FOUND] ordenProduccionId={} estado={} loteAsignado={} productoTerminadoId={} cantidadProducir={}",
@@ -251,6 +273,10 @@ public class SalidaAlmacenService {
         // Create the movements
         List<Movimiento> movimientos = new ArrayList<>();
         for (DispensacionItemDTO item : dispensacionDTO.getItems()) {
+            if (item == null || materialRequirementSnapshotService.esSemiterminadoAsignado(
+                    ordenProduccion, item.getProductoId())) {
+                throw new IllegalArgumentException("Los semiterminados asignados a una etapa se registran desde su panel operativo.");
+            }
             Producto producto = null;
             if (dispensacionV2Trace) {
                 log.info(
@@ -268,7 +294,7 @@ public class SalidaAlmacenService {
             } else {
                 throw new RuntimeException("Se requiere productoId válido para cada item de dispensación.");
             }
-            if (item.getCantidad() <= 0) {
+            if (!Double.isFinite(item.getCantidad()) || item.getCantidad() <= 0) {
                 throw new IllegalArgumentException(
                         "La cantidad de dispensacion debe ser mayor a cero para " + producto.getProductoId() + "."
                 );
@@ -350,6 +376,7 @@ public class SalidaAlmacenService {
         }
 
         transaccion.setMovimientosTransaccion(movimientos);
+        validarYBloquearLotes(movimientos);
 
         // Save the transaction
         if (dispensacionV2Trace) {
@@ -434,6 +461,67 @@ public class SalidaAlmacenService {
         }
 
         return transaccionGuardada;
+    }
+
+    /** Guardia comun a OP, OF y consumos por etapa; mantiene los locks hasta el commit. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void validarYBloquearLotes(List<Movimiento> movimientos) {
+        Map<Long, Lote> bloqueados = new TreeMap<>();
+        for (Movimiento movimiento : movimientos) {
+            if (!movimiento.isAfectaInventario()) continue;
+            if (movimiento.getLote() == null || movimiento.getLote().getId() == null) {
+                throw new IllegalArgumentException("Todo material inventariable requiere un lote origen.");
+            }
+            bloqueados.put(movimiento.getLote().getId(), movimiento.getLote());
+        }
+        for (Long id : new ArrayList<>(bloqueados.keySet())) {
+            Lote lote = loteRepo.findByIdForUpdate(id).orElseThrow(() ->
+                    new IllegalArgumentException("Lote origen no encontrado: " + id));
+            entityManager.refresh(lote, LockModeType.PESSIMISTIC_WRITE);
+            if (!esLoteConsumible(lote)) {
+                throw new IllegalStateException("El lote " + lote.getBatchNumber()
+                        + " esta vencido o tiene una disposicion de calidad que impide consumirlo.");
+            }
+            bloqueados.put(id, lote);
+        }
+        Map<String, BigDecimal> demanda = new TreeMap<>();
+        Map<String, Movimiento> referencia = new TreeMap<>();
+        for (Movimiento movimiento : movimientos) {
+            if (!movimiento.isAfectaInventario()) continue;
+            if (!Double.isFinite(movimiento.getCantidad()) || movimiento.getCantidad() >= 0
+                    || movimiento.getAlmacen() != Movimiento.Almacen.GENERAL) {
+                throw new IllegalArgumentException("La salida fisica debe ser una cantidad negativa desde Almacen General.");
+            }
+            Lote lote = bloqueados.get(movimiento.getLote().getId());
+            String productoId = movimiento.getProducto().getProductoId();
+            if (lote.getProducto() != null && !productoId.equals(lote.getProducto().getProductoId())) {
+                throw new IllegalArgumentException("El lote " + lote.getBatchNumber() + " no corresponde a " + productoId + ".");
+            }
+            movimiento.setLote(lote);
+            String clave = productoId + ":" + lote.getId();
+            demanda.merge(clave, BigDecimal.valueOf(-movimiento.getCantidad()), BigDecimal::add);
+            referencia.put(clave, movimiento);
+        }
+        for (Map.Entry<String, BigDecimal> entry : demanda.entrySet()) {
+            Movimiento movimiento = referencia.get(entry.getKey());
+            Double total = movimientoRepo.findTotalCantidadByProductoIdAndLoteIdAndAlmacen(
+                    movimiento.getProducto().getProductoId(), movimiento.getLote().getId(), Movimiento.Almacen.GENERAL);
+            BigDecimal saldo = total == null || !Double.isFinite(total) ? BigDecimal.ZERO
+                    : BigDecimal.valueOf(total).setScale(4, RoundingMode.HALF_UP);
+            if (saldo.compareTo(entry.getValue().setScale(4, RoundingMode.HALF_UP)) < 0) {
+                throw new IllegalStateException("Saldo insuficiente para " + movimiento.getProducto().getProductoId()
+                        + " en el lote " + movimiento.getLote().getBatchNumber() + ".");
+            }
+        }
+    }
+
+    public boolean esLoteConsumible(Lote lote) {
+        if (lote == null) return false;
+        EstadoCalidadLote estado = lote.getEstadoCalidad();
+        return estado != EstadoCalidadLote.CUARENTENA && estado != EstadoCalidadLote.RECHAZADO
+                && estado != EstadoCalidadLote.BLOQUEADO
+                && (lote.getExpirationDate() == null
+                || !lote.getExpirationDate().isBefore(LocalDate.now(applicationClock)));
     }
 
     private boolean isDispensacionV2Trace() {

@@ -79,6 +79,8 @@ public class ProduccionService {
     private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
     private final OrdenFabricacionService ordenFabricacionService;
     private final Clock applicationClock;
+    private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional(rollbackFor = Exception.class)
     public OrdenProduccion saveOrdenProduccion(
@@ -109,6 +111,7 @@ public class ProduccionService {
         ordenProduccion.setManufacturingVersion(manufacturingVersion);
         aplicarPoliticaDispensacionInicial(ordenProduccion);
 
+        materialRequirementSnapshotService.congelarParaOrdenProduccion(ordenProduccion);
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
         Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
@@ -168,6 +171,7 @@ public class ProduccionService {
             ordenProduccion.setManufacturingVersion(manufacturingVersion);
             aplicarPoliticaDispensacionInicial(ordenProduccion);
 
+            materialRequirementSnapshotService.congelarParaOrdenProduccion(ordenProduccion);
             OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
             Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);
@@ -336,6 +340,7 @@ public class ProduccionService {
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findByIdForUpdate(ordenId)
                 .orElseThrow(() -> new NoSuchElementException(
                         "Orden de producción no encontrada con ID: " + ordenId));
+        entityManager.refresh(ordenProduccion, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (ordenProduccion.getEstadoOrden() == -1) {
             throw new IllegalStateException("Una orden cancelada no puede cambiar nuevamente de estado.");
         }
@@ -358,6 +363,7 @@ public class ProduccionService {
         OrdenProduccion ordenProduccion = ordenProduccionRepo.findByIdForUpdate(ordenId)
             .orElseThrow(() -> new NoSuchElementException(
                     "Orden de producción no encontrada con ID: " + ordenId));
+        entityManager.refresh(ordenProduccion, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
 
         if (!isOrdenProduccionCancelable(ordenProduccion)) {
             throw new IllegalStateException("Solo se pueden cancelar órdenes en estado abierto (0). Estado actual: " + ordenProduccion.getEstadoOrden());
@@ -592,6 +598,7 @@ public class ProduccionService {
         ordenProduccion.setManufacturingVersion(manufacturingVersion);
         aplicarPoliticaDispensacionInicial(ordenProduccion);
 
+        materialRequirementSnapshotService.congelarParaOrdenProduccion(ordenProduccion);
         OrdenProduccion savedOrden = ordenProduccionRepo.save(ordenProduccion);
 
         Lote lote = crearLoteProduccion(loteNumero, savedOrden, producto);

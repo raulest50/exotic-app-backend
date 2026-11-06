@@ -59,7 +59,8 @@ public class AgentAssistantAccessService {
         }
         User user = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no encontrado"));
-        if (user.getEstado() != 1) {
+        // Para el asistente, master siempre se considera activo, incluso con un estado legado.
+        if (!"master".equalsIgnoreCase(user.getUsername()) && user.getEstado() != 1) {
             throw new ResponseStatusException(FORBIDDEN, "El usuario no está activo.");
         }
         return user;

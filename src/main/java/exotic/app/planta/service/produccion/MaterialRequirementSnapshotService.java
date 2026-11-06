@@ -8,6 +8,10 @@ import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
+import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
+import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +39,75 @@ public class MaterialRequirementSnapshotService {
     private final ProductoRepo productoRepo;
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final ObjectMapper objectMapper;
+    private final RutaProcesoCatVersionRepo rutaProcesoCatVersionRepo;
+
+    /** Debe ejecutarse antes del primer persist; no rellena ni modifica ordenes historicas. */
+    public void congelarParaOrdenProduccion(OrdenProduccion orden) {
+        if (orden.getOrdenId() != 0 || orden.getRequerimientosMaterialesJson() != null) {
+            throw new IllegalStateException("Los requerimientos operativos solo se congelan al crear la OP.");
+        }
+        Producto producto = (Producto) Hibernate.unproxy(orden.getProducto());
+        RutaProcesoCatVersion ruta = orden.getRutaProcesoCatVersion();
+        if (ruta == null && producto instanceof Terminado terminado && terminado.getCategoria() != null) {
+            ruta = rutaProcesoCatVersionRepo.findByCategoriaIdAndEstado(
+                    terminado.getCategoria().getCategoriaId(), RutaProcesoCatVersion.Estado.VIGENTE).orElse(null);
+            orden.setRutaProcesoCatVersion(ruta);
+        }
+        Map<String, RutaProcesoNode> asignaciones = new LinkedHashMap<>();
+        if (ruta != null) {
+            for (RutaProcesoNode nodo : ruta.getNodes()) {
+                for (SemiTerminado semi : nodo.getSemiterminadosConsumidos()) {
+                    if (nodo.getAreaOperativa() == null || nodo.getAreaOperativa().getAreaId() == -1
+                            || asignaciones.putIfAbsent(semi.getProductoId(), nodo) != null) {
+                        throw new IllegalStateException("La ruta contiene asignaciones de consumo invalidas o duplicadas.");
+                    }
+                }
+            }
+        }
+        String bom = construirJson(producto, orden.getManufacturingVersion(),
+                BigDecimal.valueOf(orden.getCantidadProducir()));
+        List<Map<String, Object>> congelados = new ArrayList<>();
+        for (RequirementView req : leer(bom)) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("productoId", req.productoId());
+            item.put("productoNombre", req.productoNombre());
+            item.put("tipoProducto", req.tipoProducto());
+            item.put("unidadMedida", req.unidadMedida());
+            item.put("inventareable", req.inventareable());
+            item.put("consumoDirecto", req.consumoDirecto());
+            item.put("cantidad", req.cantidad());
+            if (req.esSemiterminadoFisico()) {
+                RutaProcesoNode nodo = asignaciones.get(req.productoId());
+                if (nodo == null) {
+                    throw new IllegalStateException("Asigne el semiterminado " + req.productoId()
+                            + " a una etapa de la ruta de la categoria antes de crear la OP.");
+                }
+                item.put("rutaProcesoNodeId", nodo.getId());
+                item.put("areaOperativaId", nodo.getAreaOperativa().getAreaId());
+            }
+            congelados.add(item);
+        }
+        try {
+            orden.setRequerimientosMaterialesJson(objectMapper.writeValueAsString(congelados));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("No se pudieron congelar las entradas operativas de la OP.", exception);
+        }
+    }
+
+    public List<RequirementView> requerimientosAlmacen(OrdenProduccion orden) {
+        return leer(orden.getRequerimientosMaterialesJson()).stream()
+                .filter(req -> req.rutaProcesoNodeId() == null).toList();
+    }
+
+    public List<RequirementView> requerimientosEtapa(OrdenProduccion orden, Long nodoId) {
+        return leer(orden.getRequerimientosMaterialesJson()).stream()
+                .filter(req -> nodoId != null && nodoId.equals(req.rutaProcesoNodeId())).toList();
+    }
+
+    public boolean esSemiterminadoAsignado(OrdenProduccion orden, String productoId) {
+        return leer(orden.getRequerimientosMaterialesJson()).stream().anyMatch(req ->
+                req.productoId().equals(productoId) && req.rutaProcesoNodeId() != null);
+    }
 
     public String construirJson(
             Producto productoResultado,
@@ -74,7 +147,9 @@ public class MaterialRequirementSnapshotService {
                         item.path("unidadMedida").asText(""),
                         item.path("inventareable").asBoolean(true),
                         item.path("consumoDirecto").asBoolean(false),
-                        item.path("cantidad").decimalValue()
+                        item.path("cantidad").decimalValue(),
+                        item.hasNonNull("rutaProcesoNodeId") ? item.path("rutaProcesoNodeId").longValue() : null,
+                        item.hasNonNull("areaOperativaId") ? item.path("areaOperativaId").intValue() : null
                 ));
             }
             return result;
@@ -107,6 +182,11 @@ public class MaterialRequirementSnapshotService {
                 throw new IllegalStateException(
                         "Una receta de manufactura no puede consumir un producto terminado: "
                                 + producto.getProductoId());
+            }
+            if (producto instanceof SemiTerminado semi && semi.isRequiereOrdenFabricacion()
+                    && !semi.isInventareable()) {
+                throw new IllegalStateException("El semiterminado con OF " + semi.getProductoId()
+                        + " debe ser inventariable antes de usarlo en una receta.");
             }
             addRequirement(requirements, producto, cantidad,
                     producto instanceof Material ? "MATERIAL" : "SEMITERMINADO");
@@ -257,8 +337,20 @@ public class MaterialRequirementSnapshotService {
             String unidadMedida,
             boolean inventareable,
             boolean consumoDirecto,
-            BigDecimal cantidad
-    ) {}
+            BigDecimal cantidad,
+            Long rutaProcesoNodeId,
+            Integer areaOperativaId
+    ) {
+        public RequirementView(String productoId, String productoNombre, String tipoProducto,
+                               String unidadMedida, boolean inventareable, boolean consumoDirecto,
+                               BigDecimal cantidad) {
+            this(productoId, productoNombre, tipoProducto, unidadMedida, inventareable, consumoDirecto,
+                    cantidad, null, null);
+        }
+        public boolean esSemiterminadoFisico() {
+            return "SEMITERMINADO".equals(tipoProducto) && inventareable && !consumoDirecto;
+        }
+    }
 
     private record Ingredient(String productoId, BigDecimal cantidad) {}
 

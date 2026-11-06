@@ -20,6 +20,19 @@ import java.util.Collection;
 import java.util.List;
 
 public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Integer> {
+
+    @Query("""
+            SELECT m.producto.productoId, SUM(-m.cantidad)
+            FROM Movimiento m JOIN m.transaccionAlmacen t
+            WHERE t.idEntidadCausante = :ordenId AND t.tipoEntidadCausante = :tipo
+              AND m.areaOperativa.areaId = :areaId AND m.tipoMovimiento = :movimiento
+              AND m.afectaInventario = true AND m.cantidad < 0
+            GROUP BY m.producto.productoId
+            """)
+    List<Object[]> findDispensadoPorArea(
+            @Param("ordenId") int ordenId, @Param("areaId") int areaId,
+            @Param("tipo") TransaccionAlmacen.TipoEntidadCausante tipo,
+            @Param("movimiento") Movimiento.TipoMovimiento movimiento);
     // Read each receipt separately: sum decimal quantities without floating-point accumulation.
     @Query("""
             SELECT t.idEntidadCausante AS entityId, m.producto.productoId AS productId, m.cantidad AS quantity

@@ -30,6 +30,19 @@ public class RutaProcesoCatResource {
     private final RutaProcesoCatService rutaProcesoCatService;
     private final ModuleTabAccessGuard accessGuard;
 
+    @GetMapping("/{categoriaId}/semiterminados-candidatos")
+    public ResponseEntity<List<RutaProcesoCatService.SemiterminadoRutaOptionDTO>> getSemiterminadosCandidatos(
+            Authentication authentication, @PathVariable int categoriaId,
+            @RequestParam(required = false) String search) {
+        requirePlanningAccess(authentication);
+        try {
+            return ResponseEntity.ok(rutaProcesoCatService.getSemiterminadosCandidatos(categoriaId, search));
+        } catch (IllegalArgumentException exception) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, exception.getMessage());
+        }
+    }
+
     @GetMapping("/procesos-disponibles")
     public ResponseEntity<Page<ProcesoRutaOptionDTO>> getProcesosDisponibles(
             Authentication authentication,

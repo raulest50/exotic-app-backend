@@ -10,8 +10,11 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface TransaccionAlmacenHeaderRepo extends JpaRepository<TransaccionAlmacen, Integer> {
+
+    Optional<TransaccionAlmacen> findByIdempotencyKey(UUID idempotencyKey);
 
     /**
      * Cuenta las transacciones de almacén con un estado contable y tipo de entidad causante específicos.

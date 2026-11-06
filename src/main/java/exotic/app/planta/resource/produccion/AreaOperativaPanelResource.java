@@ -19,6 +19,8 @@ import exotic.app.planta.service.produccion.MasterProductionScheduleOrderGenerat
 import exotic.app.planta.service.produccion.OrdenFabricacionOperacionService;
 import exotic.app.planta.service.produccion.OrdenFabricacionService;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
+import exotic.app.planta.model.produccion.dto.ConsumoSemiterminadoAreaDTOs;
+import exotic.app.planta.service.produccion.ConsumoSemiterminadoAreaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +65,41 @@ public class AreaOperativaPanelResource {
     private final AreaMpsConsultaService areaMpsConsultaService;
     private final OrdenFabricacionOperacionService ordenFabricacionOperacionService;
     private final OrdenFabricacionService ordenFabricacionService;
+    private final ConsumoSemiterminadoAreaService consumoSemiterminadoAreaService;
+
+    @GetMapping("/ordenes/{ordenId}/seguimientos/{seguimientoId}/semiterminados")
+    public ConsumoSemiterminadoAreaDTOs.Contexto prepararConsumoSemiterminados(
+            Authentication authentication, @PathVariable int ordenId, @PathVariable Long seguimientoId) {
+        return consumoSemiterminadoAreaService.preparar(ordenId, seguimientoId, getCurrentUser(authentication));
+    }
+
+    @GetMapping("/ordenes/{ordenId}/seguimientos/{seguimientoId}/semiterminados/{productoId}/lotes")
+    public List<ConsumoSemiterminadoAreaDTOs.LoteDisponible> lotesConsumoSemiterminados(
+            Authentication authentication, @PathVariable int ordenId, @PathVariable Long seguimientoId,
+            @PathVariable String productoId) {
+        return consumoSemiterminadoAreaService.lotes(ordenId, seguimientoId, productoId, getCurrentUser(authentication));
+    }
+
+    @PostMapping("/ordenes/{ordenId}/seguimientos/{seguimientoId}/consumos-semiterminados")
+    public ConsumoSemiterminadoAreaDTOs.RegistroResponse registrarConsumoSemiterminados(
+            Authentication authentication, @PathVariable int ordenId, @PathVariable Long seguimientoId,
+            @Valid @RequestBody ConsumoSemiterminadoAreaDTOs.RegistroRequest request) {
+        try {
+            return consumoSemiterminadoAreaService.registrar(ordenId, seguimientoId, request, getCurrentUser(authentication));
+        } catch (org.springframework.dao.DataIntegrityViolationException exception) {
+            // La TX ya fue revertida por el proxy: no se intenta continuar una TX abortada.
+            Throwable causa = exception;
+            while (causa != null) {
+                if (causa instanceof org.hibernate.exception.ConstraintViolationException constraint
+                        && "uk_transaccion_almacen_idempotency_key".equals(constraint.getConstraintName())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "La clave de idempotencia ya fue utilizada por otra solicitud.");
+                }
+                causa = causa.getCause();
+            }
+            throw exception;
+        }
+    }
 
     @PostMapping("/ordenes-fabricacion/operaciones/{operacionId}/iniciar")
     public OrdenFabricacionDTOs.OperacionResponse iniciarOperacionFabricacion(

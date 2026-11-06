@@ -2,11 +2,13 @@ package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.config.initializers.AreaOperativaInitializer;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCat;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.repo.producto.CategoriaRepo;
+import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersionRepo;
 import exotic.app.planta.repo.producto.procesos.ProcesoProduccionRepo;
@@ -32,6 +34,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 @ExtendWith(MockitoExtension.class)
 class RutaProcesoCatServiceLayoutTest {
@@ -42,7 +46,93 @@ class RutaProcesoCatServiceLayoutTest {
     @Mock private AreaProduccionRepo areaProduccionRepo;
     @Mock private ProcesoProduccionRepo procesoProduccionRepo;
     @Mock private ProcesoProduccionDocumentoVersionRepo procesoDocumentoVersionRepo;
+    @Mock private SemiTerminadoRepo semiTerminadoRepo;
     @InjectMocks private RutaProcesoCatService service;
+
+    @Test
+    void moverElDibujoConservaLasAsignacionesDeConsumoDeLaVersion() {
+        RutaProcesoCatVersion vigente = versionVigente();
+        RutaProcesoNode mezcla = vigente.getNodes().get(1);
+        SemiTerminado segundo = semi("S2");
+        SemiTerminado primero = semi("S1");
+        mezcla.getSemiterminadosConsumidos().add(segundo);
+        mezcla.getSemiterminadosConsumidos().add(primero);
+        when(rutaProcesoCatVersionRepo.findByCategoriaIdAndEstadoForUpdate(
+                7, RutaProcesoCatVersion.Estado.VIGENTE)).thenReturn(Optional.of(vigente));
+
+        RutaProcesoCatDTO result = service.updateLayout(7, 31L,
+                layout(2, position("almacen", 15.0, 25.0), position("mezcla", 35.0, 45.0)), "diagramador");
+
+        assertThat(mezcla.getSemiterminadosConsumidos()).containsExactly(segundo, primero);
+        assertThat(result.getNodes().get(1).getSemiterminadoIds()).containsExactly("S1", "S2");
+        assertThat(result.getVersionId()).isEqualTo(31L);
+        assertThat(result.getVersionNumber()).isEqualTo(4);
+        verifyNoInteractions(semiTerminadoRepo);
+    }
+
+    @Test
+    void noAsignaUnSemiterminadoADosEtapasAunqueLasAreasSeanDistintas() {
+        RutaProcesoCatDTO request = validSemanticRoute();
+        request.getNodes().get(1).setSemiterminadoIds(List.of("S1"));
+        RutaProcesoNodeDTO llenado = new RutaProcesoNodeDTO();
+        llenado.setId("llenado");
+        llenado.setAreaOperativaId(13);
+        llenado.setProcesoProduccionId(23);
+        llenado.setLabel("Llenado");
+        llenado.setSemiterminadoIds(List.of("S1"));
+        request.setNodes(List.of(request.getNodes().get(0), request.getNodes().get(1), llenado));
+        RutaProcesoEdgeDTO siguiente = new RutaProcesoEdgeDTO();
+        siguiente.setId("e-mezcla-llenado");
+        siguiente.setSourceNodeId("mezcla");
+        siguiente.setTargetNodeId("llenado");
+        request.setEdges(List.of(request.getEdges().getFirst(), siguiente));
+        RutaProcesoCatService subject = rutaConCandidatos();
+        when(semiTerminadoRepo.findById("S1")).thenReturn(Optional.of(semi("S1")));
+
+        assertThatThrownBy(() -> subject.saveRuta(7, request, "diagramador"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("una etapa");
+        verifyNoInteractions(rutaProcesoCatRepo, rutaProcesoCatVersionRepo);
+    }
+
+    @Test
+    void noAsignaConsumosPorEtapaAlNodoDeAlmacenGeneral() {
+        RutaProcesoCatDTO request = validSemanticRoute();
+        request.getNodes().getFirst().setSemiterminadoIds(List.of("S1"));
+        RutaProcesoCatService subject = rutaConCandidatos();
+
+        assertThatThrownBy(() -> subject.saveRuta(7, request, "diagramador"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Almacen General");
+        verifyNoInteractions(rutaProcesoCatRepo, rutaProcesoCatVersionRepo, semiTerminadoRepo);
+    }
+
+    @Test
+    void noAceptaUnSemiterminadoAjenoALasRecetasDeLaCategoria() {
+        RutaProcesoCatDTO request = validSemanticRoute();
+        request.getNodes().get(1).setSemiterminadoIds(List.of("OTRA-CATEGORIA"));
+        RutaProcesoCatService subject = rutaConCandidatos();
+
+        assertThatThrownBy(() -> subject.saveRuta(7, request, "diagramador"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("ajeno");
+        verifyNoInteractions(rutaProcesoCatRepo, rutaProcesoCatVersionRepo, semiTerminadoRepo);
+    }
+
+    private RutaProcesoCatService rutaConCandidatos() {
+        Categoria categoria = new Categoria();
+        categoria.setCategoriaId(7);
+        when(categoriaRepo.findById(7)).thenReturn(Optional.of(categoria));
+        RutaProcesoCatService subject = spy(service);
+        doReturn(List.of(new RutaProcesoCatService.SemiterminadoRutaOptionDTO("S1", "Base neutra", "KG")))
+                .when(subject).getSemiterminadosCandidatos(7, null);
+        return subject;
+    }
+
+    private static SemiTerminado semi(String id) {
+        SemiTerminado semi = new SemiTerminado();
+        semi.setProductoId(id);
+        semi.setRequiereOrdenFabricacion(true);
+        semi.setInventareable(true);
+        return semi;
+    }
 
     @Test
     void actualizaSoloCoordenadasYAuditoriaSinCrearVersionFuncional() {

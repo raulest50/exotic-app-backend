@@ -3,14 +3,18 @@ package exotic.app.planta.service.produccion;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.controles.*;
 import exotic.app.planta.model.inventarios.Lote;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
+import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.producto.*;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.controles.*;
 import exotic.app.planta.repo.producto.ProductoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
+import exotic.app.planta.repo.produccion.ruprocatdesigner.RutaProcesoCatVersionRepo;
 import exotic.app.planta.service.controles.ControlWorkflowService;
 import org.hibernate.proxy.HibernateProxy;
 import org.hibernate.proxy.LazyInitializer;
@@ -108,7 +112,8 @@ class BatchRecordProductoProxyTest {
         ProductoRepo productos = mock(ProductoRepo.class);
         when(productos.findById("CAJA")).thenReturn(Optional.of(cajaProxy));
         MaterialRequirementSnapshotService service = new MaterialRequirementSnapshotService(
-                productos, mock(ManufacturingVersionRepo.class), new ObjectMapper());
+                productos, mock(ManufacturingVersionRepo.class), new ObjectMapper(),
+                mock(RutaProcesoCatVersionRepo.class));
 
         var requirements = service.leer(service.construirJson(proxy(terminado), version, BigDecimal.TEN));
 
@@ -117,6 +122,93 @@ class BatchRecordProductoProxyTest {
         assertEquals(0, BigDecimal.ONE.compareTo(requirements.get(0).cantidad()));
         assertTrue(requirements.get(0).consumoDirecto());
     }
+
+    @Test
+    void snapshotOperativoConservaCantidadUnidadYEtapaAunqueCambienRecetaYRuta() {
+        OperativoFixture fixture = operativo(true);
+        fixture.service().congelarParaOrdenProduccion(fixture.orden());
+
+        fixture.version().setInsumosJson("[]");
+        fixture.nodo().getSemiterminadosConsumidos().clear();
+        fixture.semi().setRequiereOrdenFabricacion(false);
+        fixture.semi().setTipoUnidades("L");
+
+        var requisitos = fixture.service().requerimientosEtapa(fixture.orden(), 101L);
+        assertEquals(1, requisitos.size());
+        assertEquals(0, new BigDecimal("12.500000").compareTo(requisitos.getFirst().cantidad()));
+        assertEquals("KG", requisitos.getFirst().unidadMedida());
+        assertEquals(12, requisitos.getFirst().areaOperativaId());
+        assertTrue(requisitos.getFirst().esSemiterminadoFisico());
+        assertEquals(1, fixture.service().requerimientosAlmacen(fixture.orden()).size());
+        assertEquals("M1", fixture.service().requerimientosAlmacen(fixture.orden()).getFirst().productoId());
+        assertThrows(IllegalStateException.class,
+                () -> fixture.service().congelarParaOrdenProduccion(fixture.orden()));
+    }
+
+    @Test
+    void semiterminadoFisicoSinEtapaImpideEmitirLaOp() {
+        OperativoFixture fixture = operativo(false);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> fixture.service().congelarParaOrdenProduccion(fixture.orden()));
+
+        assertTrue(error.getMessage().contains("S1"));
+        assertNull(fixture.orden().getRequerimientosMaterialesJson());
+    }
+
+    @Test
+    void noAtribuyeRequerimientosActualesAUnaOrdenHistorica() {
+        OperativoFixture fixture = operativo(true);
+        fixture.orden().setOrdenId(77);
+
+        assertThrows(IllegalStateException.class,
+                () -> fixture.service().congelarParaOrdenProduccion(fixture.orden()));
+        assertNull(fixture.orden().getRequerimientosMaterialesJson());
+    }
+
+    private OperativoFixture operativo(boolean asignar) {
+        Terminado terminado = terminado();
+        terminado.setTipoUnidades("U");
+        SemiTerminado semi = new SemiTerminado();
+        semi.setProductoId("S1");
+        semi.setNombre("Base neutra");
+        semi.setTipoUnidades("KG");
+        semi.setRequiereOrdenFabricacion(true);
+        Material material = new Material();
+        material.setProductoId("M1");
+        material.setTipoUnidades("KG");
+        ProductoRepo productos = mock(ProductoRepo.class);
+        when(productos.findById("S1")).thenReturn(Optional.of(semi));
+        when(productos.findById("M1")).thenReturn(Optional.of(material));
+        MaterialRequirementSnapshotService service = new MaterialRequirementSnapshotService(
+                productos, mock(ManufacturingVersionRepo.class), new ObjectMapper(),
+                mock(RutaProcesoCatVersionRepo.class));
+        ManufacturingVersions version = new ManufacturingVersions();
+        version.setProducto(terminado);
+        version.setInsumosJson("""
+                [{"productoId":"S1","cantidadRequerida":1.25},
+                 {"productoId":"M1","cantidadRequerida":0.1}]
+                """);
+        AreaOperativa area = new AreaOperativa();
+        area.setAreaId(12);
+        RutaProcesoCatVersion ruta = new RutaProcesoCatVersion();
+        ruta.setId(31L);
+        RutaProcesoNode nodo = new RutaProcesoNode();
+        nodo.setId(101L);
+        nodo.setAreaOperativa(area);
+        nodo.setRutaProcesoCatVersion(ruta);
+        if (asignar) nodo.getSemiterminadosConsumidos().add(semi);
+        ruta.getNodes().add(nodo);
+        OrdenProduccion orden = new OrdenProduccion();
+        orden.setProducto(terminado);
+        orden.setManufacturingVersion(version);
+        orden.setRutaProcesoCatVersion(ruta);
+        orden.setCantidadProducir(10);
+        return new OperativoFixture(service, orden, semi, nodo, version);
+    }
+
+    private record OperativoFixture(MaterialRequirementSnapshotService service, OrdenProduccion orden,
+                                    SemiTerminado semi, RutaProcesoNode nodo, ManufacturingVersions version) {}
 
     private Terminado terminado() {
         Terminado terminado = new Terminado();

@@ -59,6 +59,11 @@ public class OrdenProduccion {
     @JoinColumn(name = "ruta_proceso_cat_version_id")
     private RutaProcesoCatVersion rutaProcesoCatVersion;
 
+    /** BOM operativa y asignacion por etapa inmutables. NULL identifica el flujo historico. */
+    @JsonIgnore
+    @Column(name = "requerimientos_materiales_json", columnDefinition = "TEXT", updatable = false)
+    private String requerimientosMaterialesJson;
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "jornada_laboral_version_id")

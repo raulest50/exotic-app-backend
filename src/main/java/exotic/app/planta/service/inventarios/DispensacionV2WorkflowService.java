@@ -36,6 +36,8 @@ import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import exotic.app.planta.service.productos.ProductoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +78,7 @@ public class DispensacionV2WorkflowService {
     private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
     private final MasterDirectiveService masterDirectiveService;
     private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
+    private final EntityManager entityManager;
 
     @Transactional(readOnly = true)
     public List<DispensacionV2OrdenFabricacionDTOs.Option> buscarOrdenesFabricacion(
@@ -137,6 +140,7 @@ public class DispensacionV2WorkflowService {
         // Bloquear antes de cargar su estado: comparte exclusion con cancelar/reprogramar.
         OrdenFabricacion orden = ordenFabricacionRepo.findByIdForUpdate(ordenFabricacionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden de fabricacion no encontrada."));
+        entityManager.refresh(orden, LockModeType.PESSIMISTIC_WRITE);
         validateOrdenFabricacion(area, orden);
         List<MaterialRequirementSnapshotService.RequirementView> requirements =
                 requerimientosOrdenFabricacion(orden);
@@ -386,6 +390,13 @@ public class DispensacionV2WorkflowService {
         List<DispensacionV2FinalizacionOrdenRequestDTO> ordenesRequest = normalizeFinalizacionOrdenes(
                 request != null ? request.getOrdenes() : null
         );
+        // Todos los padres primero en orden estable; luego todos los lotes de la tanda.
+        for (Integer ordenId : ordenesRequest.stream().map(DispensacionV2FinalizacionOrdenRequestDTO::getOrdenProduccionId)
+                .sorted().toList()) {
+            OrdenProduccion bloqueada = ordenProduccionRepo.findByIdForUpdate(ordenId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OP no encontrada: " + ordenId));
+            entityManager.refresh(bloqueada, LockModeType.PESSIMISTIC_WRITE);
+        }
 
         List<FinalizacionDraft> drafts = new ArrayList<>();
         Map<StockDemandKey, Double> demandaPorLote = new HashMap<>();
@@ -402,7 +413,13 @@ public class DispensacionV2WorkflowService {
             OrdenProduccion orden = requireOrden(ordenRequest.getOrdenProduccionId());
             validateOrden(area, orden);
 
+            if (ordenRequest.getMateriales() != null) {
+                validarParticionAlmacen(orden, ordenRequest.getMateriales().stream().filter(Objects::nonNull)
+                        .map(DispensacionV2FinalizacionMaterialRequestDTO::getProductoId).toList());
+            }
+
             List<DispensacionItemDTO> items = buildFinalizacionItems(ordenRequest, demandaPorLote);
+            validarParticionAlmacen(orden, items.stream().map(DispensacionItemDTO::getProductoId).toList());
             log.info(
                     "[DISP_V2][FINALIZACION_ORDER_ITEMS] ordenProduccionId={} itemCount={}",
                     orden.getOrdenId(),
@@ -432,6 +449,11 @@ public class DispensacionV2WorkflowService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe seleccionar al menos un material para finalizar.");
         }
 
+        for (Long loteId : demandaPorLote.keySet().stream().map(StockDemandKey::loteId).distinct().sorted().toList()) {
+            Lote lote = loteRepo.findByIdForUpdate(loteId).orElseThrow(() ->
+                    new ResponseStatusException(HttpStatus.NOT_FOUND, "Lote no encontrado: " + loteId));
+            entityManager.refresh(lote, LockModeType.PESSIMISTIC_WRITE);
+        }
         validateStockDisponible(demandaPorLote);
         log.info(
                 "[DISP_V2][FINALIZACION_STOCK_VALIDATED] demandKeyCount={} totalItems={}",
@@ -710,6 +732,7 @@ public class DispensacionV2WorkflowService {
         }
 
         Map<String, MaterialAccumulator> materiales = buildMaterialesRequeridos(orden, terminado);
+        validarParticionAlmacen(orden, overrides.keySet());
         Map<String, Double> historico = calcularHistoricoPorProducto(orden.getOrdenId());
 
         List<DispensacionV2MaterialDTO> materialesDTO = new ArrayList<>();
@@ -801,6 +824,9 @@ public class DispensacionV2WorkflowService {
 
     private Map<String, MaterialAccumulator> buildMaterialesRequeridos(
             OrdenProduccion orden, Terminado terminado) {
+        if (orden.getRequerimientosMaterialesJson() != null) {
+            return buildMaterialesDesdeSnapshot(orden.getRequerimientosMaterialesJson());
+        }
         if (masterDirectiveService.isBatchRecordWorkflowEnabled()) {
             BatchRecord record = batchRecordRepo.findByOrdenProduccion_OrdenId(
                     orden.getOrdenId()).orElse(null);
@@ -821,6 +847,7 @@ public class DispensacionV2WorkflowService {
         Map<String, MaterialAccumulator> materiales = new LinkedHashMap<>();
         for (MaterialRequirementSnapshotService.RequirementView requirement
                 : materialRequirementSnapshotService.leer(json)) {
+            if (requirement.rutaProcesoNodeId() != null) continue;
             addMaterial(
                     materiales,
                     requirement.productoId(),
@@ -1210,6 +1237,9 @@ public class DispensacionV2WorkflowService {
 
         List<LoteStock> eligibleStock = allStock.stream()
                 .filter(stock -> stock.stockDisponible() > TOLERANCE)
+                .filter(stock -> salidaAlmacenService.esLoteConsumible(stock.lote()))
+                .filter(stock -> stock.lote().getProducto() == null
+                        || productoId.equals(stock.lote().getProducto().getProductoId()))
                 .toList();
         log.info(
                 "[DISP_V2][STOCK_QUERY_COMPLETE] productoId={} rowCount={} eligibleCount={}",
@@ -1232,6 +1262,15 @@ public class DispensacionV2WorkflowService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Respuesta invalida al consultar lotes disponibles.");
         }
         return new LoteStock(lote, stock.doubleValue());
+    }
+
+    private void validarParticionAlmacen(OrdenProduccion orden, java.util.Collection<String> productos) {
+        for (String productoId : productos) {
+            if (materialRequirementSnapshotService.esSemiterminadoAsignado(orden, productoId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El semiterminado " + productoId + " se registra en su etapa desde el panel operativo.");
+            }
+        }
     }
 
     private Map<String, Double> calcularHistoricoPorProducto(int ordenProduccionId) {

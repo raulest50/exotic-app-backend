@@ -154,9 +154,12 @@ public class BatchRecordService {
     /** Completa únicamente el snapshot documental de materiales. */
     public void sincronizarMaterialesDocumentales(Long batchRecordId) {
         BatchRecord record = requireRecordForUpdate(batchRecordId);
-        String requerimientosJson = materialRequirementSnapshotService.construirJson(
-                record.getProductoResultado(), record.getManufacturingVersion(),
-                record.getCantidadPlanificada());
+        String requerimientosJson = record.getOrdenProduccion() != null
+                && record.getOrdenProduccion().getRequerimientosMaterialesJson() != null
+                ? record.getOrdenProduccion().getRequerimientosMaterialesJson()
+                : materialRequirementSnapshotService.construirJson(
+                        record.getProductoResultado(), record.getManufacturingVersion(),
+                        record.getCantidadPlanificada());
         record.setRequerimientosMaterialesJson(requerimientosJson);
         batchRecordRepo.saveAndFlush(record);
     }
