@@ -27,5 +27,6 @@ public enum ModuloSistema {
     CRONOGRAMA,
     ORGANIGRAMA,
     CALIDAD,
-    PAGOS_PROVEEDORES
+    PAGOS_PROVEEDORES,
+    AGENT_ASSISTANT
 }

@@ -50,7 +50,7 @@ public class OrdenFabricacionResource {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        requireAccess(authentication, 1);
+        requireReadAccess(authentication);
         return service.buscar(search, page, size);
     }
 
@@ -61,7 +61,7 @@ public class OrdenFabricacionResource {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        requireAccess(authentication, 1);
+        requireReadAccess(authentication);
         return service.buscarSemiterminadosElegibles(search, page, size);
     }
 
@@ -70,7 +70,7 @@ public class OrdenFabricacionResource {
             Authentication authentication,
             @PathVariable Long id
     ) {
-        requireAccess(authentication, 1);
+        requireReadAccess(authentication);
         return service.detalle(id);
     }
 
@@ -79,7 +79,7 @@ public class OrdenFabricacionResource {
             Authentication authentication,
             @PathVariable Long id
     ) {
-        requireAccess(authentication, 1);
+        requireReadAccess(authentication);
         return operacionService.listar(id);
     }
 
@@ -117,14 +117,27 @@ public class OrdenFabricacionResource {
         return service.cancelar(id, requireAccess(authentication, 2));
     }
 
-    private User requireAccess(Authentication authentication, int minNivel) {
+    private User requireReadAccess(Authentication authentication) {
+        User user = requireUser(authentication);
+        if (isMasterLike(user.getUsername())) return user;
+        for (String tab : List.of(TAB, "PROGRAMACION_MPS_OF", "APROBACION_MPS_OF")) {
+            if (UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCCION, tab).orElse(0) >= 1) return user;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a las ordenes de fabricacion.");
+    }
+
+    private User requireUser(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()
                 || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }
-        User user = userRepository.findByUsername(authentication.getName())
+        return userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+    }
+
+    private User requireAccess(Authentication authentication, int minNivel) {
+        User user = requireUser(authentication);
         if (isMasterLike(user.getUsername())) return user;
         int nivel = UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCCION, TAB).orElse(0);
         if (nivel < minNivel) {

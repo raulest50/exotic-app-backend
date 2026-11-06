@@ -54,7 +54,6 @@ class ProduccionServiceCancelacionTest {
     @Mock private ManufacturingVersionRepo manufacturingVersionRepo;
     @Mock private UserRepository userRepository;
     @Mock private BatchRecordProjectionQueueService batchRecordProjectionQueueService;
-    @Mock private OrdenFabricacionAutoGenerationService ordenFabricacionAutoGenerationService;
     @Mock private OrdenFabricacionService ordenFabricacionService;
     @Mock private Clock applicationClock;
 

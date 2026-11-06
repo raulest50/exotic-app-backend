@@ -30,6 +30,8 @@ public class ReporteProduccionPendientesDTO {
         private String lote;
         private String productoId;
         private String productoNombre;
+        private Integer categoriaId;
+        private String categoriaNombre;
         private String tipoUnidades;
         private BigDecimal cantidadPlaneada;
         private BigDecimal cantidadReportada;

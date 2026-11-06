@@ -1,5 +1,6 @@
 package exotic.app.planta.model.produccion.fabricacion;
 
+import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,6 +35,20 @@ public class MpsFabricacionSemanal {
     private String creadoPor;
     @Column(name = "actualizado_por", nullable = false)
     private String actualizadoPor;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private EstadoMpsSemanal estado = EstadoMpsSemanal.BORRADOR;
+    @Column(name = "revision_numero", nullable = false)
+    private int revisionNumero = 1;
+    @Column(name = "aprobado_por_username", length = 100)
+    private String aprobadoPorUsername;
+    @Column(name = "fecha_aprobacion")
+    private LocalDateTime fechaAprobacion;
+    @Column(name = "emitido_por_username", length = 100)
+    private String emitidoPorUsername;
+    @Column(name = "fecha_emision")
+    private LocalDateTime fechaEmision;
 
     @OneToMany(mappedBy = "mps", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("posicion ASC")

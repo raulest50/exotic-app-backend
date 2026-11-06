@@ -23,6 +23,9 @@ import exotic.app.planta.repo.producto.procesos.ProcesoProduccionDocumentoVersio
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordEtapaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import exotic.app.planta.repo.produccion.fabricacion.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -58,9 +61,12 @@ public class OrdenFabricacionOperacionService {
     private final LoteRepo loteRepo;
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
+    private final DespejeLineaService despejeLineaService;
     private final PoliticaIngresoCalidadLote politicaIngresoCalidadLote;
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public void inicializar(OrdenFabricacion orden, BatchRecord record) {
         if (orden == null || orden.getOrdenFabricacionId() == null) {
@@ -172,6 +178,10 @@ public class OrdenFabricacionOperacionService {
             throw new IllegalStateException(
                     "La politica de la OF exige registrar una dispensacion antes de iniciar.");
         }
+        despejeLineaService.validarYRegistrarInicio(operacion, actor);
+        if (operacion.getEstadoEnum() != EstadoSeguimientoOrdenArea.ESPERA) {
+            throw new IllegalStateException("El estado cambió; actualice el tablero antes de iniciar.");
+        }
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         transicionar(operacion, EstadoSeguimientoOrdenArea.EN_PROCESO, actor,
                 observaciones, TipoEventoSeguimiento.OPERATIVO, null, ahora);
@@ -188,6 +198,10 @@ public class OrdenFabricacionOperacionService {
         validarResponsable(operacion, actor);
         if (operacion.getEstadoEnum() != EstadoSeguimientoOrdenArea.EN_PROCESO) {
             throw new IllegalStateException("Solo una operacion en proceso puede pausarse.");
+        }
+        despejeLineaService.validarPausa(operacion, actor);
+        if (operacion.getEstadoEnum() != EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            throw new IllegalStateException("El estado cambió; actualice el tablero antes de pausar.");
         }
         transicionar(operacion, EstadoSeguimientoOrdenArea.ESPERA, actor,
                 observaciones, TipoEventoSeguimiento.OPERATIVO, null,
@@ -220,6 +234,10 @@ public class OrdenFabricacionOperacionService {
                         || candidate.getEstadoEnum() == EstadoSeguimientoOrdenArea.OMITIDO);
         BigDecimal cantidadObtenida = validarCierreRequest(cierraOrden, orden, request);
 
+        despejeLineaService.registrarSalida(operacion, actor);
+        if (operacion.getEstadoEnum() != EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            throw new IllegalStateException("El estado cambió; actualice el tablero antes de completar.");
+        }
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         transicionar(operacion, EstadoSeguimientoOrdenArea.COMPLETADO, actor,
                 request == null ? null : request.getObservaciones(),
@@ -320,6 +338,14 @@ public class OrdenFabricacionOperacionService {
                 }
             }
         }
+        if (destino == EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            despejeLineaService.validarYRegistrarInicio(operacion, actor);
+        } else {
+            despejeLineaService.reconciliarCorreccion(operacion, actor);
+        }
+        if (operacion.getEstado() != request.getEstadoEsperado()) {
+            throw new IllegalStateException("El estado cambió; actualice el tablero antes de corregir.");
+        }
         transicionar(operacion, destino, actor, request.getMotivo(),
                 TipoEventoSeguimiento.CORRECCION_ADMINISTRATIVA, revertido,
                 ahora);
@@ -332,12 +358,49 @@ public class OrdenFabricacionOperacionService {
         return toResponse(operacion);
     }
 
+    public void reconciliarDespejesPorCancelacion(Long ordenId, User actor) {
+        operacionRepo.findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(ordenId)
+                .forEach(operacion -> despejeLineaService.reconciliarCorreccion(operacion, actor));
+    }
+
+    /** La OF ya esta bloqueada y sin ejecucion; conserva las mismas operaciones y su evidencia. */
+    public void reprogramarSinEjecucion(OrdenFabricacion orden) {
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        boolean disponible = orden.getFechaLanzamiento() == null || !orden.getFechaLanzamiento().isAfter(ahora);
+        orden.setEstado(disponible ? EstadoOrdenFabricacion.LIBERADA : EstadoOrdenFabricacion.PLANIFICADA);
+        orden.setLiberadaEn(disponible ? ahora : null);
+        ordenRepo.save(orden);
+        for (OrdenFabricacionOperacion operacion : operacionRepo
+                .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(orden.getOrdenFabricacionId())) {
+            boolean raiz = dependenciaRepo.countPredecesorasPendientes(operacion.getId()) == 0;
+            EstadoSeguimientoOrdenArea destino = disponible && raiz
+                    ? EstadoSeguimientoOrdenArea.ESPERA : EstadoSeguimientoOrdenArea.COLA;
+            if (operacion.getEstadoEnum() != destino) {
+                transicionar(operacion, destino, null, "Reprogramacion desde MPS OF",
+                        TipoEventoSeguimiento.SISTEMA, null, ahora);
+            }
+        }
+    }
+
     public void liberar(OrdenFabricacion ordenSolicitada) {
         if (ordenSolicitada == null || ordenSolicitada.getOrdenFabricacionId() == null) return;
         OrdenFabricacion orden = ordenRepo.findByIdForUpdate(
                         ordenSolicitada.getOrdenFabricacionId())
                 .orElseThrow(() -> new NoSuchElementException(
                         "Orden de fabricacion no encontrada."));
+        // Scheduler y recurso pueden haber cargado la OF antes de esperar el bloqueo.
+        // Vaciar primero conserva cambios propios; refresh impide reutilizar su estado antiguo.
+        entityManager.flush();
+        entityManager.refresh(orden, LockModeType.PESSIMISTIC_WRITE);
+        if (orden.getMpsFabricacionDetalle() != null
+                && orden.getMpsFabricacionDetalle().getMps().getEstado()
+                != exotic.app.planta.model.produccion.EstadoMpsSemanal.CERRADO) {
+            throw new IllegalStateException("La OF requiere la emision autorizada de su MPS.");
+        }
+        if (orden.getMpsFabricacionDetalle() != null && orden.getFechaLanzamiento() != null
+                && orden.getFechaLanzamiento().isAfter(LocalDateTime.now(applicationClock))) {
+            throw new IllegalStateException("La tanda aun no llega a su fecha inicial; reprograme desde el MPS OF.");
+        }
         if (orden.getEstado() != EstadoOrdenFabricacion.PLANIFICADA) return;
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         orden.setEstado(EstadoOrdenFabricacion.LIBERADA);

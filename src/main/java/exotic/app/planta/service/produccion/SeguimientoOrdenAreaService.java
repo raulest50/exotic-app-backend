@@ -89,6 +89,7 @@ public class SeguimientoOrdenAreaService {
     private final UserRepository userRepository;
     private final MasterDirectiveService masterDirectiveService;
     private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
+    private final DespejeLineaService despejeLineaService;
     private final ProcesoProduccionDocumentoVersionRepo procesoDocumentoVersionRepo;
     private final OrdenFabricacionOperacionRepo ordenFabricacionOperacionRepo;
     private final LoteRepo loteRepo;
@@ -387,6 +388,18 @@ public class SeguimientoOrdenAreaService {
             throw new IllegalArgumentException(
                     "El area final debe completarse desde el tablero operativo reportando la cantidad producida.");
         }
+        if (estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            despejeLineaService.validarYRegistrarInicio(seguimiento, actor);
+        } else {
+            despejeLineaService.reconciliarCorreccion(seguimiento, actor);
+        }
+        validarCorreccionSobreSeguimiento(seguimiento, areaId, expectedEstado);
+        if (seguimiento.getAreaOperativa().isRequiereDespeje()
+                && estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
+                && seguimiento.getEstadoEnum() != EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            throw new IllegalArgumentException(
+                    "El area exige despeje: registre el inicio autorizado antes de completar la operacion.");
+        }
 
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         if (estadoOrigen == EstadoSeguimientoOrdenArea.COMPLETADO
@@ -447,6 +460,12 @@ public class SeguimientoOrdenAreaService {
         User actor = userId != null ? userRepository.findById(userId).orElse(null) : null;
         completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.SYSTEM, actor, observaciones);
         return toDTO(seguimiento);
+    }
+
+    /** Conserva el antecedente fisico y retira habilitaciones de una OP anulada. */
+    public void reconciliarDespejesPorCancelacion(int ordenId, User actor) {
+        seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
+                .forEach(seguimiento -> despejeLineaService.reconciliarCorreccion(seguimiento, actor));
     }
 
     @Transactional(readOnly = true)
@@ -828,6 +847,19 @@ public class SeguimientoOrdenAreaService {
         EstadoSeguimientoOrdenArea estadoOrigen = seguimiento.getEstadoEnum();
         validarTransicion(seguimiento, estadoOrigen, estadoDestino, actorTipo);
 
+        if (estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO) {
+            despejeLineaService.validarYRegistrarInicio(seguimiento, actor);
+        } else if (estadoDestino == EstadoSeguimientoOrdenArea.ESPERA
+                && actorTipo == ActorTipoEventoSeguimiento.USER) {
+            despejeLineaService.validarPausa(seguimiento, actor);
+        } else if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
+                || estadoDestino == EstadoSeguimientoOrdenArea.OMITIDO) {
+            despejeLineaService.registrarSalida(seguimiento, actor);
+        }
+        // El servicio de despeje bloquea y refresca el origen operativo.
+        estadoOrigen = seguimiento.getEstadoEnum();
+        validarTransicion(seguimiento, estadoOrigen, estadoDestino, actorTipo);
+
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         String notaNormalizada = normalizeNota(nota);
 
@@ -885,6 +917,11 @@ public class SeguimientoOrdenAreaService {
             EstadoSeguimientoOrdenArea estadoDestino,
             ActorTipoEventoSeguimiento actorTipo
     ) {
+        if (seguimiento.getOrdenProduccion() == null
+                || seguimiento.getOrdenProduccion().getEstadoOrden() == -1
+                || seguimiento.getOrdenProduccion().getEstadoOrden() == 2) {
+            throw new IllegalArgumentException("Una orden cancelada o finalizada no admite transiciones operativas.");
+        }
         if (estadoOrigen == estadoDestino) {
             throw new IllegalArgumentException("La orden ya se encuentra en estado " + estadoDestino.getDescripcion() + ".");
         }
@@ -1020,6 +1057,7 @@ public class SeguimientoOrdenAreaService {
             SeguimientoOrdenAreaEvento eventoRevertido = findLatestUnrevertedEventForState(descendant, estadoActual)
                     .orElse(null);
             String notaReversion = buildNotaReversionCorreccion(motivo);
+            despejeLineaService.reconciliarCorreccion(descendant, actor);
             aplicarEstadoPorCorreccion(descendant, EstadoSeguimientoOrdenArea.COLA, actor, notaReversion, ahora);
             seguimientoRepo.save(descendant);
             registrarEvento(

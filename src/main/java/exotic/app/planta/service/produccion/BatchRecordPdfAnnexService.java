@@ -71,6 +71,9 @@ public class BatchRecordPdfAnnexService {
             for (JsonNode dispensacion : dispensaciones) {
                 partes.add(crearDispensacion(root, dispensacion));
             }
+            for (JsonNode despeje : despejesLinea(root)) {
+                partes.add(crearDespejeLinea(root, despeje));
+            }
             for (PoePreparado preparado : anexos.poes()) {
                 if (preparado.cargado() == null) {
                     partes.add(crearAvisoPoe(preparado));
@@ -105,6 +108,18 @@ public class BatchRecordPdfAnnexService {
         legado.put("tipo", "REGISTRO_HISTORICO_DE_CONSUMOS");
         legado.set("movimientos", consumos.deepCopy());
         return List.of(legado);
+    }
+
+    private List<JsonNode> despejesLinea(JsonNode root) {
+        JsonNode documentados = root.path("despejesLinea");
+        if (!documentados.isArray()) return List.of();
+        List<JsonNode> result = new ArrayList<>();
+        for (JsonNode despeje : documentados) {
+            if (despeje.isObject() && !texto(despeje.path("enviadaEn"), "").isBlank()) {
+                result.add(despeje);
+            }
+        }
+        return result;
     }
 
     public AnexosPreparados preparar(JsonNode root) {
@@ -209,6 +224,8 @@ public class BatchRecordPdfAnnexService {
 
         PdfPTable table = new PdfPTable(new float[]{0.6f, 1.5f, 2.1f, 3.8f});
         table.setWidthPercentage(100);
+        table.setHeaderRows(1);
+        table.setSplitLate(false);
         header(table, "N.º");
         header(table, "Tipo");
         header(table, "Identificador");
@@ -222,6 +239,14 @@ public class BatchRecordPdfAnnexService {
                     texto(dispensacion.path("transaccionId"), "Sin ID"),
                     texto(dispensacion.path("tipo"), "Dispensación de materiales"));
         }
+        for (JsonNode despeje : despejesLinea(root)) {
+            row(table, Integer.toString(numero++), "Despeje de línea",
+                    "Despeje " + texto(despeje.path("id"), "")
+                            + " - intento " + texto(despeje.path("intento"), ""),
+                    texto(despeje.path("areaNombre"), "Área no registrada")
+                            + " - plantilla v" + texto(despeje.path("plantilla").path("numero"), "")
+                            + " - " + texto(despeje.path("estado"), ""));
+        }
         for (PoePreparado poe : poes) {
             row(table, Integer.toString(numero++), "POE",
                     "Documento " + Objects.toString(poe.referencia().documentoVersionId(), "no registrado"),
@@ -231,6 +256,15 @@ public class BatchRecordPdfAnnexService {
         }
         document.add(table);
         document.add(Chunk.NEWLINE);
+        if (!root.path("despejesLinea").isArray()) {
+            document.add(new Paragraph(
+                    "Esta revisión no conserva una sección de despeje de línea. "
+                            + "No se reconstruye evidencia desde el estado actual.",
+                    font(8, Font.ITALIC, BaseColor.DARK_GRAY)));
+        } else if (despejesLinea(root).isEmpty()) {
+            document.add(new Paragraph("Esta revisión no registra despejes de línea enviados.",
+                    font(8, Font.ITALIC, BaseColor.DARK_GRAY)));
+        }
         document.add(new Paragraph(
                 poes.isEmpty()
                         ? "El expediente no registra versiones de POE asociadas."
@@ -242,6 +276,110 @@ public class BatchRecordPdfAnnexService {
                 font(8, Font.ITALIC, BaseColor.DARK_GRAY)));
         document.close();
         return output.toByteArray();
+    }
+
+    /** Se representa únicamente la evidencia congelada en esta revisión. */
+    private byte[] crearDespejeLinea(JsonNode root, JsonNode despeje) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4, 36, 36, 48, 42);
+        PdfWriter.getInstance(document, output);
+        document.open();
+        titulo(document, "DESPEJE DE LÍNEA - EVIDENCIA DEL INTENTO");
+        JsonNode plantilla = despeje.path("plantilla");
+        PdfPTable context = new PdfPTable(new float[]{1.4f, 3.6f});
+        context.setWidthPercentage(100);
+        context.setSplitLate(false);
+        pair(context, "Expediente", texto(root.path("codigo"), ""));
+        pair(context, "Orden", descripcionOrden(root.path("orden")) + " "
+                + texto(root.path("orden").path("id"), ""));
+        pair(context, "Área", texto(despeje.path("areaNombre"), ""));
+        pair(context, "Producto / lote actual", texto(despeje.path("productoActualNombre"),
+                texto(root.path("producto").path("nombre"), "")) + " / "
+                + texto(despeje.path("loteActualNumero"), ""));
+        pair(context, "Producto / lote anterior", despeje.path("antecedenteConocido").asBoolean(false)
+                ? texto(despeje.path("productoAnteriorNombre"), "Sin producto anterior") + " / "
+                    + texto(despeje.path("loteAnteriorNumero"), "Sin lote anterior")
+                : "Antecedente desconocido: " + texto(despeje.path("observacionAntecedente"), "Sin observación"));
+        if (!despeje.path("antecedenteConocido").asBoolean(false)) {
+            pair(context, "Antecedente desconocido confirmado",
+                    despeje.path("confirmaAntecedenteDesconocido").isBoolean()
+                            ? (despeje.path("confirmaAntecedenteDesconocido").asBoolean() ? "Sí" : "No")
+                            : "No registrado");
+        }
+        pair(context, "Plantilla", texto(plantilla.path("nombre"), "") + " - versión "
+                + texto(plantilla.path("numero"), ""));
+        pair(context, "Revisión del contexto", texto(despeje.path("revisionContexto"), "No registrada"));
+        pair(context, "Ejecución / estado", texto(despeje.path("id"), "") + " - intento "
+                + texto(despeje.path("intento"), "") + " - " + texto(despeje.path("estado"), ""));
+        pair(context, "Creado por", textoPersona(despeje.path("creadaPor")));
+        pair(context, "Fecha de creación", texto(despeje.path("creadaEn"), "No registrada"));
+        pair(context, "Enviado por", textoPersona(despeje.path("enviadaPor")));
+        pair(context, "Fecha de envío", texto(despeje.path("enviadaEn"), "No enviada"));
+        pair(context, "Revisado por", despeje.path("requiereRevision").asBoolean(false)
+                ? textoPersona(despeje.path("revisadaPor")) : "No requiere revisión independiente");
+        pair(context, "Fecha de revisión", texto(despeje.path("revisadaEn"), "No registrada"));
+        pair(context, "Utilizado al iniciar", texto(despeje.path("utilizadaEn"), "No utilizado"));
+        document.add(context);
+        seccion(document, "COMPROBACIONES Y RESPUESTAS");
+        Map<String, JsonNode> respuestas = new java.util.LinkedHashMap<>();
+        for (JsonNode respuesta : despeje.path("respuestas")) {
+            respuestas.put(texto(respuesta.path("itemId"), ""), respuesta);
+        }
+        PdfPTable checks = new PdfPTable(new float[]{0.65f, 3.1f, 1.5f, 1.2f, 2.3f});
+        checks.setWidthPercentage(100);
+        checks.setSplitRows(true);
+        checks.setSplitLate(false);
+        PdfPCell identity = new PdfPCell(new Phrase(
+                "Despeje " + texto(despeje.path("id"), "No registrado")
+                        + " - " + texto(despeje.path("areaNombre"), "Área no registrada")
+                        + " - intento " + texto(despeje.path("intento"), "No registrado")
+                        + " - plantilla v" + texto(plantilla.path("numero"), "No registrada"),
+                font(8, Font.BOLD, PRIMARY)));
+        identity.setColspan(5);
+        identity.setPadding(5);
+        identity.setBackgroundColor(LIGHT);
+        checks.addCell(identity);
+        checks.setHeaderRows(2);
+        for (String label : List.of("N.º", "Comprobación", "Criterio", "Respuesta", "Observación")) {
+            header(checks, label);
+        }
+        for (JsonNode item : plantilla.path("items")) {
+            JsonNode respuesta = respuestas.get(texto(item.path("id"), ""));
+            String criterio = "NUMERO".equals(texto(item.path("tipo"), ""))
+                    ? "Mín.: " + numeroDespeje(item.path("minimo"), "Sin límite")
+                        + "\nMáx.: " + numeroDespeje(item.path("maximo"), "Sin límite")
+                    : texto(item.path("respuestaConforme"), "");
+            String valor = respuesta == null ? "Sin responder"
+                    : "NA".equals(texto(respuesta.path("valor"), "")) ? "No aplica"
+                    : !respuesta.path("numero").isNull() && !respuesta.path("numero").isMissingNode()
+                        ? numeroDespeje(respuesta.path("numero"), "Sin responder")
+                        : texto(respuesta.path("valor"), "Sin responder");
+            row(checks, texto(item.path("orden"), ""), texto(item.path("texto"), ""),
+                    criterio + (item.path("permiteNa").asBoolean(false) ? "\nAdmite N.A." : "")
+                            + (item.path("obligatorio").asBoolean(false) ? "\nObligatorio" : "\nOpcional"),
+                    valor, respuesta == null ? "" : texto(respuesta.path("observacion"), ""));
+        }
+        document.add(checks);
+        for (String campo : List.of("observaciones", "motivoRevision", "motivoInvalidacion")) {
+            String valor = texto(despeje.path(campo), "");
+            if (!valor.isBlank()) {
+                seccion(document, switch (campo) {
+                    case "motivoRevision" -> "DICTAMEN DE REVISIÓN";
+                    case "motivoInvalidacion" -> "MOTIVO DE INVALIDACIÓN";
+                    default -> "OBSERVACIONES";
+                });
+                document.add(new Paragraph(valor, font(9, Font.NORMAL, BaseColor.BLACK)));
+            }
+        }
+        document.add(new Paragraph("SHA-256 del contenido enviado: "
+                + texto(despeje.path("contenidoSha256"), "No registrado"),
+                font(7, Font.NORMAL, BaseColor.DARK_GRAY)));
+        document.close();
+        return output.toByteArray();
+    }
+
+    private String numeroDespeje(JsonNode value, String fallback) {
+        return value.isNumber() ? value.decimalValue().toPlainString() : texto(value, fallback);
     }
 
     private byte[] crearOrden(JsonNode root) throws Exception {
@@ -489,7 +627,13 @@ public class BatchRecordPdfAnnexService {
                     + texto(root.path("codigo"), ""));
             info.put("Subject", anexos.numeroIncidencias() > 0
                     ? "Batch Record de consulta con incidencias en anexos POE"
-                    : "Batch Record con orden, dispensaciones y POE anexos");
+                    : despejesLinea(root).isEmpty()
+                        ? "Batch Record con orden, dispensaciones y POE anexos"
+                        : "Batch Record con orden, dispensaciones, despejes de línea y POE anexos");
+            info.put("EsquemaDatos", texto(root.path("esquemaVersion"), "No registrado"));
+            info.put("PlantillaPdfRepresentacion", BatchRecordService.PLANTILLA_PDF_VERSION);
+            info.put("RepresentacionDocumental", "Regenerada desde datos canónicos; "
+                    + "su presentación puede variar respecto a la emisión.");
             stamper.setMoreInfo(info);
         } finally {
             stamper.close();

@@ -1,7 +1,107 @@
-# MPS OF: primera etapa
+# MPS OF: programacion, aprobacion y emision independientes
 
-Fecha: 1 de octubre de 2026. Implementación en código fuente; pendiente de
-compilación y validación funcional en el PC de pruebas y staging.
+Actualizacion: 6 de noviembre de 2026. El flujo OF reproduce la dinamica de
+programacion y aprobacion OP, con planes, permisos y ordenes independientes.
+La base neutra y los demas semiterminados marcados para OF pueden fabricarse
+para inventario sin un MPS OP asociado. Las cantidades del plan expresan
+salida del producto; no se deduce la capacidad de una marmita de sus ingredientes.
+
+## Flujo vigente
+
+- `BORRADOR`: guardar tandas y atender observaciones. Una tanda identifica un
+  semiterminado, cantidad/unidad y fechas; puede repetirse el mismo producto.
+- Observaciones propias de OF: `ABIERTA -> ATENDIDA -> CERRADA`, con revision,
+  respuesta, responsables y fechas. Las pendientes impiden aprobar.
+- `APROBADO`: autoriza el programa y conserva usuario/fecha de aprobacion.
+- Emitir crea una OF independiente por tanda y deja el programa `CERRADO`.
+  Este estado significa ordenes emitidas, no fabricacion completada.
+- Guardar, aprobar o emitir no crea existencias. El ingreso se produce al
+  reportar la cantidad realmente obtenida mediante la ejecucion OF existente.
+- Crear una OP ya no genera OF automaticamente. Se conservan las referencias
+  historicas y las OF manuales con su autorizacion especifica.
+
+Cada OF del programa conserva una referencia unica a su tanda. Una peticion
+de emision repetida devuelve las ordenes existentes. Las OF historicas o
+manuales no se atribuyen a un MPS por coincidencia de producto o fechas.
+Las actualizaciones llevan la `version` esperada; un conflicto devuelve 409.
+`revisionNumero` conserva la revision del negocio y no sustituye `@Version`.
+
+## Cambios posteriores y permisos
+
+Se permiten adiciones, cambios y cancelaciones controlados despues de aprobar
+o emitir, siguiendo la dinamica OP. Las tandas emitidas no se borran: se
+cancelan logicamente cuando su OF no tiene ejecucion ni dispensaciones.
+La cantidad y el producto de una OF emitida permanecen congelados; para
+cambiarlos se cancela la tanda apta y se crea una sustituta. Las fechas y
+observaciones se coordinan con la OF y sus operaciones pendientes.
+
+`PROGRAMACION_MPS_OF` y `APROBACION_MPS_OF` son autorizaciones independientes
+de OP. `CREAR_ORDEN_FABRICACION` conserva la ruta manual. El administrador
+asigna los nuevos permisos; no se heredan aprobadores del MPS OP.
+
+Las directivas `MPS_FABRICACION_DIAS_BLOQUEO_EDICION` (0 a 7, defecto 2) y
+`MPS_FABRICACION_PERMITIR_AGREGAR_SEMITERMINADOS_APROBADO` (defecto false)
+controlan la ventana de edicion del borrador y la incorporacion de semiterminados nuevos
+a una semana aprobada. Las tandas existentes bloqueadas se conservan sin cambios;
+no impiden editar otras fechas habilitadas. La segunda no prohibe por si sola mas tandas de un
+producto ya programado. La directiva existente de Batch Record sigue
+controlando la disponibilidad de creacion de OF; no se activa automaticamente.
+
+## Esquema y compatibilidad
+
+`V120__mps_of_independiente.sql` amplia cabecera y detalle, vincula OF a tanda
+y crea `mps_fabricacion_observacion`. Las propuestas existentes reciben
+BORRADOR/revision 1 sin inventar aprobaciones. No modifica V119 ni las
+migraciones anteriores.
+
+El perfil opcional `schema-v1` utiliza otra ubicacion. Su V001 consolidada
+captura V118: antes de activar ese perfil con estos modelos deben incorporarse
+y validarse los incrementales equivalentes a V119 y V120. No editar V001 para
+absorberlos ni mezclar las dos ubicaciones de Flyway. La linea operativa
+predeterminada sigue siendo `classpath:db/migration`.
+
+## Alcance y verificacion
+
+La asignacion de consumos de semiterminados a areas de Ruta Proceso Categoria
+y el planificador de capacidad de marmitas pertenecen a otra iteracion.
+El modelo Gaphor requiere actualizacion manual: representar programacion,
+observaciones, aprobacion y emision OP/OF como flujos paralelos y sus ordenes
+correspondientes. El archivo Gaphor no se modifica con esta implementacion.
+
+En esa actualizacion, incluir `MpsFabricacionObservacion`, su pertenencia a la
+cabecera semanal y la relacion unica tanda-OF. Reflejar las responsabilidades
+de los servicios de aprobacion, observaciones, emision y edicion, y de
+`AprobacionMpsFabricacionTab` y `MpsFabricacionWeekView`. Retirar la dependencia
+de creacion OP hacia el generador automatico OF eliminado. La sincronizacion
+con el modelo sigue pendiente hasta revisar el diagrama actualizado.
+
+### Verificacion local del 6 de noviembre de 2026
+
+| Comprobacion | Resultado |
+| --- | --- |
+| Backend `gradlew.bat build -x test`, Java 21 | Correcto en copia temporal de las fuentes, excluyendo los `application*.properties` privados. |
+| Backend `testClasses`, seleccion de esta implementacion mediante init script temporal | Correcto: cinco pruebas nuevas y cuatro existentes modificadas compiladas; ninguna ejecutada. |
+| Backend `testClasses`, conjunto completo | Bloqueado por un constructor desactualizado en `SeguimientoOrdenAreaServiceTableroFabricacionTest`, por la dependencia de despeje de linea preexistente. No se modifico ese test. |
+| Frontend `bun run vite build` | Correcto; aviso de tamano de chunks. |
+| Frontend `bun run lint` global | No pasa: advertencia heredada de dependencias de `useMemo` en `AsistenteDispensacion/DispensacionV2Step3SeleccionOrdenes.tsx` y supresiones obsoletas ajenas. |
+| ESLint en los diez archivos frontend de esta implementacion | Correcto, sin nuevas supresiones. Se permitieron las entradas obsoletas ajenas sin modificarlas. |
+| E2E `bun run typecheck` | Correcto. Contrato MPS OF actualizado; suite sin ejecutar. |
+| Diagnostico global TypeScript frontend | Mantiene errores heredados; sin diagnosticos en los archivos de esta implementacion. |
+
+Las cinco pruebas nuevas incluyen observaciones, aprobacion, emision, edicion y
+un fixture PostgreSQL/Flyway/Hibernate de integracion con rollback, idempotencia,
+restricciones y bloqueo de cabecera. Su compilacion no acredita su ejecucion.
+No se ejecutaron suites ni migraciones, ni se accedio a bases remotas. La prueba
+manual autenticada del flujo queda pendiente por ausencia de backend, datos y
+credenciales locales verificados. Para habilitarlo en un entorno se necesita
+aplicar las migraciones pendientes por el procedimiento habitual de Flyway y
+asignar los permisos OF a los usuarios correspondientes.
+
+## Antecedente: alcance del 1 de octubre de 2026
+
+Las secciones siguientes conservan el alcance y las verificaciones pendientes
+de la primera etapa. Las restricciones de esa etapa relativas a aprobacion,
+emision y generacion OP -> OF quedan sustituidas por el flujo anterior.
 
 ## Alcance
 

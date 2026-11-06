@@ -60,6 +60,8 @@ public interface OrdenFabricacionRepo extends JpaRepository<OrdenFabricacion, Lo
 
     List<OrdenFabricacion> findByOrdenProduccionOrigen_OrdenId(int ordenId);
 
+    Optional<OrdenFabricacion> findByMpsFabricacionDetalle_Id(Long detalleId);
+
     @Query("""
             SELECT o FROM OrdenFabricacion o
             WHERE o.estado IN :estados

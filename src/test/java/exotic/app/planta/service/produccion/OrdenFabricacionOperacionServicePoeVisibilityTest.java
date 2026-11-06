@@ -6,8 +6,12 @@ import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
+import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,15 +20,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class OrdenFabricacionOperacionServicePoeVisibilityTest {
 
     @Mock
     private OrdenFabricacionOperacionRepo operacionRepo;
+    @Mock private OrdenFabricacionRepo ordenRepo;
+    @Mock private EntityManager entityManager;
     @InjectMocks
     private OrdenFabricacionOperacionService service;
 
@@ -45,6 +53,22 @@ class OrdenFabricacionOperacionServicePoeVisibilityTest {
         assertThat(result.get(1).getPoeDocumentoVersionId()).isNull();
         assertThat(result.get(1).getPoeVersion()).isNull();
         assertThat(result.get(1).getPoeNombreArchivo()).isNull();
+    }
+
+    @Test
+    void liberacionRefrescaBajoBloqueoYNoReliberaUnaOfCanceladaConcurrentemente() {
+        OrdenFabricacion orden = new OrdenFabricacion();
+        orden.setOrdenFabricacionId(55L);
+        orden.setEstado(EstadoOrdenFabricacion.PLANIFICADA);
+        when(ordenRepo.findByIdForUpdate(55L)).thenReturn(Optional.of(orden));
+        doAnswer(invocation -> { orden.setEstado(EstadoOrdenFabricacion.CANCELADA); return null; })
+                .when(entityManager).refresh(orden, LockModeType.PESSIMISTIC_WRITE);
+        service.liberar(orden);
+        var order = inOrder(entityManager);
+        order.verify(entityManager).flush();
+        order.verify(entityManager).refresh(orden, LockModeType.PESSIMISTIC_WRITE);
+        verify(ordenRepo, never()).save(any());
+        verifyNoInteractions(operacionRepo);
     }
 
     private static OrdenFabricacionOperacion operacion(

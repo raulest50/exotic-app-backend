@@ -1,6 +1,8 @@
 package exotic.app.planta.service.produccion;
 
 import exotic.app.planta.model.inventarios.Lote;
+import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.Terminado;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.ReporteProduccionLote;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
@@ -183,6 +185,8 @@ public class ReporteProduccionLoteService {
     private ReporteProduccionPendientesDTO.ItemDTO toPendienteDTO(ReporteProduccionLote reporte) {
         OrdenProduccion orden = reporte.getOrdenProduccion();
         Lote lote = reporte.getLote();
+        Categoria categoria = orden.getProducto() instanceof Terminado terminado
+                ? terminado.getCategoria() : null;
         BatchRecord record = batchRecordRepo.findByOrdenProduccion_OrdenId(
                 orden.getOrdenId()).orElse(null);
         PoliticaIngresoCalidadLote.Evaluacion evaluacionIngreso =
@@ -196,6 +200,8 @@ public class ReporteProduccionLoteService {
                 reporte.getLote().getBatchNumber(),
                 orden.getProducto().getProductoId(),
                 orden.getProducto().getNombre(),
+                categoria == null ? null : categoria.getCategoriaId(),
+                categoria == null ? null : categoria.getCategoriaNombre(),
                 orden.getProducto().getTipoUnidades(),
                 BigDecimal.valueOf(orden.getCantidadProducir()),
                 reporte.getCantidadReportada(),

@@ -53,8 +53,8 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v6";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v7";
+    public static final String ESQUEMA_VERSION = "batch-record-v7";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v8";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
     private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
             EnumSet.of(
@@ -87,6 +87,7 @@ public class BatchRecordService {
     private final MaterialRequirementSnapshotService materialRequirementSnapshotService;
     private final ControlWorkflowService controlWorkflowService;
     private final EmpresaLogoDocumentalService empresaLogoDocumentalService;
+    private final DespejeLineaService despejeLineaService;
 
     public BatchRecord crearParaOrdenProduccion(
             OrdenProduccion orden,
@@ -1710,6 +1711,7 @@ public class BatchRecordService {
         List<ControlProcesoEjecucion> controles =
                 ejecucionRepo.findByBatchRecord_IdOrderByFechaRegistroAscIdAsc(record.getId());
         root.put("controles", controles.stream().map(this::mapControlCanonico).toList());
+        root.put("despejesLinea", despejesLinea(record));
         Map<String, Object> controlesUnificados =
                 controlWorkflowService.documentoCanonicoPorBatchRecord(record.getId());
         enriquecerFirmasVisualesControles(controlesUnificados);
@@ -2085,6 +2087,7 @@ public class BatchRecordService {
                 .etapas(etapas.stream().map(this::toEtapaDTO).toList())
                 .consumos(consumos.stream().map(this::toConsumoDTO).toList())
                 .controles(controles.stream().map(this::toControlDTO).toList())
+                .despejesLinea(despejesLinea(record))
                 .desviaciones(desviacionRepo.findByBatchRecord_IdOrderByDetectadaEnAscIdAsc(record.getId())
                         .stream().map(this::toDesviacionDTO).toList())
                 .correcciones(correccionRepo.findByBatchRecord_IdOrderByCorregidaEnAscIdAsc(record.getId())
@@ -2111,6 +2114,13 @@ public class BatchRecordService {
                                 record.getLoteResultado().getId())
                         .stream().map(this::toVinculoDestinoDTO).toList())
                 .build();
+    }
+
+    private List<exotic.app.planta.model.produccion.dto.DespejeLineaDTOs.Ejecucion> despejesLinea(
+            BatchRecord record) {
+        return record.getOrdenProduccion() != null
+                ? despejeLineaService.evidenciaOrdenProduccion(record.getOrdenProduccion().getOrdenId())
+                : despejeLineaService.evidenciaOrdenFabricacion(record.getOrdenFabricacion().getOrdenFabricacionId());
     }
 
     private BatchRecordDTOs.VinculoGenealogia toVinculoOrigenDTO(

@@ -131,7 +131,12 @@ public class DispensacionV2WorkflowService {
             User currentUser) {
         requireBatchRecordWorkflow();
         AreaOperativa area = requireArea(request == null ? null : request.getAreaId());
-        OrdenFabricacion orden = requireOrdenFabricacion(ordenFabricacionId);
+        if (ordenFabricacionId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La ordenFabricacionId es obligatoria.");
+        }
+        // Bloquear antes de cargar su estado: comparte exclusion con cancelar/reprogramar.
+        OrdenFabricacion orden = ordenFabricacionRepo.findByIdForUpdate(ordenFabricacionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden de fabricacion no encontrada."));
         validateOrdenFabricacion(area, orden);
         List<MaterialRequirementSnapshotService.RequirementView> requirements =
                 requerimientosOrdenFabricacion(orden);

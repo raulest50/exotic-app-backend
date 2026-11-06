@@ -11,6 +11,8 @@ import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
 import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.MpsFabricacionDetalle;
+import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.producto.SemiTerminado;
 import exotic.app.planta.model.producto.manufacturing.snapshots.ManufacturingVersions;
 import exotic.app.planta.model.users.User;
@@ -38,6 +40,7 @@ import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -103,24 +106,28 @@ public class OrdenFabricacionService {
                 responsable,
                 normalizar(request.getObservaciones()),
                 null,
-                false);
+                false,
+                null);
     }
 
-    /** Emite una OF ligada a una OP; se usa dentro de la misma transaccion creadora. */
-    public OrdenFabricacionDTOs.Response crearAutomatica(
-            SemiTerminado semi,
-            BigDecimal cantidad,
-            OrdenProduccion ordenOrigen,
-            User actor
-    ) {
-        if (semi == null || ordenOrigen == null || actor == null) {
-            throw new IllegalArgumentException(
-                    "Semiterminado, OP origen y usuario son obligatorios para la OF automatica.");
+    /** Emite una sola OF por tanda; la transaccion llamadora bloquea el MPS aprobado. */
+    public OrdenFabricacion crearDesdeMps(MpsFabricacionDetalle detalle, User actor) {
+        if (detalle == null || detalle.getId() == null || actor == null
+                || (detalle.getMps().getEstado() != EstadoMpsSemanal.APROBADO
+                && detalle.getMps().getEstado() != EstadoMpsSemanal.CERRADO)) {
+            throw new IllegalArgumentException("La tanda aprobada y el usuario son obligatorios.");
         }
-        if (ordenRepo.existsByOrdenProduccionOrigen_OrdenIdAndSemiTerminado_ProductoId(
-                ordenOrigen.getOrdenId(), semi.getProductoId())) {
-            throw new IllegalStateException(
-                    "La OP ya tiene una OF para el semiterminado " + semi.getProductoId() + ".");
+        OrdenFabricacion existente = ordenRepo.findByMpsFabricacionDetalle_Id(detalle.getId()).orElse(null);
+        if (existente != null) {
+            detalle.setOrdenFabricacion(existente);
+            return existente;
+        }
+        SemiTerminado semi = detalle.getSemiTerminado();
+        if (!semi.isRequiereOrdenFabricacion()) {
+            throw new IllegalArgumentException("El semiterminado ya no esta habilitado para OF.");
+        }
+        if (!Objects.equals(detalle.getUnidadMedida(), semi.getTipoUnidades())) {
+            throw new IllegalStateException("Cambio la unidad del semiterminado; revise la tanda antes de emitir.");
         }
         ManufacturingVersions version = manufacturingVersionRepo
                 .findTopByProductoOrderByVersionNumberDesc(semi)
@@ -128,13 +135,13 @@ public class OrdenFabricacionService {
                         "El semiterminado " + semi.getProductoId()
                                 + " no tiene una version de manufactura disponible."));
         String loteNumero = loteNumeroService.siguiente(semi.getProductoId());
-        return crearInterna(
-                semi, version, cantidad, loteNumero,
-                LocalDateTime.now(applicationClock),
-                ordenOrigen.getFechaFinalPlanificada(),
-                actor, actor,
-                "Generada automaticamente para abastecer la OP " + ordenOrigen.getOrdenId(),
-                ordenOrigen, true);
+        OrdenFabricacionDTOs.Response response = crearInterna(
+                semi, version, detalle.getCantidad(), loteNumero,
+                detalle.getFechaInicio(), detalle.getFechaFinal(), actor, actor,
+                detalle.getObservaciones(), null, false, detalle);
+        OrdenFabricacion orden = requireEntity(response.getOrdenFabricacionId());
+        detalle.setOrdenFabricacion(orden);
+        return orden;
     }
 
     private OrdenFabricacionDTOs.Response crearInterna(
@@ -148,7 +155,8 @@ public class OrdenFabricacionService {
             User responsable,
             String observaciones,
             OrdenProduccion ordenOrigen,
-            boolean liberarInmediatamente
+            boolean liberarInmediatamente,
+            MpsFabricacionDetalle detalleMps
     ) {
         boolean batchRecordWorkflowEnabled =
                 masterDirectiveService.lockBatchRecordWorkflowForNewOrder();
@@ -176,6 +184,7 @@ public class OrdenFabricacionService {
         orden.setSemiTerminado(semi);
         orden.setManufacturingVersion(version);
         orden.setOrdenProduccionOrigen(ordenOrigen);
+        orden.setMpsFabricacionDetalle(detalleMps);
         orden.setEstado(liberar
                 ? EstadoOrdenFabricacion.LIBERADA
                 : EstadoOrdenFabricacion.PLANIFICADA);
@@ -267,8 +276,43 @@ public class OrdenFabricacionService {
     }
 
     public OrdenFabricacionDTOs.Response cancelar(Long id, User actor) {
-        OrdenFabricacion orden = ordenRepo.findById(id)
+        OrdenFabricacion orden = ordenRepo.findByIdForUpdate(id)
                 .orElseThrow(() -> new NoSuchElementException("Orden de fabricación no encontrada."));
+        if (orden.getMpsFabricacionDetalle() != null) {
+            throw new IllegalStateException("Cancele esta tanda desde su MPS OF para conservar la programacion.");
+        }
+        return cancelarInterna(orden, actor);
+    }
+
+    public OrdenFabricacionDTOs.Response cancelarDesdeMps(Long id, User actor) {
+        OrdenFabricacion orden = ordenRepo.findByIdForUpdate(id)
+                .orElseThrow(() -> new NoSuchElementException("Orden de fabricacion no encontrada."));
+        return cancelarInterna(orden, actor);
+    }
+
+    public boolean esCancelable(OrdenFabricacion orden) {
+        boolean estado = orden.getEstado() == EstadoOrdenFabricacion.BORRADOR
+                || orden.getEstado() == EstadoOrdenFabricacion.PLANIFICADA
+                || orden.getEstado() == EstadoOrdenFabricacion.LIBERADA;
+        return estado && !operacionEventoRepo
+                .existsByOperacion_OrdenFabricacion_OrdenFabricacionIdAndActorTipoAndTipoEvento(
+                        orden.getOrdenFabricacionId(), ActorTipoEventoSeguimiento.USER, TipoEventoSeguimiento.OPERATIVO)
+                && transaccionRepo.countByTipoEntidadCausanteAndIdEntidadCausante(
+                        TransaccionAlmacen.TipoEntidadCausante.OD_OF,
+                        Math.toIntExact(orden.getOrdenFabricacionId())) == 0;
+    }
+
+    public void reprogramarDesdeMps(OrdenFabricacion orden) {
+        if (orden.getMpsFabricacionDetalle() == null || !esCancelable(orden)) {
+            throw new IllegalStateException("Solo puede reprogramarse una OF de MPS sin ejecucion real.");
+        }
+        ordenRepo.save(orden);
+        operacionService.reprogramarSinEjecucion(orden);
+        batchRecordProjectionQueueService.solicitarActualizacion(orden);
+    }
+
+    private OrdenFabricacionDTOs.Response cancelarInterna(OrdenFabricacion orden, User actor) {
+        Long id = orden.getOrdenFabricacionId();
         if (orden.getEstado() != EstadoOrdenFabricacion.BORRADOR
                 && orden.getEstado() != EstadoOrdenFabricacion.PLANIFICADA
                 && orden.getEstado() != EstadoOrdenFabricacion.LIBERADA) {
@@ -286,6 +330,7 @@ public class OrdenFabricacionService {
         }
         orden.setEstado(EstadoOrdenFabricacion.CANCELADA);
         ordenRepo.save(orden);
+        operacionService.reconciliarDespejesPorCancelacion(id, actor);
         batchRecordProjectionQueueService.solicitarAnulacion(orden, actor);
         return toResponse(orden);
     }
@@ -320,6 +365,7 @@ public class OrdenFabricacionService {
             if (orden.getEstado() == EstadoOrdenFabricacion.CANCELADA) continue;
             orden.setEstado(EstadoOrdenFabricacion.CANCELADA);
             ordenRepo.save(orden);
+            operacionService.reconciliarDespejesPorCancelacion(orden.getOrdenFabricacionId(), actor);
             batchRecordProjectionQueueService.solicitarAnulacion(orden, actor);
         }
     }
@@ -349,6 +395,8 @@ public class OrdenFabricacionService {
                 .manufacturingVersionId(orden.getManufacturingVersion().getId())
                 .manufacturingVersionNumber(orden.getManufacturingVersion().getVersionNumber())
                 .cantidadPlanificada(orden.getCantidadPlanificada())
+                .mpsFabricacionDetalleId(orden.getMpsFabricacionDetalle() == null
+                        ? null : orden.getMpsFabricacionDetalle().getId())
                 .unidadMedida(orden.getUnidadMedida())
                 .loteId(lote.getId())
                 .lote(lote.getBatchNumber())

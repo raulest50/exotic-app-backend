@@ -12,6 +12,7 @@ import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.producto.SemiTerminadoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.repo.produccion.fabricacion.*;
+import exotic.app.planta.service.master.configs.MasterDirectiveService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,8 @@ class MpsFabricacionServiceTest {
     @Mock private OrdenFabricacionRepo ordenRepo;
     @Mock private LoteRepo loteRepo;
     @Mock private OrdenFabricacionService ordenService;
+    @Mock private MasterDirectiveService masterDirectiveService;
+    @Mock private MpsFabricacionObservacionRepo observacionRepo;
     private MpsFabricacionService service;
     private final User actor = new User();
 
@@ -47,7 +50,8 @@ class MpsFabricacionServiceTest {
     void setup() {
         actor.setUsername("planificador");
         service = new MpsFabricacionService(programaRepo, semiRepo, manufacturingRepo, ordenRepo,
-                loteRepo, ordenService, new ObjectMapper(), Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"), ZoneOffset.UTC));
+                loteRepo, ordenService, new ObjectMapper(), Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"), ZoneOffset.UTC),
+                masterDirectiveService, observacionRepo);
     }
 
     @Test
@@ -191,6 +195,44 @@ class MpsFabricacionServiceTest {
         verifyNoInteractions(programaRepo, ordenRepo);
     }
 
+    @Test
+    void guardarOtraTandaConservaLaLineaBloqueadaSinCambios() {
+        when(masterDirectiveService.getMpsFabricacionDiasBloqueoEdicion()).thenReturn(2);
+        var programa = programa();
+        var bloqueada = detalle(11L, semi("S1"));
+        programa.getDetalles().add(bloqueada);
+        when(programaRepo.findByWeekForUpdate(WEEK)).thenReturn(Optional.of(programa));
+        when(semiRepo.findById("S2")).thenReturn(Optional.of(semi("S2")));
+        var futura = linea(null, "S2");
+        futura.setFechaInicio(WEEK.plusDays(2).atTime(8, 0));
+        futura.setFechaFinal(WEEK.plusDays(2).atTime(16, 0));
+        var dto = service.guardar(WEEK, request(3L, List.of(linea(11L, "S1"), futura)), actor);
+        assertEquals(2, dto.getPropuestas().size());
+        assertSame(bloqueada, programa.getDetalles().getFirst());
+        assertFalse(dto.getPropuestas().getFirst().isEditable());
+        verify(semiRepo, never()).findById("S1");
+    }
+
+    @Test
+    void noPuedeEliminarUnaTandaBloqueadaOmitiendolaDelPayload() {
+        when(masterDirectiveService.getMpsFabricacionDiasBloqueoEdicion()).thenReturn(2);
+        var programa = programa(); programa.getDetalles().add(detalle(11L, semi("S1")));
+        when(programaRepo.findByWeekForUpdate(WEEK)).thenReturn(Optional.of(programa));
+        assertThrows(ResponseStatusException.class, () -> service.guardar(WEEK, request(3L, List.of()), actor));
+        assertEquals(1, programa.getDetalles().size());
+        verify(programaRepo, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void noPuedeEditarCantidadDeTandaBloqueadaEnGuardadoCompleto() {
+        when(masterDirectiveService.getMpsFabricacionDiasBloqueoEdicion()).thenReturn(2);
+        var programa = programa(); programa.getDetalles().add(detalle(11L, semi("S1")));
+        when(programaRepo.findByWeekForUpdate(WEEK)).thenReturn(Optional.of(programa));
+        var cambio = linea(11L, "S1"); cambio.setCantidad(new BigDecimal("14"));
+        assertThrows(ResponseStatusException.class, () -> service.guardar(WEEK, request(3L, List.of(cambio)), actor));
+        assertEquals(new BigDecimal("12.3456"), programa.getDetalles().getFirst().getCantidad());
+    }
+
     private MpsFabricacionSemanal programa() {
         var p = new MpsFabricacionSemanal();
         p.setId(1L);
@@ -214,6 +256,10 @@ class MpsFabricacionServiceTest {
         d.setId(id);
         d.setSemiTerminado(semi);
         d.setUnidadMedida("KG");
+        d.setMps(programa());
+        d.setCantidad(new BigDecimal("12.3456"));
+        d.setFechaInicio(WEEK.atTime(8, 0));
+        d.setFechaFinal(WEEK.atTime(16, 0));
         return d;
     }
 

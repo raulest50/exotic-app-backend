@@ -1,21 +1,26 @@
 // src/main/java/lacosmetics/planta/lacmanufacture/resource/UserManagementResource.java
 package exotic.app.planta.resource.users;
 
+import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.users.dto.AssignModuloAccesoRequest;
 import exotic.app.planta.model.users.dto.SearchUserDTO;
 import exotic.app.planta.model.users.dto.UpdateUserAccesosRequest;
 import exotic.app.planta.model.users.dto.UpdateUserInfoDTO;
 import exotic.app.planta.model.users.dto.UserAssignmentStatusDTO;
+import exotic.app.planta.security.ModuleTabAccessGuard;
 import exotic.app.planta.service.users.UserManagementService;
 import exotic.app.planta.service.users.UserOperationalCompatibilityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/usuarios")
@@ -24,6 +29,7 @@ public class UserManagementResource {
 
     private final UserManagementService userManagementService;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
+    private final ModuleTabAccessGuard accessGuard;
 
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
@@ -33,14 +39,17 @@ public class UserManagementResource {
     }
 
     @PostMapping
-    public ResponseEntity<User> createUser(@RequestBody User user) {
+    public ResponseEntity<User> createUser(Authentication authentication, @RequestBody User user) {
+        requireUserManagementAccess(authentication);
         User created = userManagementService.createUser(user);
         created.setPassword("");
         return ResponseEntity.created(URI.create("/usuarios/" + created.getId())).body(created);
     }
 
     @PutMapping("/{userId}")
-    public ResponseEntity<User> updateUser(@PathVariable Long userId, @RequestBody User user) {
+    public ResponseEntity<User> updateUser(
+            Authentication authentication, @PathVariable Long userId, @RequestBody User user) {
+        requireUserManagementAccess(authentication);
         User updated = userManagementService.updateUser(userId, user);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
@@ -48,15 +57,18 @@ public class UserManagementResource {
 
     @PatchMapping("/{userId}/info")
     public ResponseEntity<User> patchUserInfo(
+            Authentication authentication,
             @PathVariable Long userId,
             @RequestBody UpdateUserInfoDTO dto) {
+        requireUserManagementAccess(authentication);
         User updated = userManagementService.patchUserInfo(userId, dto);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/{userId}")
-    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
+    public ResponseEntity<?> deleteUser(Authentication authentication, @PathVariable Long userId) {
+        requireUserManagementAccess(authentication);
         try {
             userManagementService.deleteUser(userId);
             return ResponseEntity.noContent().build();
@@ -67,7 +79,8 @@ public class UserManagementResource {
     }
 
     @PutMapping("/{userId}/deactivate")
-    public ResponseEntity<?> deactivateUser(@PathVariable Long userId) {
+    public ResponseEntity<?> deactivateUser(Authentication authentication, @PathVariable Long userId) {
+        requireUserManagementAccess(authentication);
         try {
             User updated = userManagementService.deactivateUser(userId);
             updated.setPassword("");
@@ -79,7 +92,8 @@ public class UserManagementResource {
     }
 
     @PutMapping("/{userId}/activate")
-    public ResponseEntity<?> activateUser(@PathVariable Long userId) {
+    public ResponseEntity<?> activateUser(Authentication authentication, @PathVariable Long userId) {
+        requireUserManagementAccess(authentication);
         try {
             User updated = userManagementService.activateUser(userId);
             updated.setPassword("");
@@ -92,8 +106,10 @@ public class UserManagementResource {
 
     @DeleteMapping("/{userId}/modulo-accesos/{moduloAccesoId}")
     public ResponseEntity<User> removeModuloAccesoFromUser(
+            Authentication authentication,
             @PathVariable Long userId,
             @PathVariable Long moduloAccesoId) {
+        requireUserManagementAccess(authentication);
         User updated = userManagementService.removeModuloAccesoFromUser(userId, moduloAccesoId);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
@@ -101,8 +117,10 @@ public class UserManagementResource {
 
     @PostMapping("/{userId}/modulo-accesos")
     public ResponseEntity<User> assignModuloAcceso(
+            Authentication authentication,
             @PathVariable Long userId,
             @RequestBody AssignModuloAccesoRequest request) {
+        requireUserManagementAccess(authentication);
         User updated = userManagementService.assignModuloAcceso(userId, request);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
@@ -110,8 +128,10 @@ public class UserManagementResource {
 
     @PutMapping("/{userId}/accesos")
     public ResponseEntity<User> replaceUserAccesos(
+            Authentication authentication,
             @PathVariable Long userId,
             @RequestBody UpdateUserAccesosRequest request) {
+        requireUserManagementAccess(authentication);
         User updated = userManagementService.replaceUserAccesos(userId, request);
         updated.setPassword("");
         return ResponseEntity.ok(updated);
@@ -140,5 +160,22 @@ public class UserManagementResource {
         List<User> users = userManagementService.searchUser_by_DTO(searchUserDTO, page, size);
         users.forEach(user -> user.setPassword(""));
         return ResponseEntity.ok(users);
+    }
+
+    private void requireUserManagementAccess(Authentication authentication) {
+        User actor = accessGuard.requireAnyTabAccess(
+                authentication,
+                ModuloSistema.USUARIOS,
+                Map.of("GESTION_USUARIOS", 1, "MAIN", 1),
+                "No tiene permisos para administrar usuarios y sus accesos."
+        );
+        if (actor.getEstado() != 1) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El usuario no está activo.");
+        }
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<String> handleInvalidAssignment(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(exception.getMessage());
     }
 }

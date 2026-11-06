@@ -45,6 +45,11 @@ public class OrdenFabricacion {
     @JoinColumn(name = "orden_produccion_origen_id")
     private OrdenProduccion ordenProduccionOrigen;
 
+    /** Tanda del programa OF; nula para OF manuales e historicas. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "mps_fabricacion_detalle_id", unique = true)
+    private MpsFabricacionDetalle mpsFabricacionDetalle;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private EstadoOrdenFabricacion estado = EstadoOrdenFabricacion.BORRADOR;

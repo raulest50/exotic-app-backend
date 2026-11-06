@@ -29,6 +29,11 @@ public class MpsFabricacionExceptionHandler {
         return ResponseEntity.badRequest().body(new ErrorResponse("Solicitud invalida", e.getMessage()));
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> businessConflict(IllegalStateException e) {
+        return ResponseEntity.status(409).body(new ErrorResponse("Operacion no disponible", e.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> validation(MethodArgumentNotValidException e) {
         String message = e.getBindingResult().getFieldErrors().stream()

@@ -61,6 +61,8 @@ public final class MapaAccesos {
                         "PROGRAMACION_PRODUCCION",
                         "MONITOREAR_AREAS_OPERATIVAS",
                         "APROBACION_MPS_WEEK",
+                        "PROGRAMACION_MPS_OF",
+                        "APROBACION_MPS_OF",
                         "CONSULTAR_BATCH_RECORD",
                         "PLANES_CONTROL_PROCESO",
                         "REGISTRAR_CONTROL_PROCESO",
@@ -91,6 +93,13 @@ public final class MapaAccesos {
             if (!containsTab(modulo, tabId)) {
                 throw new IllegalArgumentException("Tab no permitido para el modulo " + modulo + ": " + tabId);
             }
+        }
+    }
+
+    /** El asistente distingue únicamente consulta y consulta con escritura. */
+    public static void validateNivel(ModuloSistema modulo, String tabId, int nivel) {
+        if (modulo == ModuloSistema.AGENT_ASSISTANT && (nivel < 1 || nivel > 2)) {
+            throw new IllegalArgumentException("El asistente admite nivel 1 (consulta) o 2 (consulta y escritura): " + tabId);
         }
     }
 }

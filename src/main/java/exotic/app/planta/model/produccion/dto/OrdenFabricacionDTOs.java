@@ -80,6 +80,7 @@ public final class OrdenFabricacionDTOs {
         private String responsable;
         private String observaciones;
         private Integer ordenProduccionOrigenId;
+        private Long mpsFabricacionDetalleId;
         private LocalDateTime liberadaEn;
         private String politicaDispensacionInicio;
         private String estadoDispensacionMateriales;

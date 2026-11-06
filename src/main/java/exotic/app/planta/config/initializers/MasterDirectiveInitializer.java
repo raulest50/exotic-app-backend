@@ -49,6 +49,7 @@ public class MasterDirectiveInitializer {
         ensureEnableMasterSupermasterDirectivesAccess();
         ensureMpsSemanalDiasBloqueoEdicion();
         ensureMpsSemanalPermitirAgregarTerminadosAprobado();
+        ensureMpsFabricacionDirectives();
         ensureAreaOperativaNoiseEnabled();
         ensureAreaOperativaNoiseIntervalMinutes();
         ensureAreaOperativaNoiseSampleSeconds();
@@ -183,6 +184,36 @@ public class MasterDirectiveInitializer {
         directive.setTipoDato(MasterDirective.TipoDato.BOOLEANO);
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setAyuda(MPS_SEMANAL_AGREGAR_TERMINADOS_APROBADO_AYUDA);
+    }
+
+    private void ensureMpsFabricacionDirectives() {
+        ensureMpsFabricacionDirective(
+                MasterDirectiveKeys.MPS_FABRICACION_DIAS_BLOQUEO_EDICION,
+                String.valueOf(MasterDirectiveKeys.DEFAULT_MPS_FABRICACION_DIAS_BLOQUEO_EDICION),
+                "Cantidad de dias bloqueados para editar MPS OF",
+                "Define cuantos dias desde hoy quedan bloqueados en el borrador MPS OF. Acepta enteros de 0 a 7; 0 permite editar desde hoy. Las tandas aprobadas se controlan por su ejecucion, igual que en MPS OP.",
+                MasterDirective.TipoDato.NUMERO);
+        ensureMpsFabricacionDirective(
+                MasterDirectiveKeys.MPS_FABRICACION_PERMITIR_AGREGAR_SEMITERMINADOS_APROBADO,
+                String.valueOf(MasterDirectiveKeys.DEFAULT_MPS_FABRICACION_PERMITIR_AGREGAR_SEMITERMINADOS_APROBADO),
+                "Permite agregar semiterminados nuevos en MPS OF aprobado",
+                "Permite incorporar un semiterminado que aun no esta programado en una semana OF aprobada o con ordenes emitidas. Las tandas siguen sujetas a las restricciones de fechas y ejecucion.",
+                MasterDirective.TipoDato.BOOLEANO);
+    }
+
+    private void ensureMpsFabricacionDirective(String nombre, String valorPredeterminado,
+            String resumen, String ayuda, MasterDirective.TipoDato tipoDato) {
+        MasterDirective directive = masterDirectiveRepo.findByNombre(nombre).orElseGet(() -> {
+            MasterDirective nueva = new MasterDirective();
+            nueva.setNombre(nombre);
+            nueva.setValor(valorPredeterminado);
+            return nueva;
+        });
+        directive.setResumen(resumen);
+        directive.setAyuda(ayuda);
+        directive.setTipoDato(tipoDato);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        masterDirectiveRepo.save(directive);
     }
 
     private void ensureAreaOperativaNoiseEnabled() {

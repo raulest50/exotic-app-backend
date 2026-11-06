@@ -155,6 +155,9 @@ public class UserManagementService {
         } catch (IllegalArgumentException e) {
             throw new RuntimeException(e.getMessage());
         }
+        for (TabAccesoAssignmentDTO tab : tabsList) {
+            MapaAccesos.validateNivel(request.getModulo(), tab.getTabId(), tab.getNivel());
+        }
 
         ModuloAcceso moduloAcceso = user.getModuloAccesos().stream()
                 .filter(ma -> ma.getModulo() == request.getModulo())
@@ -223,6 +226,7 @@ public class UserManagementService {
                 if (!tabIds.add(tab.getTabId())) {
                     throw new RuntimeException("Tab duplicado en el modulo " + acceso.getModulo() + ": " + tab.getTabId());
                 }
+                MapaAccesos.validateNivel(acceso.getModulo(), tab.getTabId(), tab.getNivel());
                 if (tab.getNivel() < 1 || tab.getNivel() > 4) {
                     throw new RuntimeException("Nivel invalido para " + tab.getTabId() + ": " + tab.getNivel());
                 }

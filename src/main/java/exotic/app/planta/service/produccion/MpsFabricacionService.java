@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.organizacion.AlcanceMps;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.SemiTerminado;
+import exotic.app.planta.model.produccion.EstadoMpsSemanal;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalObservacion;
 import exotic.app.planta.model.produccion.dto.MpsFabricacionDTOs.*;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
 import exotic.app.planta.model.produccion.fabricacion.*;
@@ -26,7 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.*;
 import java.util.*;
 
-/** Solo planificacion y consulta: no emite ordenes ni mueve inventario. */
+/** Preparacion y consulta del programa; aprobacion y emision tienen servicios propios. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -40,6 +43,8 @@ public class MpsFabricacionService {
     private final OrdenFabricacionService ordenService;
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
+    private final exotic.app.planta.service.master.configs.MasterDirectiveService masterDirectiveService;
+    private final MpsFabricacionObservacionRepo observacionRepo;
 
     public ProgramaResponse consultar(LocalDate week, AreaOperativa area) {
         validarSemana(week);
@@ -55,6 +60,10 @@ public class MpsFabricacionService {
                 : !Objects.equals(request.getVersion(), programa.getVersion())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "El MPS OF cambio desde que se abrio. Recargue antes de guardar.");
+        }
+        if (programa != null && programa.getEstado() != EstadoMpsSemanal.BORRADOR) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "El guardado completo solo aplica a borradores. Use la edicion de tandas aprobadas.");
         }
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         if (programa == null) {
@@ -79,6 +88,14 @@ public class MpsFabricacionService {
             if (detalle == null || (linea.getId() != null && !idsUsados.add(linea.getId()))) {
                 throw new IllegalArgumentException("Una propuesta esta repetida o no pertenece a este MPS OF.");
             }
+            if (detalle.getId() != null && !dentroVentana(detalle.getFechaInicio())) {
+                if (!mismaLinea(detalle, linea)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Una tanda fuera de la ventana de edicion debe conservarse sin cambios.");
+                }
+                detalles.add(detalle);
+                continue;
+            }
             SemiTerminado semi = semiRepo.findById(linea.getSemiTerminadoId().trim())
                     .orElseThrow(() -> new IllegalArgumentException("Semiterminado no encontrado."));
             if (!semi.isRequiereOrdenFabricacion()) {
@@ -93,6 +110,11 @@ public class MpsFabricacionService {
                 throw new IllegalArgumentException("Cambio la unidad del semiterminado. Reemplace la propuesta para expresar su nueva cantidad.");
             }
             detalle.setMps(programa);
+            if (detalle.getOrdenFabricacion() != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Una tanda emitida no puede sobrescribirse desde el borrador.");
+            }
+            validarVentana(linea.getFechaInicio());
             detalle.setSemiTerminado(semi);
             detalle.setUnidadMedida(unidad.trim());
             detalle.setCantidad(linea.getCantidad());
@@ -102,17 +124,25 @@ public class MpsFabricacionService {
             detalle.setPosicion(detalles.size());
             detalles.add(detalle);
         }
+        if (programa.getDetalles().stream().anyMatch(d -> !detalles.contains(d)
+                && d.getOrdenFabricacion() != null)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Una tanda emitida no puede eliminarse fisicamente.");
+        }
+        if (programa.getDetalles().stream().anyMatch(d -> !detalles.contains(d)
+                && !dentroVentana(d.getFechaInicio()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No puede eliminarse una tanda fuera de la ventana de edicion.");
+        }
         programa.getDetalles().removeIf(d -> !detalles.contains(d));
         for (MpsFabricacionDetalle detalle : detalles) {
             if (detalle.getId() == null) programa.getDetalles().add(detalle);
         }
-        // El padre debe cambiar incluso cuando solo se modifica una linea.
-        if (programa.getActualizadoEn() != null && !ahora.isAfter(programa.getActualizadoEn())) {
-            ahora = programa.getActualizadoEn().plusNanos(1000);
+        // Posicion es orden de captura; no altera cantidades ni fechas de tandas bloqueadas.
+        for (int posicion = 0; posicion < detalles.size(); posicion++) {
+            detalles.get(posicion).setPosicion(posicion);
         }
-        programa.setActualizadoEn(ahora);
-        programa.setActualizadoPor(actor.getUsername());
-        programaRepo.saveAndFlush(programa);
+        actualizar(programa, actor, programa.getId() != null);
         return toResponse(week, programa, null);
     }
 
@@ -131,7 +161,7 @@ public class MpsFabricacionService {
         return ordenService.detalle(id);
     }
 
-    private ProgramaResponse toResponse(LocalDate week, MpsFabricacionSemanal programa, AreaOperativa area) {
+    ProgramaResponse toResponse(LocalDate week, MpsFabricacionSemanal programa, AreaOperativa area) {
         ProgramaResponse dto = new ProgramaResponse();
         dto.setWeekStartDate(week);
         dto.setWeekEndDate(week.plusDays(6));
@@ -140,12 +170,20 @@ public class MpsFabricacionService {
         dto.setVersion(programa.getVersion());
         dto.setActualizadoEn(programa.getActualizadoEn());
         dto.setActualizadoPor(programa.getActualizadoPor());
+        dto.setEstado(programa.getEstado());
+        dto.setRevisionNumero(programa.getRevisionNumero());
+        dto.setFechaAprobacion(programa.getFechaAprobacion());
+        dto.setAprobadoPorUsername(programa.getAprobadoPorUsername());
+        dto.setFechaGeneracionOfs(programa.getFechaEmision());
+        dto.setGeneradoPorUsername(programa.getEmitidoPorUsername());
+        dto.setObservacionesPendientes(observacionRepo.countByMps_IdAndEstadoIn(programa.getId(),
+                List.of(EstadoMpsSemanalObservacion.ABIERTA, EstadoMpsSemanalObservacion.ATENDIDA)));
         Map<String, Boolean> visiblePorProducto = new HashMap<>();
         dto.setPropuestas(programa.getDetalles().stream()
                 .filter(d -> !soloRuta(area) || visiblePorProducto.computeIfAbsent(d.getSemiTerminado().getProductoId(),
                         ignored -> pasaPorArea(d.getSemiTerminado(), area.getAreaId())))
                 .sorted(Comparator.comparingInt(MpsFabricacionDetalle::getPosicion))
-                .map(this::toLineaResponse).toList());
+                .map(d -> toLineaResponse(d, area != null)).toList());
         return dto;
     }
 
@@ -168,7 +206,7 @@ public class MpsFabricacionService {
         }
     }
 
-    private LineaResponse toLineaResponse(MpsFabricacionDetalle d) {
+    private LineaResponse toLineaResponse(MpsFabricacionDetalle d, boolean consultaOperativa) {
         LineaResponse dto = new LineaResponse();
         dto.setId(d.getId());
         dto.setSemiTerminadoId(d.getSemiTerminado().getProductoId());
@@ -179,8 +217,67 @@ public class MpsFabricacionService {
         dto.setFechaFinal(d.getFechaFinal());
         dto.setObservaciones(d.getObservaciones());
         dto.setElegible(d.getSemiTerminado().isRequiereOrdenFabricacion());
+        dto.setEstado(d.getEstado());
+        OrdenFabricacion orden = d.getOrdenFabricacion();
+        if (orden != null) {
+            dto.setOrdenFabricacionId(orden.getOrdenFabricacionId());
+            dto.setEstadoOrdenFabricacion(orden.getEstado().name());
+            loteRepo.findByOrdenFabricacion_OrdenFabricacionId(orden.getOrdenFabricacionId()).stream()
+                    .findFirst().ifPresent(l -> dto.setLote(l.getBatchNumber()));
+        }
+        boolean cancelable = d.getEstado() != EstadoMpsSemanalItem.CANCELADO
+                && (orden == null || ordenService.esCancelable(orden));
+        boolean ventana = d.getMps().getEstado() != EstadoMpsSemanal.BORRADOR || dentroVentana(d.getFechaInicio());
+        dto.setCancelable(!consultaOperativa && cancelable && ventana);
+        dto.setEditable(!consultaOperativa && cancelable && ventana);
+        dto.setMotivoBloqueo(consultaOperativa ? "Consulta operativa de solo lectura."
+                : d.getEstado() == EstadoMpsSemanalItem.CANCELADO ? "Tanda cancelada."
+                : !cancelable ? "La OF tiene ejecucion o dispensaciones reales."
+                : !ventana ? "La fecha esta fuera de la ventana de edicion." : null);
         return dto;
     }
+
+    MpsFabricacionSemanal bloquear(LocalDate week, Long expectedVersion) {
+        validarSemana(week);
+        MpsFabricacionSemanal programa = programaRepo.findByWeekForUpdate(week)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No existe MPS OF para esa semana."));
+        if (expectedVersion == null || !Objects.equals(expectedVersion, programa.getVersion())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El MPS OF cambio. Recargue antes de continuar.");
+        }
+        return programa;
+    }
+
+    void actualizar(MpsFabricacionSemanal programa, User actor, boolean nuevaRevision) {
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        if (programa.getActualizadoEn() != null && !ahora.isAfter(programa.getActualizadoEn())) {
+            ahora = programa.getActualizadoEn().plusNanos(1000);
+        }
+        programa.setActualizadoEn(ahora);
+        programa.setActualizadoPor(actor.getUsername());
+        if (nuevaRevision) programa.setRevisionNumero(programa.getRevisionNumero() + 1);
+        programaRepo.saveAndFlush(programa);
+    }
+
+    void validarVentana(LocalDateTime inicio) {
+        if (!dentroVentana(inicio)) {
+            throw new IllegalArgumentException("La fecha inicial esta fuera de la ventana de edicion del MPS OF.");
+        }
+    }
+
+    private boolean dentroVentana(LocalDateTime inicio) {
+        return inicio != null && !inicio.toLocalDate().isBefore(LocalDate.now(applicationClock)
+                .plusDays(masterDirectiveService.getMpsFabricacionDiasBloqueoEdicion()));
+    }
+
+    private boolean mismaLinea(MpsFabricacionDetalle detalle, LineaRequest request) {
+        return Objects.equals(detalle.getSemiTerminado().getProductoId(), request.getSemiTerminadoId().trim())
+                && detalle.getCantidad().compareTo(request.getCantidad()) == 0
+                && Objects.equals(detalle.getFechaInicio(), request.getFechaInicio())
+                && Objects.equals(detalle.getFechaFinal(), request.getFechaFinal())
+                && Objects.equals(normalizarTexto(detalle.getObservaciones()), normalizarTexto(request.getObservaciones()));
+    }
+
+    private String normalizarTexto(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
     private OrdenResponse toOrdenResponse(OrdenFabricacion orden) {
         OrdenResponse dto = new OrdenResponse();

@@ -69,6 +69,8 @@ public final class BatchRecordDTOs {
         @Builder.Default
         private List<Control> controles = new ArrayList<>();
         @Builder.Default
+        private List<DespejeLineaDTOs.Ejecucion> despejesLinea = new ArrayList<>();
+        @Builder.Default
         private List<Desviacion> desviaciones = new ArrayList<>();
         @Builder.Default
         private List<Correccion> correcciones = new ArrayList<>();

@@ -58,22 +58,6 @@ public class MaterialRequirementSnapshotService {
         }
     }
 
-    /** Cantidades de semiterminados reales que requieren una OF para abastecer la OP. */
-    public Map<SemiTerminado, BigDecimal> calcularOrdenesFabricacion(
-            ManufacturingVersions version,
-            BigDecimal cantidadOrden
-    ) {
-        if (version == null || cantidadOrden == null || cantidadOrden.signum() <= 0) {
-            throw new IllegalArgumentException("La version y cantidad de la OP son obligatorias.");
-        }
-        Map<String, SemiDemand> demandas = new LinkedHashMap<>();
-        String rootId = version.getProducto() == null ? "<raiz>" : version.getProducto().getProductoId();
-        expandirOrdenes(version, cantidadOrden, demandas, new LinkedHashSet<>(Set.of(rootId)));
-        Map<SemiTerminado, BigDecimal> result = new LinkedHashMap<>();
-        demandas.values().forEach(demanda -> result.put(demanda.semi(), demanda.cantidad()));
-        return result;
-    }
-
     public List<RequirementView> leer(String json) {
         if (json == null || json.isBlank()) return List.of();
         try {
@@ -126,27 +110,6 @@ public class MaterialRequirementSnapshotService {
             }
             addRequirement(requirements, producto, cantidad,
                     producto instanceof Material ? "MATERIAL" : "SEMITERMINADO");
-        }
-    }
-
-    private void expandirOrdenes(
-            ManufacturingVersions version,
-            BigDecimal multiplicador,
-            Map<String, SemiDemand> demandas,
-            Set<String> ruta
-    ) {
-        for (Ingredient ingredient : leerIngredientes(version)) {
-            Producto producto = requireProducto(ingredient.productoId());
-            if (!(producto instanceof SemiTerminado semi)) continue;
-            BigDecimal cantidad = multiplicador.multiply(ingredient.cantidad()).setScale(SCALE, RoundingMode.HALF_UP);
-            entrarRuta(ruta, semi.getProductoId());
-            if (semi.isRequiereOrdenFabricacion()) {
-                demandas.compute(semi.getProductoId(), (ignored, actual) -> actual == null
-                        ? new SemiDemand(semi, cantidad)
-                        : new SemiDemand(semi, actual.cantidad().add(cantidad)));
-            }
-            expandirOrdenes(requireLatestVersion(semi), cantidad, demandas, ruta);
-            ruta.remove(semi.getProductoId());
         }
     }
 
@@ -298,7 +261,6 @@ public class MaterialRequirementSnapshotService {
     ) {}
 
     private record Ingredient(String productoId, BigDecimal cantidad) {}
-    private record SemiDemand(SemiTerminado semi, BigDecimal cantidad) {}
 
     private record Requirement(
             String productoId,

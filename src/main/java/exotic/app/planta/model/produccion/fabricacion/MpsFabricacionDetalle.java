@@ -1,6 +1,7 @@
 package exotic.app.planta.model.produccion.fabricacion;
 
 import exotic.app.planta.model.producto.SemiTerminado;
+import exotic.app.planta.model.produccion.EstadoMpsSemanalItem;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,4 +35,9 @@ public class MpsFabricacionDetalle {
     private String observaciones;
     @Column(nullable = false)
     private int posicion;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private EstadoMpsSemanalItem estado = EstadoMpsSemanalItem.ACTIVO;
+    @OneToOne(mappedBy = "mpsFabricacionDetalle", fetch = FetchType.LAZY)
+    private OrdenFabricacion ordenFabricacion;
 }

@@ -1,5 +1,6 @@
 package exotic.app.planta.service.produccion;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.empresa.EmpresaLogoDocumentalVersion;
@@ -63,7 +64,9 @@ public class BatchRecordPdfService {
         }
 
         try {
-            JsonNode root = objectMapper.readTree(contenidoCanonico);
+            JsonNode root = objectMapper.reader()
+                    .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+                    .readTree(contenidoCanonico);
             BatchRecordMainPdfRenderer.LogoDocumental logo = resolverLogo(root);
             BatchRecordPdfAnnexService.AnexosPreparados anexos = annexService.preparar(root);
             BatchRecordMainPdfRenderer.RenderContext context =
@@ -72,7 +75,7 @@ public class BatchRecordPdfService {
                             hash,
                             borrador,
                             revision,
-                            BatchRecordService.PLANTILLA_PDF_VERSION,
+                            plantillaAplicada(revision),
                             logo,
                             anexos.numeroIncidencias());
             byte[] pdfPrincipal = mainPdfRenderer.render(root, context);
@@ -88,6 +91,14 @@ public class BatchRecordPdfService {
             throw new IllegalStateException(
                     "No fue posible reconstruir el PDF del expediente digital.", exception);
         }
+    }
+
+    private String plantillaAplicada(BatchRecordRevision revision) {
+        String actual = BatchRecordService.PLANTILLA_PDF_VERSION + " (representación actual)";
+        if (revision == null) return actual;
+        String emitida = revision.getPlantillaPdfVersion();
+        return actual + "\nRegistrada al emitir: "
+                + (emitida == null || emitida.isBlank() ? "No registrada" : emitida);
     }
 
     private BatchRecordMainPdfRenderer.LogoDocumental resolverLogo(JsonNode root) {

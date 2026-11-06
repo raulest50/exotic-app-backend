@@ -67,6 +67,19 @@ public class MasterDirectiveService {
         );
     }
 
+    public int getMpsFabricacionDiasBloqueoEdicion() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.MPS_FABRICACION_DIAS_BLOQUEO_EDICION,
+                MasterDirectiveKeys.DEFAULT_MPS_FABRICACION_DIAS_BLOQUEO_EDICION,
+                0, 7);
+    }
+
+    public boolean isMpsFabricacionPermitirAgregarSemiterminadosAprobado() {
+        return getBooleanDirectiveValue(
+                MasterDirectiveKeys.MPS_FABRICACION_PERMITIR_AGREGAR_SEMITERMINADOS_APROBADO,
+                MasterDirectiveKeys.DEFAULT_MPS_FABRICACION_PERMITIR_AGREGAR_SEMITERMINADOS_APROBADO);
+    }
+
     public boolean isAreaOperativaNoiseEnabled() {
         return getBooleanDirectiveValue(
                 MasterDirectiveKeys.AREA_OPERATIVA_NOISE_ENABLED,
@@ -252,7 +265,8 @@ public class MasterDirectiveService {
 
     private void validateValorByTipo(MasterDirective directive, String valor) {
         if (directive.getTipoDato() == MasterDirective.TipoDato.NUMERO) {
-            if (MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())) {
+            if (MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())
+                    || MasterDirectiveKeys.MPS_FABRICACION_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())) {
                 parseIntegerInRange(valor, directive.getNombre(), 0, 7);
                 return;
             }
