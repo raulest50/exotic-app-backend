@@ -10,7 +10,8 @@ import java.util.Optional;
 
 public interface PlantillaDespejeVersionRepo extends JpaRepository<PlantillaDespejeVersion, Long> {
     List<PlantillaDespejeVersion> findByAreaOperativa_AreaIdOrderByNumeroDesc(Integer areaId);
-    Optional<PlantillaDespejeVersion> findByAreaOperativa_AreaIdAndEstado(Integer areaId, Estado estado);
-    @Query("select coalesce(max(p.numero),0) from PlantillaDespejeVersion p where p.areaOperativa.areaId = :areaId")
-    int maxNumero(@Param("areaId") Integer areaId);
+    Optional<PlantillaDespejeVersion> findByFamilia_IdAndEstado(Long familiaId, Estado estado);
+    List<PlantillaDespejeVersion> findByAreaOperativa_AreaIdAndEstadoOrderByFamilia_IdAsc(Integer areaId, Estado estado);
+    @Query("select coalesce(max(p.numero),0) from PlantillaDespejeVersion p where p.familia.id = :familiaId")
+    int maxNumero(@Param("familiaId") Long familiaId);
 }

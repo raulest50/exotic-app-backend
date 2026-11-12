@@ -8,11 +8,20 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 /**
  * Repository for IntegrantePersonal entity
  */
 public interface IntegrantePersonalRepo extends JpaRepository<IntegrantePersonal, Long> {
+
+    List<IntegrantePersonal> findByUsuarioId(Long usuarioId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from IntegrantePersonal i where i.id = :id")
+    Optional<IntegrantePersonal> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Find integrantes by nombre containing the given text (case insensitive)

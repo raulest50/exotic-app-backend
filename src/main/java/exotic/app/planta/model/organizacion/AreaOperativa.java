@@ -6,7 +6,6 @@ import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
-import exotic.app.planta.model.produccion.despeje.DespejeLineaEjecucion;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -51,9 +50,6 @@ public class AreaOperativa {
     @JsonIgnore @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "despeje_ocupante_operacion_id")
     private OrdenFabricacionOperacion despejeOcupanteOperacion;
-    @JsonIgnore @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "despeje_ejecucion_actual_id")
-    private DespejeLineaEjecucion despejeEjecucionActual;
     @Version @Column(name = "despeje_version", nullable = false)
     private long despejeVersion;
 

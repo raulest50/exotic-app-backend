@@ -244,7 +244,8 @@ public class BatchRecordPdfAnnexService {
                     "Despeje " + texto(despeje.path("id"), "")
                             + " - intento " + texto(despeje.path("intento"), ""),
                     texto(despeje.path("areaNombre"), "Área no registrada")
-                            + " - plantilla v" + texto(despeje.path("plantilla").path("numero"), "")
+                            + " - " + nombreFormularioDespeje(despeje)
+                            + " v" + texto(despeje.path("plantilla").path("numero"), "")
                             + " - " + texto(despeje.path("estado"), ""));
         }
         for (PoePreparado poe : poes) {
@@ -293,6 +294,7 @@ public class BatchRecordPdfAnnexService {
         pair(context, "Orden", descripcionOrden(root.path("orden")) + " "
                 + texto(root.path("orden").path("id"), ""));
         pair(context, "Área", texto(despeje.path("areaNombre"), ""));
+        pair(context, "Formulario de despeje", nombreFormularioDespeje(despeje));
         pair(context, "Producto / lote actual", texto(despeje.path("productoActualNombre"),
                 texto(root.path("producto").path("nombre"), "")) + " / "
                 + texto(despeje.path("loteActualNumero"), ""));
@@ -306,7 +308,7 @@ public class BatchRecordPdfAnnexService {
                             ? (despeje.path("confirmaAntecedenteDesconocido").asBoolean() ? "Sí" : "No")
                             : "No registrado");
         }
-        pair(context, "Plantilla", texto(plantilla.path("nombre"), "") + " - versión "
+        pair(context, "Versión del formulario", texto(plantilla.path("nombre"), "") + " - versión "
                 + texto(plantilla.path("numero"), ""));
         pair(context, "Revisión del contexto", texto(despeje.path("revisionContexto"), "No registrada"));
         pair(context, "Ejecución / estado", texto(despeje.path("id"), "") + " - intento "
@@ -332,6 +334,7 @@ public class BatchRecordPdfAnnexService {
         PdfPCell identity = new PdfPCell(new Phrase(
                 "Despeje " + texto(despeje.path("id"), "No registrado")
                         + " - " + texto(despeje.path("areaNombre"), "Área no registrada")
+                        + " - " + nombreFormularioDespeje(despeje)
                         + " - intento " + texto(despeje.path("intento"), "No registrado")
                         + " - plantilla v" + texto(plantilla.path("numero"), "No registrada"),
                 font(8, Font.BOLD, PRIMARY)));
@@ -380,6 +383,12 @@ public class BatchRecordPdfAnnexService {
 
     private String numeroDespeje(JsonNode value, String fallback) {
         return value.isNumber() ? value.decimalValue().toPlainString() : texto(value, fallback);
+    }
+
+    private String nombreFormularioDespeje(JsonNode despeje) {
+        return texto(despeje.path("familiaNombre"),
+                texto(despeje.path("plantilla").path("familiaNombre"),
+                        texto(despeje.path("plantilla").path("nombre"), "Formulario no registrado")));
     }
 
     private byte[] crearOrden(JsonNode root) throws Exception {

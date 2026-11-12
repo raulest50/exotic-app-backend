@@ -10,6 +10,8 @@ import java.util.List;
 public final class DespejeLineaDTOs {
     private DespejeLineaDTOs() {}
     public record Actor(Long id, String username, String nombre) {}
+    public record Familia(Long id, Integer areaId, String nombre, long version) {}
+    public record FamiliaRequest(String nombre) {}
     public record Config(Integer areaId, boolean requiereDespeje, boolean requiereRevision,
                          long revisionContexto, boolean antecedenteConocido,
                          Long ultimoLoteId, String ultimoLoteNumero, Long ocupanteSeguimientoId,
@@ -21,13 +23,14 @@ public final class DespejeLineaDTOs {
     public record Item(Long id, int orden, String texto, Tipo tipo, boolean obligatorio,
                        boolean permiteNa, Valor respuestaConforme, BigDecimal minimo, BigDecimal maximo) {}
     public record PlantillaRequest(Long id, Long version, String nombre, String motivoCambio,
-                                   List<ItemRequest> items) {}
+                                   List<ItemRequest> items, Long familiaId) {}
     public record Plantilla(Long id, Integer areaId, int numero, String nombre, String estado,
                             String motivoCambio, LocalDateTime vigenteDesde, LocalDateTime vigenteHasta,
-                            long version, List<Item> items) {}
-    public record PrepararRequest(Long seguimientoId, Long operacionId, Boolean nuevoIntento) {}
+                            long version, List<Item> items, Long familiaId, String familiaNombre) {}
+    public record PrepararRequest(Long seguimientoId, Long operacionId, Boolean nuevoIntento, Long familiaId) {}
     public record Preparacion(boolean requiereDespeje, boolean requiereRevision,
-                              boolean puedeIniciar, String motivo, Ejecucion ejecucion) {}
+                              boolean puedeIniciar, String motivo, List<Requisito> requisitos, List<String> avisos) {}
+    public record Requisito(Long familiaId, String familiaNombre, boolean listo, String motivo, Ejecucion ejecucion) {}
     public record Respuesta(Long itemId, Valor valor, BigDecimal numero, String observacion) {}
     public record GuardarRequest(Long version, Boolean confirmaAntecedenteDesconocido,
                                  String observacionAntecedente, String observaciones,
@@ -45,5 +48,6 @@ public final class DespejeLineaDTOs {
                             String observaciones, String motivoRevision, String motivoInvalidacion,
                             LocalDateTime creadaEn, LocalDateTime enviadaEn, LocalDateTime revisadaEn,
                             LocalDateTime utilizadaEn, Actor creadaPor, Actor enviadaPor, Actor revisadaPor,
-                            String contenidoSha256, long version, List<Respuesta> respuestas) {}
+                            String contenidoSha256, long version, List<Respuesta> respuestas,
+                            Long familiaId, String familiaNombre) {}
 }

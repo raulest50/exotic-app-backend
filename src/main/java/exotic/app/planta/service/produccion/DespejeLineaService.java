@@ -7,7 +7,10 @@ import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
+import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
 import exotic.app.planta.model.produccion.despeje.*;
 import exotic.app.planta.model.produccion.dto.DespejeLineaDTOs.*;
 import exotic.app.planta.model.users.*;
@@ -49,62 +52,117 @@ public class DespejeLineaService {
     @Transactional
     public Preparacion preparar(PrepararRequest request, User actor) {
         if (request == null) throw new IllegalArgumentException("Indique el seguimiento OP o la operación OF.");
+        boolean reintentar = Boolean.TRUE.equals(request.nuevoIntento());
+        if (reintentar && request.familiaId() == null)
+            throw new IllegalArgumentException("Indique la familia cuyo formulario desea repetir.");
+        if (!reintentar && request.familiaId() != null)
+            throw new IllegalArgumentException("La familia solo se indica al solicitar un nuevo intento.");
         Origen origen = bloquearOrigen(request.seguimientoId(), request.operacionId());
         AreaOperativa area = plantillaService.bloquearArea(origen.area().getAreaId());
         exigirResponsable(area, actor);
         validarOrdenActiva(origen);
-        if (!area.isRequiereDespeje()) return new Preparacion(false, false, true, "El área no exige despeje.", null);
-        if (ocupada(area) && !mismaOcupacion(area, origen))
-            throw conflicto("El área está ocupada por otra operación, incluso si está pausada.");
-        if (mismaOcupacion(area, origen)) {
-            DespejeLineaEjecucion actual = area.getDespejeEjecucionActual();
-            if (actual == null || actual.getEstado() != UTILIZADA)
-                throw conflicto("La ocupación actual no tiene evidencia válida. Requiere conciliación operativa.");
-            return preparacion(actual, true, "Reanudación de la misma ocupación; se conserva el despeje utilizado.");
+        validarDisponibilidad(area, origen);
+        if (!area.isRequiereDespeje())
+            return new Preparacion(false, false, true, "El área no exige despeje.", List.of(), List.of());
+        if (mismaOcupacion(area, origen) && tieneConjuntoUtilizado(origen, area)) {
+            if (reintentar) throw conflicto("Una ocupación iniciada conserva su conjunto utilizado; no admite nuevos intentos.");
+            List<Requisito> utilizadas = conjuntoUtilizado(origen, area).stream()
+                    .map(e -> requisito(e, true, "Formulario utilizado en esta ocupación.")).toList();
+            return new Preparacion(true, area.isRequiereRevisionDespeje(), true,
+                    "Reanudación de la misma ocupación; se conserva el conjunto de despejes utilizado.", utilizadas, List.of());
         }
         if (origen.estado() != SeguimientoOrdenArea.ESTADO_ESPERA)
-            throw conflicto("El despeje se prepara antes del arranque de una operación en espera.");
-        PlantillaDespejeVersion vigente = plantillaRepo.findByAreaOperativa_AreaIdAndEstado(
-                area.getAreaId(), PlantillaDespejeVersion.Estado.VIGENTE)
-                .orElseThrow(() -> conflicto("El área exige despeje, pero no tiene una plantilla vigente."));
-        entityManager.refresh(vigente);
-        List<DespejeLineaEjecucion> intentos = intentos(origen);
-        DespejeLineaEjecucion ultima = intentos.isEmpty() ? null : intentos.getFirst();
-        if (ultima != null) {
-            entityManager.refresh(ultima, LockModeType.PESSIMISTIC_WRITE);
-            boolean vigenteContexto = ultima.getRevisionContexto() == area.getDespejeRevisionContexto()
-                    && ultima.getPlantilla().getId().equals(vigente.getId());
-            if (vigenteContexto && ultima.getEstado() == BORRADOR)
-                return preparacion(ultima, false, "Complete y envíe el borrador.");
-            if (vigenteContexto && !Boolean.TRUE.equals(request.nuevoIntento())
-                    && ultima.getEstado() != INVALIDADA)
-                return preparacion(ultima, ultima.getEstado() == APROBADA,
-                        ultima.getEstado() == APROBADA ? "Despeje aprobado para iniciar." : "Consulte el resultado o prepare otro intento.");
-            invalidarPendiente(ultima, vigenteContexto ? "Sustituida por un nuevo intento."
-                    : "Cambió la plantilla o el contexto físico antes del arranque.");
+            throw conflicto("El despeje se prepara antes de iniciar o reanudar una operación en espera.");
+        boolean reanudacion = esReanudacion(origen);
+        String accion = reanudacion ? "reanudar" : "iniciar";
+        exigirContextoSinUsoPrevio(origen, area);
+        List<PlantillaDespejeVersion> vigentes = vigentes(area);
+        if (reintentar && vigentes.stream().noneMatch(p -> p.getFamilia().getId().equals(request.familiaId())))
+            throw conflicto("La familia indicada no tiene una versión vigente en esta área. Actualice la preparación.");
+        Map<Long, DespejeLineaEjecucion> ultimas = ultimasPorFamilia(intentos(origen));
+        Set<Long> familiasVigentes = new HashSet<>();
+        vigentes.forEach(p -> familiasVigentes.add(p.getFamilia().getId()));
+        List<String> avisos = new ArrayList<>();
+        for (DespejeLineaEjecucion anterior : ultimas.values()) {
+            if (!familiasVigentes.contains(anterior.getFamilia().getId())
+                    && anterior.getRevisionContexto() == area.getDespejeRevisionContexto()) {
+                invalidarPendiente(anterior, "La familia ya no tiene una versión vigente antes del arranque.");
+                avisos.add("La familia «" + anterior.getFamilia().getNombre()
+                        + "» ya no tiene una versión vigente y no se exige en este inicio; su historial se conserva.");
+            }
         }
         Lote lote = lote(origen);
+        List<Requisito> requisitos = new ArrayList<>();
+        for (PlantillaDespejeVersion vigente : vigentes) {
+            Long familiaId = vigente.getFamilia().getId();
+            DespejeLineaEjecucion ultima = ultimas.get(familiaId);
+            if (ultima != null) entityManager.refresh(ultima, LockModeType.PESSIMISTIC_WRITE);
+            boolean aplicable = ultima != null && aplicable(ultima, vigente, origen, area, lote);
+            boolean repetirFamilia = reintentar && familiaId.equals(request.familiaId());
+            if (aplicable && ultima.getEstado() == UTILIZADA)
+                throw conflicto("Existe evidencia utilizada sin una ocupación coherente. Requiere conciliación operativa.");
+            if (aplicable && ultima.getEstado() == BORRADOR) {
+                requisitos.add(requisito(ultima, false, "Complete y envíe el borrador."));
+                continue;
+            }
+            if (aplicable && !repetirFamilia && ultima.getEstado() != INVALIDADA) {
+                requisitos.add(requisito(ultima, ultima.getEstado() == APROBADA, motivoEstado(ultima)));
+                continue;
+            }
+            if (ultima != null) {
+                String motivo = aplicable ? "Sustituida por un nuevo intento de esta familia."
+                        : "Cambió la versión, el lote, la política o el contexto antes del arranque.";
+                invalidarPendiente(ultima, motivo);
+                avisos.add("Se preparó un nuevo intento de «" + vigente.getFamilia().getNombre()
+                        + "»: " + motivo + " Las otras familias aplicables se conservan.");
+            } else if (!ultimas.isEmpty()) {
+                avisos.add("Se incorporó el formulario vigente de «" + vigente.getFamilia().getNombre()
+                        + "» al conjunto requerido. Las aprobaciones aplicables de otras familias se conservan.");
+            }
+            // Los índices parciales deben ver la invalidación antes de insertar el nuevo borrador.
+            ejecucionRepo.flush();
+            DespejeLineaEjecucion nueva = crearBorrador(origen, area, vigente, lote, actor,
+                    ultima == null ? 1 : ultima.getIntento() + 1);
+            requisitos.add(requisito(nueva, false, "Complete y envíe este formulario antes de " + accion + "."));
+        }
+        boolean listo = !requisitos.isEmpty() && requisitos.stream().allMatch(Requisito::listo);
+        String motivo = requisitos.isEmpty()
+                ? "El área exige despeje, pero no tiene ninguna plantilla vigente. No puede " + accion + "."
+                : listo ? "Todos los formularios actualmente vigentes están aprobados para " + accion + "."
+                : "Complete y apruebe todos los formularios actualmente vigentes antes de " + accion + ".";
+        return new Preparacion(true, area.isRequiereRevisionDespeje(), listo, motivo, requisitos, avisos);
+    }
+
+    private DespejeLineaEjecucion crearBorrador(Origen origen, AreaOperativa area,
+                                               PlantillaDespejeVersion vigente, Lote lote, User actor, int intento) {
         DespejeLineaEjecucion nueva = new DespejeLineaEjecucion();
         nueva.setAreaOperativa(area);
         nueva.setAreaNombre(area.getNombre());
         nueva.setSeguimiento(origen.seguimiento());
         nueva.setOperacion(origen.operacion());
         nueva.setPlantilla(vigente);
-        nueva.setIntento(intentos.isEmpty() ? 1 : intentos.getFirst().getIntento() + 1);
+        nueva.setFamilia(vigente.getFamilia());
+        nueva.setIntento(intento);
         nueva.setRevisionContexto(area.getDespejeRevisionContexto());
         nueva.setRequiereRevision(area.isRequiereRevisionDespeje());
         nueva.setLoteActual(lote);
         nueva.setLoteActualNumero(lote.getBatchNumber());
-        Lote antecedente = area.isDespejeAntecedenteConocido() ? area.getDespejeUltimoLote() : null;
+        // Después de un arranque sin despeje, el último lote del área ya es el actual.
+        // No puede atribuirse como antecedente de un formulario preparado para reanudar.
+        boolean antecedenteConocido = !mismaOcupacion(area, origen) && !esReanudacion(origen)
+                && area.isDespejeAntecedenteConocido();
+        Lote antecedente = antecedenteConocido ? area.getDespejeUltimoLote() : null;
         nueva.setLoteAnterior(antecedente);
         nueva.setLoteAnteriorNumero(antecedente == null ? null : antecedente.getBatchNumber());
-        nueva.setAntecedenteConocido(area.isDespejeAntecedenteConocido());
+        nueva.setAntecedenteConocido(antecedenteConocido);
         nueva.setCreadaEn(ahora());
         nueva.setCreadaPor(actor);
         nueva.setCreadaPorUsername(actor.getUsername());
         nueva.setCreadaPorNombre(nombre(actor));
         Map<String, Object> contexto = new TreeMap<>();
         contexto.put("plantilla", plantillaService.toDTO(vigente));
+        contexto.put("familiaId", vigente.getFamilia().getId());
+        contexto.put("familiaNombre", vigente.getFamilia().getNombre());
         Producto actual = producto(lote);
         Producto anterior = producto(antecedente);
         contexto.put("productoActualId", actual == null ? null : actual.getProductoId());
@@ -119,7 +177,7 @@ public class DespejeLineaService {
             respuesta.setPlantilla(vigente);
             nueva.getRespuestas().add(respuesta);
         }
-        return preparacion(ejecucionRepo.saveAndFlush(nueva), false, "Complete y envíe el despeje antes de iniciar.");
+        return ejecucionRepo.saveAndFlush(nueva);
     }
 
     @Transactional
@@ -249,43 +307,69 @@ public class DespejeLineaService {
         validarOrdenActiva(origen);
         if (origen.estado() != SeguimientoOrdenArea.ESTADO_EN_PROCESO)
             throw conflicto("Solo una operación actualmente en proceso puede pausarse.");
-        if (area.isRequiereDespeje()) {
+        if (area.isRequiereDespeje() || area.isDespejeLineaExclusivaConfirmada() || ocupada(area)) {
             if (actor == null || actor.getId() == null)
                 throw new AccessDeniedException("La pausa requiere un actor autenticado.");
-            if (ocupada(area) && !mismaOcupacion(area, origen))
-                throw conflicto("Otra operación ocupa el área; no puede pausarse esta ocupación.");
+            // Las operaciones heredadas pueden pausarse sin inventar ocupación ni evidencia.
+            if (mismaOcupacion(area, origen) && tieneConjuntoUtilizado(origen, area))
+                conjuntoUtilizado(origen, area);
         }
         // No se modifica el ocupante, el antecedente, la revisión ni la evidencia.
     }
     private void registrarInicio(Origen origen, User actor) {
         AreaOperativa area = plantillaService.bloquearArea(origen.area().getAreaId());
         validarOrdenActiva(origen);
-        if (!area.isRequiereDespeje()) return;
+        if (!area.isRequiereDespeje() && !area.isDespejeLineaExclusivaConfirmada() && !ocupada(area)) return;
         if (actor == null || actor.getId() == null) throw new AccessDeniedException("El inicio requiere un actor autenticado.");
         if (!area.isDespejeLineaExclusivaConfirmada()) throw conflicto("No se ha confirmado una línea física exclusiva.");
-        if (ocupada(area)) {
-            if (!mismaOcupacion(area, origen)) throw conflicto("Otra operación ocupa el área; una pausa conserva su ocupación.");
-            DespejeLineaEjecucion actual = area.getDespejeEjecucionActual();
-            if (actual == null || actual.getEstado() != UTILIZADA
-                    || actual.getRevisionContexto() != area.getDespejeRevisionContexto())
-                throw conflicto("La ocupación no tiene un despeje utilizado válido.");
+        validarDisponibilidad(area, origen);
+        boolean mismaOcupacion = mismaOcupacion(area, origen);
+        if (mismaOcupacion && area.getDespejeUltimoLote() != null
+                && !area.getDespejeUltimoLote().getId().equals(lote(origen).getId()))
+            throw conflicto("El lote actual no corresponde a la ocupación de la línea. Requiere conciliación operativa.");
+        if (mismaOcupacion && tieneConjuntoUtilizado(origen, area)) {
+            conjuntoUtilizado(origen, area);
             return;
         }
-        DespejeLineaEjecucion aprobada = intentos(origen).stream()
-                .filter(e -> e.getEstado() == APROBADA && e.getRevisionContexto() == area.getDespejeRevisionContexto())
-                .findFirst().orElseThrow(() -> conflicto("Debe completar y aprobar el despeje de esta operación antes de iniciar."));
-        entityManager.refresh(aprobada, LockModeType.PESSIMISTIC_WRITE);
-        if (aprobada.getEstado() != APROBADA) throw conflicto("El estado del despeje cambió antes del arranque.");
-        validarContexto(aprobada, area);
-        aprobada.setEstado(UTILIZADA);
-        aprobada.setUtilizadaEn(ahora());
+        if (!area.isRequiereDespeje()) {
+            if (!mismaOcupacion) registrarOcupacion(area, origen, lote(origen), ahora());
+            return;
+        }
+        exigirContextoSinUsoPrevio(origen, area);
+        List<PlantillaDespejeVersion> vigentes = vigentes(area);
+        if (vigentes.isEmpty()) throw conflicto("El área exige despeje, pero no tiene ninguna plantilla vigente. No puede iniciar.");
+        Lote lote = lote(origen);
+        Map<Long, DespejeLineaEjecucion> ultimas = ultimasPorFamilia(intentos(origen));
+        List<DespejeLineaEjecucion> aprobadas = new ArrayList<>();
+        for (PlantillaDespejeVersion vigente : vigentes) {
+            DespejeLineaEjecucion ultima = ultimas.get(vigente.getFamilia().getId());
+            if (ultima != null) entityManager.refresh(ultima, LockModeType.PESSIMISTIC_WRITE);
+            if (ultima == null || ultima.getEstado() != APROBADA
+                    || !aplicable(ultima, vigente, origen, area, lote))
+                throw conflicto("Debe aprobar la versión vigente de «" + vigente.getFamilia().getNombre()
+                        + "» para esta operación y contexto. Actualice la preparación.");
+            if (ultima.isRequiereRevision() && (ultima.getRevisadaPor() == null
+                    || ultima.getRevisadaPor().getId().equals(ultima.getEnviadaPor().getId())))
+                throw conflicto("El formulario de «" + vigente.getFamilia().getNombre() + "» requiere una revisión independiente.");
+            aprobadas.add(ultima);
+        }
+        // El catálogo y cada aprobación se comprobaron antes de consumir cualquiera.
+        // El bloqueo de área también es compartido por publicación, retiro y altas.
+        LocalDateTime utilizadaEn = ahora();
+        for (DespejeLineaEjecucion aprobada : aprobadas) {
+            aprobada.setEstado(UTILIZADA);
+            aprobada.setUtilizadaEn(utilizadaEn);
+        }
+        if (!mismaOcupacion) registrarOcupacion(area, origen, lote, utilizadaEn);
+        ejecucionRepo.flush();
+    }
+
+    private void registrarOcupacion(AreaOperativa area, Origen origen, Lote lote, LocalDateTime inicio) {
         area.setDespejeOcupanteSeguimiento(origen.seguimiento());
         area.setDespejeOcupanteOperacion(origen.operacion());
-        area.setDespejeEjecucionActual(aprobada);
-        area.setDespejeUltimoLote(aprobada.getLoteActual());
+        area.setDespejeUltimoLote(lote);
         area.setDespejeAntecedenteConocido(true);
-        area.setDespejeUltimoInicioEn(aprobada.getUtilizadaEn());
-        ejecucionRepo.saveAndFlush(aprobada);
+        area.setDespejeUltimoInicioEn(inicio);
     }
 
     @Transactional
@@ -311,7 +395,11 @@ public class DespejeLineaService {
         if (mismaOcupacion(area, origen)) {
             area.setDespejeOcupanteSeguimiento(null);
             area.setDespejeOcupanteOperacion(null);
-            area.setDespejeEjecucionActual(null);
+            area.setDespejeRevisionContexto(area.getDespejeRevisionContexto() + 1);
+        } else if (!ocupada(area) && area.isDespejeLineaExclusivaConfirmada()
+                && (origen.estado() == SeguimientoOrdenArea.ESTADO_EN_PROCESO || esReanudacion(origen))) {
+            // Una salida heredada no permite atribuir como inmediato el lote histórico del área.
+            area.setDespejeAntecedenteConocido(false);
             area.setDespejeRevisionContexto(area.getDespejeRevisionContexto() + 1);
         }
         // Nunca se borra el último lote iniciado realmente, tampoco al cancelar una orden.
@@ -344,13 +432,21 @@ public class DespejeLineaService {
     private void validarContexto(DespejeLineaEjecucion e, AreaOperativa area) {
         if (!area.isRequiereDespeje() || e.getRevisionContexto() != area.getDespejeRevisionContexto())
             throw conflicto("Cambió la política o el contexto del área. Prepare otro intento.");
-        if (ocupada(area)) throw conflicto("El área ya está ocupada; el formulario no puede utilizarse para otro arranque.");
+        Origen origen = new Origen(area, e.getSeguimiento(), e.getOperacion());
+        validarDisponibilidad(area, origen);
+        if (ocupada(area) && (origen.estado() != SeguimientoOrdenArea.ESTADO_ESPERA
+                || tieneConjuntoUtilizado(origen, area)))
+            throw conflicto("La ocupación ya utilizó sus despejes o debe pausarse antes de preparar la reanudación.");
         entityManager.refresh(e.getPlantilla());
         if (e.getPlantilla().getEstado() != PlantillaDespejeVersion.Estado.VIGENTE)
             throw conflicto("La plantilla fue sustituida o retirada antes del arranque. Prepare otro intento.");
-        Origen origen = new Origen(area, e.getSeguimiento(), e.getOperacion());
+        if (e.isRequiereRevision() != area.isRequiereRevisionDespeje())
+            throw conflicto("Cambió la política de revisión. Actualice la preparación.");
         if (!lote(origen).getId().equals(e.getLoteActual().getId()))
             throw conflicto("Cambió el lote resultado de la operación. Prepare otro intento.");
+        DespejeLineaEjecucion ultima = ultimasPorFamilia(intentos(origen)).get(e.getFamilia().getId());
+        if (ultima == null || !ultima.getId().equals(e.getId()))
+            throw conflicto("Este formulario fue sustituido por un intento posterior de la misma familia.");
     }
     private void validarOrdenActiva(Origen origen) {
         if (origen.seguimiento() != null) {
@@ -452,6 +548,142 @@ public class DespejeLineaService {
         return ejecucionRepo.findIntentos(origen.seguimiento() == null ? null : origen.seguimiento().getId(),
                 origen.operacion() == null ? null : origen.operacion().getId());
     }
+    private List<PlantillaDespejeVersion> vigentes(AreaOperativa area) {
+        List<PlantillaDespejeVersion> versiones = plantillaRepo
+                .findByAreaOperativa_AreaIdAndEstadoOrderByFamilia_IdAsc(
+                        area.getAreaId(), PlantillaDespejeVersion.Estado.VIGENTE);
+        versiones.forEach(entityManager::refresh);
+        return versiones;
+    }
+    private Map<Long, DespejeLineaEjecucion> ultimasPorFamilia(List<DespejeLineaEjecucion> ejecuciones) {
+        Map<Long, DespejeLineaEjecucion> ultimas = new TreeMap<>();
+        for (DespejeLineaEjecucion e : ejecuciones) {
+            ultimas.merge(e.getFamilia().getId(), e,
+                    (actual, candidata) -> candidata.getIntento() > actual.getIntento() ? candidata : actual);
+        }
+        return ultimas;
+    }
+    private boolean aplicable(DespejeLineaEjecucion e, PlantillaDespejeVersion vigente,
+                              Origen origen, AreaOperativa area, Lote lote) {
+        return e.getFamilia().getId().equals(vigente.getFamilia().getId())
+                && e.getPlantilla().getId().equals(vigente.getId())
+                && e.getAreaOperativa().getAreaId() == area.getAreaId()
+                && e.getRevisionContexto() == area.getDespejeRevisionContexto()
+                && e.isRequiereRevision() == area.isRequiereRevisionDespeje()
+                && e.getLoteActual().getId().equals(lote.getId())
+                && mismoOrigen(e, origen);
+    }
+    private boolean mismoOrigen(DespejeLineaEjecucion e, Origen origen) {
+        return origen.seguimiento() != null && e.getSeguimiento() != null
+                && origen.seguimiento().getId().equals(e.getSeguimiento().getId())
+                || origen.operacion() != null && e.getOperacion() != null
+                && origen.operacion().getId().equals(e.getOperacion().getId());
+    }
+    private boolean tieneConjuntoUtilizado(Origen origen, AreaOperativa area) {
+        return intentos(origen).stream().anyMatch(e -> e.getEstado() == UTILIZADA
+                && e.getRevisionContexto() == area.getDespejeRevisionContexto()
+                && e.getAreaOperativa().getAreaId() == area.getAreaId());
+    }
+
+    private boolean esReanudacion(Origen origen) {
+        if (origen.estado() != SeguimientoOrdenArea.ESTADO_ESPERA) return false;
+        if (origen.seguimiento() != null) {
+            SeguimientoOrdenAreaEvento ultimo = entityManager.createQuery("""
+                    select e from SeguimientoOrdenAreaEvento e
+                    where e.seguimientoOrdenArea.id = :id
+                    order by e.fechaEvento desc, e.id desc
+                    """, SeguimientoOrdenAreaEvento.class).setParameter("id", origen.seguimiento().getId())
+                    .setMaxResults(1).getResultList().stream().findFirst().orElse(null);
+            return ultimo != null && ultimo.getTipoEvento() == TipoEventoSeguimiento.OPERATIVO
+                    && Objects.equals(ultimo.getEstadoOrigen(), SeguimientoOrdenArea.ESTADO_EN_PROCESO)
+                    && ultimo.getEstadoDestino() == SeguimientoOrdenArea.ESTADO_ESPERA;
+        }
+        OrdenFabricacionOperacionEvento ultimo = entityManager.createQuery("""
+                select e from OrdenFabricacionOperacionEvento e
+                where e.operacion.id = :id
+                order by e.fechaEvento desc, e.id desc
+                """, OrdenFabricacionOperacionEvento.class).setParameter("id", origen.operacion().getId())
+                .setMaxResults(1).getResultList().stream().findFirst().orElse(null);
+        return ultimo != null && ultimo.getTipoEvento() == TipoEventoSeguimiento.OPERATIVO
+                && Objects.equals(ultimo.getEstadoOrigen(), SeguimientoOrdenArea.ESTADO_EN_PROCESO)
+                && ultimo.getEstadoDestino() == SeguimientoOrdenArea.ESTADO_ESPERA;
+    }
+
+    private void validarDisponibilidad(AreaOperativa area, Origen origen) {
+        if (ocupada(area) && !mismaOcupacion(area, origen))
+            throw conflicto("Otra operación ocupa el área; una pausa conserva su ocupación.");
+        if (!area.isDespejeLineaExclusivaConfirmada()) return;
+        // Las pausas heredadas sin ocupante se drenan una a una; no admiten nuevos primeros arranques.
+        // Solo se leen las otras órdenes: sus bloqueos no se toman después del bloqueo del área.
+        boolean incluirPausadas = !esReanudacion(origen);
+        Long op = entityManager.createQuery("""
+                select count(s) from SeguimientoOrdenArea s
+                where s.areaOperativa.areaId = :area and s.id <> :seguimiento
+                and s.ordenProduccion.estadoOrden not in (-1,2,3)
+                and (s.estado = 4 or (s.estado = 1 and :incluirPausadas = true and exists (
+                    select e.id from SeguimientoOrdenAreaEvento e
+                    where e.seguimientoOrdenArea = s and e.estadoOrigen = 4 and e.estadoDestino = 1
+                    and e.tipoEvento = :operativo and not exists (
+                        select posterior.id from SeguimientoOrdenAreaEvento posterior
+                        where posterior.seguimientoOrdenArea = s
+                        and (posterior.fechaEvento > e.fechaEvento
+                            or (posterior.fechaEvento = e.fechaEvento and posterior.id > e.id))
+                    )
+                )))
+                """, Long.class).setParameter("area", area.getAreaId())
+                .setParameter("seguimiento", origen.seguimiento() == null ? -1L : origen.seguimiento().getId())
+                .setParameter("incluirPausadas", incluirPausadas)
+                .setParameter("operativo", TipoEventoSeguimiento.OPERATIVO).getSingleResult();
+        Long of = entityManager.createQuery("""
+                select count(o) from OrdenFabricacionOperacion o
+                where o.areaOperativa.areaId = :area and o.id <> :operacion
+                and o.ordenFabricacion.estado in :estadosActivos
+                and (o.estado = 4 or (o.estado = 1 and :incluirPausadas = true and exists (
+                    select e.id from OrdenFabricacionOperacionEvento e
+                    where e.operacion = o and e.estadoOrigen = 4 and e.estadoDestino = 1
+                    and e.tipoEvento = :operativo and not exists (
+                        select posterior.id from OrdenFabricacionOperacionEvento posterior
+                        where posterior.operacion = o
+                        and (posterior.fechaEvento > e.fechaEvento
+                            or (posterior.fechaEvento = e.fechaEvento and posterior.id > e.id))
+                    )
+                )))
+                """, Long.class).setParameter("area", area.getAreaId())
+                .setParameter("operacion", origen.operacion() == null ? -1L : origen.operacion().getId())
+                .setParameter("estadosActivos", List.of(
+                        exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion.LIBERADA,
+                        exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion.EN_EJECUCION))
+                .setParameter("incluirPausadas", incluirPausadas)
+                .setParameter("operativo", TipoEventoSeguimiento.OPERATIVO).getSingleResult();
+        if (op > 0 || of > 0)
+            throw conflicto("Hay otra operación iniciada o pausada del área. Finalice el trabajo anterior antes de este arranque.");
+    }
+
+    /** La ocupación conserva el conjunto consumido, aunque el catálogo cambie después. */
+    private List<DespejeLineaEjecucion> conjuntoUtilizado(Origen origen, AreaOperativa area) {
+        List<DespejeLineaEjecucion> utilizadas = intentos(origen).stream()
+                .filter(e -> e.getEstado() == UTILIZADA
+                        && e.getRevisionContexto() == area.getDespejeRevisionContexto()
+                        && e.getAreaOperativa().getAreaId() == area.getAreaId())
+                .sorted(Comparator.comparing(e -> e.getFamilia().getId())).toList();
+        if (utilizadas.isEmpty())
+            throw conflicto("La ocupación no tiene un conjunto de despejes utilizado válido. Requiere conciliación operativa.");
+        Lote lote = lote(origen);
+        Set<Long> familias = new HashSet<>();
+        LocalDateTime instante = utilizadas.getFirst().getUtilizadaEn();
+        for (DespejeLineaEjecucion e : utilizadas) {
+            if (!familias.add(e.getFamilia().getId()) || !e.getLoteActual().getId().equals(lote.getId())
+                    || e.getUtilizadaEn() == null || !Objects.equals(instante, e.getUtilizadaEn())
+                    || e.isRequiereRevision() != area.isRequiereRevisionDespeje())
+                throw conflicto("El conjunto utilizado no corresponde a una única ocupación y contexto coherentes.");
+        }
+        return utilizadas;
+    }
+    private void exigirContextoSinUsoPrevio(Origen origen, AreaOperativa area) {
+        if (intentos(origen).stream().anyMatch(e -> e.getEstado() == UTILIZADA
+                && e.getRevisionContexto() == area.getDespejeRevisionContexto()))
+            throw conflicto("Existe un conjunto utilizado sin una ocupación coherente. Requiere conciliación operativa.");
+    }
     private DespejeLineaEjecucion require(Long id) {
         return ejecucionRepo.findById(id).orElseThrow(() -> new NoSuchElementException("Intento de despeje no encontrado."));
     }
@@ -464,8 +696,16 @@ public class DespejeLineaService {
                 || o.operacion() != null && a.getDespejeOcupanteOperacion() != null
                 && o.operacion().getId().equals(a.getDespejeOcupanteOperacion().getId());
     }
-    private Preparacion preparacion(DespejeLineaEjecucion e, boolean puedeIniciar, String motivo) {
-        return new Preparacion(true, e.isRequiereRevision(), puedeIniciar, motivo, toDTO(e));
+    private Requisito requisito(DespejeLineaEjecucion e, boolean listo, String motivo) {
+        return new Requisito(e.getFamilia().getId(), e.getFamilia().getNombre(), listo, motivo, toDTO(e));
+    }
+    private String motivoEstado(DespejeLineaEjecucion e) {
+        return switch (e.getEstado()) {
+            case APROBADA -> "Formulario aprobado para el contexto actual.";
+            case PENDIENTE_REVISION -> "Formulario pendiente de revisión por otra persona autorizada.";
+            case RECHAZADA -> "El último intento fue rechazado; prepare otro intento de esta familia.";
+            default -> "El formulario todavía no habilita el inicio.";
+        };
     }
     private boolean responsable(AreaOperativa a, User actor) {
         return actor != null && a.getResponsableArea() != null && actor.getId().equals(a.getResponsableArea().getId());
@@ -502,7 +742,12 @@ public class DespejeLineaService {
                 actor(e.getEnviadaPor(), e.getEnviadaPorUsername(), e.getEnviadaPorNombre()),
                 actor(e.getRevisadaPor(), e.getRevisadaPorUsername(), e.getRevisadaPorNombre()), e.getContenidoSha256(),
                 e.getVersion(), e.getRespuestas().stream().sorted(Comparator.comparingInt(r -> r.getItem().getOrden()))
-                .map(r -> new Respuesta(r.getItem().getId(), r.getValor(), r.getNumero(), r.getObservacion())).toList());
+                .map(r -> new Respuesta(r.getItem().getId(), r.getValor(), r.getNumero(), r.getObservacion())).toList(),
+                e.getFamilia().getId(), familiaNombre(contexto, e));
+    }
+    private String familiaNombre(JsonNode contexto, DespejeLineaEjecucion e) {
+        String congelado = campo(contexto, "familiaNombre");
+        return congelado == null ? e.getFamilia().getNombre() : congelado;
     }
     private JsonNode leerContexto(DespejeLineaEjecucion e) {
         try { return objectMapper.readTree(e.getContextoJson()); }

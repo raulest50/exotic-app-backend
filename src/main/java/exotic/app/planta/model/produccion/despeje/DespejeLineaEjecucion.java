@@ -22,6 +22,9 @@ public class DespejeLineaEjecucion {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "familia_id", nullable = false, updatable = false)
+    private PlantillaDespeje familia;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "plantilla_id", nullable = false, updatable = false)
     private PlantillaDespejeVersion plantilla;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -116,6 +119,10 @@ public class DespejeLineaEjecucion {
             throw new IllegalStateException("El despeje pertenece exactamente a un seguimiento OP o una operación OF.");
         if (intento < 1 || revisionContexto < 0)
             throw new IllegalStateException("El intento y el contexto del despeje no son válidos.");
+        if (familia == null || plantilla == null || areaOperativa == null
+                || !familia.getId().equals(plantilla.getFamilia().getId())
+                || familia.getAreaOperativa().getAreaId() != areaOperativa.getAreaId())
+            throw new IllegalStateException("La ejecución, la versión y la familia deben corresponder a la misma área.");
         if (envioCargado != null && (estado == Estado.BORRADOR
                 || !java.util.Objects.equals(envioCargado, enviadaEn)
                 || !java.util.Objects.equals(enviadorCargado, enviadaPor == null ? null : enviadaPor.getId())

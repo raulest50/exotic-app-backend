@@ -12,7 +12,7 @@ public interface DespejeLineaEjecucionRepo extends JpaRepository<DespejeLineaEje
             left join e.seguimiento s left join e.operacion o
             where (:seguimientoId is not null and s.id = :seguimientoId)
                or (:operacionId is not null and o.id = :operacionId)
-            order by e.intento desc
+            order by e.familia.id, e.intento desc, e.id desc
             """)
     List<DespejeLineaEjecucion> findIntentos(@Param("seguimientoId") Long seguimientoId,
                                            @Param("operacionId") Long operacionId);

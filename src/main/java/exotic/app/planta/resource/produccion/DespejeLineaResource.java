@@ -27,6 +27,17 @@ public class DespejeLineaResource {
     private final ModuleTabAccessGuard accessGuard;
     private final UserRepository userRepository;
 
+    @GetMapping("/areas/{areaId}/familias")
+    public List<Familia> familias(Authentication auth, @PathVariable Integer areaId) {
+        configurar(auth);
+        return plantillas.listarFamilias(areaId);
+    }
+    @PostMapping("/areas/{areaId}/familias")
+    public Familia crearFamilia(Authentication auth, @PathVariable Integer areaId, @RequestBody FamiliaRequest request) {
+        configurar(auth);
+        return plantillas.crearFamilia(areaId, request);
+    }
+
     @GetMapping("/areas/{areaId}/config")
     public Config configuracion(Authentication auth, @PathVariable Integer areaId) {
         configurar(auth);

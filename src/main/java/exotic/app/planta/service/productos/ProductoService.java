@@ -142,6 +142,11 @@ public class ProductoService {
      */
     @Transactional
     public Material saveMateriaPrimaV2(Material material, MultipartFile file, String username) {
+        java.math.BigDecimal costoInicial = productoCostoService.normalizar(material.getCosto());
+        if (material.getCosto().stripTrailingZeros().scale() > 0) {
+            throw new IllegalArgumentException("El costo unitario inicial debe ser un numero entero");
+        }
+        material.asignarCostoInicial(costoInicial);
         // Prevent accidental overwrite: if a material with the same productoId already exists, throw an exception.
         if (materialRepo.existsById(material.getProductoId())) {
             throw new IllegalArgumentException("El codigo: " + material.getProductoId() +
@@ -164,7 +169,8 @@ public class ProductoService {
         }
         return (Material) productoCostoService.registrarCostoInicial(
                 saved,
-                ProductoCostoService.ContextoCambio.sistema(ProductoCostoOrigen.CREACION)).producto();
+                new ProductoCostoService.ContextoCambio(
+                        null, username, ProductoCostoOrigen.CREACION, null, null, null)).producto();
     }
 
     public Page<Producto> searchP4RecetaV2(String searchTerm, String tipoBusqueda, String clasificacion, int page, int size) {

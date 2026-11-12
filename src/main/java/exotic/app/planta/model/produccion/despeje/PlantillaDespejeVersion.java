@@ -14,13 +14,16 @@ import java.util.List;
 /** Edición de negocio por área. El contenido publicado no se reemplaza. */
 @Entity
 @Table(name = "despeje_plantilla_version", uniqueConstraints =
-        @UniqueConstraint(name = "uq_despeje_plantilla_numero", columnNames = {"area_operativa_id", "numero"}))
+        @UniqueConstraint(name = "uq_despeje_plantilla_numero", columnNames = {"familia_id", "numero"}))
 @Getter @Setter @NoArgsConstructor
 public class PlantillaDespejeVersion {
     public enum Estado { BORRADOR, VIGENTE, RETIRADA }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "familia_id", nullable = false, updatable = false)
+    private PlantillaDespeje familia;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "area_operativa_id", nullable = false, updatable = false)
     private AreaOperativa areaOperativa;
@@ -63,6 +66,12 @@ public class PlantillaDespejeVersion {
                 || !java.util.Objects.equals(motivoCargado, motivoCambio))) {
             throw new IllegalStateException("El contenido de una plantilla publicada es inmutable.");
         }
+    }
+    @PrePersist
+    private void validarFamilia() {
+        if (familia == null || areaOperativa == null
+                || familia.getAreaOperativa().getAreaId() != areaOperativa.getAreaId())
+            throw new IllegalStateException("La familia de plantilla debe pertenecer al área de la versión.");
     }
     @PreRemove
     private void preservarHistoria() {
