@@ -447,7 +447,8 @@ public class PermisoPersonalService {
     }
 
     private int requireNivel(User actor, int requerido) {
-        if (actor == null || actor.getId() == null || actor.getEstado() != 1) throw new ResponseStatusException(UNAUTHORIZED, "La cuenta no está activa.");
+        if (actor == null || actor.getId() == null) throw new ResponseStatusException(UNAUTHORIZED, "No autenticado.");
+        if (actor.getEstado() != 1) throw prohibido("La cuenta no está activa. Un administrador debe revisar su estado para acceder a Permisos.");
         int nivel = nivel(actor);
         if (nivel < requerido) throw prohibido("No tiene el nivel requerido en PERSONAL / Permisos.");
         return nivel;

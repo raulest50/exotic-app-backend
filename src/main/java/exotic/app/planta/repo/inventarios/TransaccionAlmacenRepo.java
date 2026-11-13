@@ -565,12 +565,6 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             Pageable pageable
     );
 
-    List<Movimiento> findByProducto_ProductoIdAndFechaMovimientoBetweenOrderByFechaMovimientoAscMovimientoIdAsc(
-            String productoId,
-            LocalDateTime start,
-            LocalDateTime end
-    );
-
     @Query("""
             SELECT m
             FROM Movimiento m
@@ -907,43 +901,6 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("end") LocalDateTime end,
             @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
             @Param("tipoMovimientoCompra") Movimiento.TipoMovimiento tipoMovimientoCompra);
-
-    @Query("""
-            SELECT new exotic.app.planta.model.bi.dto.ProveedorMaterialRecepcionRowDTO(
-                oc.ordenCompraId,
-                prov.id,
-                prov.nombre,
-                m.producto.productoId,
-                m.producto.nombre,
-                oc.fechaEmision,
-                oc.fechaEnvioProveedor,
-                m.fechaMovimiento,
-                m.cantidad
-            )
-            FROM Movimiento m
-            JOIN m.transaccionAlmacen t,
-                 OrdenCompraMateriales oc
-            JOIN oc.proveedor prov
-            WHERE oc.ordenCompraId = t.idEntidadCausante
-              AND t.tipoEntidadCausante = :tipoEntidadCausante
-              AND m.producto.productoId = :materialId
-              AND m.afectaInventario = true
-              AND m.tipoMovimiento = :tipoMovimientoCompra
-              AND m.cantidad > 0
-              AND COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) >= :start
-              AND COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) <= :end
-              AND m.fechaMovimiento <= :end
-              AND (:proveedorId IS NULL OR prov.id = :proveedorId)
-            ORDER BY COALESCE(oc.fechaEnvioProveedor, oc.fechaEmision) ASC, oc.ordenCompraId ASC, m.fechaMovimiento ASC, m.movimientoId ASC
-            """)
-    List<ProveedorMaterialRecepcionRowDTO> findLeadTimeReceiptHistory(
-            @Param("materialId") String materialId,
-            @Param("proveedorId") String proveedorId,
-            @Param("start") LocalDateTime start,
-            @Param("end") LocalDateTime end,
-            @Param("tipoEntidadCausante") TransaccionAlmacen.TipoEntidadCausante tipoEntidadCausante,
-            @Param("tipoMovimientoCompra") Movimiento.TipoMovimiento tipoMovimientoCompra
-    );
 
     @Query("""
             SELECT new exotic.app.planta.model.bi.dto.ProveedorMaterialRecepcionRowDTO(

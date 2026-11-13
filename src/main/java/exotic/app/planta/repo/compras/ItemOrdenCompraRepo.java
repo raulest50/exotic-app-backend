@@ -193,34 +193,6 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
             JOIN item.ordenCompraMateriales orden
             JOIN orden.proveedor proveedor
             JOIN item.material material
-            WHERE material.productoId = :materialId
-              AND COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) >= :start
-              AND COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) <= :end
-              AND (:proveedorId IS NULL OR proveedor.id = :proveedorId)
-            ORDER BY COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) ASC, orden.ordenCompraId ASC
-            """)
-    List<ProveedorMaterialOrdenHistRowDTO> findLeadTimeOrderHistory(
-            @Param("materialId") String materialId,
-            @Param("proveedorId") String proveedorId,
-            @Param("start") java.time.LocalDateTime start,
-            @Param("end") java.time.LocalDateTime end
-    );
-
-    @Query("""
-            SELECT new exotic.app.planta.model.bi.dto.ProveedorMaterialOrdenHistRowDTO(
-                orden.ordenCompraId,
-                proveedor.id,
-                proveedor.nombre,
-                material.productoId,
-                material.nombre,
-                orden.fechaEmision,
-                orden.fechaEnvioProveedor,
-                item.cantidad
-            )
-            FROM ItemOrdenCompra item
-            JOIN item.ordenCompraMateriales orden
-            JOIN orden.proveedor proveedor
-            JOIN item.material material
             WHERE proveedor.id = :proveedorId
               AND COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) >= :start
               AND COALESCE(orden.fechaEnvioProveedor, orden.fechaEmision) <= :end
