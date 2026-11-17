@@ -88,6 +88,7 @@ public class CorsConfig implements EnvironmentAware {
                 CONTENT_TYPE,
                 ACCEPT,
                 AUTHORIZATION,
+                IF_MATCH,
                 IF_NONE_MATCH,
                 ControlIdempotencyService.HEADER,
                 "x-requested-with",

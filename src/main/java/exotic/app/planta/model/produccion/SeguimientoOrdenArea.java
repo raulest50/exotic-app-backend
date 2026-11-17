@@ -47,6 +47,10 @@ public class SeguimientoOrdenArea {
     @JoinColumn(name = "area_operativa_id", nullable = false)
     private AreaOperativa areaOperativa;
 
+    /** Configuracion congelada al emitir la OP. NULL conserva la ejecucion historica. */
+    @Column(name = "aplica_ejecucion_op")
+    private Boolean aplicaEjecucionOp;
+
     /** Version exacta del POE vigente al crear la orden; nunca se recalcula. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "poe_documento_version_id")
@@ -87,6 +91,10 @@ public class SeguimientoOrdenArea {
     @OneToMany(mappedBy = "seguimientoOrdenArea", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("fechaEvento ASC, id ASC")
     private List<SeguimientoOrdenAreaEvento> eventos = new ArrayList<>();
+
+    public boolean isEjecucionOpAplicable() {
+        return !Boolean.FALSE.equals(aplicaEjecucionOp);
+    }
 
     public EstadoSeguimientoOrdenArea getEstadoEnum() {
         return EstadoSeguimientoOrdenArea.fromCode(estado);

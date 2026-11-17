@@ -19,6 +19,10 @@ import java.util.Set;
 @Setter
 public class AreaOperativa {
 
+    public enum AlcanceEjecucion {
+        SOLO_OP, SOLO_OF, AMBOS
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int areaId;
@@ -60,6 +64,11 @@ public class AreaOperativa {
     @Enumerated(EnumType.STRING)
     @Column(name = "alcance_mps", nullable = false, length = 20)
     private AlcanceMps alcanceMps = AlcanceMps.TODOS;
+
+    /** Tipos de orden que ejecuta el area; independiente de la consulta del MPS. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "alcance_ejecucion", nullable = false, length = 20)
+    private AlcanceEjecucion alcanceEjecucion = AlcanceEjecucion.AMBOS;
 
     @ManyToOne
     @JoinColumn(name = "responsable_id")

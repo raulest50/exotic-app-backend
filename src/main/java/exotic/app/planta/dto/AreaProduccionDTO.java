@@ -1,6 +1,7 @@
 package exotic.app.planta.dto;
 
 import exotic.app.planta.model.organizacion.AlcanceMps;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.organizacion.VisibilidadMps;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +29,7 @@ public class AreaProduccionDTO {
 
     private VisibilidadMps visibilidadMps;
     private AlcanceMps alcanceMps;
+    private AreaOperativa.AlcanceEjecucion alcanceEjecucion;
 
     @NotNull(message = "El responsable del area no puede ser nulo")
     private Long responsableId;

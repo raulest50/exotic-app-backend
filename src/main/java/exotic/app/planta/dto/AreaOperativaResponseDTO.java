@@ -1,6 +1,7 @@
 package exotic.app.planta.dto;
 
 import exotic.app.planta.model.organizacion.AlcanceMps;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.organizacion.VisibilidadMps;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,6 +22,7 @@ public class AreaOperativaResponseDTO {
     private String descripcion;
     private VisibilidadMps visibilidadMps;
     private AlcanceMps alcanceMps;
+    private AreaOperativa.AlcanceEjecucion alcanceEjecucion;
     private ResponsableAreaDTO responsableArea;
 
     @Builder.Default

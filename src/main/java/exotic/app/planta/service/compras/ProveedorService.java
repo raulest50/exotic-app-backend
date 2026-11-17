@@ -62,6 +62,7 @@ public class ProveedorService {
         }
 
         recepcionOcmPolicyService.validarLimiteProveedor(proveedor.getLimiteRecepcionesParcialesOcm());
+        validarLeadTimeNegociado(proveedor.getLeadTimeNegociado());
 
         // Save files if provided using the file storage service.
         if (rutFile != null && !rutFile.isEmpty()) {
@@ -184,6 +185,19 @@ public class ProveedorService {
                                             Proveedor proveedor,
                                             MultipartFile rutFile,
                                             MultipartFile camaraFile) throws IOException {
+        return updateProveedorWithFiles(id, proveedor, rutFile, camaraFile, true);
+    }
+
+    /**
+     * Conserva el plazo existente cuando el JSON de actualizacion omite el campo;
+     * un null explicito permite quitar el plazo negociado.
+     */
+    @Transactional
+    public Proveedor updateProveedorWithFiles(String id,
+                                            Proveedor proveedor,
+                                            MultipartFile rutFile,
+                                            MultipartFile camaraFile,
+                                            boolean actualizarLeadTimeNegociado) throws IOException {
 
         // Validar que el ID en la URL coincida con el ID en el cuerpo de la solicitud
         if (!id.equals(proveedor.getId())) {
@@ -198,6 +212,10 @@ public class ProveedorService {
 
         // Obtener el proveedor original para preservar campos que no deben modificarse
         Proveedor proveedorOriginal = optionalProveedor.get();
+
+        if (actualizarLeadTimeNegociado) {
+            validarLeadTimeNegociado(proveedor.getLeadTimeNegociado());
+        }
 
         // Validar archivos si se proporcionan
         if (rutFile != null && !rutFile.isEmpty() && !rutFile.getContentType().equals("application/pdf")) {
@@ -218,6 +236,9 @@ public class ProveedorService {
         proveedorOriginal.setRegimenTributario(proveedor.getRegimenTributario());
         proveedorOriginal.setCondicionPago(proveedor.getCondicionPago());
         proveedorOriginal.setLimiteRecepcionesParcialesOcm(proveedor.getLimiteRecepcionesParcialesOcm());
+        if (actualizarLeadTimeNegociado) {
+            proveedorOriginal.setLeadTimeNegociado(proveedor.getLeadTimeNegociado());
+        }
 
         // Reemplazar contactos: clear dispara orphanRemoval, luego se añaden los nuevos
         // con el back-reference correctamente establecido.
@@ -253,5 +274,12 @@ public class ProveedorService {
         // Guardar la entidad proveedor; si ocurre alguna excepción (incluido en el guardado de archivos),
         // toda la transacción se revertirá
         return proveedorRepo.save(proveedorOriginal);
+    }
+
+    private void validarLeadTimeNegociado(Integer leadTimeNegociado) {
+        if (leadTimeNegociado != null && leadTimeNegociado < 0) {
+            throw new IllegalArgumentException(
+                    "El lead time negociado debe ser mayor o igual a 0 días calendario.");
+        }
     }
 }

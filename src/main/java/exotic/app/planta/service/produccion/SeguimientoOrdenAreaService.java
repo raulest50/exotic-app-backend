@@ -145,6 +145,15 @@ public class SeguimientoOrdenAreaService {
             return;
         }
 
+        boolean tienePasosExcluidos = rutaVersion.getNodes().stream()
+                .anyMatch(node -> node.getAreaOperativa() != null
+                        && node.getAreaOperativa().getAlcanceEjecucion() == AreaOperativa.AlcanceEjecucion.SOLO_OF);
+        if (tienePasosExcluidos) {
+            RutaProcesoNode terminal = resolverTerminalRutaValida(rutaVersion);
+            if (terminal.getAreaOperativa().getAlcanceEjecucion() == AreaOperativa.AlcanceEjecucion.SOLO_OF) {
+                throw new IllegalStateException("El area final de la ruta debe ejecutar OP. Configure una etapa final aplicable antes de emitir.");
+            }
+        }
         orden.setRutaProcesoCatVersion(rutaVersion);
         if (orden.getJornadaLaboralVersion() == null) {
             jornadaLaboralVersionRepo.findFirstByEstadoOrderByVersionDesc(JornadaLaboralVersion.Estado.VIGENTE)
@@ -174,6 +183,7 @@ public class SeguimientoOrdenAreaService {
         int posicion = 0;
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         SeguimientoOrdenArea seguimientoAlmacenGeneral = null;
+        List<SeguimientoOrdenArea> raicesNoAplicables = new ArrayList<>();
 
         for (RutaProcesoNode node : rutaVersion.getNodes()) {
             if (node.getAreaOperativa() == null) {
@@ -185,11 +195,19 @@ public class SeguimientoOrdenAreaService {
             seguimiento.setOrdenProduccion(orden);
             seguimiento.setRutaProcesoNode(node);
             seguimiento.setAreaOperativa(node.getAreaOperativa());
+            boolean aplica = node.getAreaOperativa().getAreaId() == ALMACEN_GENERAL_AREA_ID
+                    || node.getAreaOperativa().getAlcanceEjecucion() != AreaOperativa.AlcanceEjecucion.SOLO_OF;
+            seguimiento.setAplicaEjecucionOp(aplica);
+            if (!aplica && orden.getRequerimientosMaterialesJson() != null
+                    && !snapshotService.requerimientosEtapa(orden, node.getId()).isEmpty()) {
+                throw new IllegalStateException("Reasigne los semiterminados consumidos del area "
+                        + node.getAreaOperativa().getNombre() + " a una etapa que ejecute OP antes de emitir.");
+            }
             seguimiento.setPosicionSecuencia(posicion++);
             seguimiento.setFechaEstadoActual(ahora);
-            seguimiento.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
-            seguimiento.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
-            if (node.getProcesoProduccion() != null) {
+            seguimiento.setDuracionEstimadaMinutos(aplica ? node.getDuracionEstimadaMinutos() : 0);
+            seguimiento.setRequiereJornadaLaboral(aplica && node.isRequiereJornadaLaboral());
+            if (aplica && node.getProcesoProduccion() != null) {
                 seguimiento.setPoeDocumentoVersion(
                         poeVigentePorProceso.get(node.getProcesoProduccion().getProcesoId())
                 );
@@ -204,6 +222,7 @@ public class SeguimientoOrdenAreaService {
             }
 
             seguimiento = seguimientoRepo.save(seguimiento);
+            if (esNodoInicial && !aplica) raicesNoAplicables.add(seguimiento);
             registrarEvento(
                     seguimiento,
                     null,
@@ -220,6 +239,11 @@ public class SeguimientoOrdenAreaService {
         }
 
         log.info("Seguimiento inicializado para orden {} con {} nodos", orden.getOrdenId(), posicion);
+        for (SeguimientoOrdenArea raiz : raicesNoAplicables) {
+            transicionarSeguimiento(raiz, EstadoSeguimientoOrdenArea.OMITIDO,
+                    ActorTipoEventoSeguimiento.SYSTEM, null, "Etapa no aplicable a OP: area exclusiva de OF.");
+            propagarVisibilidad(orden.getOrdenId(), raiz.getRutaProcesoNode().getId());
+        }
 
         boolean sinEntradasGenerales = orden.getRequerimientosMaterialesJson() != null
                 && snapshotService.requerimientosAlmacen(orden).stream().noneMatch(req ->
@@ -474,6 +498,8 @@ public class SeguimientoOrdenAreaService {
     /** Conserva el antecedente fisico y retira habilitaciones de una OP anulada. */
     public void reconciliarDespejesPorCancelacion(int ordenId, User actor) {
         seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
+                .stream()
+                .filter(SeguimientoOrdenArea::isEjecucionOpAplicable)
                 .forEach(seguimiento -> despejeLineaService.reconciliarCorreccion(seguimiento, actor));
     }
 
@@ -520,6 +546,7 @@ public class SeguimientoOrdenAreaService {
     public boolean tieneAreaOperativaEnSeguimiento(int ordenId, int areaId) {
         return seguimientoRepo.findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(ordenId)
                 .stream()
+                .filter(SeguimientoOrdenArea::isEjecucionOpAplicable)
                 .anyMatch(seguimiento -> seguimiento.getAreaOperativa() != null
                         && seguimiento.getAreaOperativa().getAreaId() == areaId);
     }
@@ -866,21 +893,30 @@ public class SeguimientoOrdenAreaService {
     }
 
     private void propagarVisibilidad(int ordenId, Long sourceNodeId) {
-        List<SeguimientoOrdenArea> sucesoresPendientes = seguimientoRepo.findSucesoresPendientes(ordenId, sourceNodeId);
+        Deque<Long> pendientes = new ArrayDeque<>();
+        pendientes.add(sourceNodeId);
+        Set<Long> propagados = new HashSet<>();
+        while (!pendientes.isEmpty()) {
+            Long source = pendientes.removeFirst();
+            if (!propagados.add(source)) continue;
+            for (SeguimientoOrdenArea sucesor : seguimientoRepo.findSucesoresPendientes(ordenId, source)) {
+                if (sucesor.getEstadoEnum() != EstadoSeguimientoOrdenArea.COLA) continue;
+                long predecesoresNoCompletados = seguimientoRepo.countPredecesoresNoCompletados(
+                        ordenId, sucesor.getRutaProcesoNode().getId());
 
-        for (SeguimientoOrdenArea sucesor : sucesoresPendientes) {
-            long predecesoresNoCompletados = seguimientoRepo.countPredecesoresNoCompletados(
-                    ordenId, sucesor.getRutaProcesoNode().getId());
-
-            if (predecesoresNoCompletados == 0) {
-                transicionarSeguimiento(
-                        sucesor,
-                        EstadoSeguimientoOrdenArea.ESPERA,
-                        ActorTipoEventoSeguimiento.SYSTEM,
-                        null,
-                        NOTA_DEPENDENCIAS_RESUELTAS
-                );
-                log.info("Nodo {} ahora en espera para orden {}", sucesor.getRutaProcesoNode().getId(), ordenId);
+                if (predecesoresNoCompletados == 0) {
+                    transicionarSeguimiento(
+                            sucesor,
+                            sucesor.isEjecucionOpAplicable() ? EstadoSeguimientoOrdenArea.ESPERA : EstadoSeguimientoOrdenArea.OMITIDO,
+                            ActorTipoEventoSeguimiento.SYSTEM,
+                            null,
+                            sucesor.isEjecucionOpAplicable() ? NOTA_DEPENDENCIAS_RESUELTAS
+                                    : "Etapa no aplicable a OP: area exclusiva de OF."
+                    );
+                    if (!sucesor.isEjecucionOpAplicable()) {
+                        pendientes.addLast(sucesor.getRutaProcesoNode().getId());
+                    }
+                }
             }
         }
     }
@@ -900,8 +936,9 @@ public class SeguimientoOrdenAreaService {
         } else if (estadoDestino == EstadoSeguimientoOrdenArea.ESPERA
                 && actorTipo == ActorTipoEventoSeguimiento.USER) {
             despejeLineaService.validarPausa(seguimiento, actor);
-        } else if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
-                || estadoDestino == EstadoSeguimientoOrdenArea.OMITIDO) {
+        } else if (seguimiento.isEjecucionOpAplicable()
+                && (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
+                || estadoDestino == EstadoSeguimientoOrdenArea.OMITIDO)) {
             despejeLineaService.registrarSalida(seguimiento, actor);
         }
         // El servicio de despeje bloquea y refresca el origen operativo.
@@ -974,6 +1011,15 @@ public class SeguimientoOrdenAreaService {
             throw new IllegalArgumentException("La orden ya se encuentra en estado " + estadoDestino.getDescripcion() + ".");
         }
 
+        if (!seguimiento.isEjecucionOpAplicable()) {
+            if (actorTipo == ActorTipoEventoSeguimiento.SYSTEM
+                    && estadoDestino == EstadoSeguimientoOrdenArea.OMITIDO
+                    && (estadoOrigen == EstadoSeguimientoOrdenArea.COLA || estadoOrigen == EstadoSeguimientoOrdenArea.ESPERA)) {
+                return;
+            }
+            throw new IllegalStateException("La etapa no aplica a la ejecucion de esta OP.");
+        }
+
         if (estadoOrigen == EstadoSeguimientoOrdenArea.COMPLETADO) {
             throw new IllegalArgumentException("No se puede modificar un seguimiento ya completado.");
         }
@@ -1009,6 +1055,9 @@ public class SeguimientoOrdenAreaService {
             int areaId,
             int expectedEstado
     ) {
+        if (!seguimiento.isEjecucionOpAplicable()) {
+            throw new IllegalArgumentException("Una etapa no aplicable a OP solo se recalcula con sus predecesoras.");
+        }
         if (seguimiento.getAreaOperativa() == null || seguimiento.getAreaOperativa().getAreaId() != areaId) {
             throw new IllegalArgumentException("El seguimiento no pertenece al area operativa seleccionada.");
         }
@@ -1097,7 +1146,9 @@ public class SeguimientoOrdenAreaService {
             if (estadoActual == EstadoSeguimientoOrdenArea.COLA) {
                 continue;
             }
-            if (estadoActual != EstadoSeguimientoOrdenArea.ESPERA) {
+            boolean omisionAutomatica = !descendant.isEjecucionOpAplicable()
+                    && estadoActual == EstadoSeguimientoOrdenArea.OMITIDO;
+            if (estadoActual != EstadoSeguimientoOrdenArea.ESPERA && !omisionAutomatica) {
                 throw new IllegalArgumentException(
                         "No se puede revertir el estado completado porque un paso sucesor ya avanzo.");
             }
@@ -1105,7 +1156,9 @@ public class SeguimientoOrdenAreaService {
             SeguimientoOrdenAreaEvento eventoRevertido = findLatestUnrevertedEventForState(descendant, estadoActual)
                     .orElse(null);
             String notaReversion = buildNotaReversionCorreccion(motivo);
-            despejeLineaService.reconciliarCorreccion(descendant, actor);
+            if (descendant.isEjecucionOpAplicable()) {
+                despejeLineaService.reconciliarCorreccion(descendant, actor);
+            }
             aplicarEstadoPorCorreccion(descendant, EstadoSeguimientoOrdenArea.COLA, actor, notaReversion, ahora);
             seguimientoRepo.save(descendant);
             registrarEvento(
@@ -1413,6 +1466,9 @@ public class SeguimientoOrdenAreaService {
     }
 
     private void validarUsuarioResponsableArea(SeguimientoOrdenArea seguimiento, User actor) {
+        if (!seguimiento.isEjecucionOpAplicable()) {
+            throw new AccessDeniedException("La etapa no aplica a la ejecucion de esta OP.");
+        }
         User responsable = seguimiento.getAreaOperativa() != null
                 ? seguimiento.getAreaOperativa().getResponsableArea()
                 : null;

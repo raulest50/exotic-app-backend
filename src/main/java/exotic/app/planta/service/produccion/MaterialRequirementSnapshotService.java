@@ -3,6 +3,7 @@ package exotic.app.planta.service.produccion;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.Material;
 import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.model.producto.SemiTerminado;
@@ -81,6 +82,10 @@ public class MaterialRequirementSnapshotService {
                 if (nodo == null) {
                     throw new IllegalStateException("Asigne el semiterminado " + req.productoId()
                             + " a una etapa de la ruta de la categoria antes de crear la OP.");
+                }
+                if (nodo.getAreaOperativa().getAlcanceEjecucion() == AreaOperativa.AlcanceEjecucion.SOLO_OF) {
+                    throw new IllegalStateException("El consumo del semiterminado " + req.productoId()
+                            + " esta asignado a un area exclusiva de OF. Reasignelo a una etapa que ejecute OP.");
                 }
                 item.put("rutaProcesoNodeId", nodo.getId());
                 item.put("areaOperativaId", nodo.getAreaOperativa().getAreaId());

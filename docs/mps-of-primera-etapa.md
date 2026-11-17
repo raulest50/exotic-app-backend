@@ -239,6 +239,74 @@ nivel 2 edición. No hereda `MAIN`. Se conserva el acceso de master/super_master
 
 ## Consulta por área
 
+### Ejecucion OP/OF por area (13 de noviembre de 2026)
+
+Gestion de Areas incorpora `alcanceEjecucion`: `SOLO_OP`, `SOLO_OF` o
+`AMBOS`. Es independiente de `visibilidadMps` y `alcanceMps`; configurar
+que un area ejecute OF no cambia por si solo los MPS que consulta.
+El valor inicial es `AMBOS`; Almacen General (-1) conserva ese valor.
+Clientes anteriores que omitan el campo al actualizar conservan lo configurado.
+
+Al emitir una nueva OP, cada seguimiento congela `aplicaEjecucionOp`.
+Las etapas de areas `SOLO_OF` permanecen en la ruta como antecedente, pero
+no aparecen en el tablero, carga o analitica operativa de OP. Cuando todas
+sus predecesoras se resuelven, pasan automaticamente a `OMITIDO` con evento
+de sistema y habilitan los siguientes pasos; una union sigue esperando las
+demas ramas. No requieren POE, controles de etapa, consumos ni despejes y
+aportan cero minutos a la estimacion. No se simulan cantidades ni firmas.
+
+La etapa final de una OP debe ejecutar OP. Si un consumo fisico de
+semiterminado esta asignado a un area `SOLO_OF`, la emision se rechaza con
+una indicacion para reasignarlo a la etapa OP consumidora; no se descarta
+el material. Las nuevas OF rechazan operaciones en areas `SOLO_OP`.
+
+Una edicion posterior del area no reinterpreta ordenes emitidas. Los
+seguimientos historicos con snapshot NULL mantienen su ejecucion anterior;
+las OF ya inicializadas y el backfill legado conservan sus operaciones.
+Revertir administrativamente un predecesor puede devolver a `COLA` sus
+omisiones automaticas y sucesores habilitados, conservando el enlace de
+auditoria; sigue prohibido si un sucesor tiene trabajo operativo registrado.
+
+Migraciones aditivas equivalentes:
+`db/migration/V125__alcance_ejecucion_areas.sql` y
+`db/migration-v1/V004__alcance_ejecucion_areas.sql`. No actualizan los
+seguimientos historicos ni modifican migraciones aplicadas. La linea
+consolidada `schema-v1` tiene una limitacion previa respecto de campos de
+despeje; no se declara validado su arranque con este cambio.
+
+Se agregaron cinco casos en `SeguimientoOrdenAreaServiceTableroFabricacionTest`:
+cadena de omisiones, union pendiente, snapshot historico NULL, cancelacion
+y reversion administrativa. Su ejecucion y la validacion real de Flyway,
+JPQL y guardado/tablero con PostgreSQL quedan pendientes; no se autorizo
+ejecutar suites. El reporte de cantidades por etapas corresponde a otra entrega.
+
+Verificacion local de esta entrega:
+
+- Backend: `gradlew.bat --init-script <temporal> build -x test testClasses
+  --offline --no-daemon`, con Java 21: correcto. El init temporal dirige las
+  salidas a una carpeta temporal y excluye `application*.properties` para no
+  copiar configuracion privada. Compila los tests, no los ejecuta.
+- Frontend: `bun run vite build`: correcto, con aviso de tamano de chunks.
+- `bun run lint`: falla por `react-hooks/exhaustive-deps` en
+  `DispensacionV2Step3SeleccionOrdenes.tsx:65`, archivo sin cambios en esta
+  entrega, y supresiones sobrantes. No se altero esa linea base.
+- ESLint sobre los siete archivos frontend de esta entrega, con la misma
+  configuracion gate, `--max-warnings 0 --pass-on-unpruned-suppressions`:
+  correcto. La opcion final solo permite entradas de la linea base ajenas
+  a los archivos seleccionados; no silencia diagnosticos de estos archivos.
+- `git diff --check`: correcto en ambos repositorios.
+- `bun run dev --host 127.0.0.1` y navegador local: login visible y sin errores
+  de consola observados. Sin backend local escuchando en 8080 ni sesion
+  autenticada, no se verifico guardar configuracion ni ejecutar OP/OF.
+  El servidor y la pestana temporales quedaron cerrados.
+
+Pendiente de sincronizacion manual con Gaphor: representar, cuando se modele
+este alcance, la separacion entre ejecucion y consulta MPS, el snapshot de
+seguimiento OP y la omision por sistema que conserva las dependencias.
+No se modifico `ExoticApp.gaphor`.
+
+### Consulta de planificacion
+
 Gestión de Áreas permite combinar:
 
 | Campo | Valores | Predeterminado |

@@ -46,6 +46,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN lote.mpsItem item
         WHERE op.mpsSemanal.mpsId = :mpsId
         AND s.areaOperativa.areaId = :areaId
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         AND op.estadoOrden <> -1
         AND (item.estado IS NULL OR item.estado <> :cancelledItemEstado)
         AND (lote.estado IS NULL OR lote.estado <> :cancelledLoteEstado)
@@ -67,6 +68,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         LEFT JOIN FETCH s.areaOperativa
         WHERE s.areaOperativa.areaId = :areaId
         AND s.estado = 1
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         AND op.estadoOrden NOT IN (-1, 2)
         ORDER BY s.fechaVisible ASC
         """)
@@ -82,6 +84,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH s.areaOperativa a
         WHERE a.responsableArea.id = :userId
         AND s.estado = 1
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         AND op.estadoOrden NOT IN (-1, 2)
         ORDER BY s.fechaVisible ASC
         """)
@@ -96,6 +99,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         WHERE a.responsableArea.id = :userId
         AND op.estadoOrden != -1
         AND s.estado IN :activeStates
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         ORDER BY s.posicionSecuencia ASC, s.id ASC
         """)
     List<SeguimientoOrdenArea> findTableroActivosByResponsableUserId(
@@ -113,6 +117,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
                 WHERE a.responsableArea.id = :userId
                 AND op.estadoOrden != -1
                 AND s.estado = :completedState
+                AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
                 AND (
                     :searchPattern = ''
                     OR LOWER(COALESCE(op.loteAsignado, '')) LIKE :searchPattern
@@ -136,6 +141,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
                 WHERE a.responsableArea.id = :userId
                 AND op.estadoOrden != -1
                 AND s.estado = :completedState
+                AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
                 AND (
                     :searchPattern = ''
                     OR LOWER(COALESCE(op.loteAsignado, '')) LIKE :searchPattern
@@ -161,6 +167,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         WHERE a.responsableArea.id = :userId
         AND op.estadoOrden != -1
         AND s.estado = :completedState
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         """)
     long countTableroCompletadosHistoricosByResponsableUserId(
             @Param("userId") Long userId,
@@ -177,6 +184,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         AND op.estadoOrden != -1
         AND s.estado = :completedState
         AND s.fechaCompletado >= :periodStart
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         AND s.fechaCompletado < :periodEndExclusive
         ORDER BY s.posicionSecuencia ASC, s.id ASC
         """)
@@ -195,6 +203,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH s.rutaProcesoNode n
         WHERE a.areaId = :areaId
         AND op.estadoOrden != -1
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         ORDER BY s.posicionSecuencia ASC, s.id ASC
         """)
     List<SeguimientoOrdenArea> findTableroByAreaId(@Param("areaId") int areaId);
@@ -206,6 +215,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH s.areaOperativa a
         WHERE a.areaId <> :excludedAreaId
         AND op.estadoOrden <> -1
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         AND COALESCE(s.fechaCreacion, s.fechaEstadoActual) <= :cutoff
         AND (s.fechaCompletado IS NULL OR s.fechaCompletado >= :horizonStart)
         ORDER BY a.areaId ASC, s.id ASC
@@ -295,11 +305,13 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         JOIN FETCH ag.rutaProcesoNode n
         WHERE a.areaId = :almacenGeneralAreaId
         AND ag.estado = :estadoEspera
+        AND (ag.aplicaEjecucionOp IS NULL OR ag.aplicaEjecucionOp = true)
         AND op.estadoOrden NOT IN (-1, 2)
         AND NOT EXISTS (
             SELECT 1 FROM SeguimientoOrdenArea s
             WHERE s.ordenProduccion.ordenId = op.ordenId
             AND s.areaOperativa.areaId <> :almacenGeneralAreaId
+            AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
             AND s.estado <> :estadoCola
         )
         ORDER BY op.ordenId ASC
@@ -316,6 +328,7 @@ public interface SeguimientoOrdenAreaRepo extends JpaRepository<SeguimientoOrden
         FROM SeguimientoOrdenArea s
         WHERE s.areaOperativa.areaId IN :areaIds
         AND s.estado IN :estados
+        AND (s.aplicaEjecucionOp IS NULL OR s.aplicaEjecucionOp = true)
         AND s.ordenProduccion.estadoOrden NOT IN (-1, 2)
         GROUP BY s.areaOperativa.areaId
         """)

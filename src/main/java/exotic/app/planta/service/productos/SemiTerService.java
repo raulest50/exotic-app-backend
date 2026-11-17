@@ -17,6 +17,7 @@ import exotic.app.planta.repo.producto.TerminadoRepo;
 import exotic.app.planta.repo.producto.InsumoRepo;
 import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVersionRepo;
 import exotic.app.planta.model.producto.manufacturing.receta.Insumo;
+import exotic.app.planta.service.productos.fotogrametria.TerminadoModelo3dService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ public class SemiTerService {
     private final ManufacturingVersionRepo manufacturingVersionRepo;
     private final ObjectMapper objectMapper;
     private final MpsFabricacionSemanalRepo mpsFabricacionSemanalRepo;
+    private final TerminadoModelo3dService terminadoModelo3dService;
 
     private static final String PRODUCTO_EN_MPS_OF =
             "El semiterminado tiene propuestas en MPS OF. Retire esas propuestas antes de eliminarlo.";
@@ -144,6 +146,7 @@ public class SemiTerService {
             semiTerminadoRepo.deleteById(productoId);
         } else if (producto instanceof Terminado) {
             log.info("Eliminando Terminado con ID: {}", productoId);
+            terminadoModelo3dService.scheduleCleanupAfterDeletion((Terminado) producto);
             terminadoRepo.deleteById(productoId);
         }
 
@@ -203,6 +206,7 @@ public class SemiTerService {
             semiTerminadoRepo.deleteById(productoId);
         } else {
             log.info("Eliminando Terminado con ID: {}", productoId);
+            terminadoModelo3dService.scheduleCleanupAfterDeletion((Terminado) producto);
             terminadoRepo.deleteById(productoId);
         }
 

@@ -82,3 +82,6 @@ fix-*.sql
 
 
 usuarios.txt
+# Local credentials for the HTTP client and Docker Compose
+http-client.private.env.json
+/.env

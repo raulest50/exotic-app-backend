@@ -513,6 +513,9 @@ public class DespejeLineaService {
                     .orElseThrow(() -> new NoSuchElementException("Orden de producción no encontrada."));
             entityManager.refresh(orden, LockModeType.PESSIMISTIC_WRITE);
             entityManager.refresh(s, LockModeType.PESSIMISTIC_WRITE);
+            if (!s.isEjecucionOpAplicable()) {
+                throw conflicto("La etapa no aplica a la ejecucion de esta OP y no admite despejes.");
+            }
             return new Origen(s.getAreaOperativa(), s, null);
         }
         OrdenFabricacionOperacion o = operacionRepo.findById(operacionId)

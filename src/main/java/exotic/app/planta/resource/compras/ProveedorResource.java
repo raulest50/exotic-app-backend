@@ -1,6 +1,8 @@
 package exotic.app.planta.resource.compras;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exotic.app.planta.model.compras.Proveedor;
 import exotic.app.planta.model.compras.dto.search.DTO_SearchProveedor;
@@ -38,10 +40,14 @@ public class ProveedorResource {
     ) {
         try {
             // Usar el ObjectMapper inyectado con soporte para Java 8 date/time
-            Proveedor proveedor = objectMapper.readValue(proveedorJson, Proveedor.class);
+            JsonNode proveedorNode = readProveedorJson(proveedorJson);
+            Proveedor proveedor = objectMapper.treeToValue(proveedorNode, Proveedor.class);
             // Delegate all logic to the service method.
             Proveedor saved = proveedorService.saveProveedorWithFiles(proveedor, rutFile, camaraFile);
             return ResponseEntity.created(URI.create("/proveedor/" + saved.getId())).body(saved);
+        } catch (JsonProcessingException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El JSON del proveedor no es válido."));
         } catch (IllegalArgumentException e) {
             log.error("Error de validacion al guardar el proveedor: {}", e.getMessage());
             return ResponseEntity.badRequest()
@@ -100,11 +106,16 @@ public class ProveedorResource {
     ) {
         try {
             // Usar el ObjectMapper inyectado con soporte para Java 8 date/time
-            Proveedor proveedor = objectMapper.readValue(proveedorJson, Proveedor.class);
+            JsonNode proveedorNode = readProveedorJson(proveedorJson);
+            Proveedor proveedor = objectMapper.treeToValue(proveedorNode, Proveedor.class);
 
             // Delegar toda la lógica al método del servicio
-            Proveedor updated = proveedorService.updateProveedorWithFiles(id, proveedor, rutFile, camaraFile);
+            Proveedor updated = proveedorService.updateProveedorWithFiles(
+                    id, proveedor, rutFile, camaraFile, proveedorNode.has("leadTimeNegociado"));
             return ResponseEntity.ok(updated);
+        } catch (JsonProcessingException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "El JSON del proveedor no es válido."));
         } catch (IllegalArgumentException e) {
             log.error("Error de validación al actualizar el proveedor: {}", e.getMessage());
             return ResponseEntity.badRequest()
@@ -118,5 +129,20 @@ public class ProveedorResource {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Error al actualizar el proveedor: " + e.getMessage()));
         }
+    }
+
+    private JsonNode readProveedorJson(String proveedorJson) throws JsonProcessingException {
+        JsonNode proveedorNode = objectMapper.readTree(proveedorJson);
+        if (proveedorNode == null || !proveedorNode.isObject()) {
+            throw new IllegalArgumentException("Los datos del proveedor deben ser un objeto JSON.");
+        }
+
+        JsonNode leadTimeNegociado = proveedorNode.get("leadTimeNegociado");
+        if (leadTimeNegociado != null && !leadTimeNegociado.isNull()
+                && (!leadTimeNegociado.isIntegralNumber() || !leadTimeNegociado.canConvertToInt())) {
+            throw new IllegalArgumentException(
+                    "El lead time negociado debe ser un número entero de días calendario entre 0 y 2147483647, o null.");
+        }
+        return proveedorNode;
     }
 }

@@ -50,6 +50,10 @@ public class AreaOperativaPoeService {
             );
         }
 
+        if (!seguimiento.isEjecucionOpAplicable()) {
+            throw new AccessDeniedException("La etapa no aplica a la ejecucion de esta OP.");
+        }
+
         ProcesoProduccionDocumentoVersion documento = seguimiento.getPoeDocumentoVersion();
         if (documento == null) {
             throw new NoSuchElementException(

@@ -34,7 +34,7 @@ public class AreaProduccionResource {
 
     @PostMapping("/crear")
     public ResponseEntity<?> createAreaProduccion(Authentication authentication, @Valid @RequestBody AreaProduccionDTO areaProduccionDTO) {
-        requireMpsConfigurationPermission(authentication, areaProduccionDTO, "CREAR_AREA_PRODUCCION");
+        requireAreaConfigurationPermission(authentication, areaProduccionDTO, "CREAR_AREA_PRODUCCION");
         log.info("REST request para crear una nueva area de produccion: {}", areaProduccionDTO.getNombre());
 
         try {
@@ -61,7 +61,7 @@ public class AreaProduccionResource {
             @PathVariable Integer areaId,
             @Valid @RequestBody AreaProduccionDTO dto) {
 
-        requireMpsConfigurationPermission(authentication, dto, "CONSULTA_AREAS_OPERATIVAS");
+        requireAreaConfigurationPermission(authentication, dto, "CONSULTA_AREAS_OPERATIVAS");
 
         log.info("REST request para actualizar area de produccion con ID: {}", areaId);
 
@@ -99,8 +99,9 @@ public class AreaProduccionResource {
         }
     }
 
-    private void requireMpsConfigurationPermission(Authentication auth, AreaProduccionDTO dto, String tab) {
-        if (dto.getVisibilidadMps() == null && dto.getAlcanceMps() == null) return;
+    private void requireAreaConfigurationPermission(Authentication auth, AreaProduccionDTO dto, String tab) {
+        if (dto.getVisibilidadMps() == null && dto.getAlcanceMps() == null
+                && dto.getAlcanceEjecucion() == null) return;
         if (auth == null || !auth.isAuthenticated()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }
@@ -110,7 +111,7 @@ public class AreaProduccionResource {
         int nivel = UserAccessEvaluator.tabNivel(user, ModuloSistema.SEGUIMIENTO_PRODUCCION, tab)
                 .orElse(UserAccessEvaluator.tabNivel(user, ModuloSistema.SEGUIMIENTO_PRODUCCION, "MAIN").orElse(0));
         if (nivel < 1) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permiso para configurar el MPS de esta area.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permiso para configurar esta area.");
         }
     }
 

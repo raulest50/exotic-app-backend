@@ -90,6 +90,14 @@ tasks.withType<Test> {
 	useJUnitPlatform()
 }
 
+tasks.register<JavaExec>("agentAssistant") {
+	group = "application"
+	description = "Administers the local assistant account without starting Spring or a database."
+	classpath = sourceSets.main.get().runtimeClasspath
+	mainClass.set("exotic.app.planta.service.agentassistant.AgentAssistantCli")
+	standardInput = System.`in`
+}
+
 tasks.register<Test>("transaccionesAlmacenLocalTest") {
 	group = "verification"
 	description = "Runs the local integration suite that protects the frontend TransaccionesAlmacen module."

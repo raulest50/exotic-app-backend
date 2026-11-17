@@ -20,6 +20,10 @@ import java.util.Optional;
 @Repository
 public interface TerminadoRepo extends JpaRepository<Terminado, String>, JpaSpecificationExecutor<Terminado> {
 
+    /** Serializa cambios del archivo opcional con otras operaciones sobre el terminado. */
+    @Query(value = "SELECT producto_id FROM productos WHERE producto_id = :productoId AND tipo_producto = 'T' FOR UPDATE", nativeQuery = true)
+    Optional<String> lockModelo3dProductoId(@Param("productoId") String productoId);
+
     List<Terminado> findByCategoria_CategoriaIdOrderByProductoIdAsc(Integer categoriaId);
 
     @EntityGraph(attributePaths = {"categoria", "insumos", "insumos.producto"})

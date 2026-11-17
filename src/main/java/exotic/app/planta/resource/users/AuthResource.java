@@ -91,6 +91,7 @@ public class AuthResource {
         areaResponsable.put("nombre", assignmentStatus.getAreaResponsableNombre());
         areaResponsable.put("visibilidadMps", assignmentStatus.getVisibilidadMps());
         areaResponsable.put("alcanceMps", assignmentStatus.getAlcanceMps());
+        areaResponsable.put("alcanceEjecucion", assignmentStatus.getAlcanceEjecucion());
         return areaResponsable;
     }
 

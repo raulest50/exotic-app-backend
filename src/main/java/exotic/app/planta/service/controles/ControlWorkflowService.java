@@ -494,6 +494,8 @@ public class ControlWorkflowService {
     }
 
     private boolean coincideEtapa(AplicabilidadPlanControl regla, BatchRecordEtapa etapa) {
+        if (etapa.getSeguimientoOrdenArea() != null
+                && !etapa.getSeguimientoOrdenArea().isEjecucionOpAplicable()) return false;
         if (!coincideNodoConfigurado(regla, etapa)) return false;
         if (regla.getAreaOperativa() != null
                 && regla.getAreaOperativa().getAreaId() != etapa.getAreaOperativa().getAreaId()) return false;

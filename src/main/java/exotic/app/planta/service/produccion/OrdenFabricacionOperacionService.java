@@ -106,6 +106,10 @@ public class OrdenFabricacionOperacionService {
                 throw new IllegalStateException(
                         "Almacen General no debe modelarse como operacion de una OF.");
             }
+            if (area.getAlcanceEjecucion() == AreaOperativa.AlcanceEjecucion.SOLO_OP) {
+                throw new IllegalStateException("El area " + area.getNombre()
+                        + " solo ejecuta OP y no puede recibir una nueva operacion de OF.");
+            }
             OrdenFabricacionOperacion operacion = new OrdenFabricacionOperacion();
             operacion.setOrdenFabricacion(orden);
             operacion.setAreaOperativa(area);

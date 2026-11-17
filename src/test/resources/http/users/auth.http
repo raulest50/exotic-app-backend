@@ -5,6 +5,9 @@
 ### Login para obtener token JWT
 # Este endpoint permite autenticarse y obtener un token JWT
 # El token se guardara automaticamente en la variable global auth_token
+< {%
+    client.global.clear("auth_token");
+%}
 POST {{host}}/api/auth/login
 Content-Type: {{contentType}}
 
@@ -14,11 +17,13 @@ Content-Type: {{contentType}}
 }
 
 > {%
-    var token = response.body.token;
+    var token = response.body && response.body.token;
 
-    if (token) {
+    if (response.status === 200 && typeof token === "string" && token.trim()) {
         client.global.set("auth_token", token);
-        client.log("Token JWT guardado con exito: " + token.substring(0, 15) + "...");
+        client.log("Inicio de sesion completado. Token guardado para las peticiones de esta sesion.");
+    } else {
+        client.log("No se completo el inicio de sesion. No se guardo ningun token.");
     }
 %}
 

@@ -38,6 +38,7 @@ import exotic.app.planta.repo.ventas.FacturaVentaRepo;
 import exotic.app.planta.repo.ventas.ItemFacturaVentaRepo;
 import exotic.app.planta.repo.ventas.ItemOrdenVentaRepo;
 import exotic.app.planta.repo.ventas.OrdenVentaRepo;
+import exotic.app.planta.service.productos.fotogrametria.TerminadoModelo3dService;
 import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -92,6 +93,7 @@ public class EliminacionesForzadasService {
     private final DangerousOperationGuard dangerousOperationGuard;
     private final TransactionTemplate transactionTemplate;
     private final EntityManager entityManager;
+    private final TerminadoModelo3dService terminadoModelo3dService;
 
     @Autowired
     public EliminacionesForzadasService(
@@ -118,7 +120,8 @@ public class EliminacionesForzadasService {
             DocumentoBajaActivoRepo documentoBajaActivoRepo,
             DangerousOperationGuard dangerousOperationGuard,
             TransactionTemplate transactionTemplate,
-            EntityManager entityManager
+            EntityManager entityManager,
+            TerminadoModelo3dService terminadoModelo3dService
     ) {
         this.ordenCompraRepo = ordenCompraRepo;
         this.itemOrdenCompraRepo = itemOrdenCompraRepo;
@@ -144,6 +147,7 @@ public class EliminacionesForzadasService {
         this.dangerousOperationGuard = dangerousOperationGuard;
         this.transactionTemplate = transactionTemplate;
         this.entityManager = entityManager;
+        this.terminadoModelo3dService = terminadoModelo3dService;
     }
 
     @Transactional(readOnly = true)
@@ -468,6 +472,7 @@ public class EliminacionesForzadasService {
         deleteSalesArtifacts(productoId);
         deleteAssociatedProcess(productoId);
 
+        terminadoModelo3dService.scheduleCleanupAfterDeletion((Terminado) producto);
         terminadoRepo.deleteById(productoId);
         log.info("Eliminación forzada ejecutada para Terminado id: {}", productoId);
     }

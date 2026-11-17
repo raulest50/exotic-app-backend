@@ -3,6 +3,7 @@ package exotic.app.planta.model.compras;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -95,6 +96,14 @@ public class Proveedor {
      * of condiciones de pago over time in case it is changed.
      */
     private String condicionPago;
+
+    /**
+     * Plazo negociado de referencia en dias calendario enteros.
+     * Null indica que el proveedor no tiene un plazo configurado.
+     */
+    @PositiveOrZero
+    @Column(name = "lead_time_negociado")
+    private Integer leadTimeNegociado;
 
     /**
      * categorias:

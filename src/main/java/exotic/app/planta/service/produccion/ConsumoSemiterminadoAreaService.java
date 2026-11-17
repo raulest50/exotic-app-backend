@@ -160,6 +160,9 @@ public class ConsumoSemiterminadoAreaService {
                 || !actor.getId().equals(area.getResponsableArea().getId())) {
             throw new AccessDeniedException("Solo el responsable del area de esta etapa puede consultar o registrar sus consumos.");
         }
+        if (!seguimiento.isEjecucionOpAplicable()) {
+            throw new IllegalStateException("La etapa no aplica a la ejecucion de esta OP y no admite consumos.");
+        }
         if (orden.getRequerimientosMaterialesJson() != null && (orden.getRutaProcesoCatVersion() == null
                 || seguimiento.getRutaProcesoNode() == null
                 || !orden.getRutaProcesoCatVersion().getId().equals(

@@ -13,7 +13,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: spring
-      POSTGRES_PASSWORD: R4f4MR3HqoqhperVwOUvMDqP0vzsmdd4
+      POSTGRES_PASSWORD: ${EXOTIC_DEV_POSTGRES_PASSWORD:?Define EXOTIC_DEV_POSTGRES_PASSWORD en el entorno local}
       POSTGRES_DB: lacmdb
     ports:
       - "5432:5432"

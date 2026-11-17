@@ -57,6 +57,7 @@ public class ExportacionProveedorService {
                 proveedor.getUrl(),
                 proveedor.getObservacion(),
                 proveedor.getCondicionPago(),
+                proveedor.getLeadTimeNegociado(),
                 proveedor.getCategorias(),
                 contactos
         );

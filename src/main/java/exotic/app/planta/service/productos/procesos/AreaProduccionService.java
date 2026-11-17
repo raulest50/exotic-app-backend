@@ -52,6 +52,7 @@ public class AreaProduccionService {
     @Transactional
     public AreaOperativa saveAreaProduccion(AreaOperativa areaProduccion) {
         log.info("Guardando area de produccion: {}", areaProduccion.getNombre());
+        validarAlcanceEjecucion(areaProduccion);
         return areaProduccionRepo.save(areaProduccion);
     }
 
@@ -82,7 +83,7 @@ public class AreaProduccionService {
         AreaOperativa area = new AreaOperativa();
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
-        aplicarConfiguracionMps(area, dto);
+        aplicarConfiguracionArea(area, dto);
         area.setResponsableArea(responsable);
         area.setCategoriasHabilitadas(resolveCategorias(resolveCategoriaIds(dto)));
 
@@ -126,7 +127,7 @@ public class AreaProduccionService {
 
         area.setNombre(dto.getNombre());
         area.setDescripcion(dto.getDescripcion());
-        aplicarConfiguracionMps(area, dto);
+        aplicarConfiguracionArea(area, dto);
         area.setResponsableArea(responsable);
         area.setCategoriasHabilitadas(resolveCategorias(resolveCategoriaIds(dto)));
 
@@ -312,10 +313,21 @@ public class AreaProduccionService {
         }
     }
 
-    private void aplicarConfiguracionMps(AreaOperativa area, AreaProduccionDTO dto) {
+    private void aplicarConfiguracionArea(AreaOperativa area, AreaProduccionDTO dto) {
         // Clientes anteriores no deben restablecer una configuracion que no conocen.
         if (dto.getVisibilidadMps() != null) area.setVisibilidadMps(dto.getVisibilidadMps());
         if (dto.getAlcanceMps() != null) area.setAlcanceMps(dto.getAlcanceMps());
+        if (dto.getAlcanceEjecucion() != null) area.setAlcanceEjecucion(dto.getAlcanceEjecucion());
+        validarAlcanceEjecucion(area);
+    }
+
+    private void validarAlcanceEjecucion(AreaOperativa area) {
+        if (area.getAlcanceEjecucion() == null) {
+            throw new IllegalArgumentException("El alcance de ejecucion del area es obligatorio.");
+        }
+        if (area.getAreaId() == -1 && area.getAlcanceEjecucion() != AreaOperativa.AlcanceEjecucion.AMBOS) {
+            throw new IllegalArgumentException("Almacen General debe conservar el alcance de ejecucion AMBOS.");
+        }
     }
 
     private AreaOperativaResponseDTO toResponseDto(AreaOperativa area) {
@@ -351,6 +363,7 @@ public class AreaProduccionService {
                 .descripcion(area.getDescripcion())
                 .visibilidadMps(area.getVisibilidadMps())
                 .alcanceMps(area.getAlcanceMps())
+                .alcanceEjecucion(area.getAlcanceEjecucion())
                 .responsableArea(responsableDto)
                 .categoriasHabilitadas(categoriasDto)
                 .build();

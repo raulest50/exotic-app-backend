@@ -20,6 +20,7 @@ public record ExportacionProveedoresConContactosDTO(
             String url,
             String observacion,
             String condicionPago,
+            Integer leadTimeNegociado,
             int[] categorias,
             List<ContactoExportDTO> contactos
     ) {

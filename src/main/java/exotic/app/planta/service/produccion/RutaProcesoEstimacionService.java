@@ -88,8 +88,8 @@ public class RutaProcesoEstimacionService {
 
             LocalDateTime nodeFinish = addMinutes(
                     nodeStart,
-                    Math.max(seguimiento.getDuracionEstimadaMinutos(), 0),
-                    seguimiento.isRequiereJornadaLaboral(),
+                    seguimiento.isEjecucionOpAplicable() ? Math.max(seguimiento.getDuracionEstimadaMinutos(), 0) : 0,
+                    seguimiento.isEjecucionOpAplicable() && seguimiento.isRequiereJornadaLaboral(),
                     jornada
             );
             finishByNodeId.put(nodeId, nodeFinish);
@@ -125,8 +125,8 @@ public class RutaProcesoEstimacionService {
         for (SeguimientoOrdenArea seguimiento : seguimientos) {
             current = addMinutes(
                     current,
-                    Math.max(seguimiento.getDuracionEstimadaMinutos(), 0),
-                    seguimiento.isRequiereJornadaLaboral(),
+                    seguimiento.isEjecucionOpAplicable() ? Math.max(seguimiento.getDuracionEstimadaMinutos(), 0) : 0,
+                    seguimiento.isEjecucionOpAplicable() && seguimiento.isRequiereJornadaLaboral(),
                     jornada
             );
         }

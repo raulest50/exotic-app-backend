@@ -61,6 +61,7 @@ public class AreaOperativaPanelDetalleService {
                 .collect(Collectors.toSet());
 
         boolean canAccess = seguimientos.stream()
+                .filter(SeguimientoOrdenArea::isEjecucionOpAplicable)
                 .map(SeguimientoOrdenArea::getAreaOperativa)
                 .filter(area -> area != null)
                 .map(AreaOperativa::getAreaId)
@@ -152,7 +153,8 @@ public class AreaOperativaPanelDetalleService {
                     seguimiento.getRutaProcesoNode().getProcesoProduccion().getNombre());
         }
 
-        boolean puedeConsultarPoe = seguimiento.getAreaOperativa() != null
+        boolean puedeConsultarPoe = seguimiento.isEjecucionOpAplicable()
+                && seguimiento.getAreaOperativa() != null
                 && areaIdsResponsables.contains(seguimiento.getAreaOperativa().getAreaId());
         dto.setPuedeConsultarPoe(puedeConsultarPoe);
         if (puedeConsultarPoe && seguimiento.getPoeDocumentoVersion() != null) {
@@ -217,7 +219,9 @@ public class AreaOperativaPanelDetalleService {
         dto.setPosicionY(node.getPosicionY());
         dto.setHasLeftHandle(node.isHasLeftHandle());
         dto.setHasRightHandle(node.isHasRightHandle());
-        dto.setCurrentLeaderArea(node.getAreaOperativa() != null && areaIdsResponsables.contains(node.getAreaOperativa().getAreaId()));
+        dto.setCurrentLeaderArea(seguimiento != null && seguimiento.isEjecucionOpAplicable()
+                && node.getAreaOperativa() != null
+                && areaIdsResponsables.contains(node.getAreaOperativa().getAreaId()));
         dto.setDuracionEstimadaMinutos(node.getDuracionEstimadaMinutos());
         dto.setRequiereJornadaLaboral(node.isRequiereJornadaLaboral());
 
