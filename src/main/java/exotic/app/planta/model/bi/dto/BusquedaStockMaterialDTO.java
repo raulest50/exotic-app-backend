@@ -15,6 +15,7 @@ public record BusquedaStockMaterialDTO(
             String nombre,
             String unidadMedida,
             double stockGeneral,
+            double puntoReorden,
             double costoUnitario,
             boolean costoDisponible,
             double valorEstimado

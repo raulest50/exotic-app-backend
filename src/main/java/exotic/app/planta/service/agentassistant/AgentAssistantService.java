@@ -12,7 +12,6 @@ import exotic.app.planta.service.commons.BackupTotalExportService;
 import exotic.app.planta.service.users.AgentAssistantAccessService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -25,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -43,12 +43,10 @@ public class AgentAssistantService {
     private static final Duration OPERATION_TTL = Duration.ofMinutes(20);
     private static final Pattern WRITE_REQUEST = Pattern.compile("(?iu)\\b(borra(?:r)?|elimina(?:r)?|actualiza(?:r)?|modifica(?:r)?|inserta(?:r)?|crea(?:r)?|registra(?:r)?|suprime|reemplaza|delete|insert|update|drop|truncate|alter|grant|revoke|merge|create)\\b");
     private final AgentAssistantAccessService access;
-    private final ChatGptGateway gateway;
+    private final Optional<AssistantAiGateway> gateway;
     private final AgentAssistantQueryRepository queries;
     private final BackupTotalExportService backups;
     private final ObjectMapper mapper;
-    @Value("${app.agent-assistant.model:}")
-    private String configuredModel = "";
     private final Map<String, Proposal> proposals = new ConcurrentHashMap<>();
     private final Map<String, RunningOperation> operations = new ConcurrentHashMap<>();
     private volatile long connectionEpoch;
@@ -66,16 +64,21 @@ public class AgentAssistantService {
 
     public AssistantStatus status(Authentication authentication) {
         access.requireRead(authentication);
-        boolean enabled = gateway.enabled();
+        boolean enabled = gateway.map(AssistantAiGateway::enabled).orElse(false);
         boolean available = false;
         if (enabled) {
-            try { available = gateway.status().connected(); }
-            catch (ResponseStatusException ex) { /* Operational details remain in the development tool. */ }
+            try { available = gateway.orElseThrow().available(); }
+            catch (ResponseStatusException ex) { /* Provider details are not part of the public status. */ }
         }
         synchronizeConnection();
+        AssistantAiGateway.Usage usage = new AssistantAiGateway.Usage(false, null);
+        try { usage = gateway.map(AssistantAiGateway::usage).orElse(usage); }
+        catch (ResponseStatusException ex) { available = false; }
         String message = available ? "El servicio de Asistente Exotic está disponible."
                 : "El asistente no está disponible en este momento. Inténtalo más tarde.";
-        return new AssistantStatus(enabled, available, message, true, connectionId);
+        if (usage.configured() && usage.remainingPercent() != null && usage.remainingPercent() <= 0)
+            message = "Se agotó el cupo asignado al asistente. Contacta al administrador.";
+        return new AssistantStatus(enabled, available, message, true, connectionId, usage);
     }
 
     private synchronized void invalidateConnection() {
@@ -86,7 +89,7 @@ public class AgentAssistantService {
     }
 
     private synchronized void synchronizeConnection() {
-        String current = gateway.connectionId();
+        String current = gateway.map(AssistantAiGateway::connectionId).orElse(null);
         if (!java.util.Objects.equals(providerConnectionId, current)) {
             if (providerConnectionId != null) invalidateConnection();
             providerConnectionId = current;
@@ -100,7 +103,7 @@ public class AgentAssistantService {
         requireEnabled();
         if (request == null || request.message() == null || request.message().isBlank() || request.message().length() > 2000)
             throw error(HttpStatus.BAD_REQUEST, "Escribe una pregunta de hasta 2000 caracteres.");
-        List<ChatGptGateway.Turn> turns = validateHistory(request.history());
+        List<AssistantAiGateway.Turn> turns = validateHistory(request.history());
         String message = request.message().trim();
         String normalized = Normalizer.normalize(message, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
         if (WRITE_REQUEST.matcher(normalized).find()) return new ChatResponse(READ_ONLY_MESSAGE, null);
@@ -117,7 +120,7 @@ public class AgentAssistantService {
             requireCatalog(authentication); // Access can change while this user waits in the queue.
             requireEnabled();
             long epoch = connectionEpoch();
-            turns.add(new ChatGptGateway.Turn("user", message));
+            turns.add(new AssistantAiGateway.Turn("user", message));
             String response = generate(turns);
             requireCatalog(authentication); // Permission changes while waiting for OpenAI take effect here.
             if (epoch != connectionEpoch()) throw error(HttpStatus.CONFLICT, "El servicio cambió durante la respuesta. Solicita una nueva propuesta.");
@@ -259,27 +262,23 @@ public class AgentAssistantService {
     }
 
     private void requireEnabled() {
-        if (!gateway.enabled()) throw error(HttpStatus.SERVICE_UNAVAILABLE, "El prototipo del asistente está deshabilitado o no está en un entorno local.");
+        if (!gateway.map(AssistantAiGateway::enabled).orElse(false))
+            throw error(HttpStatus.SERVICE_UNAVAILABLE, "El asistente no tiene un proveedor de IA habilitado.");
     }
 
-    private String generate(List<ChatGptGateway.Turn> turns) {
+    private String generate(List<AssistantAiGateway.Turn> turns) {
         try {
-            List<ChatGptGateway.ModelChoice> models = gateway.models();
-            String model = configuredModel == null ? "" : configuredModel.trim();
-            if (model.isEmpty()) model = models.isEmpty() ? "" : models.getFirst().id();
-            String selected = model;
-            if (models.stream().noneMatch(candidate -> candidate.id().equals(selected)))
-                throw error(HttpStatus.SERVICE_UNAVAILABLE, "No hay un modelo autorizado configurado para el asistente.");
-            return gateway.generate(model, instructions(), turns);
+            return gateway.orElseThrow(() -> error(HttpStatus.SERVICE_UNAVAILABLE,
+                    "El asistente no tiene un proveedor de IA habilitado.")).generate(instructions(), turns);
         } catch (ResponseStatusException ex) {
-            // Provider details, identity and consent controls are operator-only.
+            // Provider diagnostics remain outside the public API.
             if (ex.getStatusCode().value() == 429)
                 throw error(HttpStatus.TOO_MANY_REQUESTS, "El servicio del asistente está ocupado o alcanzó un límite temporal. Intenta más tarde.");
-            throw error(HttpStatus.SERVICE_UNAVAILABLE, "El servicio de IA no está disponible. El administrador debe revisar su conexión y configuración.");
+            throw error(HttpStatus.SERVICE_UNAVAILABLE, "El servicio de IA no está disponible. Intenta más tarde.");
         }
     }
 
-    private List<ChatGptGateway.Turn> validateHistory(List<ChatGptGateway.Turn> history) {
+    private List<AssistantAiGateway.Turn> validateHistory(List<AssistantAiGateway.Turn> history) {
         if (history == null) return new ArrayList<>();
         if (history.size() > 10) throw error(HttpStatus.BAD_REQUEST, "El historial enviado es demasiado largo.");
         int length = 0;
@@ -308,7 +307,9 @@ public class AgentAssistantService {
                 Devuelve exclusivamente un objeto JSON, sin Markdown ni texto alrededor:
                 {"kind":"query"|"answer"|"unsupported_write","message":"explicación breve","sql":"SELECT..."}
                 Para consultas de datos usa kind=query y SQL de lectura del catálogo. Para aclaraciones usa
-                kind=answer y omite sql. Si se pide modificar, crear o borrar datos usa kind=unsupported_write.
+                kind=answer y sql="". Responde a saludos brevemente con kind=answer y explica cómo puedes ayudar.
+                No incluyas SQL ni nombres de tablas internas en message; el servidor maneja la consulta.
+                Si se pide modificar, crear o borrar datos usa kind=unsupported_write y sql="".
                 Explica que las escrituras todavía no están soportadas y solo hay lectura.
                 Si la información no está en el catálogo, dilo; no fabriques tablas ni una consulta aproximada.
                 No respondas preguntas generales ajenas a los datos y al uso del asistente.
@@ -325,10 +326,11 @@ public class AgentAssistantService {
         operations.clear();
     }
 
-    public record ChatRequest(String message, List<ChatGptGateway.Turn> history) { }
+    public record ChatRequest(String message, List<AssistantAiGateway.Turn> history) { }
     public record ChatResponse(String message, ProposalView proposal) { }
     public record ProposalView(String id, String sql, Instant expiresAt) { }
-    public record AssistantStatus(boolean enabled, boolean available, String message, boolean readOnly, String connectionId) { }
+    public record AssistantStatus(boolean enabled, boolean available, String message, boolean readOnly, String connectionId,
+                                  AssistantAiGateway.Usage usage) { }
     public record Operation(String id, String state, String message, String sql, QueryResult result, String backupId) { }
     public static final class BackupPermissionRequired extends ResponseStatusException {
         public BackupPermissionRequired() {

@@ -46,7 +46,8 @@ public final class MapaAccesos {
                         "REGISTRAR_CONTROL_CALIDAD",
                         "DESVIACIONES_CONTROL_CALIDAD",
                         "HISTORIAL_CONTROL_CALIDAD",
-                        "REVISION_LIBERACION_LOTES"
+                        "REVISION_LIBERACION_LOTES",
+                        "CATALOGO_FORMULACION"
                 )
         );
         TABS_POR_MODULO.put(ModuloSistema.PAGOS_PROVEEDORES, Set.of("ASENTAR_TRANSACCIONES_ALMACEN", "FACTURAS_VENCIDAS"));

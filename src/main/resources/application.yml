@@ -5,6 +5,7 @@ spring:
 
   config:
     additional-location: classpath:application-secrets.properties
+    import: optional:file:./.local/agent-assistant.properties
 
   datasource:
     #url: jdbc:mysql://mysql-container:3306/lacm-planta?createDatabaseIfNotExist=true # OLD MULTI-CONTAINER URL
@@ -66,6 +67,16 @@ logging:
     org.springframework.boot.autoconfigure.flyway: DEBUG
 
 app:
+  agent-assistant:
+    api:
+      enabled: ${ASSISTANT_ENABLED:false}
+      key: ${OPENAI_API_KEY:}
+      model: ${ASSISTANT_MODEL:gpt-5.4-mini-2026-03-17}
+    quota-id: ${ASSISTANT_QUOTA_ID:exotic-initial}
+    budget-usd: ${ASSISTANT_BUDGET_USD:0}
+    input-usd-per-million: ${ASSISTANT_INPUT_USD_PER_MILLION:0.75}
+    cached-input-usd-per-million: ${ASSISTANT_CACHED_INPUT_USD_PER_MILLION:0.075}
+    output-usd-per-million: ${ASSISTANT_OUTPUT_USD_PER_MILLION:4.50}
   control-engine:
     legacy:
       write-mode: ${CONTROL_ENGINE_LEGACY_WRITE_MODE:BRIDGE}

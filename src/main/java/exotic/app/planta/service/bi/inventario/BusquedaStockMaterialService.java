@@ -3,7 +3,6 @@ package exotic.app.planta.service.bi.inventario;
 import exotic.app.planta.model.bi.dto.BusquedaStockMaterialDTO;
 import exotic.app.planta.model.inventarios.Movimiento;
 import exotic.app.planta.model.producto.Material;
-import exotic.app.planta.model.producto.Producto;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenRepo;
 import exotic.app.planta.repo.producto.MaterialRepo;
 import lombok.RequiredArgsConstructor;
@@ -78,12 +77,13 @@ public class BusquedaStockMaterialService {
     private BusquedaStockMaterialDTO.ResultadoStockMaterialDTO toResult(
             ProductoStockSnapshot snapshot
     ) {
-        Producto producto = snapshot.producto();
+        Material producto = (Material) snapshot.producto();
         return BusquedaStockMaterialDTO.ResultadoStockMaterialDTO.builder()
                 .productoId(producto.getProductoId())
                 .nombre(producto.getNombre())
                 .unidadMedida(InventarioBiUtils.unitOf(producto))
                 .stockGeneral(snapshot.stockGeneral())
+                .puntoReorden(producto.getPuntoReorden())
                 .costoUnitario(InventarioBiUtils.costAsDouble(producto))
                 .costoDisponible(InventarioBiUtils.hasValidCost(producto))
                 .valorEstimado(InventarioBiUtils.estimatedValue(snapshot))

@@ -448,14 +448,17 @@ public class PermisoPersonalService {
 
     private int requireNivel(User actor, int requerido) {
         if (actor == null || actor.getId() == null) throw new ResponseStatusException(UNAUTHORIZED, "No autenticado.");
-        if (actor.getEstado() != 1) throw prohibido("La cuenta no está activa. Un administrador debe revisar su estado para acceder a Permisos.");
+        if (actor.getEstado() != 1 && !"master".equalsIgnoreCase(actor.getUsername()))
+            throw prohibido("La cuenta no está activa. Un administrador debe revisar su estado para acceder a Permisos.");
         int nivel = nivel(actor);
         if (nivel < requerido) throw prohibido("No tiene el nivel requerido en PERSONAL / Permisos.");
         return nivel;
     }
     private static int nivel(User actor) {
-        if (actor == null || actor.getEstado() != 1) return 0;
-        if ("master".equalsIgnoreCase(actor.getUsername()) || "super_master".equalsIgnoreCase(actor.getUsername())) return 4;
+        if (actor == null) return 0;
+        if ("master".equalsIgnoreCase(actor.getUsername())) return 4;
+        if (actor.getEstado() != 1) return 0;
+        if ("super_master".equalsIgnoreCase(actor.getUsername())) return 4;
         return UserAccessEvaluator.tabNivel(actor, ModuloSistema.PERSONAL_PLANTA, "PERMISOS").orElse(0);
     }
 

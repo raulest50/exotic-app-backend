@@ -25,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,13 +33,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AgentAssistantServiceTest {
     @Mock AgentAssistantAccessService access;
-    @Mock ChatGptGateway gateway;
+    @Mock AssistantAiGateway gateway;
     @Mock AgentAssistantQueryRepository queries;
     @Mock BackupTotalExportService backups;
     AgentAssistantService service;
@@ -46,9 +46,8 @@ class AgentAssistantServiceTest {
     final User master = User.builder().id(1L).username("master").estado(1).build();
 
     @BeforeEach void createService() {
-        service = new AgentAssistantService(access, gateway, queries, backups, new ObjectMapper());
+        service = new AgentAssistantService(access, Optional.of(gateway), queries, backups, new ObjectMapper());
         lenient().when(gateway.connectionId()).thenReturn("initial-connection");
-        ReflectionTestUtils.setField(service, "configuredModel", "available-model");
     }
     @AfterEach void closeService() { service.shutdown(); }
 
@@ -62,14 +61,22 @@ class AgentAssistantServiceTest {
     }
 
     void proposedQuery() {
-        availableModel();
-        when(gateway.generate(eq("available-model"), anyString(), anyList())).thenReturn("""
+        when(gateway.generate(anyString(), anyList())).thenReturn("""
                 {"kind":"query","message":"Lista los productos autorizados.","sql":"SELECT producto_id, nombre FROM asistente_productos LIMIT 20"}
                 """);
     }
 
-    void availableModel() {
-        when(gateway.models()).thenReturn(List.of(new ChatGptGateway.ModelChoice("available-model", "Modelo de prueba")));
+    @Test void withoutAnAiProviderTheAssistantStaysUnavailableAndCannotRunQueries() {
+        service.shutdown();
+        service = new AgentAssistantService(access, Optional.empty(), queries, backups, new ObjectMapper());
+        when(access.requireRead(authentication)).thenReturn(master);
+        var status = service.status(authentication);
+        assertThat(status.enabled()).isFalse();
+        assertThat(status.available()).isFalse();
+        assertThatThrownBy(() -> service.chat(authentication, request("Hola")))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        verifyNoInteractions(gateway, queries, backups);
     }
 
     @Test void authorizationFailureCannotReachTheProviderOrDatabase() {
@@ -83,14 +90,13 @@ class AgentAssistantServiceTest {
         var response = service.chat(authentication, request("Actualiza el nombre del producto MP1"));
         assertThat(response.message()).isEqualTo(AgentAssistantService.READ_ONLY_MESSAGE);
         assertThat(response.proposal()).isNull();
-        verify(gateway, never()).generate(any(), any(), any());
+        verify(gateway, never()).generate(any(), any());
         verifyNoInteractions(queries, backups);
     }
 
     @Test void aModelCannotSmuggleASecondStatementIntoAnApprovedProposal() {
         authorized();
-        availableModel();
-        when(gateway.generate(any(), any(), any())).thenReturn("""
+        when(gateway.generate(any(), any())).thenReturn("""
                 {"kind":"query","message":"Consulta.","sql":"SELECT nombre FROM asistente_productos; DROP TABLE users"}
                 """);
         var response = service.chat(authentication, request("Lista los productos"));
@@ -173,8 +179,7 @@ class AgentAssistantServiceTest {
 
     @Test void disconnectDuringGenerationPreventsPublishingTheLateProposal() {
         authorized();
-        availableModel();
-        when(gateway.generate(anyString(), anyString(), anyList())).thenAnswer(invocation -> {
+        when(gateway.generate(anyString(), anyList())).thenAnswer(invocation -> {
             when(gateway.connectionId()).thenReturn("replacement-connection");
             return "{\"kind\":\"query\",\"message\":\"Productos\",\"sql\":\"SELECT nombre FROM asistente_productos\"}";
         });
@@ -210,32 +215,32 @@ class AgentAssistantServiceTest {
         User reader = User.builder().id(2L).username("super_master").estado(1).build();
         when(access.requireRead(authentication)).thenReturn(reader);
         var proposal = service.chat(authentication, request("Lista los productos")).proposal();
-        verify(gateway).generate(eq("available-model"), anyString(), anyList());
+        verify(gateway).generate(anyString(), anyList());
         when(access.requireRead(authentication)).thenReturn(master);
         assertThatThrownBy(() -> service.execute(authentication, proposal.id())).isInstanceOfSatisfying(
                 ResponseStatusException.class, ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
         verifyNoInteractions(backups, queries);
     }
 
-    @Test void anUnavailableProfileIsReportedWithoutAdministrativeInstructions() {
+    @Test void anUnavailableProviderIsReportedWithoutAdministrativeInstructions() {
         when(access.requireRead(authentication)).thenReturn(master);
         when(gateway.enabled()).thenReturn(true);
-        when(gateway.status()).thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Private operator detail"));
+        when(gateway.available()).thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Private operator detail"));
         var status = service.status(authentication);
         assertThat(status.available()).isFalse();
         assertThat(status.message()).doesNotContain("Private", "configur", "administrador", "cuenta");
-        verify(gateway, never()).generate(any(), any(), any());
+        verify(gateway, never()).generate(any(), any());
         verifyNoInteractions(queries, backups);
     }
 
     @Test void publicStatusDoesNotExposeProviderIdentityOrModelCatalog() throws Exception {
         authorized();
-        when(gateway.status()).thenReturn(new ChatGptGateway.Status(true, true, "private-identity", "private-provider-message"));
+        when(gateway.available()).thenReturn(true);
         var status = service.status(authentication);
         String json = new ObjectMapper().writeValueAsString(status);
         assertThat(status.available()).isTrue();
         assertThat(json).doesNotContain("private-identity", "private-provider-message", "accountLabel", "models", "ChatGPT");
-        verify(gateway, never()).models();
+        verify(gateway, never()).generate(anyString(), anyList());
     }
 
     @Test void disconnectCancelsProposalsFromEveryUser() {
@@ -266,7 +271,6 @@ class AgentAssistantServiceTest {
 
     @Test void onlyOneGenerationRunsWhileTheSecondWaitsAndTheThirdIsRejected() throws Exception {
         authorized();
-        availableModel();
         var secondAuth = new UsernamePasswordAuthenticationToken("second", "unused", List.of());
         var thirdAuth = new UsernamePasswordAuthenticationToken("third", "unused", List.of());
         when(access.requireRead(thirdAuth)).thenReturn(User.builder().id(3L).username("master").estado(1).build());
@@ -279,7 +283,7 @@ class AgentAssistantServiceTest {
         });
         var inside = new java.util.concurrent.atomic.AtomicInteger();
         var maximum = new java.util.concurrent.atomic.AtomicInteger();
-        when(gateway.generate(anyString(), anyString(), anyList())).thenAnswer(invocation -> {
+        when(gateway.generate(anyString(), anyList())).thenAnswer(invocation -> {
             maximum.accumulateAndGet(inside.incrementAndGet(), Math::max);
             started.countDown();
             if (!release.await(3, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Fixture timeout");
@@ -304,20 +308,19 @@ class AgentAssistantServiceTest {
             first.get(3, java.util.concurrent.TimeUnit.SECONDS);
             second.get(3, java.util.concurrent.TimeUnit.SECONDS);
             assertThat(maximum.get()).isEqualTo(1);
-            verify(gateway, times(2)).generate(anyString(), anyString(), anyList());
+            verify(gateway, times(2)).generate(anyString(), anyList());
         } finally { release.countDown(); pool.shutdownNow(); }
     }
 
     @Test void permissionRevokedWhileQueuedPreventsSendingTheQuestionToTheProvider() throws Exception {
         authorized();
-        availableModel();
         var secondAuth = new UsernamePasswordAuthenticationToken("second", "unused", List.of());
         var reader = User.builder().id(2L).username("super_master").estado(1).build();
         when(access.requireRead(secondAuth)).thenReturn(reader)
                 .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN));
         var started = new java.util.concurrent.CountDownLatch(1);
         var release = new java.util.concurrent.CountDownLatch(1);
-        when(gateway.generate(anyString(), anyString(), anyList())).thenAnswer(invocation -> {
+        when(gateway.generate(anyString(), anyList())).thenAnswer(invocation -> {
             started.countDown();
             if (!release.await(3, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Fixture timeout");
             return "{\"kind\":\"answer\",\"message\":\"Consulta aclarada\"}";
@@ -337,7 +340,7 @@ class AgentAssistantServiceTest {
                     .hasCauseInstanceOf(ResponseStatusException.class)
                     .satisfies(ex -> assertThat(((ResponseStatusException) ex.getCause()).getStatusCode())
                             .isEqualTo(HttpStatus.FORBIDDEN));
-            verify(gateway, times(1)).generate(anyString(), anyString(), anyList());
+            verify(gateway, times(1)).generate(anyString(), anyList());
             verifyNoInteractions(backups, queries);
         } finally { release.countDown(); pool.shutdownNow(); }
     }

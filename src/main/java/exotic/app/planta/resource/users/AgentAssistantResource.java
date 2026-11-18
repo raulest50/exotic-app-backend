@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Authenticated, local-only assistant endpoints. Authorization is repeated by the service. */
+/** Authenticated assistant endpoints. Authorization is repeated by the service. */
 @RestController
 @RequestMapping("/agent-assistant")
 @RequiredArgsConstructor

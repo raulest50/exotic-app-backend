@@ -36,7 +36,7 @@ public class TerminadoModelo3dResource {
     @GetMapping("/metadata")
     public ResponseEntity<TerminadoModelo3dService.ModelMetadata> metadata(
             @PathVariable String productoId, Authentication authentication) {
-        requireAccess(authentication, 1);
+        requireReadAccess(authentication);
         try {
             var metadata = service.metadata(productoId);
             return ResponseEntity.ok().eTag(metadata.etag()).cacheControl(CacheControl.noStore()).body(metadata);
@@ -47,7 +47,7 @@ public class TerminadoModelo3dResource {
 
     @GetMapping(produces = "model/gltf-binary")
     public ResponseEntity<byte[]> download(@PathVariable String productoId, Authentication authentication) {
-        requireAccess(authentication, 1);
+        requireReadAccess(authentication);
         try {
             var download = service.load(productoId);
             return ResponseEntity.ok().contentType(GLB).contentLength(download.metadata().contentLength())
@@ -85,13 +85,23 @@ public class TerminadoModelo3dResource {
         }
     }
 
+    private void requireReadAccess(Authentication authentication) {
+        requireAccess(authentication, 1, true);
+    }
+
     private void requireAccess(Authentication authentication, int minimum) {
+        requireAccess(authentication, minimum, false);
+    }
+
+    private void requireAccess(Authentication authentication, int minimum, boolean allowQualityRead) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado.");
         }
         var user = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado."));
         if ("master".equalsIgnoreCase(user.getUsername()) || "super_master".equalsIgnoreCase(user.getUsername())) return;
+        if (allowQualityRead && UserAccessEvaluator.tabNivel(
+                user, ModuloSistema.CALIDAD, "CATALOGO_FORMULACION").orElse(0) >= 1) return;
         int level = UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "PROCESS_DESIGNER")
                 .orElseGet(() -> UserAccessEvaluator.tabNivel(user, ModuloSistema.PRODUCTOS, "MAIN").orElse(0));
         if (level < minimum) throw new ResponseStatusException(HttpStatus.FORBIDDEN,

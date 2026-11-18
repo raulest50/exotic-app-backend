@@ -58,14 +58,16 @@ public class TerminadoModelo3dService {
         this.mapper = mapper;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ModelMetadata metadata(String productoId) throws IOException {
         return load(productoId).metadata();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ModelDownload load(String productoId) throws IOException {
-        Terminado terminado = requireTerminado(productoId);
+        // Atomic file publication allows readers to use a complete model without
+        // taking the product lock reserved for saving or deleting a model.
+        Terminado terminado = findTerminado(productoId);
         Path path = modelPath(terminado);
         byte[] bytes = readExisting(path);
         return new ModelDownload(bytes, describe(productoId, path, bytes));
@@ -136,8 +138,12 @@ public class TerminadoModelo3dService {
         terminadoRepo.lockModelo3dProductoId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "No existe un terminado con ese codigo. El modelo 3D no aplica a semiterminados."));
+        return findTerminado(id);
+    }
+
+    private Terminado findTerminado(String id) {
         return terminadoRepo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                "El terminado ya no existe."));
+                "No existe un terminado con ese codigo. El modelo 3D no aplica a semiterminados."));
     }
 
     private Path modelPath(Terminado terminado) {
