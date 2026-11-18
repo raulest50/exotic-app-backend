@@ -2,6 +2,8 @@ package exotic.app.planta.repo.produccion.fabricacion;
 
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
+import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -141,8 +143,12 @@ public interface OrdenFabricacionOperacionRepo
               AND NOT EXISTS (
                   SELECT e.id FROM OrdenFabricacionOperacionEvento e
                   WHERE e.operacion.ordenFabricacion = o.ordenFabricacion
+                    AND (e.estadoOrigen IS NULL OR e.estadoOrigen <> e.estadoDestino
+                         OR e.actorTipo <> :sistema OR e.tipoEvento <> :eventoSistema)
               )
             """)
     List<Long> findOrdenIdsPendientesBackfillLegado(
-            @Param("estadoCancelado") EstadoOrdenFabricacion estadoCancelado);
+            @Param("estadoCancelado") EstadoOrdenFabricacion estadoCancelado,
+            @Param("sistema") ActorTipoEventoSeguimiento sistema,
+            @Param("eventoSistema") TipoEventoSeguimiento eventoSistema);
 }

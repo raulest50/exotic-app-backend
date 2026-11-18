@@ -1,6 +1,10 @@
 package exotic.app.planta.repo.produccion.fabricacion;
 
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
+import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
+import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -54,6 +58,34 @@ public interface OrdenFabricacionRepo extends JpaRepository<OrdenFabricacion, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM OrdenFabricacion o WHERE o.ordenFabricacionId = :id")
     Optional<OrdenFabricacion> findByIdForUpdate(@Param("id") Long id);
+
+    /** El mismo predicado se usa en el preview y al revalidar bajo bloqueo de la OF. */
+    @Query("""
+            SELECT o.ordenFabricacionId FROM OrdenFabricacion o
+            WHERE (:id IS NULL OR o.ordenFabricacionId = :id)
+              AND o.politicaDispensacionInicio = :politica
+              AND o.estado IN :estados
+              AND o.fechaInicio IS NULL
+              AND EXISTS (SELECT p.id FROM OrdenFabricacionOperacion p WHERE p.ordenFabricacion = o)
+              AND NOT EXISTS (
+                  SELECT p.id FROM OrdenFabricacionOperacion p
+                  WHERE p.ordenFabricacion = o
+                    AND (p.estado NOT IN :estadosPendientes OR p.fechaCompletado IS NOT NULL))
+              AND NOT EXISTS (
+                  SELECT e.id FROM OrdenFabricacionOperacionEvento e
+                  WHERE e.operacion.ordenFabricacion = o
+                    AND ((e.actorTipo = :usuario AND e.tipoEvento = :operativo)
+                         OR e.estadoOrigen = :enProceso OR e.estadoDestino = :enProceso))
+            ORDER BY o.ordenFabricacionId
+            """)
+    List<Long> findIdsCandidatasDispensacionNoBloqueante(
+            @Param("id") Long id,
+            @Param("politica") PoliticaDispensacionInicio politica,
+            @Param("estados") Collection<EstadoOrdenFabricacion> estados,
+            @Param("estadosPendientes") Collection<Integer> estadosPendientes,
+            @Param("usuario") ActorTipoEventoSeguimiento usuario,
+            @Param("operativo") TipoEventoSeguimiento operativo,
+            @Param("enProceso") int enProceso);
 
     boolean existsByOrdenProduccionOrigen_OrdenIdAndSemiTerminado_ProductoId(
             int ordenId, String semiTerminadoId);

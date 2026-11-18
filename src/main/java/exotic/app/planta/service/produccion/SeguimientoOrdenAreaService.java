@@ -1961,6 +1961,11 @@ public class SeguimientoOrdenAreaService {
         private int ordenesAplicadas;
         private int ordenesOmitidas;
         private List<Integer> ordenIdsAplicadas = new ArrayList<>();
+        // Los campos anteriores conservan exclusivamente OP por compatibilidad.
+        private int ordenesFabricacionCandidatas;
+        private int ordenesFabricacionAplicadas;
+        private int ordenesFabricacionOmitidas;
+        private List<Long> ordenFabricacionIdsAplicadas = new ArrayList<>();
         private String mensaje;
     }
 

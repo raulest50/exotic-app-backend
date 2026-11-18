@@ -156,7 +156,8 @@ class MpsFabricacionWorkflowIntegrationTest {
                 mock(BatchRecordRepo.class), mock(VencimientoLoteService.class),
                 mock(BatchRecordProjectionQueueService.class), directivas, operacionService,
                 mock(OrdenFabricacionOperacionEventoRepo.class), mock(TransaccionAlmacenHeaderRepo.class),
-                transaccional(new LoteManufacturaNumeroService(productoRepo, loteRepo, CLOCK)), CLOCK));
+                transaccional(new LoteManufacturaNumeroService(productoRepo, loteRepo, CLOCK)), CLOCK,
+                repositories.getRepository(exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo.class), em));
         programaService = transaccional(new MpsFabricacionService(
                 programaRepo, semiRepo, manufacturingRepo, ordenRepo, loteRepo, ordenService,
                 new ObjectMapper(), CLOCK, directivas, observacionRepo));

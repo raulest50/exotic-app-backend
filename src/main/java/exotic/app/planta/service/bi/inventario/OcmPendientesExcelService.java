@@ -31,6 +31,7 @@ public class OcmPendientesExcelService {
     private static final String[] EXCEL_HEADERS = {
             "OCM",
             "FECHA DE EMISIÓN",
+            "FECHA PROYECTADA DE ENTREGA",
             "PROVEEDOR",
             "ÍTEM",
             "CÓDIGO",
@@ -73,7 +74,9 @@ public class OcmPendientesExcelService {
             Row noticeRow = sheet.createRow(1);
             Cell noticeCell = noticeRow.createCell(0);
             noticeCell.setCellValue(
-                    "Informe actualizado al momento de la descarga.");
+                    "Informe actualizado al momento de la descarga. "
+                            + "Fecha proyectada: envío al proveedor + plazo negociado vigente "
+                            + "en días calendario; vacía si falta algún dato.");
             noticeCell.setCellStyle(styles.notice());
             sheet.addMergedRegion(new CellRangeAddress(
                     1, 1, 0, EXCEL_HEADERS.length - 1));
@@ -134,6 +137,13 @@ public class OcmPendientesExcelService {
         Cell issueDateCell = row.createCell(column++);
         issueDateCell.setCellValue(order.fechaEmision());
         issueDateCell.setCellStyle(styles.dateTime());
+
+        Cell projectedDeliveryDateCell = row.createCell(column++);
+        if (order.fechaProyectadaEntrega() != null) {
+            projectedDeliveryDateCell.setCellValue(
+                    order.fechaProyectadaEntrega().atStartOfDay());
+        }
+        projectedDeliveryDateCell.setCellStyle(styles.date());
 
         row.createCell(column++).setCellValue(order.proveedor());
         row.createCell(column++).setCellValue(line.itemId());
@@ -209,6 +219,9 @@ public class OcmPendientesExcelService {
         CellStyle currency = workbook.createCellStyle();
         currency.setDataFormat(
                 workbook.createDataFormat().getFormat("#,##0.00"));
+        CellStyle date = workbook.createCellStyle();
+        date.setDataFormat(
+                workbook.createDataFormat().getFormat("dd/mm/yyyy"));
         CellStyle dateTime = workbook.createCellStyle();
         dateTime.setDataFormat(
                 workbook.createDataFormat().getFormat("dd/mm/yyyy hh:mm"));
@@ -220,12 +233,13 @@ public class OcmPendientesExcelService {
                 header,
                 quantity,
                 currency,
+                date,
                 dateTime);
     }
 
     private void setExcelColumnWidths(Sheet sheet) {
         int[] widths = {
-                12, 20, 34, 12, 18, 42, 12, 20, 20, 22, 24, 25
+                12, 20, 28, 34, 12, 18, 42, 12, 20, 20, 22, 24, 25
         };
         for (int index = 0; index < widths.length; index++) {
             sheet.setColumnWidth(index, widths[index] * 256);
@@ -245,6 +259,7 @@ public class OcmPendientesExcelService {
             CellStyle header,
             CellStyle quantity,
             CellStyle currency,
+            CellStyle date,
             CellStyle dateTime
     ) {
     }

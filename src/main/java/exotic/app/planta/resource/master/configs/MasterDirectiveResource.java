@@ -60,6 +60,15 @@ public class MasterDirectiveResource {
             @RequestBody DTO_MasterD_Update updateDTO,
             Authentication authentication
     ) {
+        Long persistedId = updateDTO != null && updateDTO.getOldMasterDirective() != null
+                ? updateDTO.getOldMasterDirective().getId() : null;
+        boolean isNotificationDurationUpdate = masterDirectiveService.getById(persistedId)
+                .map(directive -> MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS.equals(directive.getNombre()))
+                .orElse(false);
+        if (isNotificationDurationUpdate && !canManageNotificationDuration(authentication)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "No tiene permiso para administrar la duración de las novedades."));
+        }
         if (isBatchRecordWorkflowUpdate(updateDTO)
                 && !isMasterOrSuperMaster(authentication)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
@@ -81,6 +90,14 @@ public class MasterDirectiveResource {
             log.error("Error al actualizar directiva maestra: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body("Error al actualizar directiva maestra: " + e.getMessage());
         }
+    }
+
+    private boolean canManageNotificationDuration(Authentication authentication) {
+        if (!isMasterOrSuperMaster(authentication)) return false;
+        if ("super_master".equals(authentication.getName().trim().toLowerCase(Locale.ROOT))) return true;
+        return masterDirectiveService.getBooleanDirectiveValue(
+                MasterDirectiveKeys.ENABLE_MASTER_SUPERMASTER_DIRECTIVES_ACCESS,
+                MasterDirectiveKeys.DEFAULT_ENABLE_MASTER_SUPERMASTER_DIRECTIVES_ACCESS);
     }
 
     private boolean isBatchRecordWorkflowUpdate(DTO_MasterD_Update updateDTO) {

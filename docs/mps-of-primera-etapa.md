@@ -1,10 +1,104 @@
 # MPS OF: programacion, aprobacion y emision independientes
 
-Actualizacion: 6 de noviembre de 2026. El flujo OF reproduce la dinamica de
+Actualizacion: 17 de noviembre de 2026. El flujo OF reproduce la dinamica de
 programacion y aprobacion OP, con planes, permisos y ordenes independientes.
 La base neutra y los demas semiterminados marcados para OF pueden fabricarse
 para inventario sin un MPS OP asociado. Las cantidades del plan expresan
 salida del producto; no se deduce la capacidad de una marmita de sus ingredientes.
+
+## Retroactividad de dispensacion OP y OF (17 de noviembre de 2026)
+
+La directiva `DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION` ya se copia al crear
+OP y OF. Su edicion no reinterpreta ordenes emitidas. La accion explicita
+de Supermaster ahora consulta y aplica retroactividad a ambos tipos mediante
+los endpoints existentes `GET /api/super-master-directives/dispensacion-inicio/retroactividad-preview`
+y `POST /api/super-master-directives/dispensacion-inicio/aplicar-retroactividad`.
+Conserva la autorizacion de `master` y `super_master` y exige directiva activa.
+
+Las reglas OP se conservan. Son candidatas OF las `PLANIFICADA` o `LIBERADA`
+con politica `BLOQUEANTE`, sin fecha de inicio, con al menos una operacion,
+todas en `COLA` o `ESPERA` sin fecha de completado y sin eventos de trabajo
+operativo o paso previo por `EN_PROCESO`. Se seleccionan IDs ordenados y,
+al aplicar, se bloquea y refresca cada OF y se revalida el mismo predicado.
+Una OF que dejo de ser candidata se contabiliza como omitida. Repetir la
+accion no vuelve a modificar una OF que ya es `NO_BLOQUEANTE`.
+
+Solo cambian la politica y su fecha de aplicacion. `PENDIENTE` pasa a
+`LIBERADA_SIN_DISPENSACION`; `PARCIAL` y `COMPLETA` se conservan. No se
+alteran cantidades, movimientos, fechas de lanzamiento, estados de orden
+u operaciones, precedencias, permisos ni despejes. Una OF planificada no
+se libera anticipadamente. Se registra auditoria `SYSTEM/SISTEMA` con
+origen igual a destino y usuario solicitante, y se pide actualizar la
+proyeccion documental existente. El descubrimiento de backfill legado
+ignora solo esa auditoria neutra; las inicializaciones con origen NULL,
+las transiciones y los eventos humanos siguen siendo significativos.
+
+`SuperMasterOpsService` coordina ambos servicios en una transaccion. El DTO
+conserva `ordenesCandidatas`, `ordenesAplicadas`, `ordenesOmitidas` y
+`ordenIdsAplicadas` exclusivamente para OP. Agrega los tres contadores
+`ordenesFabricacionCandidatas/Aplicadas/Omitidas` y la lista Long
+`ordenFabricacionIdsAplicadas`. No se mezclan identificadores OP y OF.
+`ejecutable` contempla candidatas de cualquiera de los dos tipos. La
+interfaz presenta los dos grupos y confirma su alcance antes de aplicar.
+Los contratos E2E que describan estos payloads deben incorporar los campos
+aditivos; no se han ejecutado sus suites.
+
+### Diagnostico del lote BN01-0000001-26 en staging
+
+Consulta de solo lectura del 17 de noviembre de 2026: OF-1 estaba
+`LIBERADA`, sin fecha de inicio ni eventos operativos, con politica
+`BLOQUEANTE` pero dispensacion `COMPLETA`; la directiva global figuraba
+`false`. Este estado de materiales supera el control de dispensacion del
+inicio OF incluso bajo politica bloqueante.
+
+El area 13, FABRICACION 2, exige despeje y tiene linea exclusiva confirmada.
+Las OP-893 y OP-894 figuraban en proceso en esa misma area. El frontend
+prepara despeje antes de enviar el inicio; esa preparacion valida la
+disponibilidad del area y rechaza otra operacion activa con HTTP 409. Es
+un bloqueo concreto compatible con la captura, independiente de la
+dispensacion. Los logs consultados no permitieron correlacionar el motivo
+exacto de aquella solicitud. No se modificaron ordenes ni configuracion.
+
+Se conserva el motivo de `ResponseStatusException` en la respuesta de
+`DespejeLineaResource`; el panel muestra los textos `detail`, `mensaje`
+o `message` cuando existen, para evitar mostrar solo "Conflict".
+
+### Validacion y modelo
+
+Se anadieron diez casos en `OrdenFabricacionRetroactividadTest` y se adapto
+la construccion del servicio en `MpsFabricacionWorkflowIntegrationTest`.
+No se ejecutaron pruebas ni suites por las instrucciones del repositorio.
+El build local usa Java 21 y un init de Gradle temporal que excluye
+`application*.properties` y dirige las salidas a una carpeta temporal.
+No se copiaron configuraciones privadas ni se inicio la aplicacion backend.
+
+Comandos y resultados de esta entrega:
+
+- `gradlew.bat --init-script <temporal> build -x test testClasses --offline
+  --no-daemon`: correcto con Java 21; no ejecuta pruebas.
+- `bun run vite build`: correcto, con el aviso existente de chunks grandes.
+- `bun run lint`: falla por el error previo `react-hooks/exhaustive-deps`
+  de `DispensacionV2Step3SeleccionOrdenes.tsx:65` y supresiones sobrantes.
+  No se modifico ese componente ni la linea base.
+- `bunx eslint src/pages/SuperMasterDirectives/MasterDirectivesPage.tsx
+  src/pages/AreaOperativaPanel/AreaOperativaPanel.tsx --config
+  eslint.gate.config.js --max-warnings 0 --pass-on-unpruned-suppressions`:
+  correcto; no silencia diagnosticos de esos archivos.
+- `git diff --check`: correcto en ambos repositorios.
+- No habia backend local escuchando en 8080 ni historia Ladle de estos
+  componentes; no se comprobo el recorrido de guardado con sesion autenticada.
+
+La seleccion se contrasto mediante SQL equivalente de solo lectura en
+staging: OF-1 y OF-2 cumplen los criterios de candidatura. Quedan pendientes
+la ejecucion real de JPQL, concurrencia, backfill y el recorrido autenticado
+de preview/aplicacion. No se desplego ni se aplico retroactividad remota.
+
+No hay cambio de esquema ni migraciones nuevas. No se encontro una vista
+modelada de esta accion en el Gaphor guardado. Queda pendiente de
+sincronizacion manual representar, cuando se incluya este alcance, la
+coordinacion de SuperMasterOpsService con seguimiento OP y servicio OF,
+los contadores separados y la actualizacion de politica sin avance operativo.
+No se modifico `ExoticApp.gaphor`.
 
 ## Flujo vigente
 

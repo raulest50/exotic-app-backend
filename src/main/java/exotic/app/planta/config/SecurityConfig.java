@@ -6,6 +6,7 @@ import exotic.app.planta.security.JwtTokenProvider;
 import exotic.app.planta.security.MigrationAuthenticationProvider;
 import exotic.app.planta.security.RestAccessDeniedHandler;
 import exotic.app.planta.security.RestAuthenticationEntryPoint;
+import exotic.app.planta.security.VisitantePublicRequestFilter;
 import exotic.app.planta.service.users.UserDetailsServiceImpl;
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,7 @@ public class SecurityConfig {
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
                     auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll();
                     auth.requestMatchers("/api/auth/**").permitAll();
+                    auth.requestMatchers(org.springframework.http.HttpMethod.POST, "/api/public/visitantes").permitAll();
 
                     if (isDevelopment) {
                         auth.requestMatchers("/api/backend-info/**").permitAll();
@@ -68,6 +70,7 @@ public class SecurityConfig {
                 })
                 .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(corsFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(new VisitantePublicRequestFilter(), JwtAuthenticationFilter.class)
                 .authenticationProvider(migrationAuthenticationProvider);
 
         return http.build();

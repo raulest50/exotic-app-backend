@@ -37,6 +37,10 @@ public class MasterDirectiveService {
         return masterDirectiveRepo.findByNombre(nombre);
     }
 
+    public Optional<MasterDirective> getById(Long id) {
+        return id == null ? Optional.empty() : masterDirectiveRepo.findById(id);
+    }
+
     public int getLimiteRecepcionesParcialesOcm() {
         return getPositiveIntegerDirectiveValue(
                 MasterDirectiveKeys.LIMITE_RECEPCIONES_PARCIALES_OCM,
@@ -264,6 +268,12 @@ public class MasterDirectiveService {
     }
 
     private void validateValorByTipo(MasterDirective directive, String valor) {
+        if (MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS.equals(directive.getNombre())) {
+            parseIntegerInRange(valor, directive.getNombre(),
+                    MasterDirectiveKeys.MIN_NEW_FEATURES_NOTIFICATION_DAYS,
+                    MasterDirectiveKeys.MAX_NEW_FEATURES_NOTIFICATION_DAYS);
+            return;
+        }
         if (directive.getTipoDato() == MasterDirective.TipoDato.NUMERO) {
             if (MasterDirectiveKeys.MPS_SEMANAL_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())
                     || MasterDirectiveKeys.MPS_FABRICACION_DIAS_BLOQUEO_EDICION.equals(directive.getNombre())) {

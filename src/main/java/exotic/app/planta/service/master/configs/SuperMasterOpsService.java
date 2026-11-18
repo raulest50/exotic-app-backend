@@ -8,6 +8,9 @@ import exotic.app.planta.repo.master.configs.SuperMasterConfigRepo;
 import exotic.app.planta.repo.master.configs.SuperMasterVerificationCodeRepo;
 import exotic.app.planta.repo.usuarios.UserRepository;
 import exotic.app.planta.service.commons.EmailService;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
+import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.DispensacionRetroactividadDTO;
+import exotic.app.planta.service.produccion.OrdenFabricacionService;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 import java.util.Random;
 
 @Service
@@ -31,6 +35,51 @@ public class SuperMasterOpsService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final Clock applicationClock;
+    private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
+    private final OrdenFabricacionService ordenFabricacionService;
+
+    @Transactional(readOnly = true)
+    public DispensacionRetroactividadDTO previewRetroactividadDispensacionNoBloqueante() {
+        DispensacionRetroactividadDTO dto = seguimientoOrdenAreaService.previewRetroactividadDispensacionNoBloqueante();
+        dto.setOrdenesFabricacionCandidatas(ordenFabricacionService.listarCandidatasDispensacionNoBloqueante().size());
+        completarResumenRetroactividad(dto, false);
+        return dto;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public DispensacionRetroactividadDTO aplicarRetroactividadDispensacionNoBloqueante(String username) {
+        User actor = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario solicitante no encontrado."));
+        List<Long> candidatasOf = ordenFabricacionService.listarCandidatasDispensacionNoBloqueante();
+        DispensacionRetroactividadDTO dto = seguimientoOrdenAreaService.aplicarRetroactividadDispensacionNoBloqueante();
+        dto.setOrdenesFabricacionCandidatas(candidatasOf.size());
+        if (dto.isDirectivaActual()) {
+            for (Long id : candidatasOf) {
+                if (ordenFabricacionService.aplicarDispensacionNoBloqueanteRetroactiva(id, actor)) {
+                    dto.getOrdenFabricacionIdsAplicadas().add(id);
+                }
+            }
+        }
+        dto.setOrdenesFabricacionAplicadas(dto.getOrdenFabricacionIdsAplicadas().size());
+        dto.setOrdenesFabricacionOmitidas(candidatasOf.size() - dto.getOrdenesFabricacionAplicadas());
+        completarResumenRetroactividad(dto, true);
+        return dto;
+    }
+
+    private void completarResumenRetroactividad(DispensacionRetroactividadDTO dto, boolean aplicada) {
+        dto.setEjecutable(dto.isDirectivaActual()
+                && dto.getOrdenesCandidatas() + dto.getOrdenesFabricacionCandidatas() > 0);
+        if (!dto.isDirectivaActual()) {
+            dto.setMensaje("La directiva de dispensacion no bloqueante esta apagada. No se modificaron OP ni OF.");
+        } else if (aplicada) {
+            dto.setMensaje("Politica no bloqueante aplicada a " + dto.getOrdenesAplicadas() + " OP y "
+                    + dto.getOrdenesFabricacionAplicadas() + " OF. Omitidas: " + dto.getOrdenesOmitidas()
+                    + " OP y " + dto.getOrdenesFabricacionOmitidas() + " OF. Sin movimientos de inventario.");
+        } else {
+            dto.setMensaje("Candidatas para retroactividad: " + dto.getOrdenesCandidatas() + " OP y "
+                    + dto.getOrdenesFabricacionCandidatas() + " OF.");
+        }
+    }
 
     public Optional<SuperMasterConfig> getConfig() {
         return superMasterConfigRepo.findFirstByOrderByIdAsc();

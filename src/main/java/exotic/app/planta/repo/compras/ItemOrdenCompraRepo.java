@@ -17,6 +17,8 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
         int getItemId();
         int getOcmId();
         LocalDateTime getFechaEmision();
+        LocalDateTime getFechaEnvioProveedor();
+        Integer getLeadTimeNegociado();
         String getProveedor();
         String getProductoId();
         String getProductoNombre();
@@ -39,6 +41,8 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
             SELECT item.itemOrdenId AS itemId,
                    orden.ordenCompraId AS ocmId,
                    orden.fechaEmision AS fechaEmision,
+                   orden.fechaEnvioProveedor AS fechaEnvioProveedor,
+                   proveedor.leadTimeNegociado AS leadTimeNegociado,
                    proveedor.nombre AS proveedor,
                    material.productoId AS productoId,
                    material.nombre AS productoNombre,
@@ -58,6 +62,8 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
             SELECT item.itemOrdenId AS itemId,
                    orden.ordenCompraId AS ocmId,
                    orden.fechaEmision AS fechaEmision,
+                   orden.fechaEnvioProveedor AS fechaEnvioProveedor,
+                   proveedor.leadTimeNegociado AS leadTimeNegociado,
                    proveedor.nombre AS proveedor,
                    material.productoId AS productoId,
                    material.nombre AS productoNombre,

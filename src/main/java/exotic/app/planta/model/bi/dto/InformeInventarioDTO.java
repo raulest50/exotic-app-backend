@@ -290,6 +290,7 @@ public record InformeInventarioDTO(
     public record OcmDTO(
             int ocmId,
             LocalDateTime fechaEmision,
+            LocalDate fechaProyectadaEntrega,
             String proveedor,
             int referencias,
             List<CantidadUnidadDTO> cantidadesPorUnidad,

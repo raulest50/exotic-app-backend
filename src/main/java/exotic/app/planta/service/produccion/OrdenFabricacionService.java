@@ -4,6 +4,7 @@ import exotic.app.planta.model.inventarios.EstadoCalidadLote;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
 import exotic.app.planta.model.produccion.EstadoDispensacionMateriales;
+import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.PoliticaDispensacionInicio;
 import exotic.app.planta.model.produccion.ActorTipoEventoSeguimiento;
@@ -11,6 +12,8 @@ import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
 import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
+import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
 import exotic.app.planta.model.produccion.fabricacion.MpsFabricacionDetalle;
 import exotic.app.planta.model.produccion.EstadoMpsSemanal;
 import exotic.app.planta.model.producto.SemiTerminado;
@@ -22,6 +25,7 @@ import exotic.app.planta.repo.producto.manufacturing.snapshots.ManufacturingVers
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionRepo;
 import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionEventoRepo;
+import exotic.app.planta.repo.produccion.fabricacion.OrdenFabricacionOperacionRepo;
 import exotic.app.planta.repo.inventarios.TransaccionAlmacenHeaderRepo;
 import exotic.app.planta.model.inventarios.TransaccionAlmacen;
 import exotic.app.planta.repo.usuarios.UserRepository;
@@ -33,6 +37,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 import java.util.NoSuchElementException;
 import java.time.Clock;
@@ -64,6 +70,59 @@ public class OrdenFabricacionService {
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final LoteManufacturaNumeroService loteNumeroService;
     private final Clock applicationClock;
+    private final OrdenFabricacionOperacionRepo operacionRepo;
+    private final EntityManager entityManager;
+
+    @Transactional(readOnly = true)
+    public List<Long> listarCandidatasDispensacionNoBloqueante() {
+        return candidatasDispensacionNoBloqueante(null);
+    }
+
+    /** Cambia solo la politica: no inicia ni libera anticipadamente operaciones. */
+    public boolean aplicarDispensacionNoBloqueanteRetroactiva(Long id, User actor) {
+        if (actor == null || actor.getId() == null) {
+            throw new IllegalArgumentException("El usuario que solicita la retroactividad es obligatorio.");
+        }
+        if (!masterDirectiveService.isDispensacionNoBloqueaInicioProduccion()) return false;
+        OrdenFabricacion orden = ordenRepo.findByIdForUpdate(id).orElse(null);
+        if (orden == null) return false;
+        // No perder cambios de otras ordenes procesadas por esta misma transaccion.
+        entityManager.flush();
+        entityManager.refresh(orden, LockModeType.PESSIMISTIC_WRITE);
+        if (candidatasDispensacionNoBloqueante(id).isEmpty()) return false;
+
+        LocalDateTime ahora = LocalDateTime.now(applicationClock);
+        orden.setPoliticaDispensacionInicio(PoliticaDispensacionInicio.NO_BLOQUEANTE);
+        orden.setFechaAplicacionPoliticaDispensacion(ahora);
+        if (orden.getEstadoDispensacionMateriales() == EstadoDispensacionMateriales.PENDIENTE) {
+            orden.setEstadoDispensacionMateriales(EstadoDispensacionMateriales.LIBERADA_SIN_DISPENSACION);
+        }
+        ordenRepo.save(orden);
+        for (OrdenFabricacionOperacion operacion : operacionRepo
+                .findByOrdenFabricacion_OrdenFabricacionIdOrderByPosicionSecuenciaAsc(id)) {
+            OrdenFabricacionOperacionEvento evento = new OrdenFabricacionOperacionEvento();
+            evento.setOperacion(operacion);
+            evento.setEstadoOrigen(operacion.getEstado());
+            evento.setEstadoDestino(operacion.getEstado());
+            evento.setFechaEvento(ahora);
+            evento.setActorTipo(ActorTipoEventoSeguimiento.SYSTEM);
+            evento.setTipoEvento(TipoEventoSeguimiento.SISTEMA);
+            evento.setUsuario(actor);
+            evento.setNota("Aplicacion retroactiva de politica de dispensacion no bloqueante; sin avance operativo.");
+            operacionEventoRepo.save(evento);
+        }
+        batchRecordProjectionQueueService.solicitarActualizacion(orden);
+        return true;
+    }
+
+    private List<Long> candidatasDispensacionNoBloqueante(Long id) {
+        return ordenRepo.findIdsCandidatasDispensacionNoBloqueante(id,
+                PoliticaDispensacionInicio.BLOQUEANTE,
+                List.of(EstadoOrdenFabricacion.PLANIFICADA, EstadoOrdenFabricacion.LIBERADA),
+                List.of(EstadoSeguimientoOrdenArea.COLA.getCode(), EstadoSeguimientoOrdenArea.ESPERA.getCode()),
+                ActorTipoEventoSeguimiento.USER, TipoEventoSeguimiento.OPERATIVO,
+                EstadoSeguimientoOrdenArea.EN_PROCESO.getCode());
+    }
 
     public OrdenFabricacionDTOs.Response crear(
             OrdenFabricacionDTOs.CreateRequest request,

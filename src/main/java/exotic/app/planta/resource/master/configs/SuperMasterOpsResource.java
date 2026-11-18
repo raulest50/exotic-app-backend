@@ -3,7 +3,6 @@ package exotic.app.planta.resource.master.configs;
 import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import exotic.app.planta.model.master.configs.SuperMasterConfig;
 import exotic.app.planta.service.master.configs.SuperMasterOpsService;
-import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService;
 import exotic.app.planta.service.produccion.SeguimientoOrdenAreaService.DispensacionRetroactividadDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +22,6 @@ public class SuperMasterOpsResource {
     private static final String SUPER_MASTER_USERNAME = "super_master";
 
     private final SuperMasterOpsService superMasterOpsService;
-    private final SeguimientoOrdenAreaService seguimientoOrdenAreaService;
     private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
 
     private boolean isSuperMaster(Authentication auth) {
@@ -81,7 +79,7 @@ public class SuperMasterOpsResource {
         if (!isMasterOrSuperMaster(authentication)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Only master or super_master can preview this action"));
         }
-        DispensacionRetroactividadDTO preview = seguimientoOrdenAreaService.previewRetroactividadDispensacionNoBloqueante();
+        DispensacionRetroactividadDTO preview = superMasterOpsService.previewRetroactividadDispensacionNoBloqueante();
         return ResponseEntity.ok(preview);
     }
 
@@ -90,7 +88,8 @@ public class SuperMasterOpsResource {
         if (!isMasterOrSuperMaster(authentication)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Only master or super_master can run this action"));
         }
-        DispensacionRetroactividadDTO result = seguimientoOrdenAreaService.aplicarRetroactividadDispensacionNoBloqueante();
+        DispensacionRetroactividadDTO result = superMasterOpsService
+                .aplicarRetroactividadDispensacionNoBloqueante(authentication.getName());
         return ResponseEntity.ok(result);
     }
 

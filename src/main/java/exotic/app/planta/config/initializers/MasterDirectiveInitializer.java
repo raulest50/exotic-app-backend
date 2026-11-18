@@ -14,8 +14,8 @@ public class MasterDirectiveInitializer {
 
     private static final String LIMITE_OCM_RESUMEN = "Tope global para configurar limites de recepciones OCM por proveedor";
     private static final String LIMITE_OCM_AYUDA = "Define el maximo permitido al crear o editar el limite de recepciones parciales OCM de un proveedor. No afecta retroactivamente limites ya configurados y no se usa directamente para validar ingresos OCM.";
-    private static final String DISPENSACION_NO_BLOQUEA_RESUMEN = "Permite iniciar el proceso productivo sin esperar la dispensacion de materiales";
-    private static final String DISPENSACION_NO_BLOQUEA_AYUDA = "Cuando esta activa, Almacen General se marca automaticamente como completado solo a nivel de seguimiento de proceso al crear ordenes de produccion nuevas. No crea transacciones de almacen, no descuenta inventario y no acredita la dispensacion real. Para ordenes existentes use la accion retroactiva de esta pantalla.";
+    private static final String DISPENSACION_NO_BLOQUEA_RESUMEN = "Permite iniciar OP y OF sin esperar la dispensacion de materiales";
+    private static final String DISPENSACION_NO_BLOQUEA_AYUDA = "La politica se copia al crear cada OP y OF. En OP, Almacen General se completa solo en el seguimiento; en OF, se permite iniciar sin dispensacion. Cambiar la directiva no modifica ordenes existentes: use la accion retroactiva controlada para las candidatas sin ejecucion productiva. No inicia operaciones, no adelanta su liberacion, no crea movimientos ni acredita dispensacion real; conserva entregas parciales o completas, permisos y despejes.";
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_RESUMEN = "Permite que master vea y entre al modulo de Directivas Super Master";
     private static final String MASTER_SUPERMASTER_DIRECTIVES_ACCESS_AYUDA = "Cuando esta activa, el usuario master puede ver el acceso en Inicio y entrar a la ruta de Directivas Super Master. No agrega proteccion adicional sobre los endpoints API.";
     private static final String MPS_SEMANAL_DIAS_BLOQUEO_RESUMEN = "Cantidad de dias bloqueados para editar MPS semanal";
@@ -44,6 +44,7 @@ public class MasterDirectiveInitializer {
     private final MasterDirectiveRepo masterDirectiveRepo;
 
     public void initializeMasterDirectives() {
+        ensureNewFeaturesNotificationDays();
         ensureLimiteRecepcionesParcialesOcm();
         ensureDispensacionNoBloqueaInicioProduccion();
         ensureEnableMasterSupermasterDirectivesAccess();
@@ -59,6 +60,21 @@ public class MasterDirectiveInitializer {
         ensureAreaOperativaPanelHistoricoToggleEnabled();
         ensureAreaOperativaAdminCorrectionEnabled();
         ensureBatchRecordWorkflowEnabled();
+    }
+
+    private void ensureNewFeaturesNotificationDays() {
+        MasterDirective directive = masterDirectiveRepo.findByNombre(MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS)
+                .orElseGet(() -> {
+                    MasterDirective created = new MasterDirective();
+                    created.setNombre(MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS);
+                    created.setValor(String.valueOf(MasterDirectiveKeys.DEFAULT_NEW_FEATURES_NOTIFICATION_DAYS));
+                    return created;
+                });
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setResumen("Días de vigencia de la notificación Nuevo");
+        directive.setAyuda("Acepta enteros de 0 a 365; 7 por defecto. Cuenta días de 24 horas desde la publicación de cada novedad. 0 desactiva los indicadores. También desaparecen antes si el usuario consulta la novedad y entra al módulo. El carrusel sigue disponible; cambiar el plazo no reinicia fechas ni lecturas.");
+        masterDirectiveRepo.save(directive);
     }
 
     private void ensureLimiteRecepcionesParcialesOcm() {

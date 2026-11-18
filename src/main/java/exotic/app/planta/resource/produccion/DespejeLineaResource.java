@@ -107,6 +107,11 @@ public class DespejeLineaResource {
         return userRepository.findByUsername(auth.getName())
                 .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no encontrado."));
     }
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> conflictoOperativo(ResponseStatusException error) {
+        return ResponseEntity.status(error.getStatusCode())
+                .body(new ErrorResponse("Despeje no disponible", error.getReason()));
+    }
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> invalido(IllegalArgumentException error) {
         return ResponseEntity.badRequest().body(new ErrorResponse("Despeje no válido", error.getMessage()));

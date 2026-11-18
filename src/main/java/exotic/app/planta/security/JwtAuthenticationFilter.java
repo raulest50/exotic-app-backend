@@ -25,6 +25,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return VisitantePublicRequestFilter.isPublicRegistration(request);
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String jwt = getJwtFromRequest(request);

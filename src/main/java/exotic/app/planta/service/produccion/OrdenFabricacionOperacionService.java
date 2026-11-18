@@ -482,7 +482,7 @@ public class OrdenFabricacionOperacionService {
     @Transactional(readOnly = true)
     public List<Long> listarOrdenesPendientesBackfillLegado() {
         return operacionRepo.findOrdenIdsPendientesBackfillLegado(
-                EstadoOrdenFabricacion.CANCELADA);
+                EstadoOrdenFabricacion.CANCELADA, ActorTipoEventoSeguimiento.SYSTEM, TipoEventoSeguimiento.SISTEMA);
     }
 
     @Scheduled(fixedDelayString = "${app.orden-fabricacion.release-check-ms:60000}")

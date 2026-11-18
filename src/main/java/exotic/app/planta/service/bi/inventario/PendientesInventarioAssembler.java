@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -379,6 +380,7 @@ class PendientesInventarioAssembler {
     private static final class PendingPurchaseOrderAccumulator {
         private final int purchaseOrderId;
         private final LocalDateTime issueDate;
+        private final LocalDate projectedDeliveryDate;
         private final String supplierName;
         private final Set<String> productIds = new HashSet<>();
         private final UnitQuantityAccumulator pendingQuantities =
@@ -391,6 +393,12 @@ class PendientesInventarioAssembler {
         ) {
             purchaseOrderId = firstItem.getOcmId();
             issueDate = firstItem.getFechaEmision();
+            LocalDateTime sentAt = firstItem.getFechaEnvioProveedor();
+            Integer negotiatedLeadTime = firstItem.getLeadTimeNegociado();
+            // This projection requires both values; emission is not a fallback.
+            projectedDeliveryDate = sentAt == null || negotiatedLeadTime == null
+                    ? null
+                    : sentAt.toLocalDate().plusDays(negotiatedLeadTime);
             supplierName = firstItem.getProveedor();
         }
 
@@ -422,6 +430,7 @@ class PendientesInventarioAssembler {
             return InformeInventarioDTO.OcmDTO.builder()
                     .ocmId(purchaseOrderId)
                     .fechaEmision(issueDate)
+                    .fechaProyectadaEntrega(projectedDeliveryDate)
                     .proveedor(supplierName)
                     .referencias(productIds.size())
                     .cantidadesPorUnidad(pendingQuantities.toDto())
