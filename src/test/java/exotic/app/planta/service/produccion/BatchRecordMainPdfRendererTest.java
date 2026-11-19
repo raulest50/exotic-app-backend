@@ -2,6 +2,8 @@ package exotic.app.planta.service.produccion;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.itextpdf.text.pdf.PdfDictionary;
 import com.itextpdf.text.pdf.PdfName;
 import com.itextpdf.text.pdf.PdfReader;
@@ -12,6 +14,8 @@ import exotic.app.planta.model.users.firma.FirmaVisualUsuarioVersion;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoService;
 import exotic.app.planta.service.productos.procesos.ProcesoProduccionDocumentoPdfService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ByteArrayResource;
 
 import javax.imageio.ImageIO;
@@ -235,6 +239,131 @@ class BatchRecordMainPdfRendererTest {
         } finally {
             completeReader.close();
             mainReader.close();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ORDEN_PRODUCCION", "ORDEN_FABRICACION"})
+    void filtersSystemEventsButKeepsHumanReleasesCorrectionsAndCanonicalInput(String orderType) throws Exception {
+        ObjectNode root = chronologyRecord(orderType);
+        String source = "ORDEN_FABRICACION".equals(orderType)
+                ? "EVENTO_AREA_OPERATIVA_OF" : "EVENTO_AREA_OPERATIVA";
+        ObjectNode automatic = addChronologyEvent(root, source, 1, "EVENTO_SISTEMA",
+                "AUTOMATICO_OCULTO", "LIBERADA");
+        // Una automatizacion puede tener un usuario asociado sin volverse un reporte humano.
+        automatic.putObject("actor").put("nombre", "USUARIO_AUTOMATICO_OCULTO");
+        addChronologyEvent(root, source, 2, "OBSERVACION_AREA",
+                "LIBERACION_HUMANA", "LIBERADA")
+                .putObject("actor").put("nombre", "Operaria Cronologia");
+        addChronologyEvent(root, source, 3, "CORRECCION_ADMINISTRATIVA",
+                "CORRECCION_HUMANA", "COMPLETADO")
+                .putObject("actor").put("nombre", "Supervisora Cronologia");
+        JsonNode original = root.deepCopy();
+        String canonicalBefore = objectMapper.writeValueAsString(root);
+
+        String text = renderText(root);
+
+        assertThat(text).contains("LIBERACION_HUMANA", "CORRECCION_HUMANA", "Operaria Cronologia")
+                .contains("Completada", "1 kg", "19/11/2026 08:00", "19/11/2026 09:00")
+                .doesNotContain("AUTOMATICO_OCULTO", "USUARIO_AUTOMATICO_OCULTO");
+        assertThat(root).isEqualTo(original);
+        assertThat(objectMapper.writeValueAsString(root)).isEqualTo(canonicalBefore);
+        assertThat(root.path("cronologiaProceso").size()).isEqualTo(3);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ORDEN_PRODUCCION", "ORDEN_FABRICACION"})
+    void allSystemChronologyDoesNotReactivateLegacyOrderOrStageObservations(String orderType) throws Exception {
+        ObjectNode root = chronologyRecord(orderType);
+        ((ObjectNode) root.path("orden")).put("observaciones", "AUTOMATICO_ORDEN_OCULTO");
+        ((ObjectNode) root.path("etapas").get(0)).put("observaciones", "AUTOMATICO_ETAPA_OCULTO");
+        String source = "ORDEN_FABRICACION".equals(orderType)
+                ? "EVENTO_AREA_OPERATIVA_OF" : "EVENTO_AREA_OPERATIVA";
+        addChronologyEvent(root, source, 1, "EVENTO_SISTEMA", "AUTOMATICO_ETAPA_OCULTO", "ESPERA");
+        JsonNode original = root.deepCopy();
+
+        String text = renderText(root);
+
+        assertThat(text).contains("No hay observaciones, correcciones ni desviaciones para mostrar.")
+                .contains("Completada", "Operaria Cronologia", "1 kg")
+                .doesNotContain("AUTOMATICO_ORDEN_OCULTO", "AUTOMATICO_ETAPA_OCULTO")
+                .doesNotContain("Observación de la orden", "Observación de etapa: Mezcla");
+        assertThat(root).isEqualTo(original);
+    }
+
+    @Test
+    void historicalChronologyWithoutActorRemainsVisibleEvenWhenDetailMentionsSystem() throws Exception {
+        ObjectNode root = chronologyRecord("ORDEN_PRODUCCION");
+        addChronologyEvent(root, "MPS", 1, "OBSERVACION_MPS", "LEGADO_ACTOR_VACIO", "")
+                .putObject("actor");
+        ObjectNode withoutActor = addChronologyEvent(root, "EXPEDIENTE", 2,
+                "OBSERVACION_EXPEDIENTE", "El sistema requiere una corrección histórica", "");
+        withoutActor.remove("actor");
+
+        String text = renderText(root);
+
+        assertThat(text).contains("LEGADO_ACTOR_VACIO")
+                .contains("El sistema requiere una corrección histórica");
+    }
+
+    @Test
+    void historicalRecordWithoutCanonicalChronologyKeepsOrderAndStageFallback() throws Exception {
+        ObjectNode root = chronologyRecord("ORDEN_FABRICACION");
+        root.remove("cronologiaProceso");
+        ((ObjectNode) root.path("orden")).put("observaciones", "OBSERVACION_ORDEN_LEGADA");
+        ((ObjectNode) root.path("etapas").get(0)).put("observaciones", "OBSERVACION_ETAPA_LEGADA");
+
+        String text = renderText(root);
+
+        assertThat(text).contains("OBSERVACION_ORDEN_LEGADA", "OBSERVACION_ETAPA_LEGADA");
+    }
+
+    private ObjectNode chronologyRecord(String orderType) throws Exception {
+        ObjectNode root = (ObjectNode) objectMapper.readTree("""
+                {
+                  "esquemaVersion":"batch-record-v6", "codigo":"BR-CRONOLOGIA-77",
+                  "estado":"CERRADO", "revisionDocumental":1,
+                  "orden":{"tipo":"ORDEN_PRODUCCION", "id":77, "estado":"CERRADA"},
+                  "lote":{"numero":"LOTE-77", "estadoCalidad":"LIBERADO"},
+                  "producto":{"id":"P-77", "nombre":"Producto cronologia", "unidad":"kg"},
+                  "cantidades":{"planificada":1, "obtenida":1, "unidad":"kg"},
+                  "etapas":[{"id":7,"secuencia":0,"nombre":"Mezcla","areaNombre":"Fabricacion",
+                    "estado":"COMPLETADA","iniciadaEn":"2026-11-19T08:00:00",
+                    "completadaEn":"2026-11-19T09:00:00",
+                    "reportadaPor":{"nombre":"Operaria Cronologia"}}],
+                  "consumos":[], "dispensaciones":[], "controles":[],
+                  "controlesUnificados":{"requisitos":[]}, "desviaciones":[], "correcciones":[],
+                  "ciclosRevision":[], "seccionesCorreccion":[], "solicitudesReapertura":[],
+                  "decisionesCalidad":[], "firmas":[], "cronologiaProceso":[]
+                }
+                """);
+        ((ObjectNode) root.path("orden")).put("tipo", orderType);
+        return root;
+    }
+
+    private ObjectNode addChronologyEvent(ObjectNode root, String source, long id,
+                                           String category, String detail, String destination) {
+        ObjectNode event = ((ArrayNode) root.path("cronologiaProceso")).addObject();
+        event.put("fuenteTipo", source).put("fuenteId", id)
+                .put("fechaHora", "2026-11-19T09:00:00").put("categoria", category)
+                .put("titulo", "Observación de proceso").put("detalle", detail)
+                .put("area", "Fabricacion").put("etapa", "Mezcla")
+                .put("estadoDestino", destination);
+        return event;
+    }
+
+    private String renderText(JsonNode root) throws Exception {
+        BatchRecordMainPdfRenderer renderer = new BatchRecordMainPdfRenderer(
+                mock(BatchRecordFirmaRepo.class), mock(FirmaVisualUsuarioVersionRepo.class), objectMapper);
+        byte[] pdf = renderer.render(root, new BatchRecordMainPdfRenderer.RenderContext(
+                "Revisión 1 · CIERRE", "a".repeat(64), false, null,
+                BatchRecordService.PLANTILLA_PDF_VERSION,
+                new BatchRecordMainPdfRenderer.LogoDocumental(qaLogo(), 2, "logo-sha"), 0));
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            return extractText(reader).replaceAll("\\s+", " ");
+        } finally {
+            reader.close();
         }
     }
 

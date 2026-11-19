@@ -17,6 +17,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,9 @@ public class AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
     private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
+
+    @Value("${app.frontend.base-url:}")
+    private String frontendBaseUrl;
 
     private static final String LOCAL_FRONTEND_URL = "http://localhost:5173";
     private static final String STAGING_FRONTEND_URL = "https://exotic-app-frontend-staging.onrender.com";
@@ -149,6 +153,9 @@ public class AuthService {
      * @return La URL base para construir enlaces
      */
     public String getDomain() {
+        if (frontendBaseUrl != null && !frontendBaseUrl.isBlank()) {
+            return frontendBaseUrl.trim().replaceAll("/+$", "");
+        }
         return switch (applicationRuntimeEnvironmentResolver.getCurrentEnvironment()) {
             case LOCAL -> LOCAL_FRONTEND_URL;
             case STAGING -> STAGING_FRONTEND_URL;

@@ -16,6 +16,21 @@ import java.util.List;
 @Repository
 public interface SemiTerminadoRepo extends JpaRepository<SemiTerminado, String>, JpaSpecificationExecutor<SemiTerminado> {
 
+    interface CatalogoAreaProjection {
+        String getProductoId();
+        String getNombre();
+        String getTipoUnidades();
+    }
+
+    // Proyeccion ligera: incluye tanto semiterminados con OF como etapas integradas.
+    @Query("""
+            SELECT s.productoId AS productoId, s.nombre AS nombre, s.tipoUnidades AS tipoUnidades
+            FROM SemiTerminado s
+            WHERE LOWER(s.nombre) LIKE LOWER(CONCAT('%', :search, '%'))
+               OR LOWER(s.productoId) LIKE LOWER(CONCAT('%', :search, '%'))
+            """)
+    Page<CatalogoAreaProjection> buscarCatalogoArea(@Param("search") String search, Pageable pageable);
+
     @EntityGraph(attributePaths = {"insumos", "insumos.producto"})
     List<SemiTerminado> findByInsumos_Producto(Producto producto);
 

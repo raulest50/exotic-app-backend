@@ -66,7 +66,7 @@ public class OpenAiAssistantGateway implements AssistantAiGateway {
         try {
             Map<String, Object> schema = Map.of("type", "object", "additionalProperties", false,
                     "required", List.of("kind", "message", "sql"), "properties", Map.of(
-                            "kind", Map.of("type", "string", "enum", List.of("answer", "query", "unsupported_write")),
+                            "kind", Map.of("type", "string", "enum", List.of("answer", "query", "unsupported_write", "out_of_scope")),
                             "message", Map.of("type", "string"), "sql", Map.of("type", "string")));
             var payload = Map.of("model", model, "instructions", instructions, "input", turns,
                     "store", false, "stream", false, "max_output_tokens", 1600,

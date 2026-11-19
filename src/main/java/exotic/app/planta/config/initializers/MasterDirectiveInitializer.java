@@ -45,6 +45,7 @@ public class MasterDirectiveInitializer {
 
     public void initializeMasterDirectives() {
         ensureNewFeaturesNotificationDays();
+        ensureReordenSeguimientoDirectives();
         ensureLimiteRecepcionesParcialesOcm();
         ensureDispensacionNoBloqueaInicioProduccion();
         ensureEnableMasterSupermasterDirectivesAccess();
@@ -74,6 +75,46 @@ public class MasterDirectiveInitializer {
         directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
         directive.setResumen("Días de vigencia de la notificación Nuevo");
         directive.setAyuda("Acepta enteros de 0 a 365; 7 por defecto. Cuenta días de 24 horas desde la publicación de cada novedad. 0 desactiva los indicadores. También desaparecen antes si el usuario consulta la novedad y entra al módulo. El carrusel sigue disponible; cambiar el plazo no reinicia fechas ni lecturas.");
+        masterDirectiveRepo.save(directive);
+    }
+
+    private void ensureReordenSeguimientoDirectives() {
+        ensureReordenDirective(
+                MasterDirectiveKeys.REORDEN_SEGUIMIENTO_PORCENTAJE,
+                MasterDirectiveKeys.DEFAULT_REORDEN_SEGUIMIENTO_PORCENTAJE,
+                "Porcentaje del plazo del proveedor para iniciar seguimiento en el correo de reorden",
+                "Indica desde qué porcentaje del plazo negociado se debe contactar al proveedor para confirmar la entrega. "
+                        + "Acepta enteros de 1 a 100; el valor inicial es 80. Aplica a materiales con stock igual o inferior a su punto de reorden, "
+                        + "con OCM enviada, pendiente de recepción y cantidad aún por recibir. Se cuentan días calendario desde el envío al proveedor; "
+                        + "el día del envío cuenta como día 0. El inicio se redondea al siguiente día entero. "
+                        + "Ejemplo: con 80 % y plazo de 10 días, la OCM aparece en seguimiento los días 8, 9 y 10; desde el día 11 aparece solo en plazo superado. "
+                        + "Con plazo de 11 días, el seguimiento comienza el día 9 (80 % de 11 = 8,8). "
+                        + "También debe cumplirse el plazo mínimo de la otra directiva. La tabla muestra el estado vigente en cada correo programado, "
+                        + "lunes a viernes a las 07:00 y 16:00 de Bogotá; no envía un aviso instantáneo al cumplir el porcentaje.");
+        ensureReordenDirective(
+                MasterDirectiveKeys.REORDEN_SEGUIMIENTO_MINIMO_LEAD_TIME_DIAS,
+                MasterDirectiveKeys.DEFAULT_REORDEN_SEGUIMIENTO_MINIMO_LEAD_TIME_DIAS,
+                "Plazo mínimo negociado del proveedor para el seguimiento anticipado del correo de reorden",
+                "Define qué proveedores participan en la tabla de seguimiento anticipado. Acepta de 1 a 3650 días calendario; el valor inicial es 10. "
+                        + "Ejemplo: con mínimo de 10 días y porcentaje de 80 %, un proveedor con plazo de 10 días entra en seguimiento desde el día 8; "
+                        + "uno con plazo de 9 días no entra en esa tabla. Ambos pueden aparecer en plazo superado cuando exceden su propio plazo. "
+                        + "Este mínimo no cambia el plazo del proveedor ni el punto de reorden del material. "
+                        + "Se utiliza el plazo negociado vigente de la ficha del proveedor, no el indicador histórico observado; cambiarlo puede reclasificar OCM abiertas en el siguiente correo. "
+                        + "Las OCM sin fecha de envío o sin plazo definido se contabilizan como datos incompletos, sin sustituir la fecha de envío por la emisión. "
+                        + "Un plazo de cero días es válido: no participa en seguimiento anticipado y supera el plazo desde el día siguiente al envío.");
+    }
+
+    private void ensureReordenDirective(String nombre, int valorInicial, String resumen, String ayuda) {
+        MasterDirective directive = masterDirectiveRepo.findByNombre(nombre).orElseGet(() -> {
+            MasterDirective created = new MasterDirective();
+            created.setNombre(nombre);
+            created.setValor(String.valueOf(valorInicial));
+            return created;
+        });
+        directive.setTipoDato(MasterDirective.TipoDato.NUMERO);
+        directive.setGrupo(MasterDirective.GRUPO.COMPRAS_ALMACEN);
+        directive.setResumen(resumen);
+        directive.setAyuda(ayuda);
         masterDirectiveRepo.save(directive);
     }
 

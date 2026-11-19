@@ -333,6 +333,9 @@ public class ProductoManufacturingService {
 
     private void updateTypedFields(Producto producto, ProductoManufacturingDTO dto) {
         if (producto instanceof Terminado terminado) {
+            if (dto.getLoteSize() != null) {
+                throw new IllegalArgumentException("El tamaño de lote OF solo aplica a semiterminados.");
+            }
             terminado.setStatus(dto.getStatus() != null ? dto.getStatus() : terminado.getStatus());
             terminado.setFotoUrl(dto.getFotoUrl());
             String prefijoLote = normalizeOptionalPrefijoLote(dto.getPrefijoLote());
@@ -347,6 +350,14 @@ public class ProductoManufacturingService {
             throw new IllegalArgumentException("Solo los terminados pueden tener case pack");
         }
         SemiTerminado semiTerminado = (SemiTerminado) producto;
+        if (dto.isLoteSizePresent()) {
+            BigDecimal loteSize = dto.getLoteSize();
+            if (loteSize != null && (loteSize.signum() <= 0 || loteSize.scale() > 4
+                    || loteSize.precision() - loteSize.scale() > 14)) {
+                throw new IllegalArgumentException("El tamaño de lote OF debe ser positivo, con hasta 14 enteros y 4 decimales.");
+            }
+            semiTerminado.setLoteSize(loteSize);
+        }
         boolean requiereOrden = dto.getRequiereOrdenFabricacion() != null
                 ? dto.getRequiereOrdenFabricacion()
                 : semiTerminado.isRequiereOrdenFabricacion();
@@ -707,6 +718,7 @@ public class ProductoManufacturingService {
             dto.setCasePack(toCasePackDTO(terminado.getCasePack()));
         } else if (producto instanceof SemiTerminado semiTerminado) {
             dto.setRequiereOrdenFabricacion(semiTerminado.isRequiereOrdenFabricacion());
+            dto.setLoteSize(semiTerminado.getLoteSize());
             dto.setPrefijoLote(semiTerminado.getPrefijoLote());
         }
 

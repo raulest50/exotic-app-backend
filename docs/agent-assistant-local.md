@@ -70,6 +70,62 @@ El estado comprueba configuración y cupo, sin hacer una llamada pagada de sonde
 La validez de la clave, acceso al modelo y disponibilidad de OpenAI se comprueban
 al enviar la primera pregunta; los errores del proveedor se sanean.
 
+## Contexto de Exotic versionado
+
+La parametrización inicial del 19 de noviembre de 2026 incorpora
+`AgentAssistantContext`. Al crear el componente carga una vez, en UTF-8 estricto,
+los recursos `agentassistant/exotic-domain-context.md` y
+`agentassistant/exotic-relational-model.md`. Los archivos se versionan junto al
+backend; para aplicar cambios se recompila y se reinicia o recarga Spring.
+No se configuran en el navegador ni en el panel de claves de OpenAI.
+
+El primer recurso describe el ámbito exclusivo de Exotic y distingue terminados,
+OP, OF, lotes, proveedores, unidades y existencias. El segundo es un inventario
+estático saneado de las fuentes de negocio, no una introspección de la base
+desplegada. No contiene registros reales ni lee archivos de configuración privada.
+Los nombres físicos solo se presentan cuando están comprobados; las referencias
+lógicas no deben convertirse en nombres SQL por conjetura.
+
+La revisión inicial clasifica las 146 entidades JPA de 17 dominios: publica
+135 entidades y 299 relaciones de negocio; excluye 11 entidades y 200 campos o
+relaciones sensibles. La exclusión comprende identidades de autenticación,
+controles secretos, datos personales sensibles, binarios y contenido opaco de
+auditoría. El contexto contiene estructura, nunca valores de esos registros.
+
+El contexto se añade a cada petición del proveedor, junto al historial acotado
+del usuario y al catálogo ejecutable real. El tamaño se limita a 32 KiB para el
+documento de dominio y 256 KiB para el modelo; un recurso ausente, vacío, excesivo
+o con UTF-8 inválido impide crear el componente. La huella SHA-256 de
+`AgentAssistantContext.version()` identifica las instrucciones efectivas sin
+registrar su contenido, preguntas, respuestas ni credenciales.
+
+Las preguntas ajenas a Exotic pueden clasificarse como `out_of_scope`; el
+servidor devuelve una respuesta fija y no crea propuestas. Las explicaciones de
+procesos no se confunden por una palabra aislada con una orden de escritura.
+La clasificación del modelo puede equivocarse: los permisos y la gramática de
+lectura siguen siendo las barreras de ejecución.
+
+**Conocimiento no equivale a capacidad ejecutable.** Esta primera parametrización
+permite explicar conceptos del modelo, pero conserva la consulta autenticada
+del catálogo de productos/materiales, confirmación y respaldo existentes.
+Todavía no habilita búsquedas de registros de OP/lotes ni escrituras de proveedores.
+Esas capacidades requieren sus adaptadores y autorizaciones de negocio; no se
+activan adjuntando documentación. Los resultados de consultas continúan fuera
+del historial enviado al modelo. Toda pregunta conserva, por ahora, los controles
+vigentes de acceso al asistente y consulta de Productos.
+
+El inventario debe revisarse cuando cambien entidades, relaciones o migraciones.
+No incorporar automáticamente nuevas tablas o campos al prompt, ni copiar el
+repositorio, `AGENTS.md`, archivos privados o respaldos como contexto.
+Enviar este conocimiento en cada petición aumenta los tokens de entrada; la
+barra de consumo sigue contabilizando el uso informado por el proveedor.
+
+Validación local de esta versión: `gradlew.bat build -x test compileTestJava`
+con Java 21 terminó correctamente. Se comprobó que ambos recursos están en el
+JAR y que `git diff --check` no informa errores. Las pruebas aisladas quedaron
+preparadas, sin ejecutarse por estar pendiente la autorización. No se hicieron
+llamadas a OpenAI, consultas de base de datos ni despliegues para esta validación.
+
 ## Barra de porcentaje
 
 `AssistantUsageService` estima el consumo a partir de los tokens de entrada,
@@ -135,9 +191,9 @@ confirmó `app.agent-assistant.api.enabled=true`, cupo asignado y `Ready=true`.
 El proceso conserva Flyway y Hibernate; no se modificó su configuración.
 No fue necesario crear un proceso Spring adicional ni cambiar la ejecución de IDE.
 
-Pendiente: iniciar sesión en Exotic tras la renovación del JWT y verificar saludo
-y lectura con el entorno completo. Aún no se ha consumido saldo en esta activación
-ni se ha demostrado un saludo real. La revisión automática rechazó transferir la
+El usuario confirmó posteriormente un saludo real con OpenAI. Esa comprobación
+no acredita el recorrido de respaldo y lectura ni evalúa esta nueva parametrización.
+La revisión automática rechazó transferir la
 propiedad del archivo privado por incertidumbre sobre la identidad; se acreditó
 la cuenta real del proceso y se resolvió con permisos, conservando la propiedad.
 
@@ -153,3 +209,9 @@ migración. Actualizar el estado de la integración y configuración por servido
 En **AgentAssistant — uso de solo lectura**, conservar confirmación y respaldo;
 actualizar la interfaz para no mostrar SQL y añadir el porcentaje estimado.
 No se modificó `ExoticApp.gaphor`; la sincronización sigue pendiente.
+
+La parametrización añade además el componente `AgentAssistantContext`, sus dos
+recursos Markdown y la dependencia del servicio hacia el contexto. Representar
+por separado el conocimiento del modelo de negocio y el catálogo ejecutable
+restringido; actualizar el flujo con la respuesta de fuera de alcance. No dibujar
+escrituras de proveedores ni consultas amplias como capacidades ya habilitadas.

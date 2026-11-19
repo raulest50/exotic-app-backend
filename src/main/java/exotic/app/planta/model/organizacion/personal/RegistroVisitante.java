@@ -38,17 +38,40 @@ public class RegistroVisitante {
     @Column(length = 30, updatable = false)
     private Genero genero;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 40, updatable = false)
+    private Motivo motivo;
+
+    @Column(name = "motivo_otro", length = 300, updatable = false)
+    private String motivoOtro;
+
     @Column(name = "fecha_registro", nullable = false, updatable = false,
             columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private Instant fechaRegistro;
 
     public RegistroVisitante(String cedula, String nombreCompleto, Integer edad,
-                             Genero genero, Instant fechaRegistro) {
+                             Genero genero, Motivo motivo, String motivoOtro, Instant fechaRegistro) {
         this.cedula = cedula;
         this.nombreCompleto = nombreCompleto;
         this.edad = edad;
         this.genero = genero;
+        this.motivo = motivo;
+        this.motivoOtro = motivoOtro;
         this.fechaRegistro = fechaRegistro;
+    }
+
+    public enum Motivo {
+        ENTREGA_MATERIALES,
+        RECOGIDA_MERCANCIA,
+        MANTENIMIENTO_EQUIPOS,
+        MENSAJERIA_DOCUMENTOS,
+        REUNION_COMERCIAL,
+        CALIBRACION_VALIDACION,
+        SERVICIOS_INSTALACIONES,
+        AUDITORIA_INSPECCION,
+        CAPACITACION_ASESORIA,
+        GESTION_HUMANA,
+        OTROS
     }
 
     public enum Genero {

@@ -1,6 +1,7 @@
 package exotic.app.planta.service.productos.procesos;
 
 import exotic.app.planta.dto.AreaOperativaResponseDTO;
+import exotic.app.planta.dto.AreaOperativaAsociacionesDTO;
 import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
 import exotic.app.planta.dto.SearchAreaProduccionDTO;
@@ -8,8 +9,12 @@ import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.organizacion.AreaOperativaCategoriaUnidadMedida;
 import exotic.app.planta.model.organizacion.UnidadMedidaAreaOperativa;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.SemiTerminado;
+import exotic.app.planta.model.producto.manufacturing.procesos.RecursoProduccion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.producto.CategoriaRepo;
+import exotic.app.planta.repo.producto.SemiTerminadoRepo;
+import exotic.app.planta.repo.producto.procesos.RecursoProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.AreaOperativaCategoriaUnidadMedidaRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
 import exotic.app.planta.repo.producto.procesos.UnidadMedidaAreaOperativaRepo;
@@ -20,9 +25,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -48,6 +57,101 @@ public class AreaProduccionService {
     private final AreaOperativaCategoriaUnidadMedidaRepo areaCategoriaUnidadRepo;
     private final UserRepository userRepository;
     private final UserOperationalCompatibilityService userOperationalCompatibilityService;
+    private final SemiTerminadoRepo semiTerminadoRepo;
+    private final RecursoProduccionRepo recursoProduccionRepo;
+
+    @Transactional(readOnly = true)
+    public List<AreaOperativaAsociacionesDTO.Item> listarSemiterminadosManufacturados(Integer areaId) {
+        return semiterminadosItems(requireAreaAsociaciones(areaId, false));
+    }
+
+    @Transactional
+    public List<AreaOperativaAsociacionesDTO.Item> guardarSemiterminadosManufacturados(
+            Integer areaId, AreaOperativaAsociacionesDTO.SemiterminadosRequest request) {
+        AreaOperativa area = requireAreaAsociaciones(areaId, true);
+        List<String> ids = request.productoIds();
+        if (ids == null || ids.stream().anyMatch(id -> id == null || id.isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los codigos de semiterminados son obligatorios.");
+        }
+        Set<String> uniqueIds = new LinkedHashSet<>(ids);
+        List<SemiTerminado> productos = semiTerminadoRepo.findAllById(uniqueIds);
+        if (productos.size() != uniqueIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Algun semiterminado ya no existe o no es de tipo semiterminado. Recargue el catalogo.");
+        }
+        area.getSemiterminadosManufacturados().clear();
+        area.getSemiterminadosManufacturados().addAll(productos);
+        return semiterminadosItems(area);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AreaOperativaAsociacionesDTO.Item> listarRecursosProduccion(Integer areaId) {
+        return recursosItems(requireAreaAsociaciones(areaId, false));
+    }
+
+    @Transactional
+    public List<AreaOperativaAsociacionesDTO.Item> guardarRecursosProduccion(
+            Integer areaId, AreaOperativaAsociacionesDTO.RecursosRequest request) {
+        AreaOperativa area = requireAreaAsociaciones(areaId, true);
+        List<Long> ids = request.recursoIds();
+        if (ids == null || ids.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los IDs de recursos deben ser positivos.");
+        }
+        Set<Long> uniqueIds = new LinkedHashSet<>(ids);
+        List<RecursoProduccion> recursos = recursoProduccionRepo.findAllById(uniqueIds);
+        if (recursos.size() != uniqueIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Algun recurso ya no existe. Recargue el catalogo.");
+        }
+        area.getRecursosProduccion().clear();
+        area.getRecursosProduccion().addAll(recursos);
+        return recursosItems(area);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AreaOperativaAsociacionesDTO.Item> buscarSemiterminadosParaArea(Integer areaId, String search, int page) {
+        requireAreaAsociaciones(areaId, false);
+        return semiTerminadoRepo.buscarCatalogoArea(catalogoSearch(search), catalogoPage(page, "productoId"))
+                .map(item -> new AreaOperativaAsociacionesDTO.Item(item.getProductoId(), item.getNombre(), item.getTipoUnidades()));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AreaOperativaAsociacionesDTO.Item> buscarRecursosParaArea(Integer areaId, String search, int page) {
+        requireAreaAsociaciones(areaId, false);
+        return recursoProduccionRepo.buscarCatalogoArea(catalogoSearch(search), catalogoPage(page, "id"))
+                .map(item -> new AreaOperativaAsociacionesDTO.Item(item.getId().toString(), item.getNombre(), item.getDescripcion()));
+    }
+
+    private String catalogoSearch(String search) {
+        if (search.length() > 200) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La busqueda no puede superar 200 caracteres.");
+        return search.trim();
+    }
+
+    private Pageable catalogoPage(int page, String idProperty) {
+        if (page < 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La pagina no puede ser negativa.");
+        return PageRequest.of(page, 20, Sort.by("nombre").ascending().and(Sort.by(idProperty)));
+    }
+
+    private AreaOperativa requireAreaAsociaciones(Integer areaId, boolean escritura) {
+        if (escritura && areaId == -1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Almacen General es un area de solo lectura.");
+        }
+        return (escritura ? areaProduccionRepo.findByIdForUpdate(areaId) : areaProduccionRepo.findById(areaId))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Area operativa no encontrada."));
+    }
+
+    private List<AreaOperativaAsociacionesDTO.Item> semiterminadosItems(AreaOperativa area) {
+        return ordenarAsociaciones(area.getSemiterminadosManufacturados().stream()
+                .map(item -> new AreaOperativaAsociacionesDTO.Item(item.getProductoId(), item.getNombre(), item.getTipoUnidades())).toList());
+    }
+
+    private List<AreaOperativaAsociacionesDTO.Item> recursosItems(AreaOperativa area) {
+        return ordenarAsociaciones(area.getRecursosProduccion().stream()
+                .map(item -> new AreaOperativaAsociacionesDTO.Item(item.getId().toString(), item.getNombre(), item.getDescripcion())).toList());
+    }
+
+    private List<AreaOperativaAsociacionesDTO.Item> ordenarAsociaciones(List<AreaOperativaAsociacionesDTO.Item> items) {
+        return items.stream().sorted(Comparator.comparing(AreaOperativaAsociacionesDTO.Item::nombre,
+                Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)).thenComparing(AreaOperativaAsociacionesDTO.Item::id)).toList();
+    }
 
     @Transactional
     public AreaOperativa saveAreaProduccion(AreaOperativa areaProduccion) {

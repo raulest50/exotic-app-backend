@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Alerta de punto de reorden</title>
+</head>
+<body style="margin:0;padding:20px 12px;background-color:#f3f5f7;color:#202b38;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+    <tr>
+        <td align="center">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:1120px;border-collapse:collapse;background-color:#ffffff;border:1px solid #dce2e8;">
+                <tr>
+                    <td style="padding:24px 20px;background-color:#ffffff;color:#202b38;border-bottom:3px solid #b38b3b;">
+                        <img src="cid:novum-logo" th:src="${correo.logoSrc}" alt="Novum Laboratorios" th:alt="${correo.identidad.nombreComercial}"
+                             width="132" height="132" style="display:block;width:132px;height:132px;border:0;margin:0 0 12px;">
+                        <p style="margin:0 0 6px;font-size:17px;font-weight:bold;" th:text="${correo.identidad.nombreComercial}">Novum Laboratorios</p>
+                        <h1 style="margin:0;font-size:24px;line-height:1.3;">Alerta de punto de reorden</h1>
+                        <p style="margin:10px 0 0;color:#4b5967;">Fecha de corte: <span th:text="${correo.fechaCorte}">19/11/2026</span> · Bogotá</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:20px;">
+                        <p style="margin:0 0 10px;">Materiales con stock igual o inferior al punto de reorden:
+                            <strong th:text="${correo.totalEnAlerta}">0</strong>.
+                        </p>
+                        <p style="margin:0 0 24px;color:#4b5967;">El punto de reorden indica cuándo gestionar la compra para procurar recibir el material antes de llegar al punto límite.</p>
+
+                        <section th:if="${not #lists.isEmpty(correo.pendientesOrdenar)}">
+                            <h2 style="margin:0 0 8px;font-size:19px;">Materiales que requieren generar OCM</h2>
+                            <p style="margin:0 0 12px;color:#4b5967;"><span th:text="${#lists.size(correo.pendientesOrdenar)}">0</span> material(es).</p>
+                            <div style="overflow-x:auto;">
+                                <table width="100%" border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;border:1px solid #d3dce4;font-size:13px;">
+                                    <thead style="background-color:#edf2f6;">
+                                    <tr>
+                                        <th scope="col" align="left">Código</th>
+                                        <th scope="col" align="left">Nombre</th>
+                                        <th scope="col" align="left">Tipo</th>
+                                        <th scope="col" align="right">Stock actual</th>
+                                        <th scope="col" align="right">Punto de reorden</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr th:each="material : ${correo.pendientesOrdenar}">
+                                        <td valign="top" th:text="${material.productoId}">Código</td>
+                                        <td valign="top" th:text="${material.nombre}">Material</td>
+                                        <td valign="top" th:text="${material.tipoMaterialLabel}">Tipo</td>
+                                        <td valign="top" align="right"><span th:text="${material.stockActual}">0</span> <span th:text="${material.tipoUnidades}">unidad</span></td>
+                                        <td valign="top" align="right"><span th:text="${material.puntoReorden}">0</span> <span th:text="${material.tipoUnidades}">unidad</span></td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p style="margin:0;height:24px;line-height:24px;">&nbsp;</p>
+                        </section>
+
+                        <section th:if="${not #lists.isEmpty(correo.pendientesIngresoAlmacen)}">
+                            <h2 style="margin:0 0 8px;font-size:19px;">Materiales ya solicitados, pendientes de ingreso</h2>
+                            <p style="margin:0 0 12px;color:#4b5967;"><span th:text="${#lists.size(correo.pendientesIngresoAlmacen)}">0</span> material(es).</p>
+                            <div style="overflow-x:auto;">
+                                <table width="100%" border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;border:1px solid #d3dce4;font-size:13px;">
+                                    <thead style="background-color:#edf2f6;">
+                                    <tr>
+                                        <th scope="col" align="left">Código</th>
+                                        <th scope="col" align="left">Nombre</th>
+                                        <th scope="col" align="left">Tipo</th>
+                                        <th scope="col" align="right">Stock actual</th>
+                                        <th scope="col" align="right">Punto de reorden</th>
+                                        <th scope="col" align="left">OCM / emisión</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr th:each="fila : ${correo.pendientesIngresoAlmacen}">
+                                        <td valign="top" th:text="${fila.material.productoId}">Código</td>
+                                        <td valign="top" th:text="${fila.material.nombre}">Material</td>
+                                        <td valign="top" th:text="${fila.material.tipoMaterialLabel}">Tipo</td>
+                                        <td valign="top" align="right"><span th:text="${fila.material.stockActual}">0</span> <span th:text="${fila.material.tipoUnidades}">unidad</span></td>
+                                        <td valign="top" align="right"><span th:text="${fila.material.puntoReorden}">0</span> <span th:text="${fila.material.tipoUnidades}">unidad</span></td>
+                                        <td valign="top">
+                                            <div th:each="ocm : ${fila.ocms}" style="margin-bottom:6px;">
+                                                <strong>OCM #<span th:text="${ocm.ordenCompraId}">0</span></strong><br>
+                                                <span th:text="${ocm.fechaEmision}">Sin fecha de emisión</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p style="margin:0;height:24px;line-height:24px;">&nbsp;</p>
+                        </section>
+
+                        <h2 style="margin:0 0 8px;font-size:19px;color:#8c2724;">OCM con plazo de entrega superado</h2>
+                        <p style="margin:0 0 12px;color:#4b5967;">
+                            <strong th:text="${#lists.size(correo.vencidas)}">0</strong> fila(s) OCM–material ·
+                            <strong th:text="${correo.materialesConPlazoSuperado}">0</strong> material(es) distintos.
+                            Gestionar con el proveedor la entrega del saldo pendiente.
+                        </p>
+                        <p th:if="${#lists.isEmpty(correo.vencidas)}" style="margin:0 0 24px;padding:12px;background-color:#f4f6f8;">No hay OCM con plazo superado para los materiales en alerta.</p>
+                        <div th:if="${not #lists.isEmpty(correo.vencidas)}" style="overflow-x:auto;">
+                            <table width="100%" border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;border:1px solid #d3dce4;font-size:13px;">
+                                <thead style="background-color:#fbeceb;">
+                                <tr>
+                                    <th scope="col" align="left">Material</th>
+                                    <th scope="col" align="left">OCM / proveedor</th>
+                                    <th scope="col" align="left">Envío / plazo</th>
+                                    <th scope="col" align="right">Días transcurridos</th>
+                                    <th scope="col" align="left">Fecha límite</th>
+                                    <th scope="col" align="right">Saldo pendiente</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr th:each="fila : ${correo.vencidas}">
+                                    <td valign="top"><strong th:text="${fila.material.productoId}">Código</strong><br><span th:text="${fila.material.nombre}">Material</span></td>
+                                    <td valign="top"><strong>OCM #<span th:text="${fila.ordenCompraId}">0</span></strong><br><span th:text="${fila.proveedor}">Proveedor</span></td>
+                                    <td valign="top"><span th:text="${fila.fechaEnvio}">Fecha de envío</span><br><span th:text="${fila.leadTimeDias}">0</span> días calendario</td>
+                                    <td valign="top" align="right" th:text="${fila.diasTranscurridos}">0</td>
+                                    <td valign="top"><span th:text="${fila.fechaLimite}">Fecha límite</span><br><strong style="color:#8c2724;"><span th:text="${fila.diasExceso}">0</span> día(s) de exceso</strong></td>
+                                    <td valign="top" align="right"><span th:text="${fila.cantidadPendiente}">0</span> <span th:text="${fila.material.tipoUnidades}">unidad</span></td>
+                                </tr>
+                                </tbody>
+                            </table>
+                            <p style="margin:0;height:24px;line-height:24px;">&nbsp;</p>
+                        </div>
+
+                        <h2 style="margin:0 0 8px;font-size:19px;color:#76520b;">OCM para seguimiento anticipado</h2>
+                        <p style="margin:0 0 12px;color:#4b5967;">
+                            <strong th:text="${#lists.size(correo.seguimiento)}">0</strong> fila(s) OCM–material ·
+                            <strong th:text="${correo.materialesEnSeguimiento}">0</strong> material(es) distintos.
+                            Contactar al proveedor para confirmar el estado de entrega.
+                        </p>
+                        <p th:if="${#lists.isEmpty(correo.seguimiento)}" style="margin:0 0 16px;padding:12px;background-color:#f4f6f8;">No hay OCM en el intervalo de seguimiento anticipado para los materiales en alerta.</p>
+                        <div th:if="${not #lists.isEmpty(correo.seguimiento)}" style="overflow-x:auto;">
+                            <table width="100%" border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;border:1px solid #d3dce4;font-size:13px;">
+                                <thead style="background-color:#fff5db;">
+                                <tr>
+                                    <th scope="col" align="left">Material</th>
+                                    <th scope="col" align="left">OCM / proveedor</th>
+                                    <th scope="col" align="left">Envío / plazo</th>
+                                    <th scope="col" align="right">Días transcurridos</th>
+                                    <th scope="col" align="left">Fecha límite</th>
+                                    <th scope="col" align="right">Saldo pendiente</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr th:each="fila : ${correo.seguimiento}">
+                                    <td valign="top"><strong th:text="${fila.material.productoId}">Código</strong><br><span th:text="${fila.material.nombre}">Material</span></td>
+                                    <td valign="top"><strong>OCM #<span th:text="${fila.ordenCompraId}">0</span></strong><br><span th:text="${fila.proveedor}">Proveedor</span></td>
+                                    <td valign="top"><span th:text="${fila.fechaEnvio}">Fecha de envío</span><br><span th:text="${fila.leadTimeDias}">0</span> días calendario</td>
+                                    <td valign="top" align="right" th:text="${fila.diasTranscurridos}">0</td>
+                                    <td valign="top" th:text="${fila.fechaLimite}">Fecha límite</td>
+                                    <td valign="top" align="right"><span th:text="${fila.cantidadPendiente}">0</span> <span th:text="${fila.material.tipoUnidades}">unidad</span></td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p style="margin:14px 0 24px;color:#4b5967;font-size:12px;">
+                            El seguimiento comienza al alcanzar el <span th:text="${correo.porcentajeSeguimiento}">80</span> % del plazo, redondeado hacia arriba a días enteros, y permanece hasta la fecha límite inclusive.
+                            Aplica a proveedores cuyo plazo negociado sea de al menos <span th:text="${correo.minimoLeadTimeDias}">10</span> día(s).
+                            Las OCM que superan su plazo aparecen únicamente en la tabla de plazo superado.
+                            Los plazos se calculan con el lead time negociado vigente del proveedor y los días calendario se cuentan desde el envío de la OCM.
+                            Un material puede aparecer en varias filas si tiene varias OCM pendientes.
+                        </p>
+
+                        <p th:if="${correo.paresSinDatosSeguimiento > 0}" style="margin:0 0 24px;padding:12px;border:1px solid #d3dce4;background-color:#f4f6f8;">
+                            <strong>Datos por revisar:</strong> <span th:text="${correo.paresSinDatosSeguimiento}">0</span> pareja(s) OCM–material con saldo pendiente no se clasificaron en las tablas de seguimiento por datos ausentes o inconsistentes.
+                            Revisar fecha de envío, proveedor y plazo negociado. Permanecen incluidas en el resumen de materiales pendientes de ingreso.
+                        </p>
+
+                        <section th:if="${not #lists.isEmpty(correo.sinPuntoReorden)}">
+                            <h2 style="margin:0 0 8px;font-size:19px;">Materiales sin punto de reorden configurado</h2>
+                            <p style="margin:0 0 8px;color:#4b5967;">Revise y defina un punto de reorden si aplica. Estos materiales no se incluyen en el total en alerta.</p>
+                            <ul style="margin:0 0 24px;padding-left:20px;">
+                                <li th:each="material : ${correo.sinPuntoReorden}"><span th:text="${material.productoId}">Código</span> / <span th:text="${material.nombre}">Material</span></li>
+                            </ul>
+                        </section>
+
+                        <hr style="margin:24px 0 16px;border:0;border-top:1px solid #dce2e8;">
+                        <p style="margin:0;color:#4b5967;font-size:12px;">
+                            <strong th:text="${correo.identidad.nombreComercial}">Empresa</strong><br>
+                            <span th:text="${correo.identidad.razonSocial}">Razón social</span><br>
+                            Teléfono: <span th:text="${correo.identidad.telefono}">Teléfono</span><br>
+                            Correo: <span th:text="${correo.identidad.email}">Correo</span>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

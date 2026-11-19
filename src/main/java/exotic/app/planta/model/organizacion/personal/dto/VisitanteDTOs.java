@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante;
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Genero;
+import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Motivo;
 
 import java.time.Instant;
 
@@ -12,15 +13,19 @@ public final class VisitanteDTOs {
     private VisitanteDTOs() {
     }
 
-    public record CrearRequest(String cedula, String nombreCompleto, Integer edad, Genero genero) {
+    public record CrearRequest(String cedula, String nombreCompleto, Integer edad, Genero genero,
+                               Motivo motivo, String motivoOtro) {
         /** Evita convertir numeros, decimales o ordinales en datos personales validos. */
         @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
         public static CrearRequest fromJson(
                 @JsonProperty("cedula") JsonNode cedula,
                 @JsonProperty("nombreCompleto") JsonNode nombreCompleto,
                 @JsonProperty("edad") JsonNode edad,
-                @JsonProperty("genero") JsonNode genero) {
-            return new CrearRequest(texto(cedula), texto(nombreCompleto), entero(edad), leerGenero(genero));
+                @JsonProperty("genero") JsonNode genero,
+                @JsonProperty("motivo") JsonNode motivo,
+                @JsonProperty("motivoOtro") JsonNode motivoOtro) {
+            return new CrearRequest(texto(cedula), texto(nombreCompleto), entero(edad), leerGenero(genero),
+                    leerMotivo(motivo), texto(motivoOtro));
         }
     }
 
@@ -28,10 +33,10 @@ public final class VisitanteDTOs {
     }
 
     public record Registro(Long id, String cedula, String nombreCompleto, Integer edad,
-                           Genero genero, Instant fechaRegistro) {
+                           Genero genero, Motivo motivo, String motivoOtro, Instant fechaRegistro) {
         public static Registro fromEntity(RegistroVisitante registro) {
             return new Registro(registro.getId(), registro.getCedula(), registro.getNombreCompleto(),
-                    registro.getEdad(), registro.getGenero(), registro.getFechaRegistro());
+                    registro.getEdad(), registro.getGenero(), registro.getMotivo(), registro.getMotivoOtro(), registro.getFechaRegistro());
         }
     }
 
@@ -52,9 +57,17 @@ public final class VisitanteDTOs {
     private static Genero leerGenero(JsonNode valor) {
         String codigo = texto(valor);
         if (codigo == null) return null;
-        for (Genero genero : Genero.values()) {
-            if (genero.name().equals(codigo)) return genero;
-        }
+        if (Genero.MASCULINO.name().equals(codigo)) return Genero.MASCULINO;
+        if (Genero.FEMENINO.name().equals(codigo)) return Genero.FEMENINO;
         throw new IllegalArgumentException("Genero invalido.");
+    }
+
+    private static Motivo leerMotivo(JsonNode valor) {
+        String codigo = texto(valor);
+        if (codigo == null) return null;
+        for (Motivo motivo : Motivo.values()) {
+            if (motivo.name().equals(codigo)) return motivo;
+        }
+        throw new IllegalArgumentException("Motivo invalido.");
     }
 }

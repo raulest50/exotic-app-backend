@@ -62,12 +62,18 @@ public class MasterDirectiveResource {
     ) {
         Long persistedId = updateDTO != null && updateDTO.getOldMasterDirective() != null
                 ? updateDTO.getOldMasterDirective().getId() : null;
-        boolean isNotificationDurationUpdate = masterDirectiveService.getById(persistedId)
-                .map(directive -> MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS.equals(directive.getNombre()))
-                .orElse(false);
-        if (isNotificationDurationUpdate && !canManageNotificationDuration(authentication)) {
+        String persistedName = masterDirectiveService.getById(persistedId)
+                .map(MasterDirective::getNombre).orElse(null);
+        boolean isNotificationDurationUpdate = MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS.equals(persistedName);
+        if (isNotificationDurationUpdate && !canManageRestrictedDirectives(authentication)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                     "message", "No tiene permiso para administrar la duración de las novedades."));
+        }
+        boolean isReordenSeguimientoUpdate = MasterDirectiveKeys.REORDEN_SEGUIMIENTO_PORCENTAJE.equals(persistedName)
+                || MasterDirectiveKeys.REORDEN_SEGUIMIENTO_MINIMO_LEAD_TIME_DIAS.equals(persistedName);
+        if (isReordenSeguimientoUpdate && !canManageRestrictedDirectives(authentication)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "No tiene permiso para administrar el seguimiento del correo de punto de reorden."));
         }
         if (isBatchRecordWorkflowUpdate(updateDTO)
                 && !isMasterOrSuperMaster(authentication)) {
@@ -92,7 +98,7 @@ public class MasterDirectiveResource {
         }
     }
 
-    private boolean canManageNotificationDuration(Authentication authentication) {
+    private boolean canManageRestrictedDirectives(Authentication authentication) {
         if (!isMasterOrSuperMaster(authentication)) return false;
         if ("super_master".equals(authentication.getName().trim().toLowerCase(Locale.ROOT))) return true;
         return masterDirectiveService.getBooleanDirectiveValue(

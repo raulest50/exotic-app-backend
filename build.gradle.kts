@@ -57,6 +57,8 @@ dependencies {
 
 	// for email sending capabilities
 	implementation("org.springframework.boot:spring-boot-starter-mail")
+	// Dedicated HTML email renderer; no Spring MVC view resolver.
+	implementation("org.thymeleaf:thymeleaf:3.1.7.RELEASE")
 
 	// para escanear las clases, se usa en backend endpoins information
 	implementation("org.reflections:reflections:0.10.2")

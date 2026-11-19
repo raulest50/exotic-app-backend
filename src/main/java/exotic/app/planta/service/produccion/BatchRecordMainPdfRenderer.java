@@ -770,12 +770,13 @@ class BatchRecordMainPdfRenderer {
         document.add(note(
                 "La línea de tiempo reúne observaciones ya capturadas durante la planificación, "
                         + "la orden, las áreas operativas, los controles y la revisión del expediente. "
+                        + "Los eventos automáticos se conservan internamente y se omiten de esta cronología. "
                         + "Una firma visual de perfil identifica al usuario, pero no sustituye una "
                         + "confirmación electrónica del evento."));
         List<TimelineEntry> entries = timelineEntries(root);
         if (entries.isEmpty()) {
             document.add(noRecords(
-                    "No se registraron observaciones, correcciones ni desviaciones."));
+                    "No hay observaciones, correcciones ni desviaciones para mostrar."));
             return;
         }
 
@@ -795,6 +796,8 @@ class BatchRecordMainPdfRenderer {
         JsonNode canonical = root.path("cronologiaProceso");
         if (canonical.isArray()) {
             for (JsonNode event : canonical) {
+                // Filtrar solo la representación; el JSON original conserva la auditoría y evita reactivar fallbacks.
+                if ("EVENTO_SISTEMA".equals(text(event.path("categoria"), ""))) continue;
                 addTimelineEntry(entries, keys, new TimelineEntry(
                         text(event.path("fechaHora"), ""),
                         text(event.path("categoria"), "OBSERVACION"),

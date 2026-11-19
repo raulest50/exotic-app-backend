@@ -31,7 +31,7 @@ public class VisitantePublicResource {
     @ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<ErrorResponse> solicitudInvalida() {
         return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).body(new ErrorResponse(
-                "Solicitud invalida", "Revise la cedula, el nombre completo, la edad y el genero."));
+                "Solicitud invalida", "Revise los datos personales y seleccione el motivo de la visita. Si selecciona Otros, debe describirlo con un maximo de 300 caracteres."));
     }
 
     @ExceptionHandler(Exception.class)

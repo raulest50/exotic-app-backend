@@ -184,6 +184,39 @@ public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Inte
             @Param("productoIds") Collection<String> productoIds,
             @Param("estado") int estado);
 
+    interface PuntoReordenSeguimientoProjection {
+        int getOrdenCompraId();
+        String getProductoId();
+        String getProveedor();
+        LocalDateTime getFechaEnvioProveedor();
+        Integer getLeadTimeNegociado();
+        long getCantidadOrdenada();
+    }
+
+    /** Una fila por OCM y material; suma los items repetidos antes de descontar recepciones. */
+    @Query("""
+            SELECT orden.ordenCompraId AS ordenCompraId,
+                   material.productoId AS productoId,
+                   proveedor.nombre AS proveedor,
+                   orden.fechaEnvioProveedor AS fechaEnvioProveedor,
+                   proveedor.leadTimeNegociado AS leadTimeNegociado,
+                   SUM(item.cantidad) AS cantidadOrdenada
+            FROM ItemOrdenCompra item
+            JOIN item.ordenCompraMateriales orden
+            JOIN item.material material
+            LEFT JOIN orden.proveedor proveedor
+            WHERE orden.estado = :estado
+              AND material.productoId IN :productoIds
+              AND orden.ordenCompraId IN :ocmIds
+            GROUP BY orden.ordenCompraId, material.productoId, proveedor.nombre,
+                     orden.fechaEnvioProveedor, proveedor.leadTimeNegociado
+            ORDER BY material.productoId ASC, orden.ordenCompraId ASC
+            """)
+    List<PuntoReordenSeguimientoProjection> findPuntoReordenSeguimientoRows(
+            @Param("productoIds") Collection<String> productoIds,
+            @Param("ocmIds") Collection<Integer> ocmIds,
+            @Param("estado") int estado);
+
     @Query("""
             SELECT new exotic.app.planta.model.bi.dto.ProveedorMaterialOrdenHistRowDTO(
                 orden.ordenCompraId,

@@ -1,6 +1,7 @@
 package exotic.app.planta.resource.productos.procesos;
 
 import exotic.app.planta.dto.AreaOperativaResponseDTO;
+import exotic.app.planta.dto.AreaOperativaAsociacionesDTO;
 import exotic.app.planta.dto.AreaProduccionDTO;
 import exotic.app.planta.dto.ErrorResponse;
 import exotic.app.planta.dto.SearchAreaOperativaDTO;
@@ -19,6 +20,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.net.URI;
 import java.util.List;
@@ -31,6 +35,72 @@ public class AreaProduccionResource {
 
     private final AreaProduccionService areaProduccionService;
     private final UserRepository userRepository;
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> statusError(ResponseStatusException error) {
+        return ResponseEntity.status(error.getStatusCode()).body(new ErrorResponse("Configuracion del area", error.getReason()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> validationError(MethodArgumentNotValidException error) {
+        String message = error.getBindingResult().getFieldErrors().stream()
+                .map(item -> item.getDefaultMessage()).findFirst().orElse("Revise los datos de las asociaciones.");
+        return ResponseEntity.badRequest().body(new ErrorResponse("Datos invalidos", message));
+    }
+
+    @ExceptionHandler({DataIntegrityViolationException.class, OptimisticLockingFailureException.class})
+    public ResponseEntity<ErrorResponse> associationConflict(RuntimeException error) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse("No fue posible guardar",
+                "El area o sus referencias cambiaron. Recargue la configuracion e intente nuevamente."));
+    }
+
+    @GetMapping("/{areaId}/semiterminados-manufacturados")
+    public List<AreaOperativaAsociacionesDTO.Item> listarSemiterminadosManufacturados(
+            Authentication authentication, @PathVariable Integer areaId) {
+        requireAreaPermission(authentication, "CONSULTA_AREAS_OPERATIVAS");
+        return areaProduccionService.listarSemiterminadosManufacturados(areaId);
+    }
+
+    @PutMapping("/{areaId}/semiterminados-manufacturados")
+    public List<AreaOperativaAsociacionesDTO.Item> guardarSemiterminadosManufacturados(
+            Authentication authentication, @PathVariable Integer areaId,
+            @Valid @RequestBody AreaOperativaAsociacionesDTO.SemiterminadosRequest request) {
+        requireAreaPermission(authentication, "CONSULTA_AREAS_OPERATIVAS");
+        return areaProduccionService.guardarSemiterminadosManufacturados(areaId, request);
+    }
+
+    @GetMapping("/{areaId}/semiterminados-manufacturados/catalogo")
+    public Page<AreaOperativaAsociacionesDTO.Item> buscarSemiterminadosParaArea(
+            Authentication authentication, @PathVariable Integer areaId,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "0") int page) {
+        requireAreaPermission(authentication, "CONSULTA_AREAS_OPERATIVAS");
+        return areaProduccionService.buscarSemiterminadosParaArea(areaId, search, page);
+    }
+
+    @GetMapping("/{areaId}/recursos-produccion")
+    public List<AreaOperativaAsociacionesDTO.Item> listarRecursosProduccion(
+            Authentication authentication, @PathVariable Integer areaId) {
+        requireAreaPermission(authentication, "CONSULTA_AREAS_OPERATIVAS");
+        return areaProduccionService.listarRecursosProduccion(areaId);
+    }
+
+    @PutMapping("/{areaId}/recursos-produccion")
+    public List<AreaOperativaAsociacionesDTO.Item> guardarRecursosProduccion(
+            Authentication authentication, @PathVariable Integer areaId,
+            @Valid @RequestBody AreaOperativaAsociacionesDTO.RecursosRequest request) {
+        requireAreaPermission(authentication, "CONSULTA_AREAS_OPERATIVAS");
+        return areaProduccionService.guardarRecursosProduccion(areaId, request);
+    }
+
+    @GetMapping("/{areaId}/recursos-produccion/catalogo")
+    public Page<AreaOperativaAsociacionesDTO.Item> buscarRecursosParaArea(
+            Authentication authentication, @PathVariable Integer areaId,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "0") int page) {
+        requireAreaPermission(authentication, "CONSULTA_AREAS_OPERATIVAS");
+        return areaProduccionService.buscarRecursosParaArea(areaId, search, page);
+    }
 
     @PostMapping("/crear")
     public ResponseEntity<?> createAreaProduccion(Authentication authentication, @Valid @RequestBody AreaProduccionDTO areaProduccionDTO) {
@@ -102,6 +172,10 @@ public class AreaProduccionResource {
     private void requireAreaConfigurationPermission(Authentication auth, AreaProduccionDTO dto, String tab) {
         if (dto.getVisibilidadMps() == null && dto.getAlcanceMps() == null
                 && dto.getAlcanceEjecucion() == null) return;
+        requireAreaPermission(auth, tab);
+    }
+
+    private void requireAreaPermission(Authentication auth, String tab) {
         if (auth == null || !auth.isAuthenticated()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }

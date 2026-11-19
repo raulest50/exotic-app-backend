@@ -2,6 +2,8 @@ package exotic.app.planta.model.organizacion;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import exotic.app.planta.model.producto.Categoria;
+import exotic.app.planta.model.producto.SemiTerminado;
+import exotic.app.planta.model.producto.manufacturing.procesos.RecursoProduccion;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
@@ -9,6 +11,7 @@ import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.OptimisticLock;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -82,4 +85,22 @@ public class AreaOperativa {
             inverseJoinColumns = @JoinColumn(name = "categoria_id")
     )
     private Set<Categoria> categoriasHabilitadas = new LinkedHashSet<>();
+
+    /** Productos de salida que esta area manufactura, independiente de sus insumos y rutas. */
+    @JsonIgnore
+    @OptimisticLock(excluded = true)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "area_operativa_semiterminado_manufacturado",
+            joinColumns = @JoinColumn(name = "area_operativa_id"),
+            inverseJoinColumns = @JoinColumn(name = "producto_id"))
+    private Set<SemiTerminado> semiterminadosManufacturados = new LinkedHashSet<>();
+
+    /** Tipos de recursos utilizables; no asigna equipos fisicos ni reserva capacidad. */
+    @JsonIgnore
+    @OptimisticLock(excluded = true)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "area_operativa_recurso_produccion",
+            joinColumns = @JoinColumn(name = "area_operativa_id"),
+            inverseJoinColumns = @JoinColumn(name = "recurso_produccion_id"))
+    private Set<RecursoProduccion> recursosProduccion = new LinkedHashSet<>();
 }

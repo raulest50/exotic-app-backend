@@ -48,6 +48,22 @@ public class MasterDirectiveService {
         );
     }
 
+    public int getPuntoReordenSeguimientoPorcentaje() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.REORDEN_SEGUIMIENTO_PORCENTAJE,
+                MasterDirectiveKeys.DEFAULT_REORDEN_SEGUIMIENTO_PORCENTAJE,
+                MasterDirectiveKeys.MIN_REORDEN_SEGUIMIENTO_PORCENTAJE,
+                MasterDirectiveKeys.MAX_REORDEN_SEGUIMIENTO_PORCENTAJE);
+    }
+
+    public int getPuntoReordenSeguimientoMinimoLeadTimeDias() {
+        return getIntegerDirectiveValueInRange(
+                MasterDirectiveKeys.REORDEN_SEGUIMIENTO_MINIMO_LEAD_TIME_DIAS,
+                MasterDirectiveKeys.DEFAULT_REORDEN_SEGUIMIENTO_MINIMO_LEAD_TIME_DIAS,
+                MasterDirectiveKeys.MIN_REORDEN_SEGUIMIENTO_LEAD_TIME_DIAS,
+                MasterDirectiveKeys.MAX_REORDEN_SEGUIMIENTO_LEAD_TIME_DIAS);
+    }
+
     public boolean isDispensacionNoBloqueaInicioProduccion() {
         return getBooleanDirectiveValue(
                 MasterDirectiveKeys.DISPENSACION_NO_BLOQUEA_INICIO_PRODUCCION,
@@ -268,6 +284,18 @@ public class MasterDirectiveService {
     }
 
     private void validateValorByTipo(MasterDirective directive, String valor) {
+        if (MasterDirectiveKeys.REORDEN_SEGUIMIENTO_PORCENTAJE.equals(directive.getNombre())) {
+            parseIntegerInRange(valor, directive.getNombre(),
+                    MasterDirectiveKeys.MIN_REORDEN_SEGUIMIENTO_PORCENTAJE,
+                    MasterDirectiveKeys.MAX_REORDEN_SEGUIMIENTO_PORCENTAJE);
+            return;
+        }
+        if (MasterDirectiveKeys.REORDEN_SEGUIMIENTO_MINIMO_LEAD_TIME_DIAS.equals(directive.getNombre())) {
+            parseIntegerInRange(valor, directive.getNombre(),
+                    MasterDirectiveKeys.MIN_REORDEN_SEGUIMIENTO_LEAD_TIME_DIAS,
+                    MasterDirectiveKeys.MAX_REORDEN_SEGUIMIENTO_LEAD_TIME_DIAS);
+            return;
+        }
         if (MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS.equals(directive.getNombre())) {
             parseIntegerInRange(valor, directive.getNombre(),
                     MasterDirectiveKeys.MIN_NEW_FEATURES_NOTIFICATION_DAYS,
