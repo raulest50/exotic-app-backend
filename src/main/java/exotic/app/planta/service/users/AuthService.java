@@ -45,8 +45,8 @@ public class AuthService {
     private String frontendBaseUrl;
 
     private static final String LOCAL_FRONTEND_URL = "http://localhost:5173";
-    private static final String STAGING_FRONTEND_URL = "https://exotic-app-frontend-staging.onrender.com";
-    private static final String PRODUCTION_FRONTEND_URL = "https://lac-manufacture-frontend.onrender.com";
+    private static final String STAGING_FRONTEND_URL = "https://mrp.staging.exotic.com.co";
+    private static final String PRODUCTION_FRONTEND_URL = "https://mrp.prod.exotic.com.co";
 
     /**
      * Authenticates a user and returns a JWT token
