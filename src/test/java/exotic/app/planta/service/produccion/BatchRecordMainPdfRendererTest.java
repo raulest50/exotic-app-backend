@@ -318,6 +318,35 @@ class BatchRecordMainPdfRendererTest {
         assertThat(text).contains("OBSERVACION_ORDEN_LEGADA", "OBSERVACION_ETAPA_LEGADA");
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void ofShowsEquipmentCodeManufacturingDateAndProvisionalStatusWithoutSystemEvents(
+            boolean provisional) throws Exception {
+        ObjectNode root = chronologyRecord("ORDEN_FABRICACION");
+        root.put("esquemaVersion", "batch-record-v9");
+        ObjectNode order = (ObjectNode) root.path("orden");
+        order.put("fechaLoteOrigen", "INICIO").put("loteProvisional", provisional);
+        order.put("fechaFinal", "2026-11-19T09:00:00");
+        order.putObject("equipoFabricacion").put("id", "MARMITA-PRUEBA-77").put("codigoLote", "07");
+        ((ObjectNode) root.path("lote")).put("fechaProduccion", "2026-11-18");
+        addChronologyEvent(root, "EVENTO_AREA_OPERATIVA_OF", 1,
+                "EVENTO_SISTEMA", "AUTOMATICO_EQUIPO_OCULTO", "COMPLETADO");
+        addChronologyEvent(root, "EVENTO_AREA_OPERATIVA_OF", 2,
+                "OBSERVACION_AREA", "REPORTE_EQUIPO_HUMANO", "COMPLETADO");
+        JsonNode original = root.deepCopy();
+
+        String text = renderText(root);
+
+        assertThat(text).contains("Equipo de fabricación", "MARMITA-PRUEBA-77")
+                .contains("Código de equipo en lote 07")
+                .contains("Fecha de fabricación 18/11/2026")
+                .contains("REPORTE_EQUIPO_HUMANO")
+                .doesNotContain("AUTOMATICO_EQUIPO_OCULTO");
+        if (provisional) assertThat(text).contains("Lote provisional LOTE-77");
+        else assertThat(text).doesNotContain("Lote provisional");
+        assertThat(root).isEqualTo(original);
+    }
+
     private ObjectNode chronologyRecord(String orderType) throws Exception {
         ObjectNode root = (ObjectNode) objectMapper.readTree("""
                 {

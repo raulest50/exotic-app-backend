@@ -69,6 +69,7 @@ public class OrdenFabricacionService {
     private final OrdenFabricacionOperacionEventoRepo operacionEventoRepo;
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final LoteManufacturaNumeroService loteNumeroService;
+    private final LoteFabricacionEquipoService loteFabricacionEquipoService;
     private final Clock applicationClock;
     private final OrdenFabricacionOperacionRepo operacionRepo;
     private final EntityManager entityManager;
@@ -131,9 +132,8 @@ public class OrdenFabricacionService {
         if (request == null || actor == null) {
             throw new IllegalArgumentException("La solicitud y el usuario autenticado son obligatorios.");
         }
-        String loteNumero = normalizarObligatorio(request.getLote(),
-                "El número de lote es obligatorio.");
-        if (loteRepo.findByBatchNumber(loteNumero) != null) {
+        String loteNumero = normalizar(request.getLote());
+        if (loteNumero != null && loteRepo.findByBatchNumber(loteNumero) != null) {
             throw new IllegalArgumentException("El lote '" + loteNumero + "' ya existe.");
         }
 
@@ -193,9 +193,8 @@ public class OrdenFabricacionService {
                 .orElseThrow(() -> new IllegalStateException(
                         "El semiterminado " + semi.getProductoId()
                                 + " no tiene una version de manufactura disponible."));
-        String loteNumero = loteNumeroService.siguiente(semi.getProductoId());
         OrdenFabricacionDTOs.Response response = crearInterna(
-                semi, version, detalle.getCantidad(), loteNumero,
+                semi, version, detalle.getCantidad(), null,
                 detalle.getFechaInicio(), detalle.getFechaFinal(), actor, actor,
                 detalle.getObservaciones(), null, false, detalle);
         OrdenFabricacion orden = requireEntity(response.getOrdenFabricacionId());
@@ -256,6 +255,13 @@ public class OrdenFabricacionService {
         orden.setCreadaPor(actor);
         orden.setResponsable(responsable);
         orden.setObservaciones(observaciones);
+        if (loteNumero == null) {
+            LoteManufacturaNumeroService.Reserva reserva = loteNumeroService.reservar(semi.getProductoId());
+            orden.setPrefijoLoteReservado(reserva.prefijo());
+            orden.setConsecutivoLoteReservado(reserva.consecutivo());
+            loteNumero = reserva.codigoProvisional();
+        }
+        orden.setFechaLoteOrigen(loteFabricacionEquipoService.politicaFechaActual());
         boolean noBloqueante = masterDirectiveService.isDispensacionNoBloqueaInicioProduccion();
         orden.setPoliticaDispensacionInicio(noBloqueante
                 ? PoliticaDispensacionInicio.NO_BLOQUEANTE
@@ -459,6 +465,10 @@ public class OrdenFabricacionService {
                 .unidadMedida(orden.getUnidadMedida())
                 .loteId(lote.getId())
                 .lote(lote.getBatchNumber())
+                .loteProvisional(orden.getConsecutivoLoteReservado() != null && orden.getFechaFinal() == null)
+                .activoLoteId(orden.getActivoLote() == null ? null : orden.getActivoLote().getId())
+                .codigoEquipoLote(orden.getCodigoEquipoLote())
+                .fechaLoteOrigen(orden.getFechaLoteOrigen())
                 .estadoCalidadLote(lote.getEstadoCalidad())
                 .batchRecordId(record == null ? null : record.getId())
                 .batchRecordCodigo(record == null ? null : record.getCodigo())

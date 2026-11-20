@@ -121,6 +121,11 @@ public class ControlExecutionService {
             EjecucionWriteRequest request,
             ControlProcesoEjecucion legacyExecution) {
         ControlRequerido requerido = bloquearRequisitoConExpediente(request.controlRequeridoId());
+        var etapa = requerido.getBatchRecordEtapa();
+        if (etapa != null && etapa.getSeguimientoOrdenArea() != null
+                && !etapa.getSeguimientoOrdenArea().isEjecucionOpAplicable()) {
+            throw new IllegalArgumentException("La etapa de OP tiene free pass y no admite ejecuciones de control.");
+        }
         if (requerido.getAmbitoSnapshot() != ambito) {
             throw new NoSuchElementException("El control requerido no pertenece a este ambito.");
         }

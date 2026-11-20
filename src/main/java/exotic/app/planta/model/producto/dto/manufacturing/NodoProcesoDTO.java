@@ -8,6 +8,8 @@ import lombok.Setter;
 @Setter
 @EqualsAndHashCode(callSuper = true)
 public class NodoProcesoDTO extends ProcesoFabricacionNodoDTO {
+    /** Tipos previstos para esta operacion, no equipos fisicos ni reservas de capacidad. */
+    private java.util.List<Long> recursosProduccionIds;
     private Integer procesoId;
     private String procesoNombre;
     private Integer areaOperativaId;

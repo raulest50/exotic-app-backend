@@ -98,7 +98,8 @@ class OrdenFabricacionRetroactividadTest {
                 ordenRepo, mock(SemiTerminadoRepo.class), mock(ManufacturingVersionRepo.class),
                 loteRepo, mock(UserRepository.class), mock(BatchRecordRepo.class),
                 mock(VencimientoLoteService.class), proyeccion, directivas, operacionService,
-                eventoRepo, transaccionRepo, mock(LoteManufacturaNumeroService.class), CLOCK,
+                eventoRepo, transaccionRepo, mock(LoteManufacturaNumeroService.class),
+                mock(LoteFabricacionEquipoService.class), CLOCK,
                 operacionRepo, entityManager);
     }
 

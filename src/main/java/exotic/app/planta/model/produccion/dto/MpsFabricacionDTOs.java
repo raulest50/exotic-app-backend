@@ -56,6 +56,7 @@ public final class MpsFabricacionDTOs {
         private Long ordenFabricacionId;
         private String lote;
         private String estadoOrdenFabricacion;
+        private boolean loteProvisional;
         private boolean editable;
         private boolean cancelable;
         private String motivoBloqueo;
@@ -88,6 +89,7 @@ public final class MpsFabricacionDTOs {
         private String unidadMedida;
         private String lote;
         private String estado;
+        private boolean loteProvisional;
         private LocalDateTime fechaInicioSemana;
         private boolean usaFechaCreacion;
         private LocalDateTime fechaFinalPlanificada;

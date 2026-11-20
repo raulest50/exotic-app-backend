@@ -33,6 +33,16 @@ public class ActivoFijoResource {
 
     private final ActivoFijoService activoFijoService;
 
+    public record CodigoLoteRequest(@jakarta.validation.constraints.Size(max = 255) String codigoLoteFabricacion) {}
+    public record CodigoLoteResponse(String id, String codigoLoteFabricacion) {}
+
+    @PutMapping("/{id}/codigo-lote-fabricacion")
+    public CodigoLoteResponse actualizarCodigoLoteFabricacion(
+            @PathVariable String id, @jakarta.validation.Valid @RequestBody CodigoLoteRequest request) {
+        ActivoFijo activo = activoFijoService.actualizarCodigoLoteFabricacion(id, request.codigoLoteFabricacion());
+        return new CodigoLoteResponse(activo.getId(), activo.getCodigoLoteFabricacion());
+    }
+
     /**
      * Obtiene todos los activos fijos paginados.
      * 

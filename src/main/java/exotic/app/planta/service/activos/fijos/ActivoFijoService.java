@@ -120,6 +120,14 @@ public class ActivoFijoService {
         activoFijoRepo.deleteById(id);
     }
 
+    @Transactional
+    public ActivoFijo actualizarCodigoLoteFabricacion(String id, String codigo) {
+        ActivoFijo activo = activoFijoRepo.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Activo fijo no encontrado"));
+        activo.setCodigoLoteFabricacion(codigo);
+        return save(activo);
+    }
+
     /**
      * Busca activos fijos por ubicación.
      * 

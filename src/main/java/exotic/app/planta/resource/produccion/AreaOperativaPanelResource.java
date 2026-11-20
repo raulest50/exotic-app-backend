@@ -133,6 +133,12 @@ public class AreaOperativaPanelResource {
                 operacionId, getCurrentUser(authentication), request);
     }
 
+    @GetMapping("/ordenes-fabricacion/operaciones/{operacionId}/equipos-lote")
+    public exotic.app.planta.service.produccion.LoteFabricacionEquipoService.Contexto equiposLote(
+            Authentication authentication, @PathVariable Long operacionId) {
+        return ordenFabricacionOperacionService.equiposLote(operacionId, getCurrentUser(authentication));
+    }
+
     @GetMapping("/ordenes-fabricacion/{ordenFabricacionId}/detalle-operativo")
     public OrdenFabricacionDTOs.Response getDetalleOperativoFabricacion(
             Authentication authentication,

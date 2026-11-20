@@ -222,7 +222,8 @@ class BatchRecordMainPdfRenderer {
         pair(identity, "Orden", orderDescription(order) + " " + text(order.path("id"), ""));
         pair(identity, "Producto", text(product.path("nombre"), "No registra"));
         pair(identity, "Código de producto", text(product.path("id"), "No registra"));
-        pair(identity, "Lote", text(lot.path("numero"), "No registra"));
+        pair(identity, order.path("loteProvisional").asBoolean(false) ? "Lote provisional" : "Lote",
+                text(lot.path("numero"), "No registra"));
         pair(identity, "Estado de calidad", humanEnum(text(lot.path("estadoCalidad"), "No registra")));
         pair(identity, "Estado del expediente", humanEnum(text(root.path("estado"), "No registra")));
         pair(identity, "Revisión documental", text(root.path("revisionDocumental"), "No registra"));
@@ -281,6 +282,14 @@ class BatchRecordMainPdfRenderer {
         pair(table, "Cierre", formatDate(text(root.path("cerradoEn"), text(order.path("fechaFinal"), ""))));
         pair(table, "Envío a Calidad", formatDate(text(root.path("enviadoRevisionEn"), "")));
         pair(table, "Vencimiento del lote", formatDate(text(lot.path("fechaVencimiento"), "")));
+        if ("ORDEN_FABRICACION".equals(order.path("tipo").asText())) {
+            pair(table, "Fecha de fabricación", formatDate(text(lot.path("fechaProduccion"), "")));
+            if (order.hasNonNull("equipoFabricacion")) {
+                pair(table, "Equipo de fabricación", text(order.path("equipoFabricacion").path("id"), ""));
+                pair(table, "Código de equipo en lote", text(order.path("equipoFabricacion").path("codigoLote"), ""));
+            }
+        }
+        table.completeRow();
         document.add(table);
 
         PdfPTable metrics = new PdfPTable(4);

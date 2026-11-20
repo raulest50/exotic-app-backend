@@ -27,6 +27,7 @@ import exotic.app.planta.model.calidad.dto.CalidadControlProcesoDTOs.ProductoRes
 import exotic.app.planta.model.inventarios.Lote;
 import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.OrdenProduccion;
+import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
 import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
@@ -38,6 +39,7 @@ import exotic.app.planta.repo.calidad.ControlProcesoEjecucionSpecifications;
 import exotic.app.planta.repo.calidad.ControlProcesoPlantillaRepo;
 import exotic.app.planta.repo.inventarios.LoteRepo;
 import exotic.app.planta.repo.producto.procesos.AreaProduccionRepo;
+import exotic.app.planta.repo.produccion.SeguimientoOrdenAreaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordEtapaRepo;
 import exotic.app.planta.repo.produccion.batchrecord.BatchRecordRepo;
 import exotic.app.planta.service.master.configs.MasterDirectiveService;
@@ -75,6 +77,7 @@ public class CalidadControlProcesoService {
     private final BatchRecordRepo batchRecordRepo;
     private final BatchRecordEtapaRepo batchRecordEtapaRepo;
     private final MasterDirectiveService masterDirectiveService;
+    private final SeguimientoOrdenAreaRepo seguimientoOrdenAreaRepo;
 
     @Transactional(readOnly = true)
     public List<PlantillaResponse> listarPlantillas(Integer areaId, EstadoControlProcesoPlantilla estado) {
@@ -174,6 +177,7 @@ public class CalidadControlProcesoService {
         Lote lote = loteRepo.findById(loteId)
                 .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
         validarLoteManufactura(lote);
+        validarAplicabilidadControl(lote, areaId);
         BatchRecord record = batchRecordRepo.findByLoteResultado_Id(loteId).orElse(null);
         validarExpedienteAdmiteControl(record);
         BatchRecordEtapa etapa = resolverEtapaBatchRecord(
@@ -207,6 +211,7 @@ public class CalidadControlProcesoService {
         Lote lote = loteRepo.findById(request.getLoteId())
                 .orElseThrow(() -> new NoSuchElementException("Lote no encontrado."));
         validarLoteManufactura(lote);
+        validarAplicabilidadControl(lote, plantilla.getAreaOperativa().getAreaId());
         BatchRecord record = batchRecordRepo
                 .findByLoteResultadoIdForUpdate(lote.getId())
                 .orElse(null);
@@ -626,6 +631,7 @@ public class CalidadControlProcesoService {
                 .findByBatchRecord_IdOrderBySecuenciaAscIdAsc(record.getId())
                 .stream()
                 .filter(etapa -> etapa.getAreaOperativa().getAreaId() == areaId)
+                .filter(this::esEtapaAplicable)
                 .filter(etapa -> etapa.getControlProcesoPlantilla() != null)
                 .toList();
         if (etapasArea.isEmpty()) {
@@ -640,7 +646,9 @@ public class CalidadControlProcesoService {
                         etapa.getControlProcesoPlantilla().getId(), plantilla.getId()))
                 .toList();
         if (candidatas.size() == 1) {
-            return candidatas.get(0);
+            BatchRecordEtapa etapa = candidatas.get(0);
+            validarEtapaControl(etapa, areaId, plantilla);
+            return etapa;
         }
         if (validarPlantillaCongelada && candidatas.isEmpty()) {
             throw new IllegalArgumentException(
@@ -668,6 +676,10 @@ public class CalidadControlProcesoService {
             Integer areaId,
             ControlProcesoPlantilla plantilla
     ) {
+        if (!esEtapaAplicable(etapa)) {
+            throw new IllegalArgumentException(
+                    "La etapa de OP tiene free pass y no admite controles de proceso.");
+        }
         if (etapa.getAreaOperativa().getAreaId() != areaId) {
             throw new IllegalArgumentException("La etapa no corresponde al área seleccionada.");
         }
@@ -678,6 +690,27 @@ public class CalidadControlProcesoService {
                 etapa.getControlProcesoPlantilla().getId(), plantilla.getId())) {
             throw new IllegalArgumentException(
                     "Debe diligenciar la versión de plantilla congelada en el expediente.");
+        }
+    }
+
+    private boolean esEtapaAplicable(BatchRecordEtapa etapa) {
+        return etapa.getSeguimientoOrdenArea() == null
+                || etapa.getSeguimientoOrdenArea().isEjecucionOpAplicable();
+    }
+
+    /** El snapshot de la OP gobierna incluso antes de materializarse su expediente. */
+    void validarAplicabilidadControl(Lote lote, Integer areaId) {
+        if (lote == null || lote.getOrdenProduccion() == null || areaId == null) return;
+        List<SeguimientoOrdenArea> seguimientos = seguimientoOrdenAreaRepo
+                .findByOrdenProduccion_OrdenIdOrderByPosicionSecuenciaAsc(
+                        lote.getOrdenProduccion().getOrdenId()).stream()
+                .filter(seguimiento -> seguimiento.getAreaOperativa() != null
+                        && seguimiento.getAreaOperativa().getAreaId() == areaId)
+                .toList();
+        if (!seguimientos.isEmpty()
+                && seguimientos.stream().noneMatch(SeguimientoOrdenArea::isEjecucionOpAplicable)) {
+            throw new IllegalArgumentException(
+                    "El área tiene free pass en esta OP y no admite controles de proceso.");
         }
     }
 

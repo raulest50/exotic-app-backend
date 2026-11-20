@@ -65,6 +65,11 @@ public class MasterDirectiveResource {
         String persistedName = masterDirectiveService.getById(persistedId)
                 .map(MasterDirective::getNombre).orElse(null);
         boolean isNotificationDurationUpdate = MasterDirectiveKeys.NEW_FEATURES_NOTIFICATION_DAYS.equals(persistedName);
+        if (MasterDirectiveKeys.OF_LOTE_FECHA_FABRICACION.equals(persistedName)
+                && !canManageRestrictedDirectives(authentication)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "No tiene permiso para administrar la fecha del lote OF."));
+        }
         if (isNotificationDurationUpdate && !canManageRestrictedDirectives(authentication)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                     "message", "No tiene permiso para administrar la duración de las novedades."));

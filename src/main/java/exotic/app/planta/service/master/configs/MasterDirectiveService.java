@@ -284,6 +284,11 @@ public class MasterDirectiveService {
     }
 
     private void validateValorByTipo(MasterDirective directive, String valor) {
+        if (MasterDirectiveKeys.OF_LOTE_FECHA_FABRICACION.equals(directive.getNombre())) {
+            if (!"INICIO".equals(valor) && !"TERMINACION".equals(valor))
+                throw new IllegalArgumentException("La fecha del lote OF debe ser INICIO o TERMINACION.");
+            return;
+        }
         if (MasterDirectiveKeys.REORDEN_SEGUIMIENTO_PORCENTAJE.equals(directive.getNombre())) {
             parseIntegerInRange(valor, directive.getNombre(),
                     MasterDirectiveKeys.MIN_REORDEN_SEGUIMIENTO_PORCENTAJE,

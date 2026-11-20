@@ -132,6 +132,13 @@ public class LegacyControlCompatibilityService {
     private ControlRequerido resolveRequired(
             VersionPlanControl version, ControlProcesoEjecucion legacyExecution) {
         BatchRecordEtapa stage = legacyExecution.getBatchRecordEtapa();
+        legacyService.validarAplicabilidadControl(legacyExecution.getLote(),
+                legacyExecution.getPlantilla().getAreaOperativa().getAreaId());
+        if (stage != null && stage.getSeguimientoOrdenArea() != null
+                && !stage.getSeguimientoOrdenArea().isEjecucionOpAplicable()) {
+            throw new IllegalArgumentException(
+                    "La etapa de OP tiene free pass y no admite requisitos de control.");
+        }
         if (stage != null) {
             return requiredRepo.findByBatchRecordEtapa_IdAndVersionPlan_Id(stage.getId(), version.getId())
                     .orElseGet(() -> requiredRepo.saveAndFlush(

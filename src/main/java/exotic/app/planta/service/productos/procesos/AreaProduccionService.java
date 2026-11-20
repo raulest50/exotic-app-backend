@@ -422,10 +422,15 @@ public class AreaProduccionService {
         if (dto.getVisibilidadMps() != null) area.setVisibilidadMps(dto.getVisibilidadMps());
         if (dto.getAlcanceMps() != null) area.setAlcanceMps(dto.getAlcanceMps());
         if (dto.getAlcanceEjecucion() != null) area.setAlcanceEjecucion(dto.getAlcanceEjecucion());
+        if (dto.getRequiereEquipoLoteOf() != null) area.setRequiereEquipoLoteOf(dto.getRequiereEquipoLoteOf());
         validarAlcanceEjecucion(area);
     }
 
     private void validarAlcanceEjecucion(AreaOperativa area) {
+        if (area.isRequiereEquipoLoteOf() && (area.getAreaId() == -1
+                || area.getAlcanceEjecucion() == AreaOperativa.AlcanceEjecucion.SOLO_OP)) {
+            throw new IllegalArgumentException("El equipo de lote solo se exige en areas que ejecutan OF.");
+        }
         if (area.getAlcanceEjecucion() == null) {
             throw new IllegalArgumentException("El alcance de ejecucion del area es obligatorio.");
         }
@@ -468,6 +473,7 @@ public class AreaProduccionService {
                 .visibilidadMps(area.getVisibilidadMps())
                 .alcanceMps(area.getAlcanceMps())
                 .alcanceEjecucion(area.getAlcanceEjecucion())
+                .requiereEquipoLoteOf(area.isRequiereEquipoLoteOf())
                 .responsableArea(responsableDto)
                 .categoriasHabilitadas(categoriasDto)
                 .build();

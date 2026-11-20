@@ -21,6 +21,9 @@ import java.util.Optional;
 
 public interface OrdenFabricacionRepo extends JpaRepository<OrdenFabricacion, Long> {
 
+    @Query("select max(o.consecutivoLoteReservado) from OrdenFabricacion o where o.semiTerminado.productoId = :productoId")
+    Long maxConsecutivoLote(@Param("productoId") String productoId);
+
     @EntityGraph(attributePaths = {"semiTerminado"})
     @Query("""
             select o from OrdenFabricacion o

@@ -15,6 +15,10 @@ import lombok.Setter;
 @Setter
 public class NodoProceso extends ProcesoFabricacionNodo {
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @jakarta.persistence.Column(name = "recursos_produccion_ids", columnDefinition = "jsonb")
+    private java.util.List<Long> recursosProduccionIds;
+
     @ManyToOne(optional = false)
     @JoinColumn(name = "proceso_id", nullable = false)
     private ProcesoProduccion procesoProduccion;

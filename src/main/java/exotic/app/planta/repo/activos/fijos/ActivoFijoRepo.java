@@ -14,6 +14,19 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ActivoFijoRepo extends JpaRepository<ActivoFijo, String>, JpaSpecificationExecutor<ActivoFijo> {
 
+    @Query("select a from ActivoFijo a join fetch a.tipoRecurso r where a.estado = 0 and a.tipoActivo = :tipo and r.id in :recursos order by a.nombre, a.id")
+    java.util.List<ActivoFijo> equiposDeRecursos(
+            @org.springframework.data.repository.query.Param("tipo") ActivoFijo.TipoActivo tipo,
+            @org.springframework.data.repository.query.Param("recursos") java.util.Collection<Long> recursos);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_READ)
+    @Query("select a from ActivoFijo a where a.id = :id")
+    java.util.Optional<ActivoFijo> findByIdForLote(@org.springframework.data.repository.query.Param("id") String id);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from ActivoFijo a where a.id = :id")
+    java.util.Optional<ActivoFijo> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") String id);
+
     /**
      * Busca activos fijos por ubicación.
      * 

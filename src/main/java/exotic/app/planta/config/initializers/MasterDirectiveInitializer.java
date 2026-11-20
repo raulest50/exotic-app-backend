@@ -44,6 +44,7 @@ public class MasterDirectiveInitializer {
     private final MasterDirectiveRepo masterDirectiveRepo;
 
     public void initializeMasterDirectives() {
+        ensureFechaLoteOf();
         ensureNewFeaturesNotificationDays();
         ensureReordenSeguimientoDirectives();
         ensureLimiteRecepcionesParcialesOcm();
@@ -61,6 +62,21 @@ public class MasterDirectiveInitializer {
         ensureAreaOperativaPanelHistoricoToggleEnabled();
         ensureAreaOperativaAdminCorrectionEnabled();
         ensureBatchRecordWorkflowEnabled();
+    }
+
+    private void ensureFechaLoteOf() {
+        MasterDirective directive = masterDirectiveRepo.findByNombre(MasterDirectiveKeys.OF_LOTE_FECHA_FABRICACION)
+                .orElseGet(() -> {
+                    MasterDirective nueva = new MasterDirective();
+                    nueva.setNombre(MasterDirectiveKeys.OF_LOTE_FECHA_FABRICACION);
+                    nueva.setValor("TERMINACION");
+                    return nueva;
+                });
+        directive.setTipoDato(MasterDirective.TipoDato.TEXTO);
+        directive.setGrupo(MasterDirective.GRUPO.FLEXIBILIDAD_CONTROL);
+        directive.setResumen("Fecha de fabricacion utilizada en el lote OF");
+        directive.setAyuda("INICIO o TERMINACION real. Se conserva al emitir nuevas OF; no renumera lotes existentes ni modifica firmas.");
+        masterDirectiveRepo.save(directive);
     }
 
     private void ensureNewFeaturesNotificationDays() {

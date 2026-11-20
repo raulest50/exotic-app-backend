@@ -53,8 +53,8 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v8";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v10";
+    public static final String ESQUEMA_VERSION = "batch-record-v9";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v11";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
     private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
             EnumSet.of(
@@ -255,12 +255,12 @@ public class BatchRecordService {
             throw new IllegalStateException(
                     "El cierre documental requiere la cantidad obtenida registrada.");
         }
-        crearRevision(record, TipoRevisionBatchRecord.CIERRE, actor,
+        BatchRecordRevision revision = crearRevision(record, TipoRevisionBatchRecord.CIERRE, actor,
                 record.getOrdenFabricacion() == null
                         ? "Ingreso confirmado en almacén y cierre documental"
                         : "Ingreso de lote intermedio confirmado y cierre documental");
         record.setEstado(EstadoBatchRecord.CERRADO);
-        record.setCerradoEn(LocalDateTime.now(applicationClock));
+        record.setCerradoEn(revision.getCreadaEn());
         batchRecordRepo.saveAndFlush(record);
     }
 
@@ -297,6 +297,8 @@ public class BatchRecordService {
                 .findByOrdenFabricacionOperacion_Id(evento.getOperacion().getId())
                 .orElse(null);
         if (etapa == null) return;
+
+        if (eventoFabricacionYaProyectado(etapa, evento)) return;
 
         BatchRecord record = etapa.getBatchRecord();
         EstadoSeguimientoOrdenArea destino = EstadoSeguimientoOrdenArea.fromCode(
@@ -507,6 +509,8 @@ public class BatchRecordService {
         if (etapa == null) {
             return;
         }
+
+        if (eventoSeguimientoYaProyectado(etapa, evento)) return;
 
         BatchRecord record = etapa.getBatchRecord();
         EstadoSeguimientoOrdenArea destino = EstadoSeguimientoOrdenArea.fromCode(
@@ -1116,7 +1120,9 @@ public class BatchRecordService {
         record.setRevisionDocumental(numero);
         batchRecordRepo.saveAndFlush(record);
 
-        String contenido = serializarCanonico(record, ahora);
+        // El cierre se proyecta en el documento sin persistir CERRADO antes de tener su hash.
+        String contenido = serializarCanonico(record, ahora,
+                tipo == TipoRevisionBatchRecord.CIERRE ? ahora : null);
         String hash = sha256(contenido);
 
         BatchRecordRevision revision = new BatchRecordRevision();
@@ -1183,8 +1189,10 @@ public class BatchRecordService {
             etapa.setIniciadaEn(seguimiento.getEstadoEnum() == EstadoSeguimientoOrdenArea.EN_PROCESO
                     ? seguimiento.getFechaEstadoActual()
                     : null);
-            etapa.setControlProcesoPlantilla(plantillaVigente(
-                    seguimiento.getAreaOperativa().getAreaId()));
+            if (seguimiento.isEjecucionOpAplicable()) {
+                etapa.setControlProcesoPlantilla(plantillaVigente(
+                        seguimiento.getAreaOperativa().getAreaId()));
+            }
             etapaRepo.save(etapa);
             record.getEtapas().add(etapa);
         }
@@ -1224,6 +1232,44 @@ public class BatchRecordService {
             operacion.setBatchRecordEtapa(etapa);
             ordenFabricacionOperacionRepo.save(operacion);
         }
+    }
+
+    /** No reproduce estados anteriores sobre un cierre firmado o una correccion ya materializada. */
+    private boolean eventoSeguimientoYaProyectado(
+            BatchRecordEtapa etapa, SeguimientoOrdenAreaEvento evento) {
+        SeguimientoOrdenAreaEvento cierre = etapa.getSeguimientoEventoOrigen();
+        if (cierre != null && eventoNoPosterior(evento.getFechaEvento(), evento.getId(),
+                cierre.getFechaEvento(), cierre.getId())) return true;
+        return correccionRepo.findByBatchRecord_IdOrderByCorregidaEnAscIdAsc(
+                        etapa.getBatchRecord().getId()).stream()
+                .filter(correccion -> correccion.getEtapa() != null
+                        && Objects.equals(correccion.getEtapa().getId(), etapa.getId()))
+                .map(BatchRecordCorreccion::getEventoCorreccion)
+                .filter(Objects::nonNull)
+                .anyMatch(correccion -> eventoNoPosterior(evento.getFechaEvento(), evento.getId(),
+                        correccion.getFechaEvento(), correccion.getId()));
+    }
+
+    private boolean eventoFabricacionYaProyectado(
+            BatchRecordEtapa etapa, OrdenFabricacionOperacionEvento evento) {
+        OrdenFabricacionOperacionEvento cierre = etapa.getOrdenFabricacionEventoOrigen();
+        if (cierre != null && eventoNoPosterior(evento.getFechaEvento(), evento.getId(),
+                cierre.getFechaEvento(), cierre.getId())) return true;
+        return correccionRepo.findByBatchRecord_IdOrderByCorregidaEnAscIdAsc(
+                        etapa.getBatchRecord().getId()).stream()
+                .filter(correccion -> correccion.getEtapa() != null
+                        && Objects.equals(correccion.getEtapa().getId(), etapa.getId()))
+                .map(BatchRecordCorreccion::getOrdenFabricacionEventoCorreccion)
+                .filter(Objects::nonNull)
+                .anyMatch(correccion -> eventoNoPosterior(evento.getFechaEvento(), evento.getId(),
+                        correccion.getFechaEvento(), correccion.getId()));
+    }
+
+    private boolean eventoNoPosterior(
+            LocalDateTime fecha, Long id, LocalDateTime fechaLimite, Long idLimite) {
+        if (fecha == null || id == null || fechaLimite == null || idLimite == null) return false;
+        int ordenFecha = fecha.compareTo(fechaLimite);
+        return ordenFecha < 0 || (ordenFecha == 0 && id <= idLimite);
     }
 
     private void aplicarEstadoEtapa(
@@ -1611,11 +1657,17 @@ public class BatchRecordService {
     }
 
     private String serializarCanonico(BatchRecord record, LocalDateTime registradoEn) {
+        return serializarCanonico(record, registradoEn, null);
+    }
+
+    private String serializarCanonico(BatchRecord record, LocalDateTime registradoEn,
+                                      LocalDateTime cierreDocumentalEn) {
         Map<String, Object> root = new TreeMap<>();
         root.put("esquemaVersion", ESQUEMA_VERSION);
         root.put("registradoEn", registradoEn);
         root.put("codigo", record.getCodigo());
-        root.put("estado", record.getEstado().name());
+        root.put("estado", cierreDocumentalEn == null
+                ? record.getEstado().name() : EstadoBatchRecord.CERRADO.name());
         root.put("revisionDocumental", record.getRevisionDocumental());
 
         EmpresaLogoDocumentalVersion logoDocumental = empresaLogoDocumentalService.getVigente();
@@ -1653,6 +1705,14 @@ public class BatchRecordService {
         } else {
             OrdenFabricacion ordenFabricacion = record.getOrdenFabricacion();
             orden.put("tipo", "ORDEN_FABRICACION");
+            orden.put("loteProvisional", ordenFabricacion.getConsecutivoLoteReservado() != null
+                    && ordenFabricacion.getFechaFinal() == null);
+            orden.put("fechaLoteOrigen", ordenFabricacion.getFechaLoteOrigen());
+            if (ordenFabricacion.getActivoLote() != null) {
+                orden.put("equipoFabricacion", Map.of(
+                        "id", ordenFabricacion.getActivoLote().getId(),
+                        "codigoLote", ordenFabricacion.getCodigoEquipoLote()));
+            }
             orden.put("id", ordenFabricacion.getOrdenFabricacionId());
             orden.put("estado", ordenFabricacion.getEstado());
             orden.put("estadoDispensacion", ordenFabricacion.getEstadoDispensacionMateriales());
@@ -1701,7 +1761,7 @@ public class BatchRecordService {
         root.put("iniciadoEn", record.getIniciadoEn());
         root.put("enviadoRevisionEn", record.getEnviadoRevisionEn());
         root.put("cicloRevisionActual", record.getCicloRevisionActual());
-        root.put("cerradoEn", record.getCerradoEn());
+        root.put("cerradoEn", cierreDocumentalEn == null ? record.getCerradoEn() : cierreDocumentalEn);
         root.put("observaciones", record.getObservaciones());
 
         List<BatchRecordEtapa> etapas =

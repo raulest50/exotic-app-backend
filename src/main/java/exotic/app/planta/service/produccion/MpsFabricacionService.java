@@ -222,6 +222,7 @@ public class MpsFabricacionService {
         if (orden != null) {
             dto.setOrdenFabricacionId(orden.getOrdenFabricacionId());
             dto.setEstadoOrdenFabricacion(orden.getEstado().name());
+            dto.setLoteProvisional(orden.getConsecutivoLoteReservado() != null && orden.getFechaFinal() == null);
             loteRepo.findByOrdenFabricacion_OrdenFabricacionId(orden.getOrdenFabricacionId()).stream()
                     .findFirst().ifPresent(l -> dto.setLote(l.getBatchNumber()));
         }
@@ -287,6 +288,7 @@ public class MpsFabricacionService {
         dto.setCantidadPlanificada(orden.getCantidadPlanificada());
         dto.setUnidadMedida(orden.getUnidadMedida());
         dto.setEstado(orden.getEstado().name());
+        dto.setLoteProvisional(orden.getConsecutivoLoteReservado() != null && orden.getFechaFinal() == null);
         dto.setUsaFechaCreacion(orden.getFechaLanzamiento() == null);
         dto.setFechaInicioSemana(orden.getFechaLanzamiento() == null ? orden.getFechaCreacion() : orden.getFechaLanzamiento());
         dto.setFechaFinalPlanificada(orden.getFechaFinalPlanificada());

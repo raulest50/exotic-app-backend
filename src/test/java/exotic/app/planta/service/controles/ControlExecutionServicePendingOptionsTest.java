@@ -1,8 +1,16 @@
 package exotic.app.planta.service.controles;
 
 import exotic.app.planta.model.controles.AmbitoControl;
+import exotic.app.planta.model.controles.ControlRequerido;
+import exotic.app.planta.model.controles.EstadoControlRequerido;
 import exotic.app.planta.model.controles.MomentoControl;
 import exotic.app.planta.model.controles.TipoOrdenControl;
+import exotic.app.planta.model.controles.dto.ControlDTOs.EjecucionWriteRequest;
+import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecord;
+import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
+import exotic.app.planta.model.produccion.batchrecord.EstadoBatchRecord;
+import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.controles.ControlRequeridoRepo;
 import exotic.app.planta.repo.controles.DesviacionControlRepo;
 import exotic.app.planta.repo.controles.EjecucionControlRepo;
@@ -18,13 +26,17 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -90,5 +102,36 @@ class ControlExecutionServicePendingOptionsTest {
                 eq(AmbitoControl.CALIDAD), anyCollection(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), eq(77L),
                 isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void noEjecutaUnRequisitoPreexistenteDeEtapaFreepassNiPersisteEvidencia() {
+        SeguimientoOrdenArea seguimiento = new SeguimientoOrdenArea();
+        seguimiento.setAplicaEjecucionOp(false);
+        BatchRecordEtapa etapa = new BatchRecordEtapa();
+        etapa.setSeguimientoOrdenArea(seguimiento);
+        BatchRecord record = new BatchRecord();
+        record.setId(5L);
+        record.setEstado(EstadoBatchRecord.EN_EJECUCION);
+        ControlRequerido requerido = new ControlRequerido();
+        requerido.setId(41L);
+        requerido.setAmbitoSnapshot(AmbitoControl.PROCESO);
+        requerido.setEstado(EstadoControlRequerido.PENDIENTE);
+        requerido.setBatchRecord(record);
+        requerido.setBatchRecordEtapa(etapa);
+        when(requeridoRepo.findById(41L)).thenReturn(Optional.of(requerido));
+        when(batchRecordRepo.findByIdForUpdate(5L)).thenReturn(Optional.of(record));
+        when(requeridoRepo.findByIdForUpdate(41L)).thenReturn(Optional.of(requerido));
+        User actor = new User();
+        actor.setId(7L);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> service.ejecutar(
+                AmbitoControl.PROCESO, actor, new EjecucionWriteRequest(41L, null, null, null, List.of())))
+                .withMessageContaining("free pass");
+
+        assertEquals(EstadoControlRequerido.PENDIENTE, requerido.getEstado());
+        assertEquals(EstadoBatchRecord.EN_EJECUCION, record.getEstado());
+        verify(requeridoRepo, never()).save(any());
+        verifyNoInteractions(ejecucionRepo, desviacionRepo, revalidacionRepo, legacyProjection);
     }
 }

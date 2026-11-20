@@ -73,6 +73,10 @@ public class AreaOperativa {
     @Column(name = "alcance_ejecucion", nullable = false, length = 20)
     private AlcanceEjecucion alcanceEjecucion = AlcanceEjecucion.AMBOS;
 
+    /** Exige equipo al reportar la salida OF; se congela en operaciones nuevas. */
+    @Column(name = "requiere_equipo_lote_of", nullable = false)
+    private boolean requiereEquipoLoteOf;
+
     @ManyToOne
     @JoinColumn(name = "responsable_id")
     private User responsableArea;

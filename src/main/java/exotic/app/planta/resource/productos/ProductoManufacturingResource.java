@@ -24,6 +24,13 @@ public class ProductoManufacturingResource {
 
     private final ProductoManufacturingService productoManufacturingService;
     private final UserRepository userRepository;
+    private final exotic.app.planta.service.productos.procesos.AreaProduccionService areaProduccionService;
+
+    @GetMapping("/designer/areas/{areaId}/recursos-produccion")
+    public Object recursosDesigner(@PathVariable Integer areaId, Authentication authentication) {
+        requireDesignerAccess(authentication);
+        return areaProduccionService.listarRecursosProduccion(areaId);
+    }
 
     private void requireDesignerAccess(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated())

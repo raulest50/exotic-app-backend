@@ -1413,6 +1413,7 @@ public class SeguimientoOrdenAreaService {
         SeguimientoOrdenAreaDTO dto = new SeguimientoOrdenAreaDTO();
         var orden = entity.getOrdenFabricacion();
         dto.setTipoOrden("OF");
+        dto.setLoteProvisional(orden.getConsecutivoLoteReservado() != null && orden.getFechaFinal() == null);
         dto.setId(entity.getId());
         dto.setOrdenFabricacionId(orden.getOrdenFabricacionId());
         dto.setOperacionFabricacionId(entity.getId());
@@ -1825,6 +1826,7 @@ public class SeguimientoOrdenAreaService {
 
     @Data
     public static class SeguimientoOrdenAreaDTO {
+        private boolean loteProvisional;
         private String tipoOrden;
         private Long id;
         private int ordenId;

@@ -43,7 +43,6 @@ public final class OrdenFabricacionDTOs {
         @Positive
         private BigDecimal cantidadPlanificada;
 
-        @NotBlank
         @Size(max = 80)
         private String lote;
 
@@ -71,6 +70,10 @@ public final class OrdenFabricacionDTOs {
         private Long loteId;
         private String lote;
         private EstadoCalidadLote estadoCalidadLote;
+        private boolean loteProvisional;
+        private String activoLoteId;
+        private String codigoEquipoLote;
+        private String fechaLoteOrigen;
         private Long batchRecordId;
         private String batchRecordCodigo;
         private LocalDateTime fechaCreacion;
@@ -126,6 +129,8 @@ public final class OrdenFabricacionDTOs {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class OperacionCompletarRequest {
+        @Size(max = 255)
+        private String activoFijoId;
         @Size(max = 500)
         private String observaciones;
         private BigDecimal cantidadObtenida;

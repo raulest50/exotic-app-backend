@@ -81,6 +81,20 @@ public class OrdenFabricacion {
     @Column(name = "fecha_final")
     private LocalDateTime fechaFinal;
 
+    /** Reserva durable: el codigo definitivo incorpora equipo y fecha al terminar. NULL conserva legados/manuales. */
+    @Column(name = "prefijo_lote_reservado", length = 20)
+    private String prefijoLoteReservado;
+    @Column(name = "consecutivo_lote_reservado")
+    private Long consecutivoLoteReservado;
+    @Column(name = "fecha_lote_origen", length = 20)
+    private String fechaLoteOrigen;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "activo_lote_id")
+    private exotic.app.planta.model.activos.fijos.ActivoFijo activoLote;
+    /** Copia del codigo realmente utilizado; cambios posteriores del activo no renumeran el lote. */
+    @Column(name = "codigo_equipo_lote")
+    private String codigoEquipoLote;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "politica_dispensacion_inicio", nullable = false, length = 30)
     private PoliticaDispensacionInicio politicaDispensacionInicio = PoliticaDispensacionInicio.BLOQUEANTE;

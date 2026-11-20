@@ -22,6 +22,9 @@ import java.util.List;
 @NoArgsConstructor
 public class OrdenFabricacionOperacion {
 
+    @Column(name = "requiere_equipo_lote_of", nullable = false)
+    private boolean requiereEquipoLoteOf;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

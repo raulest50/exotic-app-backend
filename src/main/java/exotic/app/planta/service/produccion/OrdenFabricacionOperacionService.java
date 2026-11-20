@@ -59,6 +59,7 @@ public class OrdenFabricacionOperacionService {
     private final ProcesoProduccionDocumentoVersionRepo poeRepo;
     private final ControlProcesoPlantillaRepo plantillaRepo;
     private final LoteRepo loteRepo;
+    private final LoteFabricacionEquipoService loteFabricacionEquipoService;
     private final TransaccionAlmacenHeaderRepo transaccionRepo;
     private final BatchRecordProjectionQueueService batchRecordProjectionQueueService;
     private final DespejeLineaService despejeLineaService;
@@ -78,6 +79,7 @@ public class OrdenFabricacionOperacionService {
         }
 
         Graph graph = parseGraph(orden.getManufacturingVersion().getProcesoProduccionJson());
+        Set<String> salidas = loteFabricacionEquipoService.operacionesSalida(orden);
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         boolean liberada = orden.getEstado() == EstadoOrdenFabricacion.LIBERADA
                 || orden.getEstado() == EstadoOrdenFabricacion.EN_EJECUCION;
@@ -113,6 +115,9 @@ public class OrdenFabricacionOperacionService {
             OrdenFabricacionOperacion operacion = new OrdenFabricacionOperacion();
             operacion.setOrdenFabricacion(orden);
             operacion.setAreaOperativa(area);
+            if (area.isRequiereEquipoLoteOf() && salidas.contains(frontendId) && salidas.size() != 1)
+                throw new IllegalStateException("El requisito de equipo OF necesita una unica operacion de salida en el disenador.");
+            operacion.setRequiereEquipoLoteOf(area.isRequiereEquipoLoteOf() && salidas.contains(frontendId));
             operacion.setFrontendNodeId(frontendId);
             operacion.setProcesoProduccionId(node.procesoId());
             operacion.setProcesoNombre(node.nombre());
@@ -237,6 +242,9 @@ public class OrdenFabricacionOperacionService {
                 .allMatch(candidate -> candidate.getEstadoEnum() == EstadoSeguimientoOrdenArea.COMPLETADO
                         || candidate.getEstadoEnum() == EstadoSeguimientoOrdenArea.OMITIDO);
         BigDecimal cantidadObtenida = validarCierreRequest(cierraOrden, orden, request);
+        if (!cierraOrden && request != null && request.getActivoFijoId() != null
+                && !request.getActivoFijoId().isBlank())
+            throw new IllegalArgumentException("El equipo del lote se reporta al completar la salida final de la OF.");
 
         despejeLineaService.registrarSalida(operacion, actor);
         if (operacion.getEstadoEnum() != EstadoSeguimientoOrdenArea.EN_PROCESO) {
@@ -253,8 +261,7 @@ public class OrdenFabricacionOperacionService {
             Lote lote = loteRepo.findByOrdenFabricacion_OrdenFabricacionId(
                             orden.getOrdenFabricacionId()).stream().findFirst()
                     .orElseThrow(() -> new IllegalStateException("La OF no tiene lote de resultado."));
-            LocalDate fechaProduccion = LocalDate.now(applicationClock);
-            lote.setProductionDate(fechaProduccion);
+            loteFabricacionEquipoService.completar(operacion, lote, request.getActivoFijoId(), ahora);
             lote.setExpirationDate(request.getFechaVencimiento());
             loteRepo.save(lote);
 
@@ -274,6 +281,14 @@ public class OrdenFabricacionOperacionService {
             }
         }
         return toResponse(operacion);
+    }
+
+    @Transactional(readOnly = true)
+    public LoteFabricacionEquipoService.Contexto equiposLote(Long operacionId, User actor) {
+        OrdenFabricacionOperacion operacion = operacionRepo.findById(operacionId)
+                .orElseThrow(() -> new NoSuchElementException("Operacion de OF no encontrada."));
+        validarResponsable(operacion, actor);
+        return loteFabricacionEquipoService.contexto(operacion);
     }
 
     public OrdenFabricacionDTOs.OperacionResponse corregir(

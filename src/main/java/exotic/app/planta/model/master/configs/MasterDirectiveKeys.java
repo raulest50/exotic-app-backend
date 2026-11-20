@@ -1,6 +1,7 @@
 package exotic.app.planta.model.master.configs;
 
 public final class MasterDirectiveKeys {
+    public static final String OF_LOTE_FECHA_FABRICACION = "OF_LOTE_FECHA_FABRICACION";
 
     public static final String CIERRE_AUTOMATICO_OCM = "CIERRE_AUTOMATICO_OCM";
 

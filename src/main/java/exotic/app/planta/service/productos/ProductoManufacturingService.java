@@ -456,6 +456,11 @@ public class ProductoManufacturingService {
         proceso.setCantidadSalidaReceta(procesoDto.getCantidadSalidaReceta());
 
         List<ProcesoFabricacionNodo> managedNodes = proceso.getNodes();
+        Map<String, List<Long>> recursosPrevios = new HashMap<>();
+        if (managedNodes != null) for (ProcesoFabricacionNodo previo : managedNodes) {
+            if (previo instanceof NodoProceso nodo && nodo.getRecursosProduccionIds() != null)
+                recursosPrevios.put(previo.getFrontendId(), new ArrayList<>(nodo.getRecursosProduccionIds()));
+        }
         if (managedNodes == null) {
             managedNodes = new ArrayList<>();
             proceso.setNodes(managedNodes);
@@ -475,6 +480,8 @@ public class ProductoManufacturingService {
 
         Map<String, ProcesoFabricacionNodo> nodeMap = new LinkedHashMap<>();
         for (ProcesoFabricacionNodoDTO nodeDto : procesoDto.getNodes()) {
+            if (nodeDto instanceof NodoProcesoDTO nodo && nodo.getRecursosProduccionIds() == null)
+                nodo.setRecursosProduccionIds(recursosPrevios.getOrDefault(nodo.getFrontendId(), List.of()));
             ProcesoFabricacionNodo node = buildNode(nodeDto, proceso, insumoByProductoId);
             managedNodes.add(node);
             nodeMap.put(node.getFrontendId(), node);
@@ -577,6 +584,22 @@ public class ProductoManufacturingService {
             NodoProceso nodoProceso = new NodoProceso();
             nodoProceso.setProcesoProduccion(procesoProduccion);
             nodoProceso.setAreaOperativa(areaOperativa);
+            List<Long> recursos = procesoDto.getRecursosProduccionIds() == null
+                    ? List.of() : procesoDto.getRecursosProduccionIds();
+            if (proceso.getProducto() instanceof Terminado && !recursos.isEmpty())
+                throw new IllegalArgumentException("La configuracion de recursos OF pertenece solo a semiterminados.");
+            if (recursos.stream().anyMatch(id -> id == null || id <= 0)
+                    || new HashSet<>(recursos).size() != recursos.size()) {
+                throw new IllegalArgumentException("Los recursos del nodo deben ser IDs positivos sin duplicados.");
+            }
+            if (proceso.getProducto() instanceof SemiTerminado semi && semi.isRequiereOrdenFabricacion()) {
+                Set<Long> permitidos = areaOperativa.getRecursosProduccion().stream()
+                        .map(recurso -> recurso.getId()).collect(Collectors.toSet());
+                if (!permitidos.containsAll(recursos)) {
+                    throw new IllegalArgumentException("Los recursos de la operacion deben estar permitidos en su area.");
+                }
+            }
+            nodoProceso.setRecursosProduccionIds(new ArrayList<>(recursos));
             node = nodoProceso;
         } else if (nodeDto instanceof NodoTargetDTO) {
             node = new NodoTarget();
@@ -810,6 +833,8 @@ public class ProductoManufacturingService {
             dto = nodoDto;
         } else if (node instanceof NodoProceso nodoProceso) {
             NodoProcesoDTO nodoDto = new NodoProcesoDTO();
+            nodoDto.setRecursosProduccionIds(nodoProceso.getRecursosProduccionIds() == null
+                    ? List.of() : new ArrayList<>(nodoProceso.getRecursosProduccionIds()));
             nodoDto.setProcesoId(nodoProceso.getProcesoProduccion() != null ? nodoProceso.getProcesoProduccion().getProcesoId() : null);
             nodoDto.setProcesoNombre(nodoProceso.getProcesoProduccion() != null ? nodoProceso.getProcesoProduccion().getNombre() : null);
             nodoDto.setAreaOperativaId(nodoProceso.getAreaOperativa() != null ? nodoProceso.getAreaOperativa().getAreaId() : null);
