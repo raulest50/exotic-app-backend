@@ -9,13 +9,18 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 @Entity
-@Table(name = "activo")
+@Table(name = "activo", uniqueConstraints = @UniqueConstraint(
+        name = "uk_activo_codigo_lote_fabricacion", columnNames = "codigo_lote_fabricacion"))
 @Setter
 @Getter
 @AllArgsConstructor
@@ -42,6 +47,23 @@ public class ActivoFijo {
     // llave primaria
     @Id
     private String id;
+
+    /** Identificador del equipo dentro del lote OF; opcional y distinto del ID del activo. */
+    @Column(name = "codigo_lote_fabricacion")
+    @Size(max = 255)
+    private String codigoLoteFabricacion;
+
+    @Transient
+    @JsonIgnore
+    private boolean codigoLoteFabricacionPresent;
+
+    @JsonSetter("codigoLoteFabricacion")
+    public void setCodigoLoteFabricacion(String codigoLoteFabricacion) {
+        String codigo = codigoLoteFabricacion == null ? null
+                : codigoLoteFabricacion.strip().toUpperCase(Locale.ROOT);
+        this.codigoLoteFabricacion = codigo == null || codigo.isBlank() ? null : codigo;
+        this.codigoLoteFabricacionPresent = true;
+    }
 
     @Column(nullable = false)
     private String nombre;

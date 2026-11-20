@@ -51,7 +51,7 @@ public final class MapaAccesos {
                 )
         );
         TABS_POR_MODULO.put(ModuloSistema.PAGOS_PROVEEDORES, Set.of("ASENTAR_TRANSACCIONES_ALMACEN", "FACTURAS_VENCIDAS"));
-        TABS_POR_MODULO.put(ModuloSistema.PERSONAL_PLANTA, Set.of("INCORPORACION", "CONSULTA", "PERMISOS", "CONTROL_VISITANTES"));
+        TABS_POR_MODULO.put(ModuloSistema.PERSONAL_PLANTA, Set.of("INCORPORACION", "CONSULTA", "PERMISOS", "APROBACIONES", "CONTROL_VISITANTES"));
         TABS_POR_MODULO.put(
                 ModuloSistema.PRODUCCION,
                 Set.of(

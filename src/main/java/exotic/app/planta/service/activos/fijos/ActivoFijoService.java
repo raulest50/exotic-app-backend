@@ -17,6 +17,10 @@ import exotic.app.planta.model.activos.fijos.dto.IncorporacionActivoDto;
 import exotic.app.planta.model.activos.fijos.dto.GrupoActivosDto;
 import exotic.app.planta.service.commons.FileStorageService;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,10 +82,32 @@ public class ActivoFijoService {
      */
     @Transactional
     public ActivoFijo save(ActivoFijo activoFijo) {
+        // Un cliente anterior que omite el campo no debe borrar el identificador configurado.
+        if (!activoFijo.isCodigoLoteFabricacionPresent() && activoFijo.getId() != null) {
+            activoFijoRepo.findById(activoFijo.getId()).ifPresent(existente ->
+                    activoFijo.setCodigoLoteFabricacion(existente.getCodigoLoteFabricacion()));
+        }
+        if (activoFijo.getCodigoLoteFabricacion() != null
+                && activoFijo.getCodigoLoteFabricacion().length() > 255) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El código de lote de fabricación del activo admite hasta 255 caracteres.");
+        }
         if (activoFijo.getFechaCodificacion() == null) {
             activoFijo.setFechaCodificacion(LocalDateTime.now(applicationClock));
         }
-        return activoFijoRepo.save(activoFijo);
+        try {
+            return activoFijoRepo.saveAndFlush(activoFijo);
+        } catch (DataIntegrityViolationException exception) {
+            for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+                if (cause instanceof ConstraintViolationException violation
+                        && "uk_activo_codigo_lote_fabricacion".equals(violation.getConstraintName())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Otro activo ya utiliza ese código de lote de fabricación.", exception);
+                }
+                if (cause == cause.getCause()) break;
+            }
+            throw exception;
+        }
     }
 
     /**
@@ -341,10 +367,7 @@ public class ActivoFijoService {
                 ItemOrdenCompraActivo item = grupo.getItemOrdenCompra();
                 if (grupo.getActivos() != null) {
                     for (ActivoFijo af : grupo.getActivos()) {
-                        if (af.getFechaCodificacion() == null) {
-                            af.setFechaCodificacion(LocalDateTime.now(applicationClock));
-                        }
-                        ActivoFijo saved = activoFijoRepo.save(af);
+                        ActivoFijo saved = save(af);
                         IncorporacionActivoLine line = new IncorporacionActivoLine();
                         line.setIncorporacionHeader(header);
                         line.setActivoFijo(saved);

@@ -22,7 +22,8 @@ public final class PermisoPersonalDTOs {
     public record Empleado(Long id, String nombre, String cargo, String proceso, Long usuarioId) { }
     public record Contexto(Long usuarioId, String usuarioNombre, int nivel, Empleado empleado, Usuario jefe,
                            boolean habilitado, List<String> impedimentos, boolean puedeRevisar,
-                           boolean puedeConsultarTodas, boolean puedeConfigurar) { }
+                           boolean puedeConsultarTodas, boolean puedeConfigurar,
+                           int nivelAprobaciones, boolean puedeSolicitar) { }
     public record ConfiguracionEmpleado(Empleado empleado, Usuario jefeConfigurado, Usuario jefeOrganigrama,
                                         Long version) { }
     public record Configuracion(List<ConfiguracionEmpleado> empleados, List<Usuario> usuarios) { }

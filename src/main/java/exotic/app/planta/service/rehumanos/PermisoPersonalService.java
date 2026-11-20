@@ -64,11 +64,14 @@ public class PermisoPersonalService {
 
     @Transactional(readOnly = true)
     public Contexto contexto(User actor) {
-        int nivel = requireNivel(actor, 1);
+        requireAcceso(actor);
+        int nivel = nivel(actor, "PERMISOS");
+        int nivelAprobaciones = nivel(actor, "APROBACIONES");
+        boolean puedeSolicitar = nivel >= 1;
         List<String> impedimentos = new ArrayList<>();
-        List<IntegrantePersonal> vinculados = empleados.findByUsuarioId(actor.getId());
+        List<IntegrantePersonal> vinculados = puedeSolicitar ? empleados.findByUsuarioId(actor.getId()) : List.of();
         IntegrantePersonal empleado = vinculados.size() == 1 ? vinculados.getFirst() : null;
-        if (vinculados.isEmpty()) impedimentos.add("Debe vincular su cuenta a un trabajador desde la configuración de permisos.");
+        if (puedeSolicitar && vinculados.isEmpty()) impedimentos.add("Debe vincular su cuenta a un trabajador desde la configuración de Aprobaciones.");
         if (vinculados.size() > 1) impedimentos.add("La cuenta está vinculada a más de un trabajador. Un administrador debe corregir el vínculo.");
         if (empleado != null && empleado.getEstado() != IntegrantePersonal.Estado.ACTIVO)
             impedimentos.add("El trabajador vinculado no está activo.");
@@ -76,12 +79,14 @@ public class PermisoPersonalService {
         if (empleado != null && !jefeValido(jefe, actor))
             impedimentos.add("Debe asignarse un jefe activo, distinto del solicitante y autorizado para decidir permisos.");
         return new Contexto(actor.getId(), nombre(actor), nivel, empleado == null ? null : empleadoDto(empleado),
-                usuarioDto(jefe), impedimentos.isEmpty(), List.copyOf(impedimentos), nivel >= 2, nivel >= 3, nivel >= 4);
+                usuarioDto(jefe), puedeSolicitar && impedimentos.isEmpty(), List.copyOf(impedimentos),
+                nivelAprobaciones >= 1, nivelAprobaciones >= 3, nivelAprobaciones >= 4,
+                nivelAprobaciones, puedeSolicitar);
     }
 
     @Transactional(readOnly = true)
     public Configuracion configuracion(User actor) {
-        requireNivel(actor, 4);
+        requireNivel(actor, "APROBACIONES", 4);
         List<ConfiguracionEmpleado> filas = empleados.findAll(Sort.by("apellidos", "nombres")).stream().map(e -> {
             ConfiguracionPermisoPersonal c = configuraciones.findById(e.getId()).orElse(null);
             return new ConfiguracionEmpleado(empleadoDto(e), c == null ? null : usuarioDto(c.getJefe()),
@@ -94,7 +99,7 @@ public class PermisoPersonalService {
 
     @Transactional
     public Configuracion configurar(Long empleadoId, ConfigurarRequest request, User actor) {
-        requireNivel(actor, 4);
+        requireNivel(actor, "APROBACIONES", 4);
         if (request == null) throw invalido("Debe indicar la configuración.");
         String motivo = texto(request.motivo(), 1500, true, "el motivo del cambio");
         IntegrantePersonal empleado = empleados.findByIdForUpdate(empleadoId)
@@ -115,7 +120,7 @@ public class PermisoPersonalService {
         }
         User jefe = request.jefeUsuarioId() == null ? null : usuarios.findById(request.jefeUsuarioId())
                 .orElseThrow(() -> invalido("El jefe no existe."));
-        if (jefe != null && !jefeValido(jefe, vinculado)) throw invalido("El jefe debe estar activo, tener nivel 2 de Permisos y ser distinto del trabajador.");
+        if (jefe != null && !jefeValido(jefe, vinculado)) throw invalido("El jefe debe estar activo, tener nivel 2 de Aprobaciones y ser distinto del trabajador.");
         empleado.setUsuario(vinculado);
         empleados.saveAndFlush(empleado);
         if (config == null) {
@@ -133,10 +138,12 @@ public class PermisoPersonalService {
 
     @Transactional(readOnly = true)
     public Page<Resumen> listar(Scope scope, Estado estado, LocalDate desde, LocalDate hasta, String q, int page, int size, User actor) {
-        int nivel = requireNivel(actor, 1);
         Scope alcance = scope == null ? Scope.MIAS : scope;
-        if (alcance == Scope.TODAS && nivel < 3) throw prohibido("No tiene permiso para consultar todos los expedientes.");
-        if (alcance == Scope.POR_REVISAR && nivel < 2) throw prohibido("No tiene permiso para revisar solicitudes.");
+        switch (alcance) {
+            case MIAS -> requireNivel(actor, "PERMISOS", 1);
+            case POR_REVISAR -> requireNivel(actor, "APROBACIONES", 1);
+            case TODAS -> requireNivel(actor, "APROBACIONES", 3);
+        }
         validarFechas(desde, hasta);
         String busqueda = texto(q, 255, false, "la búsqueda");
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(50, Math.max(1, size)), Sort.by(Sort.Direction.DESC, "id"));
@@ -171,6 +178,7 @@ public class PermisoPersonalService {
         if (alcance == Scope.MIAS) condiciones.add(cb.equal(root.get("solicitante").get("id"), actorId));
         if (alcance == Scope.POR_REVISAR) {
             condiciones.add(cb.equal(root.get("jefe").get("id"), actorId));
+            condiciones.add(cb.notEqual(root.get("solicitante").get("id"), actorId));
             condiciones.add(cb.equal(root.get("estado"), Estado.SOLICITADA));
         }
         if (estado != null) condiciones.add(cb.equal(root.get("estado"), estado));
@@ -184,7 +192,7 @@ public class PermisoPersonalService {
 
     @Transactional
     public Detalle crear(Borrador request, User actor) {
-        requireNivel(actor, 1);
+        requireNivel(actor, "PERMISOS", 1);
         Contexto contexto = contexto(actor);
         if (!contexto.habilitado()) throw conflicto(String.join(" ", contexto.impedimentos()));
         IntegrantePersonal empleado = requireEmpleado(actor);
@@ -253,7 +261,7 @@ public class PermisoPersonalService {
 
     @Transactional
     public Detalle decidir(Long id, DecidirRequest request, User actor) {
-        requireNivel(actor, 2);
+        requireNivel(actor, "APROBACIONES", 2);
         SolicitudPermisoPersonal s = paraCambio(id, request == null ? null : request.version(), actor);
         if (!puedeDecidir(s, actor)) throw prohibido("Solo el jefe asignado, distinto del solicitante, puede resolver una solicitud pendiente.");
         if (request.decision() == null) throw invalido("Debe indicar la decisión.");
@@ -328,7 +336,7 @@ public class PermisoPersonalService {
 
     @Transactional(readOnly = true)
     public FirmaVigente firmaVigente(User actor) {
-        requireNivel(actor, 1);
+        requireAcceso(actor);
         try {
             FirmaVisualUsuarioVersion vigente = firmaVisual.getVigente(actor.getId());
             return new FirmaVigente(vigente.getId(), Base64.getEncoder().encodeToString(vigente.getContenido()), vigente.getSha256());
@@ -404,7 +412,7 @@ public class PermisoPersonalService {
     }
 
     private boolean jefeValido(User jefe, User solicitante) {
-        return jefe != null && jefe.getEstado() == 1 && nivel(jefe) >= 2
+        return jefe != null && jefe.getEstado() == 1 && nivel(jefe, "APROBACIONES") >= 2
                 && (solicitante == null || !jefe.getId().equals(solicitante.getId()));
     }
 
@@ -413,7 +421,7 @@ public class PermisoPersonalService {
     }
 
     private SolicitudPermisoPersonal paraCambio(Long id, Long version, User actor) {
-        requireNivel(actor, 1);
+        requireAcceso(actor);
         SolicitudPermisoPersonal s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> noEncontrado("Solicitud de permiso no encontrada."));
         requireLectura(s, actor);
         if (version == null || !Objects.equals(s.getVersion(), version)) throw conflicto("La solicitud cambió. Recargue el expediente antes de continuar.");
@@ -426,40 +434,56 @@ public class PermisoPersonalService {
     }
 
     private void requireBorradorPropio(SolicitudPermisoPersonal s, User actor) {
+        requireNivel(actor, "PERMISOS", 1);
         if (s.getEstado() != Estado.BORRADOR) throw conflicto("El contenido presentado y sus soportes ya no pueden modificarse.");
         if (!esPropia(s, actor)) throw prohibido("Solo el solicitante puede editar o firmar su borrador.");
     }
 
     private void requireLectura(SolicitudPermisoPersonal s, User actor) {
-        int nivel = requireNivel(actor, 1);
-        boolean asignada = s.getJefe() != null && s.getJefe().getId().equals(actor.getId()) && nivel >= 2 && s.getEstado() != Estado.BORRADOR;
-        if (!esPropia(s, actor) && !asignada && nivel < 3) throw prohibido("No tiene acceso a este expediente de permiso.");
+        requireAcceso(actor);
+        int nivelAprobaciones = nivel(actor, "APROBACIONES");
+        boolean propia = esPropia(s, actor) && nivel(actor, "PERMISOS") >= 1;
+        boolean asignada = s.getJefe() != null && s.getJefe().getId().equals(actor.getId())
+                && !esPropia(s, actor) && nivelAprobaciones >= 1 && s.getEstado() != Estado.BORRADOR;
+        if (!propia && !asignada && nivelAprobaciones < 3) throw prohibido("No tiene acceso a este expediente de permiso.");
     }
 
     private boolean esPropia(SolicitudPermisoPersonal s, User actor) { return s.getSolicitante().getId().equals(actor.getId()); }
     private boolean puedeDecidir(SolicitudPermisoPersonal s, User actor) {
-        return nivel(actor) >= 2 && s.getEstado() == Estado.SOLICITADA && !esPropia(s, actor)
+        return nivel(actor, "APROBACIONES") >= 2 && s.getEstado() == Estado.SOLICITADA && !esPropia(s, actor)
                 && s.getJefe() != null && s.getJefe().getId().equals(actor.getId());
     }
     private boolean puedeAnular(SolicitudPermisoPersonal s, User actor) {
-        return s.getEstado() != Estado.ANULADA && (nivel(actor) >= 4 || (esPropia(s, actor)
+        return s.getEstado() != Estado.ANULADA && (nivel(actor, "APROBACIONES") >= 4 || (esPropia(s, actor) && nivel(actor, "PERMISOS") >= 1
                 && (s.getEstado() == Estado.BORRADOR || s.getEstado() == Estado.SOLICITADA)));
     }
 
-    private int requireNivel(User actor, int requerido) {
+    private void requireCuenta(User actor) {
         if (actor == null || actor.getId() == null) throw new ResponseStatusException(UNAUTHORIZED, "No autenticado.");
         if (actor.getEstado() != 1 && !"master".equalsIgnoreCase(actor.getUsername()))
             throw prohibido("La cuenta no está activa. Un administrador debe revisar su estado para acceder a Permisos.");
-        int nivel = nivel(actor);
-        if (nivel < requerido) throw prohibido("No tiene el nivel requerido en PERSONAL / Permisos.");
+    }
+
+    private void requireAcceso(User actor) {
+        requireCuenta(actor);
+        if (nivel(actor, "PERMISOS") < 1 && nivel(actor, "APROBACIONES") < 1)
+            throw prohibido("No tiene acceso a Gestión Humana / Permisos ni Aprobaciones.");
+    }
+
+    private int requireNivel(User actor, String tab, int requerido) {
+        requireCuenta(actor);
+        int nivel = nivel(actor, tab);
+        if (nivel < requerido) throw prohibido("No tiene el nivel requerido en Gestión Humana / "
+                + ("PERMISOS".equals(tab) ? "Permisos." : "Aprobaciones."));
         return nivel;
     }
-    private static int nivel(User actor) {
+
+    private static int nivel(User actor, String tab) {
         if (actor == null) return 0;
         if ("master".equalsIgnoreCase(actor.getUsername())) return 4;
         if (actor.getEstado() != 1) return 0;
         if ("super_master".equalsIgnoreCase(actor.getUsername())) return 4;
-        return UserAccessEvaluator.tabNivel(actor, ModuloSistema.PERSONAL_PLANTA, "PERMISOS").orElse(0);
+        return UserAccessEvaluator.tabNivel(actor, ModuloSistema.PERSONAL_PLANTA, tab).orElse(0);
     }
 
     private void firmar(SolicitudPermisoPersonal s, User actor, String rol, Boolean confirmacion, String imagen, Long vigenteId) {
@@ -613,7 +637,7 @@ public class PermisoPersonalService {
     }
 
     private Detalle detalleDto(SolicitudPermisoPersonal s, User actor) {
-        boolean propia = esPropia(s, actor), borrador = s.getEstado() == Estado.BORRADOR;
+        boolean propia = esPropia(s, actor) && nivel(actor, "PERMISOS") >= 1, borrador = s.getEstado() == Estado.BORRADOR;
         Empleado empleado = new Empleado(s.getEmpleado().getId(), s.getEmpleadoNombre(), s.getEmpleadoCargo(), s.getProceso(), s.getSolicitante().getId());
         Usuario jefe = s.getJefe() == null ? null : new Usuario(s.getJefe().getId(), s.getJefeUsername(), s.getJefeNombre());
         Soporte soporte = s.getSoporteContenido() == null ? null : new Soporte(s.getSoporteNombre(), s.getSoporteContentType(), s.getSoporteContenido().length, s.getSoporteSha256());

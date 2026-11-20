@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.Map;
 import static org.springframework.http.HttpStatus.CONFLICT;
 
 @RestController
@@ -107,7 +108,9 @@ public class PermisoPersonalResource {
     }
 
     private User actor(Authentication auth) {
-        return guard.requireTabAccess(auth, ModuloSistema.PERSONAL_PLANTA, "PERMISOS", 1, "No tiene acceso a Gestión Humana / Permisos.");
+        return guard.requireAnyTabAccess(auth, ModuloSistema.PERSONAL_PLANTA,
+                Map.of("PERMISOS", 1, "APROBACIONES", 1),
+                "No tiene acceso a Gestión Humana / Permisos ni Aprobaciones.");
     }
 
     private ResponseEntity<byte[]> descarga(byte[] bytes, String type, String nombre) {
