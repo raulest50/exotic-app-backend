@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -36,6 +37,8 @@ public interface ProveedorRepo extends JpaRepository<Proveedor, Long> {
      * @return An Optional containing the Proveedor if found
      */
     Optional<Proveedor> findById(String id);
+
+    List<Proveedor> findByIdIn(Collection<String> ids);
 
     /**
      * Find providers whose business identifier equals the given id

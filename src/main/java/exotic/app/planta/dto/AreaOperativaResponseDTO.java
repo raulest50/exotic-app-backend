@@ -24,6 +24,7 @@ public class AreaOperativaResponseDTO {
     private AlcanceMps alcanceMps;
     private AreaOperativa.AlcanceEjecucion alcanceEjecucion;
     private boolean requiereEquipoLoteOf;
+    private boolean requiereReporteProduccionEtapa;
     private ResponsableAreaDTO responsableArea;
 
     @Builder.Default

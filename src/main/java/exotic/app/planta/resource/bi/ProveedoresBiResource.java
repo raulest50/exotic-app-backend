@@ -67,7 +67,7 @@ public class ProveedoresBiResource {
                 proveedor.getId(),
                 proveedor.getNombre(),
                 estado,
-                kpi.getLeadTimeMedianoDias(),
+                kpi.getLeadTimeCalculado(),
                 kpi.getObservaciones(),
                 kpi.getOrdenesConsideradas(),
                 kpi.getFechaCorte(),

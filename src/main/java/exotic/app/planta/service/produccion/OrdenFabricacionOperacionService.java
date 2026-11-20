@@ -13,6 +13,7 @@ import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccion
 import exotic.app.planta.model.produccion.*;
 import exotic.app.planta.model.produccion.batchrecord.*;
 import exotic.app.planta.model.produccion.dto.OrdenFabricacionDTOs;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs;
 import exotic.app.planta.model.produccion.fabricacion.*;
 import exotic.app.planta.model.users.User;
 import exotic.app.planta.repo.calidad.ControlProcesoPlantillaRepo;
@@ -66,6 +67,7 @@ public class OrdenFabricacionOperacionService {
     private final PoliticaIngresoCalidadLote politicaIngresoCalidadLote;
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
+    private final ReporteProduccionEtapaService reporteEtapaService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -97,6 +99,7 @@ public class OrdenFabricacionOperacionService {
                                 documento -> documento));
 
         Map<String, OrdenFabricacionOperacion> persisted = new LinkedHashMap<>();
+        Map<String, ReporteProduccionEtapaDTOs.Configuracion> reportesPorNodo = null;
         int secuencia = 0;
         for (String frontendId : graph.topologicalOrder()) {
             Node node = graph.nodes().get(frontendId);
@@ -115,6 +118,10 @@ public class OrdenFabricacionOperacionService {
             OrdenFabricacionOperacion operacion = new OrdenFabricacionOperacion();
             operacion.setOrdenFabricacion(orden);
             operacion.setAreaOperativa(area);
+            if (area.isRequiereReporteProduccionEtapa() && reportesPorNodo == null)
+                reportesPorNodo = reporteEtapaService.congelarOf(orden);
+            operacion.setConfiguracionReporteProduccion(reporteEtapaService.paraOperacionOf(
+                    area, frontendId, reportesPorNodo == null ? Map.of() : reportesPorNodo));
             if (area.isRequiereEquipoLoteOf() && salidas.contains(frontendId) && salidas.size() != 1)
                 throw new IllegalStateException("El requisito de equipo OF necesita una unica operacion de salida en el disenador.");
             operacion.setRequiereEquipoLoteOf(area.isRequiereEquipoLoteOf() && salidas.contains(frontendId));
@@ -242,6 +249,9 @@ public class OrdenFabricacionOperacionService {
                 .allMatch(candidate -> candidate.getEstadoEnum() == EstadoSeguimientoOrdenArea.COMPLETADO
                         || candidate.getEstadoEnum() == EstadoSeguimientoOrdenArea.OMITIDO);
         BigDecimal cantidadObtenida = validarCierreRequest(cierraOrden, orden, request);
+        List<ReporteProduccionEtapaDTOs.Reporte> reportes = reporteEtapaService.validar(
+                operacion.getConfiguracionReporteProduccion(),
+                request == null ? null : request.getReportesProduccion(), cantidadObtenida);
         if (!cierraOrden && request != null && request.getActivoFijoId() != null
                 && !request.getActivoFijoId().isBlank())
             throw new IllegalArgumentException("El equipo del lote se reporta al completar la salida final de la OF.");
@@ -253,7 +263,7 @@ public class OrdenFabricacionOperacionService {
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         transicionar(operacion, EstadoSeguimientoOrdenArea.COMPLETADO, actor,
                 request == null ? null : request.getObservaciones(),
-                TipoEventoSeguimiento.OPERATIVO, null, ahora);
+                TipoEventoSeguimiento.OPERATIVO, null, ahora, reportes);
         propagarSucesores(operacion, ahora);
 
         if (cierraOrden) {
@@ -570,6 +580,15 @@ public class OrdenFabricacionOperacionService {
             OrdenFabricacionOperacionEvento revertido,
             LocalDateTime ahora
     ) {
+        transicionar(operacion, destino, actor, nota, tipo, revertido, ahora, null);
+    }
+
+    private void transicionar(
+            OrdenFabricacionOperacion operacion, EstadoSeguimientoOrdenArea destino,
+            User actor, String nota, TipoEventoSeguimiento tipo,
+            OrdenFabricacionOperacionEvento revertido, LocalDateTime ahora,
+            List<ReporteProduccionEtapaDTOs.Reporte> reportesProduccion
+    ) {
         EstadoSeguimientoOrdenArea origen = operacion.getEstadoEnum();
         if (origen == destino) throw new IllegalStateException("La operacion ya tiene ese estado.");
         operacion.setEstadoEnum(destino);
@@ -591,7 +610,7 @@ public class OrdenFabricacionOperacionService {
         operacionRepo.saveAndFlush(operacion);
         registrarEvento(operacion, origen, destino,
                 actor == null ? ActorTipoEventoSeguimiento.SYSTEM : ActorTipoEventoSeguimiento.USER,
-                actor, nota, tipo, revertido, ahora);
+                actor, nota, tipo, revertido, ahora, reportesProduccion);
     }
 
     private OrdenFabricacionOperacionEvento registrarEvento(
@@ -605,6 +624,16 @@ public class OrdenFabricacionOperacionService {
             OrdenFabricacionOperacionEvento revertido,
             LocalDateTime ahora
     ) {
+        return registrarEvento(operacion, origen, destino, actorTipo, actor, nota, tipo, revertido, ahora, null);
+    }
+
+    private OrdenFabricacionOperacionEvento registrarEvento(
+            OrdenFabricacionOperacion operacion, EstadoSeguimientoOrdenArea origen,
+            EstadoSeguimientoOrdenArea destino, ActorTipoEventoSeguimiento actorTipo,
+            User actor, String nota, TipoEventoSeguimiento tipo,
+            OrdenFabricacionOperacionEvento revertido, LocalDateTime ahora,
+            List<ReporteProduccionEtapaDTOs.Reporte> reportesProduccion
+    ) {
         OrdenFabricacionOperacionEvento evento = new OrdenFabricacionOperacionEvento();
         evento.setOperacion(operacion);
         evento.setEstadoOrigen(origen == null ? null : origen.getCode());
@@ -615,6 +644,7 @@ public class OrdenFabricacionOperacionService {
         evento.setEventoRevertido(revertido);
         evento.setUsuario(actor);
         evento.setNota(truncate(normalize(nota), 500));
+        evento.setReportesProduccion(reportesProduccion);
         eventoRepo.saveAndFlush(evento);
         batchRecordProjectionQueueService.solicitarActualizacion(
                 evento.getOperacion().getOrdenFabricacion());
@@ -861,7 +891,13 @@ public class OrdenFabricacionOperacionService {
         BatchRecordEtapa etapa = operacion.getBatchRecordEtapa();
         ProcesoProduccionDocumentoVersion poe = incluirPoe
                 ? operacion.getPoeDocumentoVersion() : null;
+        List<ReporteProduccionEtapaDTOs.Registro> reportes = operacion.getConfiguracionReporteProduccion() != null
+                && operacion.getConfiguracionReporteProduccion().requerido()
+                ? reporteEtapaService.historial(operacion) : List.of();
         return OrdenFabricacionDTOs.OperacionResponse.builder()
+                .configuracionReporteProduccion(operacion.getConfiguracionReporteProduccion())
+                .historialReportesProduccion(reportes)
+                .reportesProduccion(reporteEtapaService.vigentes(reportes))
                 .id(operacion.getId())
                 .ordenFabricacionId(operacion.getOrdenFabricacion().getOrdenFabricacionId())
                 .frontendNodeId(operacion.getFrontendNodeId())

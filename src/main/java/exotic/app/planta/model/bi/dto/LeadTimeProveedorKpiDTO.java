@@ -1,5 +1,6 @@
 package exotic.app.planta.model.bi.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import exotic.app.planta.model.compras.proveedor.metricas.EstadoLeadTimeProveedorKPI;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -18,7 +19,7 @@ public class LeadTimeProveedorKpiDTO {
     private String proveedorId;
     private String proveedorNombre;
     private EstadoLeadTimeProveedorKPI estado;
-    private Double leadTimeMedianoDias;
+    private Double leadTimeCalculado;
     private Integer observaciones;
     private Integer ordenesConsideradas;
     private LocalDate fechaCorte;
@@ -27,4 +28,24 @@ public class LeadTimeProveedorKpiDTO {
     private String motivoEstado;
     private LocalDateTime ultimaEvaluacionEn;
     private LocalDate ultimaFechaCorteEvaluada;
+
+    /**
+     * @deprecated Usar {@link #getLeadTimeCalculado()}. Se conserva para clientes
+     * que todavia leen el nombre JSON anterior.
+     */
+    @Deprecated
+    @JsonProperty("leadTimeMedianoDias")
+    public Double getLeadTimeMedianoDias() {
+        return leadTimeCalculado;
+    }
+
+    /**
+     * @deprecated Usar {@link #setLeadTimeCalculado(Double)}. Acepta el nombre
+     * JSON anterior como alias del mismo valor calculado.
+     */
+    @Deprecated
+    @JsonProperty("leadTimeMedianoDias")
+    public void setLeadTimeMedianoDias(Double leadTimeMedianoDias) {
+        this.leadTimeCalculado = leadTimeMedianoDias;
+    }
 }

@@ -10,6 +10,7 @@ import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.SeguimientoOrdenAreaEvento;
 import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Configuracion;
 import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
@@ -46,6 +47,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -76,6 +78,7 @@ class SeguimientoOrdenAreaServiceTableroFabricacionTest {
     private DespejeLineaService despejeLineaService;
     private OrdenProduccionRepo ordenProduccionRepo;
     private UserRepository userRepository;
+    private ReporteProduccionEtapaService reporteEtapaService;
     private SeguimientoOrdenAreaService service;
 
     @BeforeEach
@@ -88,6 +91,7 @@ class SeguimientoOrdenAreaServiceTableroFabricacionTest {
         despejeLineaService = mock(DespejeLineaService.class);
         ordenProduccionRepo = mock(OrdenProduccionRepo.class);
         userRepository = mock(UserRepository.class);
+        reporteEtapaService = mock(ReporteProduccionEtapaService.class);
         service = new SeguimientoOrdenAreaService(
                 seguimientoRepo,
                 seguimientoEventoRepo,
@@ -110,7 +114,8 @@ class SeguimientoOrdenAreaServiceTableroFabricacionTest {
                 ordenProduccionRepo,
                 mock(TransaccionAlmacenRepo.class),
                 mock(MaterialRequirementSnapshotService.class),
-                mock(EntityManager.class)
+                mock(EntityManager.class),
+                reporteEtapaService
         );
 
         when(seguimientoRepo.findTableroActivosByResponsableUserId(USER_ID, ACTIVE_STATES))
@@ -230,6 +235,9 @@ class SeguimientoOrdenAreaServiceTableroFabricacionTest {
         ruta(orden, List.of(almacen, fabricacionUno, fabricacionDos, envasado),
                 conexion(almacen, fabricacionUno), conexion(fabricacionUno, fabricacionDos),
                 conexion(fabricacionDos, envasado));
+        Configuracion sinReporte = new Configuracion(false, List.of());
+        when(reporteEtapaService.congelarOp(orden, orden.getRutaProcesoCatVersion()))
+                .thenReturn(Map.of(1L, sinReporte, 2L, sinReporte, 3L, sinReporte, 4L, sinReporte));
         List<SeguimientoOrdenArea> creados = new ArrayList<>();
         when(seguimientoRepo.save(any(SeguimientoOrdenArea.class))).thenAnswer(invocation -> {
             SeguimientoOrdenArea seguimiento = invocation.getArgument(0);
@@ -248,6 +256,7 @@ class SeguimientoOrdenAreaServiceTableroFabricacionTest {
         assertThat(omitidoUno.getAplicaEjecucionOp()).isFalse();
         assertThat(omitidoDos.getAplicaEjecucionOp()).isFalse();
         assertThat(pasoEnvasado.getAplicaEjecucionOp()).isTrue();
+        assertThat(pasoEnvasado.getConfiguracionReporteProduccion().requerido()).isFalse();
         assertThat(omitidoUno.getDuracionEstimadaMinutos()).isZero();
         assertThat(omitidoUno.isRequiereJornadaLaboral()).isFalse();
         assertThat(omitidoUno.getPoeDocumentoVersion()).isNull();

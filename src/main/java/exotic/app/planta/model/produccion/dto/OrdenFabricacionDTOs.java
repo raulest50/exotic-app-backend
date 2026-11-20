@@ -96,6 +96,9 @@ public final class OrdenFabricacionDTOs {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class OperacionResponse {
+        private ReporteProduccionEtapaDTOs.Configuracion configuracionReporteProduccion;
+        private List<ReporteProduccionEtapaDTOs.Reporte> reportesProduccion;
+        private List<ReporteProduccionEtapaDTOs.Registro> historialReportesProduccion;
         private Long id;
         private Long ordenFabricacionId;
         private String frontendNodeId;
@@ -129,6 +132,7 @@ public final class OrdenFabricacionDTOs {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class OperacionCompletarRequest {
+        private List<ReporteProduccionEtapaDTOs.Solicitud> reportesProduccion;
         @Size(max = 255)
         private String activoFijoId;
         @Size(max = 500)

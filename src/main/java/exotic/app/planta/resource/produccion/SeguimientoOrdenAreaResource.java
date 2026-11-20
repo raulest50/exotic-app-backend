@@ -133,7 +133,8 @@ public class SeguimientoOrdenAreaResource {
                 request.getAreaId(),
                 user.getId(),
                 request.getObservaciones(),
-                request.getCantidadProducida()
+                request.getCantidadProducida(),
+                request.getReportesProduccion()
         );
 
         return ResponseEntity.ok(result);

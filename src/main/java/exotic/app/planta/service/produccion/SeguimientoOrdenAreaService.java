@@ -13,6 +13,7 @@ import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
 import exotic.app.planta.model.produccion.TipoEventoSeguimiento;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs;
 import exotic.app.planta.model.produccion.fabricacion.EstadoOrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.model.producto.Categoria;
@@ -105,6 +106,7 @@ public class SeguimientoOrdenAreaService {
     private final TransaccionAlmacenRepo movimientoRepo;
     private final MaterialRequirementSnapshotService snapshotService;
     private final EntityManager entityManager;
+    private final ReporteProduccionEtapaService reporteEtapaService;
 
     /**
      * Inicializa el seguimiento para una nueva orden de produccion.
@@ -184,6 +186,8 @@ public class SeguimientoOrdenAreaService {
         LocalDateTime ahora = LocalDateTime.now(applicationClock);
         SeguimientoOrdenArea seguimientoAlmacenGeneral = null;
         List<SeguimientoOrdenArea> raicesNoAplicables = new ArrayList<>();
+        Map<Long, ReporteProduccionEtapaDTOs.Configuracion> reportesPorNodo =
+                reporteEtapaService.congelarOp(orden, rutaVersion);
 
         for (RutaProcesoNode node : rutaVersion.getNodes()) {
             if (node.getAreaOperativa() == null) {
@@ -198,6 +202,7 @@ public class SeguimientoOrdenAreaService {
             boolean aplica = node.getAreaOperativa().getAreaId() == ALMACEN_GENERAL_AREA_ID
                     || node.getAreaOperativa().getAlcanceEjecucion() != AreaOperativa.AlcanceEjecucion.SOLO_OF;
             seguimiento.setAplicaEjecucionOp(aplica);
+            seguimiento.setConfiguracionReporteProduccion(reportesPorNodo.get(node.getId()));
             if (!aplica && orden.getRequerimientosMaterialesJson() != null
                     && !snapshotService.requerimientosEtapa(orden, node.getId()).isEmpty()) {
                 throw new IllegalStateException("Reasigne los semiterminados consumidos del area "
@@ -359,6 +364,13 @@ public class SeguimientoOrdenAreaService {
             String observaciones,
             BigDecimal cantidadProducida
     ) {
+        return reportarCompletado(ordenId, areaId, userId, observaciones, cantidadProducida, null);
+    }
+
+    public SeguimientoOrdenAreaDTO reportarCompletado(
+            int ordenId, int areaId, Long userId, String observaciones, BigDecimal cantidadProducida,
+            List<ReporteProduccionEtapaDTOs.Solicitud> reportesProduccion
+    ) {
         SeguimientoOrdenArea seguimiento = bloquearSeguimiento(ordenId, areaId, SeguimientoOrdenArea.ESTADO_EN_PROCESO);
 
         User actor = requireUser(userId);
@@ -371,7 +383,12 @@ public class SeguimientoOrdenAreaService {
             throw new IllegalArgumentException("Solo el area final puede reportar unidades producidas.");
         }
 
-        completarSeguimiento(seguimiento, ActorTipoEventoSeguimiento.USER, actor, observaciones);
+        List<ReporteProduccionEtapaDTOs.Reporte> reportes = reporteEtapaService.validar(
+                seguimiento.getConfiguracionReporteProduccion(), reportesProduccion,
+                nodoFinal ? cantidadProducida : null);
+        transicionarSeguimiento(seguimiento, EstadoSeguimientoOrdenArea.COMPLETADO,
+                ActorTipoEventoSeguimiento.USER, actor, observaciones, reportes);
+        propagarVisibilidad(ordenId, seguimiento.getRutaProcesoNode().getId());
         if (nodoFinal) {
             reporteProduccionLoteService.registrarPendiente(seguimiento, actor, cantidadProducida);
         }
@@ -416,9 +433,11 @@ public class SeguimientoOrdenAreaService {
         validarDependenciasCorreccion(seguimiento, estadoDestino);
         if (estadoDestino == EstadoSeguimientoOrdenArea.COMPLETADO
                 && estadoOrigen != EstadoSeguimientoOrdenArea.COMPLETADO
-                && esNodoFinalConRutaValida(seguimiento, true)) {
+                && (esNodoFinalConRutaValida(seguimiento, true)
+                || seguimiento.getConfiguracionReporteProduccion() != null
+                && seguimiento.getConfiguracionReporteProduccion().requerido())) {
             throw new IllegalArgumentException(
-                    "El area final debe completarse desde el tablero operativo reportando la cantidad producida.");
+                    "Esta etapa debe completarse desde el tablero operativo reportando las cantidades producidas.");
         }
         if (estadoDestino == EstadoSeguimientoOrdenArea.EN_PROCESO) {
             validarEntradasEtapa(seguimiento);
@@ -928,6 +947,14 @@ public class SeguimientoOrdenAreaService {
             User actor,
             String nota
     ) {
+        transicionarSeguimiento(seguimiento, estadoDestino, actorTipo, actor, nota, null);
+    }
+
+    private void transicionarSeguimiento(
+            SeguimientoOrdenArea seguimiento, EstadoSeguimientoOrdenArea estadoDestino,
+            ActorTipoEventoSeguimiento actorTipo, User actor, String nota,
+            List<ReporteProduccionEtapaDTOs.Reporte> reportesProduccion
+    ) {
         EstadoSeguimientoOrdenArea estadoOrigen = seguimiento.getEstadoEnum();
         validarTransicion(seguimiento, estadoOrigen, estadoDestino, actorTipo);
 
@@ -968,7 +995,9 @@ public class SeguimientoOrdenAreaService {
         }
 
         seguimientoRepo.save(seguimiento);
-        registrarEvento(seguimiento, estadoOrigen, estadoDestino, actorTipo, actor, notaNormalizada, ahora);
+        registrarEvento(seguimiento, estadoOrigen, estadoDestino, actorTipo, actor, notaNormalizada, ahora,
+                actorTipo == ActorTipoEventoSeguimiento.SYSTEM ? TipoEventoSeguimiento.SISTEMA : TipoEventoSeguimiento.OPERATIVO,
+                null, reportesProduccion);
     }
 
     private boolean isPoliticaDispensacionNoBloqueante(OrdenProduccion orden) {
@@ -1305,6 +1334,17 @@ public class SeguimientoOrdenAreaService {
             TipoEventoSeguimiento tipoEvento,
             SeguimientoOrdenAreaEvento eventoRevertido
     ) {
+        registrarEvento(seguimiento, estadoOrigen, estadoDestino, actorTipo, actor, nota,
+                fechaEvento, tipoEvento, eventoRevertido, null);
+    }
+
+    private void registrarEvento(
+            SeguimientoOrdenArea seguimiento, EstadoSeguimientoOrdenArea estadoOrigen,
+            EstadoSeguimientoOrdenArea estadoDestino, ActorTipoEventoSeguimiento actorTipo,
+            User actor, String nota, LocalDateTime fechaEvento, TipoEventoSeguimiento tipoEvento,
+            SeguimientoOrdenAreaEvento eventoRevertido,
+            List<ReporteProduccionEtapaDTOs.Reporte> reportesProduccion
+    ) {
         SeguimientoOrdenAreaEvento evento = new SeguimientoOrdenAreaEvento();
         evento.setSeguimientoOrdenArea(seguimiento);
         evento.setEstadoOrigen(estadoOrigen != null ? estadoOrigen.getCode() : null);
@@ -1315,6 +1355,7 @@ public class SeguimientoOrdenAreaService {
         evento.setEventoRevertido(eventoRevertido);
         evento.setUsuario(actor);
         evento.setNota(normalizeNota(nota));
+        evento.setReportesProduccion(reportesProduccion);
         SeguimientoOrdenAreaEvento eventoGuardado = seguimientoEventoRepo.saveAndFlush(evento);
         batchRecordProjectionQueueService.solicitarActualizacion(
                 eventoGuardado.getSeguimientoOrdenArea().getOrdenProduccion());
@@ -1383,6 +1424,7 @@ public class SeguimientoOrdenAreaService {
         dto.setNodeId(entity.getRutaProcesoNode().getId());
         dto.setNodeLabel(entity.getRutaProcesoNode().getLabel());
         dto.setEsNodoFinal(esNodoFinalConRutaValida(entity, false));
+        dto.setConfiguracionReporteProduccion(entity.getConfiguracionReporteProduccion());
 
         AreaOperativa area = entity.getAreaOperativa();
         dto.setAreaId(area.getAreaId());
@@ -1413,6 +1455,7 @@ public class SeguimientoOrdenAreaService {
         SeguimientoOrdenAreaDTO dto = new SeguimientoOrdenAreaDTO();
         var orden = entity.getOrdenFabricacion();
         dto.setTipoOrden("OF");
+        dto.setConfiguracionReporteProduccion(entity.getConfiguracionReporteProduccion());
         dto.setLoteProvisional(orden.getConsecutivoLoteReservado() != null && orden.getFechaFinal() == null);
         dto.setId(entity.getId());
         dto.setOrdenFabricacionId(orden.getOrdenFabricacionId());
@@ -1826,6 +1869,7 @@ public class SeguimientoOrdenAreaService {
 
     @Data
     public static class SeguimientoOrdenAreaDTO {
+        private ReporteProduccionEtapaDTOs.Configuracion configuracionReporteProduccion;
         private boolean loteProvisional;
         private String tipoOrden;
         private Long id;
@@ -2004,6 +2048,7 @@ public class SeguimientoOrdenAreaService {
 
     @Data
     public static class ReportarCompletadoRequest {
+        private List<ReporteProduccionEtapaDTOs.Solicitud> reportesProduccion;
         private int ordenId;
         private int areaId;
         private String observaciones;

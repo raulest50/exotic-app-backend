@@ -15,6 +15,8 @@ import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.produccion.*;
 import exotic.app.planta.model.produccion.batchrecord.*;
 import exotic.app.planta.model.produccion.dto.BatchRecordDTOs;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Configuracion;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Reporte;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacion;
 import exotic.app.planta.model.produccion.fabricacion.OrdenFabricacionOperacionEvento;
@@ -53,8 +55,8 @@ import java.util.*;
 @Transactional(rollbackFor = Exception.class)
 public class BatchRecordService {
 
-    public static final String ESQUEMA_VERSION = "batch-record-v9";
-    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v11";
+    public static final String ESQUEMA_VERSION = "batch-record-v10";
+    public static final String PLANTILLA_PDF_VERSION = "batch-record-pdf-v12";
     private static final int ALMACEN_GENERAL_AREA_ID = -1;
     private static final EnumSet<TransaccionAlmacen.TipoEntidadCausante> TIPOS_DISPENSACION_DOCUMENTAL =
             EnumSet.of(
@@ -1830,9 +1832,27 @@ public class BatchRecordService {
         data.put("plantillaControlVersion", etapa.getControlProcesoPlantilla() == null
                 ? null : etapa.getControlProcesoPlantilla().getVersion());
         data.put("poe", mapPoeCanonica(etapa));
+        data.put("configuracionReporteProduccion", configuracionReporteProduccion(etapa));
+        List<Reporte> reportes = null;
+        if (etapa.getEstado() == EstadoBatchRecordEtapa.COMPLETADA) {
+            if (etapa.getSeguimientoEventoOrigen() != null) {
+                reportes = etapa.getSeguimientoEventoOrigen().getReportesProduccion();
+            } else if (etapa.getOrdenFabricacionEventoOrigen() != null) {
+                reportes = etapa.getOrdenFabricacionEventoOrigen().getReportesProduccion();
+            }
+        }
+        data.put("reportesProduccion", reportes == null ? List.of() : reportes);
         data.put("observaciones", etapa.getObservaciones());
         data.put("contenidoSha256", etapa.getContenidoSha256());
         return data;
+    }
+
+    private Configuracion configuracionReporteProduccion(BatchRecordEtapa etapa) {
+        if (etapa.getSeguimientoOrdenArea() != null) {
+            return etapa.getSeguimientoOrdenArea().getConfiguracionReporteProduccion();
+        }
+        return etapa.getOrdenFabricacionOperacion() == null ? null
+                : etapa.getOrdenFabricacionOperacion().getConfiguracionReporteProduccion();
     }
 
     private Map<String, Object> mapConsumoCanonico(BatchRecordConsumo consumo) {
@@ -2548,6 +2568,11 @@ public class BatchRecordService {
         contenido.put("completadaEn", evento.getFechaEvento());
         contenido.put("usuarioId", evento.getUsuario().getId());
         contenido.put("observaciones", evento.getNota());
+        Configuracion configuracion = configuracionReporteProduccion(etapa);
+        if (configuracion != null) contenido.put("configuracionReporteProduccion", configuracion);
+        if (evento.getReportesProduccion() != null) {
+            contenido.put("reportesProduccion", evento.getReportesProduccion());
+        }
         ProcesoProduccionDocumentoVersion documento = poeDocumento(etapa);
         contenido.put("poeDocumentoVersionId", documento == null ? null : documento.getId());
         contenido.put("poeProcesoProduccionId", documento == null
@@ -2577,6 +2602,11 @@ public class BatchRecordService {
         contenido.put("completadaEn", evento.getFechaEvento());
         contenido.put("usuarioId", evento.getUsuario().getId());
         contenido.put("observaciones", evento.getNota());
+        Configuracion configuracion = configuracionReporteProduccion(etapa);
+        if (configuracion != null) contenido.put("configuracionReporteProduccion", configuracion);
+        if (evento.getReportesProduccion() != null) {
+            contenido.put("reportesProduccion", evento.getReportesProduccion());
+        }
         ProcesoProduccionDocumentoVersion documento = poeDocumento(etapa);
         contenido.put("poeDocumentoVersionId", documento == null ? null : documento.getId());
         contenido.put("poeProcesoProduccionId", documento == null

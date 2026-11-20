@@ -423,6 +423,10 @@ public class AreaProduccionService {
         if (dto.getAlcanceMps() != null) area.setAlcanceMps(dto.getAlcanceMps());
         if (dto.getAlcanceEjecucion() != null) area.setAlcanceEjecucion(dto.getAlcanceEjecucion());
         if (dto.getRequiereEquipoLoteOf() != null) area.setRequiereEquipoLoteOf(dto.getRequiereEquipoLoteOf());
+        if (dto.getRequiereReporteProduccionEtapa() != null)
+            area.setRequiereReporteProduccionEtapa(dto.getRequiereReporteProduccionEtapa());
+        if (area.getAreaId() == -1 && area.isRequiereReporteProduccionEtapa())
+            throw new IllegalArgumentException("Almacen General no reporta produccion por etapa.");
         validarAlcanceEjecucion(area);
     }
 
@@ -474,6 +478,7 @@ public class AreaProduccionService {
                 .alcanceMps(area.getAlcanceMps())
                 .alcanceEjecucion(area.getAlcanceEjecucion())
                 .requiereEquipoLoteOf(area.isRequiereEquipoLoteOf())
+                .requiereReporteProduccionEtapa(area.isRequiereReporteProduccionEtapa())
                 .responsableArea(responsableDto)
                 .categoriasHabilitadas(categoriasDto)
                 .build();

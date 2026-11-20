@@ -719,6 +719,33 @@ public interface TransaccionAlmacenRepo extends JpaRepository<Movimiento, Intege
             @Param("end") LocalDateTime end,
             @Param("tipoDispensacion") Movimiento.TipoMovimiento tipoDispensacion);
 
+    interface ReordenConsumoDiarioProjection {
+        String getProductoId();
+        LocalDate getDia();
+        Double getCantidad();
+    }
+
+    /** Agrega las salidas del informe de dispensacion por material y dia, con fin exclusivo. */
+    @Query("""
+            SELECT m.producto.productoId AS productoId,
+                   CAST(m.fechaMovimiento AS LocalDate) AS dia,
+                   SUM(-m.cantidad) AS cantidad
+            FROM Movimiento m
+            JOIN m.transaccionAlmacen t
+            WHERE TYPE(m.producto) = Material
+              AND m.afectaInventario = true
+              AND m.cantidad < 0
+              AND m.tipoMovimiento = :tipo
+              AND m.fechaMovimiento >= :inicio
+              AND m.fechaMovimiento < :finExclusivo
+            GROUP BY m.producto.productoId, CAST(m.fechaMovimiento AS LocalDate)
+            ORDER BY m.producto.productoId ASC, CAST(m.fechaMovimiento AS LocalDate) ASC
+            """)
+    List<ReordenConsumoDiarioProjection> findConsumoDiarioParaReorden(
+            @Param("inicio") LocalDateTime inicio,
+            @Param("finExclusivo") LocalDateTime finExclusivo,
+            @Param("tipo") Movimiento.TipoMovimiento tipo);
+
     /**
      * Ingresos de {@link Terminado} por backflush en un rango (típicamente un día).
      * Ampliación futura posible: AJUSTE_POSITIVO / TRANSFERENCIA positiva sobre Terminado.

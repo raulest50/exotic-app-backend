@@ -4,11 +4,14 @@ import exotic.app.planta.model.organizacion.AreaOperativa;
 import exotic.app.planta.model.producto.manufacturing.procesos.ProcesoProduccionDocumentoVersion;
 import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.batchrecord.BatchRecordEtapa;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Configuracion;
 import exotic.app.planta.model.users.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -36,6 +39,11 @@ public class OrdenFabricacionOperacion {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "area_operativa_id", nullable = false)
     private AreaOperativa areaOperativa;
+
+    /** Snapshot informativo al emitir; NULL conserva el comportamiento historico. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "configuracion_reporte_produccion", columnDefinition = "jsonb", updatable = false)
+    private Configuracion configuracionReporteProduccion;
 
     /** Version exacta del POE vigente al emitir la OF. */
     @ManyToOne(fetch = FetchType.LAZY)

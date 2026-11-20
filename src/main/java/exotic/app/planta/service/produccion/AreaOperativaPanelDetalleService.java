@@ -8,6 +8,9 @@ import exotic.app.planta.model.producto.manufacturing.packaging.InsumoEmpaque;
 import exotic.app.planta.model.produccion.EstadoSeguimientoOrdenArea;
 import exotic.app.planta.model.produccion.OrdenProduccion;
 import exotic.app.planta.model.produccion.SeguimientoOrdenArea;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Configuracion;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Registro;
+import exotic.app.planta.model.produccion.dto.ReporteProduccionEtapaDTOs.Reporte;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoCatVersion;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoEdge;
 import exotic.app.planta.model.produccion.ruprocatdesigner.RutaProcesoNode;
@@ -40,6 +43,7 @@ public class AreaOperativaPanelDetalleService {
     private final ProductoService productoService;
     private final RutaProcesoEstimacionService rutaProcesoEstimacionService;
     private final MaterialRequirementSnapshotService snapshotService;
+    private final ReporteProduccionEtapaService reporteProduccionEtapaService;
 
     public AreaOperativaOrdenDetalleDTO getDetalleOperativoOrden(int ordenId, Long userId) {
         if (userId == null) {
@@ -145,6 +149,10 @@ public class AreaOperativaPanelDetalleService {
         dto.setRequiereJornadaLaboral(seguimiento.isRequiereJornadaLaboral());
         dto.setUsuarioReportaNombre(seguimiento.getUsuarioReporta() != null ? seguimiento.getUsuarioReporta().getNombreCompleto() : null);
         dto.setObservaciones(seguimiento.getObservaciones());
+        List<Registro> historial = reporteProduccionEtapaService.historial(seguimiento);
+        dto.setConfiguracionReporteProduccion(seguimiento.getConfiguracionReporteProduccion());
+        dto.setReportesProduccion(reporteProduccionEtapaService.vigentes(historial));
+        dto.setHistorialReportesProduccion(historial);
 
         if (seguimiento.getRutaProcesoNode().getProcesoProduccion() != null) {
             dto.setProcesoProduccionId(
@@ -394,6 +402,9 @@ public class AreaOperativaPanelDetalleService {
         private String procesoProduccionNombre;
         private boolean puedeConsultarPoe;
         private PoeOperativoDTO poe;
+        private Configuracion configuracionReporteProduccion;
+        private List<Reporte> reportesProduccion = new ArrayList<>();
+        private List<Registro> historialReportesProduccion = new ArrayList<>();
     }
 
     @Data

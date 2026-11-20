@@ -594,6 +594,7 @@ class BatchRecordMainPdfRenderer {
             cell(table, dateRange(stage.path("iniciadaEn"), stage.path("completadaEn")));
             cell(table, person(stage.path("reportadaPor")));
             cell(table, poeLabel(stage.path("poe")));
+            addProductionReports(table, stage);
             String observations = text(stage.path("observaciones"), "");
             if (!hasCanonicalChronology(root) && !observations.isBlank()) {
                 PdfPCell observationsCell = new PdfPCell(new Phrase(
@@ -605,6 +606,33 @@ class BatchRecordMainPdfRenderer {
             }
         }
         document.add(table);
+    }
+
+    private void addProductionReports(PdfPTable table, JsonNode stage) {
+        JsonNode reports = stage.path("reportesProduccion");
+        if (!"COMPLETADA".equals(text(stage.path("estado"), ""))
+                || !reports.isArray() || reports.isEmpty()) return;
+
+        PdfPCell reportCell = new PdfPCell();
+        reportCell.setColspan(6);
+        reportCell.setBorderColor(BORDER);
+        reportCell.setPadding(5);
+        Paragraph title = new Paragraph("Producción informativa por producto",
+                font(7.6f, Font.BOLD, CHARCOAL));
+        title.setSpacingAfter(3);
+        reportCell.addElement(title);
+        for (JsonNode report : reports) {
+            String id = text(report.path("productoId"), "");
+            String name = text(report.path("productoNombre"), id);
+            String product = id.isBlank() || id.equals(name) ? name : name + " (" + id + ")";
+            String detail = product + ": " + quantity(report.path("cantidad"), report.path("unidadMedida"));
+            String reason = text(report.path("motivoCero"), "");
+            if (!reason.isBlank()) detail += ". Motivo de cantidad cero: " + reason;
+            Paragraph line = new Paragraph(detail, font(7.4f, Font.NORMAL, CHARCOAL));
+            line.setLeading(10);
+            reportCell.addElement(line);
+        }
+        table.addCell(reportCell);
     }
 
     private void addControls(Document document, JsonNode root) throws Exception {

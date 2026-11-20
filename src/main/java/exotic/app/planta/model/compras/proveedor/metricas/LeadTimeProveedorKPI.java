@@ -68,11 +68,13 @@ public class LeadTimeProveedorKPI {
     private Integer ventanaDias;
 
     /**
-     * Mediana historica vigente u obsoleta del proveedor. Puede ser nula si
-     * nunca ha existido informacion suficiente para calcular el KPI.
+     * Lead time historico calculado del proveedor, en dias, vigente u obsoleto.
+     * El algoritmo actual usa la mediana. Puede ser nulo si nunca ha existido
+     * informacion suficiente para calcular el KPI. La columna conserva su
+     * nombre historico para mantener la compatibilidad del esquema.
      */
     @Column(name = "lead_time_mediano_dias")
-    private Double leadTimeMedianoDias;
+    private Double leadTimeCalculado;
 
     /**
      * Observaciones validas usadas por el ultimo KPI calculable.

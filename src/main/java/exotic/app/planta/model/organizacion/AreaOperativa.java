@@ -77,6 +77,10 @@ public class AreaOperativa {
     @Column(name = "requiere_equipo_lote_of", nullable = false)
     private boolean requiereEquipoLoteOf;
 
+    /** Exige cantidades informativas al completar; se congela en etapas nuevas. */
+    @Column(name = "requiere_reporte_produccion_etapa", nullable = false)
+    private boolean requiereReporteProduccionEtapa;
+
     @ManyToOne
     @JoinColumn(name = "responsable_id")
     private User responsableArea;

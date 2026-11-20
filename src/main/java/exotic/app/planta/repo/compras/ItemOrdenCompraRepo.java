@@ -13,6 +13,34 @@ import java.util.List;
 import java.time.LocalDateTime;
 
 public interface ItemOrdenCompraRepo extends JpaRepository<ItemOrdenCompra, Integer> {
+    interface ReordenProveedorFrecuenciaProjection {
+        String getProductoId();
+        String getProveedorId();
+        String getProveedorNombre();
+        Integer getLeadTimeNegociado();
+        Long getCompras();
+        LocalDateTime getUltimaCompra();
+    }
+
+    /** Cuenta OCM distintas por material y proveedor, sin multiplicar items repetidos. */
+    @Query("""
+            SELECT material.productoId AS productoId,
+                   proveedor.id AS proveedorId,
+                   proveedor.nombre AS proveedorNombre,
+                   proveedor.leadTimeNegociado AS leadTimeNegociado,
+                   COUNT(DISTINCT orden.ordenCompraId) AS compras,
+                   MAX(orden.fechaEmision) AS ultimaCompra
+            FROM ItemOrdenCompra item
+            JOIN item.ordenCompraMateriales orden
+            JOIN orden.proveedor proveedor
+            JOIN item.material material
+            WHERE orden.estado IN (2, 3)
+              AND material.inventareable = true
+            GROUP BY material.productoId, proveedor.pk, proveedor.id,
+                     proveedor.nombre, proveedor.leadTimeNegociado
+            """)
+    List<ReordenProveedorFrecuenciaProjection> findFrecuenciasProveedorParaReorden();
+
     interface PendingPurchaseItemProjection {
         int getItemId();
         int getOcmId();

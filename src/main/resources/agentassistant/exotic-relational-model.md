@@ -200,7 +200,7 @@ Campos o relaciones omitidos por politica: 5; no inferir sus valores ni recorrer
 Clase: `exotic.app.planta.model.compras.proveedor.metricas.LeadTimeProveedorKPI`
 Fuente: `src/main/java/exotic/app/planta/model/compras/proveedor/metricas/LeadTimeProveedorKPI.java`
 Tabla declarada y corroborada en DDL: `lead_time_proveedor_kpi`.
-Atributos: id:Long [PK]; fechaCorte:LocalDate; ventanaDias:Integer; leadTimeMedianoDias:Double; observaciones:Integer; ordenesConsideradas:Integer; calculadoEn:LocalDateTime; estado:EstadoLeadTimeProveedorKPI; motivoEstado:String; ultimaEvaluacionEn:LocalDateTime; ultimaFechaCorteEvaluada:LocalDate.
+Atributos: id:Long [PK]; fechaCorte:LocalDate; ventanaDias:Integer; leadTimeCalculado:Double; observaciones:Integer; ordenesConsideradas:Integer; calculadoEn:LocalDateTime; estado:EstadoLeadTimeProveedorKPI; motivoEstado:String; ultimaEvaluacionEn:LocalDateTime; ultimaFechaCorteEvaluada:LocalDate.
 Relaciones: proveedor -> Proveedor [ManyToOne].
 
 ### Proveedor

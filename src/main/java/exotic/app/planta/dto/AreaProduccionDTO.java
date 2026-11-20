@@ -31,6 +31,7 @@ public class AreaProduccionDTO {
     private AlcanceMps alcanceMps;
     private AreaOperativa.AlcanceEjecucion alcanceEjecucion;
     private Boolean requiereEquipoLoteOf;
+    private Boolean requiereReporteProduccionEtapa;
 
     @NotNull(message = "El responsable del area no puede ser nulo")
     private Long responsableId;

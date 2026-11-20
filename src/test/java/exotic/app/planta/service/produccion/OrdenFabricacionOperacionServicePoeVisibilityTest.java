@@ -33,6 +33,7 @@ class OrdenFabricacionOperacionServicePoeVisibilityTest {
     private OrdenFabricacionOperacionRepo operacionRepo;
     @Mock private OrdenFabricacionRepo ordenRepo;
     @Mock private EntityManager entityManager;
+    @Mock private ReporteProduccionEtapaService reporteEtapaService;
     @InjectMocks
     private OrdenFabricacionOperacionService service;
 

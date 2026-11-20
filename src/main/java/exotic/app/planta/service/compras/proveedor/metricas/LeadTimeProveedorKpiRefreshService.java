@@ -209,7 +209,7 @@ public class LeadTimeProveedorKpiRefreshService {
             }
             kpi.setFechaCorte(result.window().fechaCorte());
             kpi.setVentanaDias(result.window().ventanaDias());
-            kpi.setLeadTimeMedianoDias(result.leadTimeMedianoDias());
+            kpi.setLeadTimeCalculado(result.leadTimeCalculado());
             kpi.setObservaciones(result.observaciones());
             kpi.setOrdenesConsideradas(result.ordenesConsideradas());
             kpi.setCalculadoEn(result.evaluatedAt());
@@ -226,7 +226,7 @@ public class LeadTimeProveedorKpiRefreshService {
             kpi.setProveedor(proveedor);
             kpi.setFechaCorte(result.window().fechaCorte());
             kpi.setVentanaDias(result.window().ventanaDias());
-            kpi.setLeadTimeMedianoDias(null);
+            kpi.setLeadTimeCalculado(null);
             kpi.setObservaciones(0);
             kpi.setOrdenesConsideradas(0);
             kpi.setCalculadoEn(null);
@@ -238,7 +238,7 @@ public class LeadTimeProveedorKpiRefreshService {
             return EstadoLeadTimeProveedorKPI.SIN_INFORMACION;
         }
 
-        if (kpi.getLeadTimeMedianoDias() != null) {
+        if (kpi.getLeadTimeCalculado() != null) {
             kpi.setEstado(EstadoLeadTimeProveedorKPI.DESACTUALIZADO);
             kpi.setMotivoEstado(result.reason());
             kpi.setUltimaEvaluacionEn(result.evaluatedAt());
@@ -342,7 +342,7 @@ public class LeadTimeProveedorKpiRefreshService {
             boolean calculable,
             EffectiveWindow window,
             LocalDateTime evaluatedAt,
-            Double leadTimeMedianoDias,
+            Double leadTimeCalculado,
             int observaciones,
             int ordenesConsideradas,
             String reason
@@ -350,7 +350,7 @@ public class LeadTimeProveedorKpiRefreshService {
         static LeadTimeProveedorKpiResult calculable(
                 EffectiveWindow window,
                 LocalDateTime evaluatedAt,
-                Double leadTimeMedianoDias,
+                Double leadTimeCalculado,
                 int observaciones,
                 int ordenesConsideradas
         ) {
@@ -358,7 +358,7 @@ public class LeadTimeProveedorKpiRefreshService {
                     true,
                     window,
                     evaluatedAt,
-                    leadTimeMedianoDias,
+                    leadTimeCalculado,
                     observaciones,
                     ordenesConsideradas,
                     null
