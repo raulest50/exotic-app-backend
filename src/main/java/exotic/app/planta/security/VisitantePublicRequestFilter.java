@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Bounded, instance-local protection for the anonymous registration endpoint. */
 public class VisitantePublicRequestFilter extends OncePerRequestFilter {
-    private static final int MAX_BODY_BYTES = 4096;
+    private static final int MAX_BODY_BYTES = 192 * 1024;
     private static final int MAX_REQUESTS_PER_MINUTE = 120;
     private static final long WINDOW_NANOS = TimeUnit.MINUTES.toNanos(1);
     private long windowStart = System.nanoTime();
@@ -27,6 +27,10 @@ public class VisitantePublicRequestFilter extends OncePerRequestFilter {
     public static boolean isPublicRegistration(HttpServletRequest request) {
         return "POST".equals(request.getMethod())
                 && "/api/public/visitantes".equals(request.getServletPath());
+    }
+
+    public static boolean isPublicNotice(HttpServletRequest request) {
+        return "GET".equals(request.getMethod()) && "/api/public/visitantes/aviso".equals(request.getServletPath());
     }
 
     @Override

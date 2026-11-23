@@ -59,6 +59,7 @@ public class SecurityConfig {
                     auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll();
                     auth.requestMatchers("/api/auth/**").permitAll();
                     auth.requestMatchers(org.springframework.http.HttpMethod.POST, "/api/public/visitantes").permitAll();
+                    auth.requestMatchers(org.springframework.http.HttpMethod.GET, "/api/public/visitantes/aviso").permitAll();
 
                     if (isDevelopment) {
                         auth.requestMatchers("/api/backend-info/**").permitAll();

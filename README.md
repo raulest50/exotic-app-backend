@@ -8,6 +8,11 @@ en general.
 
 ## Copiar archivos a remote
 
+**Referencia histórica de Render.** Estas instrucciones no corresponden al
+actual destino operativo en Google Cloud. Consultar el
+[README de deployment](../exotic-app-architecture/migracion/deployment/README.md)
+y la [guía de acceso SSH](../ssh_gcloud/README.md).
+
 [documentacion de render.com](https://render.com/docs/ssh)
 
 primero se debe generar una public key de manera local, por ejemplo como:

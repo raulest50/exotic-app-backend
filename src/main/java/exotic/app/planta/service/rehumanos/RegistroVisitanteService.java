@@ -7,12 +7,12 @@ import exotic.app.planta.model.organizacion.personal.dto.VisitanteDTOs.CrearRequ
 import exotic.app.planta.model.organizacion.personal.dto.VisitanteDTOs.Registro;
 import exotic.app.planta.repo.personal.RegistroVisitanteRepo;
 import exotic.app.planta.config.TimeZoneConfig;
-import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +22,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.text.Normalizer;
-import java.util.ArrayList;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -37,10 +36,13 @@ public class RegistroVisitanteService {
     private static final ZoneId ZONA_VISITAS = ZoneId.of(TimeZoneConfig.APP_TIME_ZONE_ID);
     private final RegistroVisitanteRepo repo;
     private final Clock applicationClock;
+    private final FirmaVisitanteService firmaService;
+    private final VisitantesPrivacidadService privacidadService;
 
     @Transactional
     public Confirmacion registrar(CrearRequest request) {
         if (request == null) throw new IllegalArgumentException("Solicitud requerida.");
+        var aviso = privacidadService.exigirAceptacion(request.aceptaDatosPersonales(), request.consentimientoVersion());
         String cedula = normalizarTexto(request.cedula(), 10);
         String nombreCompleto = normalizarTexto(request.nombreCompleto(), 160);
         if (!CEDULA_PATTERN.matcher(cedula).matches()) {
@@ -49,7 +51,7 @@ public class RegistroVisitanteService {
         if (!NOMBRE_PATTERN.matcher(nombreCompleto).matches() || !LETRA_PATTERN.matcher(nombreCompleto).find()) {
             throw new IllegalArgumentException("Nombre invalido.");
         }
-        if (request.edad() != null && (request.edad() < 0 || request.edad() > 120)) {
+        if (request.edad() != null && (request.edad() < 18 || request.edad() > 120)) {
             throw new IllegalArgumentException("Edad fuera del rango permitido.");
         }
         if (request.genero() != null && request.genero() != RegistroVisitante.Genero.MASCULINO
@@ -66,8 +68,16 @@ public class RegistroVisitanteService {
             throw new IllegalArgumentException("El detalle solo corresponde al motivo Otros.");
         }
 
+        if (request.tipoIngreso() == null) throw new IllegalArgumentException("Tipo de ingreso requerido.");
+        String cargoEmpresa = request.cargoEmpresa() == null || request.cargoEmpresa().isBlank()
+                ? null : normalizarTexto(request.cargoEmpresa(), 160);
+        String areaPersonaVisita = normalizarTexto(request.areaPersonaVisita(), 160);
+        var firma = firmaService.validar(request.firmaBase64(), request.autorizaFirma());
+
         RegistroVisitante registro = new RegistroVisitante(cedula, nombreCompleto, request.edad(),
-                request.genero(), request.motivo(), motivoOtro, applicationClock.instant());
+                request.genero(), request.motivo(), motivoOtro, cargoEmpresa, request.tipoIngreso(), areaPersonaVisita,
+                aviso.version(), aviso.textoAceptado(), firma == null ? null : firma.contenido(),
+                firma == null ? null : firma.sha256(), firma == null ? null : aviso.autorizacionFirma(), applicationClock.instant());
         RegistroVisitante guardado = repo.save(registro);
         return new Confirmacion(guardado.getFechaRegistro());
     }
@@ -93,17 +103,16 @@ public class RegistroVisitanteService {
         String nombreFiltro = nombre == null || nombre.isBlank() ? null : normalizarTexto(nombre, 160);
         String patronNombre = nombreFiltro == null ? null : "%" + nombreFiltro.toLowerCase(Locale.ROOT)
                 .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-        Specification<RegistroVisitante> filtros = (root, query, cb) -> {
-            var condiciones = new ArrayList<Predicate>();
-            condiciones.add(cb.greaterThanOrEqualTo(root.<Instant>get("fechaRegistro"), inicio));
-            condiciones.add(cb.lessThan(root.<Instant>get("fechaRegistro"), fin));
-            if (patronNombre != null) {
-                condiciones.add(cb.like(cb.lower(root.get("nombreCompleto")), patronNombre, '\\'));
-            }
-            return cb.and(condiciones.toArray(Predicate[]::new));
-        };
         Sort ordenamiento = Sort.by(Sort.Direction.valueOf(orden), "fechaRegistro", "id");
-        return repo.findAll(filtros, PageRequest.of(page, size, ordenamiento)).map(Registro::fromEntity);
+        return repo.consultar(inicio, fin, patronNombre, PageRequest.of(page, size, ordenamiento))
+                .map(r -> new Registro(r.getId(), r.getCedula(), r.getNombreCompleto(), r.getEdad(), r.getGenero(),
+                        r.getMotivo(), r.getMotivoOtro(), r.getFechaRegistro(), r.getCargoEmpresa(), r.getTipoIngreso(),
+                        r.getAreaPersonaVisita(), r.getFirmaRegistrada()));
+    }
+
+    public byte[] obtenerFirma(Long id) {
+        if (id == null || id <= 0) throw new IllegalArgumentException("Registro invalido.");
+        return repo.obtenerFirma(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private static String normalizarTexto(String valor, int maximo) {

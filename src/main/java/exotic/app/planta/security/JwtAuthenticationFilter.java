@@ -26,7 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return VisitantePublicRequestFilter.isPublicRegistration(request);
+        return VisitantePublicRequestFilter.isPublicRegistration(request) || VisitantePublicRequestFilter.isPublicNotice(request);
     }
 
     @Override

@@ -10,10 +10,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,6 +47,14 @@ public class RegistroVisitanteResource {
                 .body(service.listar(page, size, fecha, horaDesde, horaHasta, nombre, orden));
     }
 
+    @GetMapping(value = "/{id}/firma", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> firma(Authentication authentication, @PathVariable Long id) {
+        guard.requireTabAccess(authentication, ModuloSistema.PERSONAL_PLANTA, "CONTROL_VISITANTES", 1,
+                "No tiene acceso a Gestion Humana / Control de visitantes.");
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
+                .header("X-Content-Type-Options", "nosniff").body(service.obtenerFirma(id));
+    }
+
     @ExceptionHandler({IllegalArgumentException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ErrorResponse> filtrosInvalidos() {
         return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).body(new ErrorResponse(
@@ -54,6 +64,8 @@ public class RegistroVisitanteResource {
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> accesoRechazado(ResponseStatusException error) {
+        if (error.getStatusCode().value() == 404) return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .cacheControl(CacheControl.noStore()).body(new ErrorResponse("Firma no disponible", "No existe una firma para este registro."));
         return ResponseEntity.status(error.getStatusCode()).cacheControl(CacheControl.noStore())
                 .body(new ErrorResponse("Acceso no autorizado", "No tiene acceso al listado de visitantes."));
     }
