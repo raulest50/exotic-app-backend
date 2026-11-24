@@ -1,5 +1,5 @@
 # Build with a full JDK, then copy only the runnable artifact into the final image.
-FROM eclipse-temurin:21-jdk-jammy AS builder
+FROM eclipse-temurin:21-jdk-jammy@sha256:b2711c65970c1227197c29c46e669bfdbb137524e9da0e664703a140ec25a040 AS builder
 
 LABEL authors="Raul Esteban" version="dev-1" description="Spring Boot Docker Image"
 
@@ -21,7 +21,7 @@ COPY src src
 RUN ./gradlew clean build -x test -Pprod --no-daemon
 
 # PostgreSQL 18 tooling is required for complete export/import and recovery.
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21-jre-jammy@sha256:a8bff88f760e87e0c8844f8461f807c203fd5e8f78c951c843024647e965eaf5
 
 ENV TZ=America/Bogota
 ENV JAVA_TOOL_OPTIONS="-Duser.timezone=America/Bogota"

@@ -13,11 +13,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
         with:
           java-version: '21'
           distribution: temurin
+          problem-matcher: true
           cache: gradle
       - name: Compile and package
         run: bash ./gradlew build -x test --no-daemon
@@ -28,20 +29,21 @@ jobs:
           --tests '*JwtTokenProviderTest'
           --tests '*BackupV2ArchiveServiceTest'
           --tests '*BackupV2ImportServiceTest'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: backend-jar
           path: build/libs/exotic-app-v1.jar
           if-no-files-found: error
+          archive: true
   request-release:
     needs: verify
-    if: github.event_name == 'push' && vars.DEPLOYMENT_DISPATCH_APP_ID != ''
+    if: github.event_name == 'push' && vars.DEPLOYMENT_DISPATCH_APP_CLIENT_ID != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         id: broker
         with:
-          app-id: ${{ vars.DEPLOYMENT_DISPATCH_APP_ID }}
+          client-id: ${{ vars.DEPLOYMENT_DISPATCH_APP_CLIENT_ID }}
           private-key: ${{ secrets.DEPLOYMENT_DISPATCH_PRIVATE_KEY }}
           owner: raulest50
           repositories: exotic-app-deployment
