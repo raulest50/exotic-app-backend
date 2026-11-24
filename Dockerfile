@@ -20,51 +20,37 @@ COPY src src
 
 RUN ./gradlew clean build -x test -Pprod --no-daemon
 
-# Jammy gives us a predictable apt-based runtime for optional PostgreSQL tooling.
+# PostgreSQL 18 tooling is required for complete export/import and recovery.
 FROM eclipse-temurin:21-jre-jammy
-
-ARG POSTGRES_CLIENT_MAJOR=18
 
 ENV TZ=America/Bogota
 ENV JAVA_TOOL_OPTIONS="-Duser.timezone=America/Bogota"
 
-# Spring Boot is mandatory; pg_dump/pg_restore are best-effort helpers.
 RUN set -eu; \
     export DEBIAN_FRONTEND=noninteractive; \
     apt-get update; \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        gnupg \
-        tzdata; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg tzdata; \
     install -d /usr/share/postgresql-common/pgdg; \
-    if curl --fail --silent --show-error --location \
+    curl --fail --silent --show-error --location \
         --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-        https://www.postgresql.org/media/keys/ACCC4CF8.asc; then \
-        . /etc/os-release; \
-        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
-        if ! apt-get update; then \
-            echo "[WARN] PGDG repository metadata could not be refreshed. PostgreSQL client tooling may be unavailable."; \
-        fi; \
-    else \
-        echo "[WARN] Could not configure the PGDG repository. PostgreSQL client tooling may be unavailable."; \
-    fi; \
-    if ! apt-get install -y --no-install-recommends "postgresql-client-${POSTGRES_CLIENT_MAJOR}"; then \
-        echo "[WARN] PostgreSQL client ${POSTGRES_CLIENT_MAJOR} could not be installed. Export/import total will stay disabled until the image can provide pg_dump and pg_restore."; \
-    fi; \
-    rm -rf /var/lib/apt/lists/*
-
-# Emit a compact capabilities summary during image build so Render logs show what the runtime contains.
-RUN set -eu; \
-    echo "[DIAG] Runtime PATH=$PATH"; \
-    if command -v pg_dump >/dev/null 2>&1; then pg_dump --version; else echo "[WARN] pg_dump unavailable in runtime image."; fi; \
-    if command -v pg_restore >/dev/null 2>&1; then pg_restore --version; else echo "[WARN] pg_restore unavailable in runtime image."; fi
-
-RUN mkdir -p /root/.ssh && chmod 0700 /root/.ssh
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
+    fingerprint=$(gpg --batch --show-keys --with-colons /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc | awk -F: '$1 == "fpr" {print $10; exit}'); \
+    test "$fingerprint" = B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8; \
+    . /etc/os-release; \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends postgresql-client-18; \
+    pg_dump --version | grep -E '^pg_dump \(PostgreSQL\) 18\.'; \
+    pg_restore --version | grep -E '^pg_restore \(PostgreSQL\) 18\.'; \
+    rm -rf /var/lib/apt/lists/*; \
+    groupadd --gid 1000 exotic; \
+    useradd --uid 1000 --gid 1000 --no-create-home --shell /usr/sbin/nologin exotic
 
 WORKDIR /app
 
 COPY --from=builder /app/build/libs/exotic-app-v1.jar app.jar
+
+USER 1000:1000
 
 EXPOSE 8080
 

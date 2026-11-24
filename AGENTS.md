@@ -78,10 +78,11 @@ Estas instrucciones aplican a todo el repositorio `exotic-app-backend`.
 
 ## Validación después de cambios de código
 
-La validación de este repositorio es **local**. No existe red de seguridad
-automatizada: el workflow `.github/workflows/gradle-build.yml` dispara en la
-rama `master`, la rama de trabajo es `main`, y por tanto nunca se ejecuta.
-Además está configurado con `-x test`. No asumir que la CI verifica nada.
+El workflow `.github/workflows/gradle-build.yml` se prepara para `main` y PR:
+compila y ejecuta pruebas unitarias acotadas de deployment. Su presencia no
+acredita una corrida aprobada ni cobertura completa. Consultar los resultados
+de GitHub y [el pipeline de releases](../exotic-app-deployment/docs/ci.md).
+La compilación local sigue siendo el gate mínimo.
 
 Compilar desde la raíz del repositorio:
 
