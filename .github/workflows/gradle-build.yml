@@ -12,8 +12,11 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
         with:
           java-version: '21'
@@ -35,10 +38,21 @@ jobs:
           path: build/libs/exotic-app-v1.jar
           if-no-files-found: error
           archive: true
+      - name: Report staging connection
+        if: github.event_name == 'push'
+        env:
+          DISPATCH_CONFIGURED: ${{ vars.DEPLOYMENT_DISPATCH_APP_CLIENT_ID != '' }}
+        run: |
+          if [ "$DISPATCH_CONFIGURED" = true ]; then
+            echo 'Backend verified; requesting the independent staging pipeline.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Backend verified. Staging dispatch is pending GitHub App configuration; no deployment was requested.' >> "$GITHUB_STEP_SUMMARY"
+          fi
   request-release:
     needs: verify
-    if: github.event_name == 'push' && vars.DEPLOYMENT_DISPATCH_APP_CLIENT_ID != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOYMENT_DISPATCH_APP_CLIENT_ID != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         id: broker
@@ -48,10 +62,10 @@ jobs:
           owner: raulest50
           repositories: exotic-app-deployment
           permission-actions: write
-      - name: Request a paired release; no direct VM access
+      - name: Request backend staging build; no direct VM access
         env:
           GH_TOKEN: ${{ steps.broker.outputs.token }}
           SOURCE_SHA: ${{ github.sha }}
         run: >-
-          gh api --method POST repos/raulest50/exotic-app-deployment/actions/workflows/release.yml/dispatches
-          -f ref=main -f "inputs[backend_sha]=$SOURCE_SHA" -f 'inputs[frontend_sha]=main'
+          gh api --method POST repos/raulest50/exotic-app-deployment/actions/workflows/staging.yml/dispatches
+          -f ref=main -f 'inputs[component]=backend' -f "inputs[source_sha]=$SOURCE_SHA"
