@@ -66,6 +66,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.broker.outputs.token }}
           SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: >-
           gh api --method POST repos/raulest50/exotic-app-deployment/actions/workflows/staging.yml/dispatches
           -f ref=main -f 'inputs[component]=backend' -f "inputs[source_sha]=$SOURCE_SHA"
+          -f "inputs[source_run_id]=$SOURCE_RUN_ID" -f "inputs[source_run_attempt]=$SOURCE_RUN_ATTEMPT"
