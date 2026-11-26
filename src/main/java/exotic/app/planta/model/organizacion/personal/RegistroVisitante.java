@@ -84,6 +84,23 @@ public class RegistroVisitante {
             columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private Instant fechaRegistro;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private Estado estado;
+
+    @Column(name = "fecha_salida", columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant fechaSalida;
+
+    @Column(name = "salida_registrada_en", columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant salidaRegistradaEn;
+
+    @Column(name = "salida_registrada_por_id")
+    private Long salidaRegistradaPorId;
+
+    // Snapshots preserve the closing actor without loading or linking the User entity.
+    @Column(name = "salida_registrada_por_username", length = 255)
+    private String salidaRegistradaPorUsername;
+
     public RegistroVisitante(String cedula, String nombreCompleto, Integer edad,
                              Genero genero, Motivo motivo, String motivoOtro, String cargoEmpresa,
                              TipoIngreso tipoIngreso, String areaPersonaVisita, String consentimientoVersion,
@@ -105,7 +122,10 @@ public class RegistroVisitante {
         this.firmaSha256 = firmaSha256;
         this.consentimientoFirmaTexto = consentimientoFirmaTexto;
         this.fechaRegistro = fechaRegistro;
+        this.estado = Estado.PENDIENTE_SALIDA;
     }
+
+    public enum Estado { PENDIENTE_SALIDA, SALIO, SIN_SEGUIMIENTO }
 
     public enum TipoIngreso { TRABAJADOR, VISITANTE, CONTRATISTA, PROVEEDOR, OTRO }
 

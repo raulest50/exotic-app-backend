@@ -2,12 +2,14 @@ package exotic.app.planta.config;
 
 import exotic.app.planta.config.runtime.ApplicationRuntimeEnvironmentResolver;
 import exotic.app.planta.security.JwtAuthenticationFilter;
+import exotic.app.planta.security.DatabaseImportMaintenanceFilter;
 import exotic.app.planta.security.JwtTokenProvider;
 import exotic.app.planta.security.MigrationAuthenticationProvider;
 import exotic.app.planta.security.RestAccessDeniedHandler;
 import exotic.app.planta.security.RestAuthenticationEntryPoint;
 import exotic.app.planta.security.VisitantePublicRequestFilter;
 import exotic.app.planta.service.users.UserDetailsServiceImpl;
+import exotic.app.planta.service.commons.DatabaseImportMaintenanceService;
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -36,6 +38,7 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
     private final ApplicationRuntimeEnvironmentResolver applicationRuntimeEnvironmentResolver;
     private final UserDetailsServiceImpl userDetailsService;
+    private final DatabaseImportMaintenanceService databaseImportMaintenanceService;
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
@@ -70,7 +73,8 @@ public class SecurityConfig {
                     auth.anyRequest().authenticated();
                 })
                 .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(corsFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(new DatabaseImportMaintenanceFilter(databaseImportMaintenanceService), JwtAuthenticationFilter.class)
+                .addFilterBefore(corsFilter, DatabaseImportMaintenanceFilter.class)
                 .addFilterBefore(new VisitantePublicRequestFilter(), JwtAuthenticationFilter.class)
                 .authenticationProvider(migrationAuthenticationProvider);
 

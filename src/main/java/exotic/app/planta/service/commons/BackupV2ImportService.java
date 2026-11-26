@@ -38,12 +38,14 @@ public class BackupV2ImportService {
     private final String datasourceUrl;
     private final String username;
     private final String password;
+    private final BackupSchemaCompatibilityService schemas;
 
     public BackupV2ImportService(BackupV2ArchiveService archives, PgDumpExecutableResolver executables,
                                  DangerousOperationGuard guard, DataSource dataSource, ObjectMapper mapper,
                                  @Value("${spring.datasource.url}") String datasourceUrl,
                                  @Value("${spring.datasource.username}") String username,
-                                 @Value("${spring.datasource.password}") String password) {
+                                 @Value("${spring.datasource.password}") String password,
+                                 BackupSchemaCompatibilityService schemas) {
         this.archives = archives;
         this.executables = executables;
         this.guard = guard;
@@ -52,9 +54,16 @@ public class BackupV2ImportService {
         this.datasourceUrl = datasourceUrl;
         this.username = username;
         this.password = password;
+        this.schemas = schemas;
     }
 
-    public int restore(Path zip, String jobId, Consumer<String> progress) throws Exception {
+    @FunctionalInterface
+    public interface ImportPreparation {
+        void prepare(BackupSchemaCompatibilityService.SchemaPlan plan) throws Exception;
+    }
+
+    public int restore(Path zip, String jobId, Consumer<String> progress,
+                       ImportPreparation beforeReplacement, Runnable databaseMutationStarted) throws Exception {
         guard.assertLocalOrStagingOnly("La importacion total V2");
         Path work = Files.createTempDirectory(zip.getParent(), "import-v2-");
         Path recovery = null;
@@ -65,19 +74,12 @@ public class BackupV2ImportService {
             String restore = executables.resolveRestoreExecutable();
             String psql = executables.resolvePsqlExecutable();
             BackupProcessRunner.run(List.of(psql, "--version"), null, Duration.ofMinutes(1));
-            List<PoeFile> current;
+            var plan = schemas.inspect(work.resolve("database.dump"), work, manifest.migrations());
             try (var connection = dataSource.getConnection()) {
                 BackupV2ArchiveService.requirePublicSchema(connection);
                 if (manifest.postgresMajor() != connection.getMetaData().getDatabaseMajorVersion()) {
                     throw invalid("La importacion V2 requiere la misma version mayor de PostgreSQL que el origen.");
                 }
-                List<SchemaMigration> expectedMigrations = manifest.migrations().stream()
-                        .sorted(Comparator.comparing(SchemaMigration::version)).toList();
-                if (!expectedMigrations.equals(BackupV2ArchiveService.readMigrations(connection))) {
-                    throw invalid("El respaldo y el destino tienen diferentes migraciones Flyway. "
-                            + "Sincronice las versiones de la aplicacion antes de importar V2.");
-                }
-                current = BackupV2ArchiveService.readDocuments(connection);
             }
 
             // pg_restore parses the entire archive BEFORE any database or live-file replacement.
@@ -96,7 +98,11 @@ public class BackupV2ImportService {
 
             // Immutable storage keys let us copy files first without invalidating the current database.
             // A conflicting key/hash is rejected; existing unreferenced files are never deleted.
-            validateDestinations(manifest.poes(), current);
+            beforeReplacement.prepare(plan);
+            // Re-read under maintenance so a concurrent POE publication cannot invalidate the inventory.
+            try (var connection = dataSource.getConnection()) {
+                validateDestinations(manifest.poes(), BackupV2ArchiveService.readDocuments(connection));
+            }
             guard.assertLocalOrStagingOnly("La importacion total V2");
             Path root = archives.storageRoot();
             Files.createDirectories(root);
@@ -114,6 +120,7 @@ public class BackupV2ImportService {
             command.addAll(List.of("--file=" + reset.toAbsolutePath(), "--file=" + sql.toAbsolutePath(),
                     "--file=" + verify.toAbsolutePath()));
             // Reset, restore and manifest verification commit together. No separate DROP SCHEMA.
+            databaseMutationStarted.run();
             BackupProcessRunner.run(command, password, Duration.ofMinutes(15));
             restored = true;
             return manifest.poes().size();

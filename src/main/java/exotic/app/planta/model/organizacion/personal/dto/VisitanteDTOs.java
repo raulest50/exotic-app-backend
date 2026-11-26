@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Genero;
+import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Estado;
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Motivo;
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante.TipoIngreso;
 
@@ -43,10 +44,23 @@ public final class VisitanteDTOs {
     public record Confirmacion(Instant fechaRegistro) {
     }
 
+    public record RegistrarSalidaRequest(String fechaSalida) {
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public static RegistrarSalidaRequest fromJson(JsonNode payload) {
+            if (payload == null || !payload.isObject() || payload.size() != 1
+                    || !payload.has("fechaSalida") || !payload.get("fechaSalida").isTextual()) {
+                throw new IllegalArgumentException("El cuerpo debe contener solo fechaSalida como texto ISO 8601 con offset.");
+            }
+            return new RegistrarSalidaRequest(payload.get("fechaSalida").textValue());
+        }
+    }
+
     public record Registro(Long id, String cedula, String nombreCompleto, Integer edad,
                            Genero genero, Motivo motivo, String motivoOtro, Instant fechaRegistro,
                            String cargoEmpresa, TipoIngreso tipoIngreso, String areaPersonaVisita,
-                           boolean firmaRegistrada) { }
+                           boolean firmaRegistrada, Estado estado, Instant fechaSalida,
+                           Instant salidaRegistradaEn, Long salidaRegistradaPorId,
+                           String salidaRegistradaPorUsername) { }
 
     private static Boolean booleano(JsonNode valor) {
         if (valor == null || valor.isNull()) return null;

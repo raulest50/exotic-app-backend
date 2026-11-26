@@ -42,8 +42,10 @@ Estas instrucciones aplican a todo el repositorio `exotic-app-backend`.
 
 ## Configuración local
 
-- `src/main/resources/application.yml` es el único archivo de configuración
-  versionado. El `.gitignore` excluye `*.properties`.
+- `src/main/resources/application.yml` y su catálogo importado
+  `src/main/resources/module-timeouts.yml` son configuración versionada.
+  El catálogo contiene timeouts no sensibles por entorno, módulo y operación;
+  no almacenar credenciales allí. El `.gitignore` excluye `*.properties`.
 - `application.properties` y `application-jwt.properties` existen solo en la
   máquina local y contienen credenciales reales de base de datos, correo, API de
   TRM y el secreto JWT. Un clon nuevo no arranca sin ellos y el repositorio no

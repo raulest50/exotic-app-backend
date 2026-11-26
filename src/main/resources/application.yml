@@ -5,7 +5,9 @@ spring:
 
   config:
     additional-location: classpath:application-secrets.properties
-    import: optional:file:./.local/agent-assistant.properties
+    import:
+      - optional:file:./.local/agent-assistant.properties
+      - classpath:module-timeouts.yml
 
   datasource:
     #url: jdbc:mysql://mysql-container:3306/lacm-planta?createDatabaseIfNotExist=true # OLD MULTI-CONTAINER URL

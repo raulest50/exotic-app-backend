@@ -8,6 +8,7 @@ import exotic.app.planta.model.users.ModuloSistema;
 import exotic.app.planta.model.users.TabAcceso;
 import exotic.app.planta.repo.agentassistant.AgentAssistantQueryRepository;
 import exotic.app.planta.service.commons.BackupTotalExportService;
+import exotic.app.planta.service.commons.DatabaseImportMaintenanceService;
 import exotic.app.planta.service.users.AgentAssistantAccessService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,8 @@ class AgentAssistantServiceTest {
     @Mock AssistantAiGateway gateway;
     @Mock AgentAssistantQueryRepository queries;
     @Mock BackupTotalExportService backups;
+    @Mock DatabaseImportMaintenanceService maintenance;
+    @Mock DatabaseImportMaintenanceService.Access workAdmission;
     final AgentAssistantContext context = new AgentAssistantContext(
             new ByteArrayResource("Dominio de prueba: una OP pertenece a producción.".getBytes(StandardCharsets.UTF_8)),
             new ByteArrayResource("Modelo de prueba: OrdenProduccion relaciona producto y lote.".getBytes(StandardCharsets.UTF_8)));
@@ -51,7 +54,8 @@ class AgentAssistantServiceTest {
     final User master = User.builder().id(1L).username("master").estado(1).build();
 
     @BeforeEach void createService() {
-        service = new AgentAssistantService(access, Optional.of(gateway), queries, backups, new ObjectMapper(), context);
+        service = new AgentAssistantService(access, Optional.of(gateway), queries, backups, new ObjectMapper(), context, maintenance);
+        lenient().when(maintenance.tryEnterWork()).thenReturn(workAdmission);
         lenient().when(gateway.connectionId()).thenReturn("initial-connection");
         lenient().when(gateway.usage()).thenReturn(new AssistantAiGateway.Usage(false, null));
     }
@@ -74,7 +78,7 @@ class AgentAssistantServiceTest {
 
     @Test void withoutAnAiProviderTheAssistantStaysUnavailableAndCannotRunQueries() {
         service.shutdown();
-        service = new AgentAssistantService(access, Optional.empty(), queries, backups, new ObjectMapper(), context);
+        service = new AgentAssistantService(access, Optional.empty(), queries, backups, new ObjectMapper(), context, maintenance);
         when(access.requireRead(authentication)).thenReturn(master);
         var status = service.status(authentication);
         assertThat(status.enabled()).isFalse();
@@ -233,6 +237,19 @@ class AgentAssistantServiceTest {
         assertThat(awaitTerminal(proposal.id()).state()).isEqualTo("FAILED");
         verifyNoInteractions(queries);
         verify(backups, never()).getDownloadPayload(any(), any());
+    }
+
+    @Test void aWorkerAdmittedAfterImportMaintenanceStartsCannotReadOrCreateABackup() throws Exception {
+        authorized();
+        proposedQuery();
+        var proposal = service.chat(authentication, request("Lista los productos")).proposal();
+        when(maintenance.tryEnterWork()).thenReturn(null);
+
+        service.execute(authentication, proposal.id());
+
+        assertThat(awaitTerminal(proposal.id()).state()).isEqualTo("FAILED");
+        verify(maintenance).tryEnterWork();
+        verifyNoInteractions(backups, queries, workAdmission);
     }
 
     @Test void assistantAndProductsAccessNeverGrantTheIndependentBackupPermission() {

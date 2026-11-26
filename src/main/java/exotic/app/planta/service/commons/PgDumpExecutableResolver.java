@@ -73,7 +73,7 @@ public class PgDumpExecutableResolver {
         Path psql = restore.resolveSibling(name);
         if (!Files.isRegularFile(psql)) {
             throw new PgDumpResolutionException("PSQL_PATH_INVALID",
-                    "No se encontro psql junto al pg_dump configurado. La importacion V2 lo requiere.");
+                    "No se encontro psql junto al pg_dump configurado. La importacion total V1/V2 lo requiere.");
         }
         return psql.toAbsolutePath().toString();
     }

@@ -48,6 +48,7 @@ public class BackupTotalExportService {
     private final String datasourcePassword;
     private final PgDumpExecutableResolver pgDumpExecutableResolver;
     private final BackupV2ArchiveService backupV2ArchiveService;
+    private final DatabaseImportMaintenanceService maintenance;
 
     private final ConcurrentMap<String, BackupJob> jobsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, String> activeJobByUserId = new ConcurrentHashMap<>();
@@ -61,7 +62,8 @@ public class BackupTotalExportService {
             @Value("${spring.datasource.username}") String datasourceUsername,
             @Value("${spring.datasource.password}") String datasourcePassword,
             PgDumpExecutableResolver pgDumpExecutableResolver,
-            BackupV2ArchiveService backupV2ArchiveService
+            BackupV2ArchiveService backupV2ArchiveService,
+            DatabaseImportMaintenanceService maintenance
     ) {
         this.dataSource = dataSource;
         this.datasourceUrl = datasourceUrl;
@@ -69,6 +71,7 @@ public class BackupTotalExportService {
         this.datasourcePassword = datasourcePassword;
         this.pgDumpExecutableResolver = pgDumpExecutableResolver;
         this.backupV2ArchiveService = backupV2ArchiveService;
+        this.maintenance = maintenance;
         this.backupExecutor = Executors.newSingleThreadExecutor(new BackupThreadFactory());
     }
 
@@ -172,7 +175,12 @@ public class BackupTotalExportService {
         job.status = JobStatus.EN_PROCESO;
         LocalDateTime startedAt = AppTime.now();
 
-        try {
+        try (var access = maintenance.tryEnterWork()) {
+            if (access == null) {
+                markJobError(job, "DATABASE_IMPORT_MAINTENANCE",
+                        "No se genero el respaldo porque la base esta en mantenimiento por importacion.", null);
+                return;
+            }
             if (job.v2) {
                 job.message = "Generando respaldo V2: PostgreSQL y todas las versiones de POE...";
                 backupV2ArchiveService.exportArchive(job.filePath, this::writeDump);

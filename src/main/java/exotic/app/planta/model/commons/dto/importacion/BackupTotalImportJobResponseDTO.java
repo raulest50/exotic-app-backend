@@ -11,6 +11,11 @@ public record BackupTotalImportJobResponseDTO(
         LocalDateTime finishedAt,
         LocalDateTime expiresAt,
         String errorCode,
-        String message
+        String message,
+        String sourceSchemaVersion,
+        String targetSchemaVersion,
+        String finalSchemaVersion,
+        Integer migrationsApplied,
+        boolean requiresRecovery
 ) {
 }

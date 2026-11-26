@@ -75,6 +75,35 @@ Ejemplo de fila usando gramos:
 |--------------------|--------------|-------|------------|-----|--------------|---------------|
 | Polvo de Colágeno  | G            | 500   | MP004      | 19  | 50           | 35000         |
 
+## Timeouts por entorno y módulo
+
+El catálogo versionado [module-timeouts.yml](src/main/resources/module-timeouts.yml)
+se importa obligatoriamente desde `application.yml`. Contiene los grupos
+`production` y `testing`, organizados por módulo y operación. Cada
+`transaction-seconds` es un entero positivo de segundos; el catálogo se valida
+al arrancar, incluidos los grupos y las excepciones de entorno.
+
+`ModuleTimeoutPolicy` reutiliza `ApplicationRuntimeEnvironmentResolver`:
+producción selecciona `production`; local y staging seleccionan `testing`.
+Las excepciones `environments` de una operación sustituyen su valor base solo
+para el entorno indicado. BI por áreas (`bi.production-areas`) conserva 5 segundos
+en producción/local y dispone de 60 en staging como presupuesto piloto, pendiente
+de medir su suficiencia. En staging se recomienda una operación pesada a la vez,
+sin solapar informes, respaldos e importaciones; esta configuración no impone
+ese control de concurrencia. Los demás módulos no cambian hasta incorporarlos
+al catálogo e integrar explícitamente sus operaciones.
+
+Los valores se mantienen en ese archivo, sin variables específicas de timeout.
+La identificación del entorno sigue usando la configuración existente. Como
+otras propiedades importadas de Spring, el catálogo conserva la precedencia
+normal de configuración externa; no es un bloqueo de overrides administrativos.
+
+El límite actual controla únicamente la transacción de la analítica, no el
+timeout HTTP del informe completo ni la espera del pool de conexiones.
+Se conservan `readOnly`, `REQUIRES_NEW` y el resultado parcial si falla la analítica.
+El cambio entra en vigor al desplegar el backend recompilado; no hay recarga
+dinámica por editar el archivo ni se modifican los servicios existentes.
+
 ## Ajustes de inventario
 
 El endpoint `POST /movimientos/ajustes` permite registrar ajustes positivos o negativos, con soporte opcional de lotes y documento de soporte.

@@ -1,16 +1,17 @@
 package exotic.app.planta.service.rehumanos;
 
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante;
+import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Estado;
 import exotic.app.planta.model.organizacion.personal.RegistroVisitante.Motivo;
 import exotic.app.planta.model.organizacion.personal.dto.VisitanteDTOs.Confirmacion;
 import exotic.app.planta.model.organizacion.personal.dto.VisitanteDTOs.CrearRequest;
 import exotic.app.planta.model.organizacion.personal.dto.VisitanteDTOs.Registro;
+import exotic.app.planta.model.organizacion.personal.dto.VisitanteDTOs.RegistrarSalidaRequest;
 import exotic.app.planta.repo.personal.RegistroVisitanteRepo;
 import exotic.app.planta.config.TimeZoneConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.text.Normalizer;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -83,7 +86,7 @@ public class RegistroVisitanteService {
     }
 
     public Page<Registro> listar(int page, int size, LocalDate fecha, LocalTime horaDesde,
-                                LocalTime horaHasta, String nombre, String orden) {
+                                LocalTime horaHasta, String nombre) {
         if (page < 0 || size < 1 || size > 50) {
             throw new IllegalArgumentException("Paginacion fuera del rango permitido.");
         }
@@ -91,9 +94,6 @@ public class RegistroVisitanteService {
                 || (horaHasta != null && (horaHasta.getSecond() != 0 || horaHasta.getNano() != 0))
                 || (horaDesde != null && horaHasta != null && horaDesde.isAfter(horaHasta))) {
             throw new IllegalArgumentException("Rango de horas invalido.");
-        }
-        if (!"ASC".equals(orden) && !"DESC".equals(orden)) {
-            throw new IllegalArgumentException("Orden invalido.");
         }
         LocalDate dia = fecha == null ? LocalDate.now(applicationClock.withZone(ZONA_VISITAS)) : fecha;
         Instant inicio = dia.atTime(horaDesde == null ? LocalTime.MIN : horaDesde).atZone(ZONA_VISITAS).toInstant();
@@ -103,11 +103,56 @@ public class RegistroVisitanteService {
         String nombreFiltro = nombre == null || nombre.isBlank() ? null : normalizarTexto(nombre, 160);
         String patronNombre = nombreFiltro == null ? null : "%" + nombreFiltro.toLowerCase(Locale.ROOT)
                 .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-        Sort ordenamiento = Sort.by(Sort.Direction.valueOf(orden), "fechaRegistro", "id");
-        return repo.consultar(inicio, fin, patronNombre, PageRequest.of(page, size, ordenamiento))
-                .map(r -> new Registro(r.getId(), r.getCedula(), r.getNombreCompleto(), r.getEdad(), r.getGenero(),
-                        r.getMotivo(), r.getMotivoOtro(), r.getFechaRegistro(), r.getCargoEmpresa(), r.getTipoIngreso(),
-                        r.getAreaPersonaVisita(), r.getFirmaRegistrada()));
+        return repo.consultar(inicio, fin, patronNombre, Estado.PENDIENTE_SALIDA, Estado.SALIO,
+                PageRequest.of(page, size)).map(RegistroVisitanteService::aRegistro);
+    }
+
+    @Transactional
+    public Registro registrarSalida(Long id, RegistrarSalidaRequest request, Long actorId, String actorUsername) {
+        if (id == null || id <= 0) throw new IllegalArgumentException("Registro invalido.");
+        RegistroVisitanteRepo.Resumen actual = exigirResumen(id);
+        // Retrying a completed visit always returns the first committed closing evidence.
+        if (actual.getEstado() == Estado.SALIO) return aRegistro(actual);
+        if (actual.getEstado() != Estado.PENDIENTE_SALIDA) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Este registro historico no tiene seguimiento de salida.");
+        }
+        Instant fechaSalida;
+        try {
+            if (request == null || request.fechaSalida() == null) throw new IllegalArgumentException();
+            fechaSalida = OffsetDateTime.parse(request.fechaSalida()).toInstant();
+        } catch (DateTimeParseException | IllegalArgumentException error) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La fecha de salida debe ser texto ISO 8601 con offset, por ejemplo 2026-11-25T15:30:00-05:00.");
+        }
+        Instant registradaEn = applicationClock.instant();
+        if (fechaSalida.isBefore(actual.getFechaRegistro()) || fechaSalida.isAfter(registradaEn)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La salida debe ser igual o posterior al ingreso y no superar la hora actual del servidor.");
+        }
+        if (actorId == null || actorId <= 0 || actorUsername == null || actorUsername.isBlank()
+                || actorUsername.length() > 255) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no disponible.");
+        }
+        repo.registrarSalida(id, fechaSalida, registradaEn, actorId, actorUsername,
+                Estado.PENDIENTE_SALIDA, Estado.SALIO);
+        RegistroVisitanteRepo.Resumen resultado = exigirResumen(id);
+        if (resultado.getEstado() != Estado.SALIO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No fue posible registrar la salida de esta visita.");
+        }
+        return aRegistro(resultado);
+    }
+
+    private RegistroVisitanteRepo.Resumen exigirResumen(Long id) {
+        return repo.obtenerResumen(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "No existe el registro de visita."));
+    }
+
+    private static Registro aRegistro(RegistroVisitanteRepo.Resumen r) {
+        return new Registro(r.getId(), r.getCedula(), r.getNombreCompleto(), r.getEdad(), r.getGenero(),
+                r.getMotivo(), r.getMotivoOtro(), r.getFechaRegistro(), r.getCargoEmpresa(), r.getTipoIngreso(),
+                r.getAreaPersonaVisita(), r.getFirmaRegistrada(), r.getEstado(), r.getFechaSalida(),
+                r.getSalidaRegistradaEn(), r.getSalidaRegistradaPorId(), r.getSalidaRegistradaPorUsername());
     }
 
     public byte[] obtenerFirma(Long id) {

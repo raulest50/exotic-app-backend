@@ -1,4 +1,4 @@
-# Registro de ingresos y firma opcional
+# Registro de ingresos, salidas y firma opcional
 
 El formulario público `/visitantes-registro` pertenece a Gestión Humana. Requiere
 tipo de ingreso, área/persona a visitar y autorización de datos; cargo/empresa es
@@ -65,3 +65,62 @@ la copia de Gestión Humana. No cambian los componentes, las firmas persistidas 
 las API de Usuarios. El servicio de firma de visitantes también es independiente.
 
 El modelo Gaphor no contiene un diagrama aplicable a esta funcionalidad. No se edita.
+
+## Salida y trazabilidad
+
+V136 amplía la visita existente. Clasifica los registros previos como
+`SIN_SEGUIMIENTO` (sin salida inferida) y crea los nuevos como `PENDIENTE_SALIDA`.
+No existe reapertura ni edición del cierre en esta versión.
+
+`PATCH /gestion-humana/visitantes/{id}/salida` admite exclusivamente
+`{"fechaSalida":"2026-11-25T13:00:00-05:00"}`. La fecha debe incluir offset.
+El servidor verifica `fechaRegistro <= fechaSalida <= salidaRegistradaEn`;
+obtiene `salidaRegistradaEn` de su reloj sin truncarlo y guarda instantáneas
+del ID y username del usuario autenticado. Permite fechas anteriores cuando
+son posteriores al ingreso. La consulta exige nivel 1 y el cierre nivel 2 de
+`PERSONAL_PLANTA/CONTROL_VISITANTES`, con las excepciones administrativas vigentes.
+
+La actualización condicional a pendiente es atómica. Un reintento devuelve el
+primer cierre guardado, sin sustituir fecha ni operador. Responde 404 si no existe
+la visita, 409 si es un histórico sin seguimiento y 400 por fecha inválida.
+Las restricciones SQL exigen metadatos completos para `SALIO`, coherencia entre
+fechas y ausencia de metadatos de salida en los otros estados. El operador se
+conserva como instantánea, sin FK a una cuenta que podría cambiar o eliminarse.
+
+El listado incluye estado, salida informada, registro del cierre y operador,
+sin cargar la firma ni los textos de autorización. Ordena antes de paginar:
+pendientes, salieron e históricos; dentro de cada grupo, ingreso e ID ascendentes.
+Ya no admite orden configurable. Fecha, rango de horas y nombre filtran todo el
+conjunto por **ingreso**: una pendiente de ayer requiere consultar ayer.
+
+La interfaz captura fecha y hora de Colombia y muestra la demora como diferencia
+entre el registro del cierre y la salida informada; no se persiste otro indicador.
+Si el operador conserva los valores iniciales, el envío retiene los milisegundos
+del instante inicial. Si los edita, se envía la hora indicada con offset -05:00,
+independientemente de la zona del dispositivo. Tras cerrar, se vuelve a consultar
+la página actual con sus filtros.
+
+Aplicar V136 y desplegar ambos componentes coordinadamente mediante el
+procedimiento autorizado. La suite contractual de `exotic-app-e2e` consume los
+tipos/adaptadores: requiere revisar el nuevo resumen y la retirada del parámetro
+`orden`; no se ejecutaron suites automatizadas. No se aplicó la migración ni se
+verificaron cierres concurrentes en PostgreSQL durante este cambio.
+
+### Verificación local del 25 de noviembre de 2026
+
+- `bun run lint`: correcto.
+- `bun run vite build`: correcto; mantiene el aviso de tamaño de chunks.
+- `.\gradlew.bat build -x test` con Java 21: correcto, sin ejecutar pruebas.
+- `bunx tsc --noEmit --project tsconfig.json`: conserva diagnósticos ajenos a
+  Gestión Humana; no informó errores en los archivos de esta funcionalidad.
+- Revisión manual en navegador con los componentes reales y API simulada:
+  permiso visual nivel 1/2, salida inmediata, doble clic con una sola solicitud,
+  rechazo de salida futura/anterior al ingreso, salida del día anterior,
+  demora de 3 h 30 min, estados, filtro por nombre y cambio de página. Consola
+  sin errores. Se retiraron la página y sesión ficticias y se detuvo Vite.
+- La migración, los permisos efectivos de API y la concurrencia requieren
+  validación ejecutada en PostgreSQL. La revisión estática de Datos y Seguridad
+  fue favorable y no sustituye esa evidencia.
+
+No se encontró un diagrama aplicable en el modelo Gaphor local; no se requieren
+ajustes al alcance actualmente modelado.

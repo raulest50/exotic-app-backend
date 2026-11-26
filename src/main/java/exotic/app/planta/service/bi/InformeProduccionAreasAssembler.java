@@ -54,7 +54,7 @@ public class InformeProduccionAreasAssembler {
     @Transactional(
             readOnly = true,
             propagation = Propagation.REQUIRES_NEW,
-            timeout = 5
+            timeoutString = "#{@moduleTimeoutPolicy.transactionSeconds('bi', 'production-areas')}"
     )
     public InformeGlobalProduccionDTO.AnaliticaAreasDTO construir(
             LocalDate fechaDesde,

@@ -5,6 +5,7 @@ import exotic.app.planta.config.StorageProperties;
 import exotic.app.planta.service.commons.BackupV2ArchiveService.DumpFile;
 import exotic.app.planta.service.commons.BackupV2ArchiveService.Manifest;
 import exotic.app.planta.service.commons.BackupV2ArchiveService.PoeFile;
+import exotic.app.planta.service.commons.BackupV2ArchiveService.SchemaMigration;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -121,6 +122,43 @@ class BackupV2ArchiveServiceTest {
         Manifest invalid = new Manifest("exotic-backup", 3, "2026-09-22", "public", 17,
                 new DumpFile(dump.length, sha(dump)), List.of(), List.of());
         assertThrows(IllegalArgumentException.class, () -> BackupV2ArchiveService.validateManifest(invalid));
+    }
+
+    @Test
+    void rejectsADatabaseDumpWhoseDigestDoesNotMatchTheManifest() throws Exception {
+        Manifest invalid = new Manifest("exotic-backup", 2, "2026-11-25", "public", 17,
+                new DumpFile(dump.length, "0".repeat(64)), List.of(), List.of());
+        Path zip = archive(invalid, List.of(), document, null, false);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.extractValidated(zip, Files.createDirectory(directory.resolve("bad-dump"))));
+        assertFalse(Files.exists(directory.resolve("storage")));
+    }
+
+    @Test
+    void preservesOldMigrationMetadataForCompatibilityValidationInsteadOfRequiringTheLatestVersion() throws Exception {
+        List<SchemaMigration> history = List.of(new SchemaMigration("1", 123), new SchemaMigration("2", -456));
+        Manifest old = new Manifest("exotic-backup", 2, "2026-11-25", "public", 17,
+                new DumpFile(dump.length, sha(dump)), List.of(), history);
+        Path zip = archive(old, List.of(), document, null, false);
+
+        Manifest extracted = service.extractValidated(zip, Files.createDirectory(directory.resolve("old-history")));
+
+        assertEquals(history, extracted.migrations());
+        assertFalse(Files.exists(directory.resolve("storage")));
+    }
+
+    @Test
+    void rejectsMissingAndDuplicateMigrationMetadataBeforeExtraction() throws Exception {
+        Manifest missing = new Manifest("exotic-backup", 2, "2026-11-25", "public", 17,
+                new DumpFile(dump.length, sha(dump)), List.of(), null);
+        Manifest duplicate = new Manifest("exotic-backup", 2, "2026-11-25", "public", 17,
+                new DumpFile(dump.length, sha(dump)), List.of(),
+                List.of(new SchemaMigration("1", 123), new SchemaMigration("1", 456)));
+
+        assertThrows(IllegalArgumentException.class, () -> BackupV2ArchiveService.validateManifest(missing));
+        assertThrows(IllegalArgumentException.class, () -> BackupV2ArchiveService.validateManifest(duplicate));
+        assertFalse(Files.exists(directory.resolve("storage")));
     }
 
     private PoeFile poe(long id, int version, String name) throws Exception {

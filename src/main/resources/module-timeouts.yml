@@ -1,0 +1,13 @@
+app:
+  module-timeouts:
+    production:
+      bi:
+        production-areas:
+          transaction-seconds: 5
+    testing:
+      bi:
+        production-areas:
+          transaction-seconds: 5
+          environments:
+            staging:
+              transaction-seconds: 60

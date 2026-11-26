@@ -14,9 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.sql.DataSource;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +31,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,7 +40,6 @@ import java.util.regex.Pattern;
 public class BackupTotalImportService {
 
     private static final Duration JOB_TTL = Duration.ofMinutes(15);
-    private static final long PG_RESTORE_TIMEOUT_MINUTES = 15;
     private static final DateTimeFormatter FILE_TS_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final Pattern PG_TOOL_MAJOR_VERSION_PATTERN = Pattern.compile("(\\d+)(?:\\.\\d+)?");
     private static final String OPERATION_NAME = "La importacion total de base de datos";
@@ -54,9 +50,10 @@ public class BackupTotalImportService {
     private final String datasourcePassword;
     private final PgDumpExecutableResolver pgDumpExecutableResolver;
     private final DangerousOperationGuard dangerousOperationGuard;
-    private final DatabasePurgeService databasePurgeService;
     private final ImportedPasswordSanitizationService importedPasswordSanitizationService;
     private final BackupV2ImportService backupV2ImportService;
+    private final BackupSchemaCompatibilityService schemas;
+    private final DatabaseImportMaintenanceService maintenance;
 
     private final ConcurrentMap<String, ImportJob> jobsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> activeJobByUsername = new ConcurrentHashMap<>();
@@ -72,9 +69,10 @@ public class BackupTotalImportService {
             @Value("${spring.datasource.password}") String datasourcePassword,
             PgDumpExecutableResolver pgDumpExecutableResolver,
             DangerousOperationGuard dangerousOperationGuard,
-            DatabasePurgeService databasePurgeService,
             ImportedPasswordSanitizationService importedPasswordSanitizationService,
-            BackupV2ImportService backupV2ImportService
+            BackupV2ImportService backupV2ImportService,
+            BackupSchemaCompatibilityService schemas,
+            DatabaseImportMaintenanceService maintenance
     ) {
         this.dataSource = dataSource;
         this.datasourceUrl = datasourceUrl;
@@ -82,9 +80,10 @@ public class BackupTotalImportService {
         this.datasourcePassword = datasourcePassword;
         this.pgDumpExecutableResolver = pgDumpExecutableResolver;
         this.dangerousOperationGuard = dangerousOperationGuard;
-        this.databasePurgeService = databasePurgeService;
         this.importedPasswordSanitizationService = importedPasswordSanitizationService;
         this.backupV2ImportService = backupV2ImportService;
+        this.schemas = schemas;
+        this.maintenance = maintenance;
         this.importExecutor = Executors.newSingleThreadExecutor(new ImportThreadFactory());
     }
 
@@ -110,6 +109,10 @@ public class BackupTotalImportService {
 
     public synchronized BackupTotalImportJobResponseDTO createJob(User user, MultipartFile file, boolean v2) {
         dangerousOperationGuard.assertLocalOrStagingOnly(OPERATION_NAME);
+        if (maintenance.isBlocked()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "La base esta en mantenimiento. Revise la importacion anterior antes de continuar.");
+        }
         cleanupExpiredJobsInternal(false);
 
         String extension = v2 ? ".zip" : ".dump";
@@ -220,6 +223,8 @@ public class BackupTotalImportService {
         LocalDateTime startedAt = AppTime.now();
         job.startedAt = startedAt;
         int poeCount = 0;
+        Path work = null;
+        AtomicReference<DatabaseImportMaintenanceService.MaintenanceLease> lease = new AtomicReference<>();
 
         try {
             dangerousOperationGuard.assertLocalOrStagingOnly(OPERATION_NAME);
@@ -243,65 +248,56 @@ public class BackupTotalImportService {
                 poeCount = backupV2ImportService.restore(job.dumpFilePath, job.jobId, message -> {
                     job.message = message;
                     if (message.startsWith("Restaurando")) job.status = JobStatus.RESTAURANDO;
+                }, plan -> {
+                    recordPlan(job, plan);
+                    job.message = "Esperando el cierre de operaciones activas antes del reemplazo...";
+                    lease.set(enterMaintenance(job));
+                }, () -> {
+                    job.databaseMutationStarted = true;
+                    lease.get().markDatabaseMutation();
                 });
             } else {
-                job.status = JobStatus.PURGANDO;
-                job.message = "Vaciando completamente el esquema actual antes de restaurar el backup...";
-                databasePurgeService.resetCurrentSchemaForFullRestore();
-
+                work = Files.createTempDirectory(importDir, "import-v1-");
+                try (var connection = dataSource.getConnection()) {
+                    BackupV2ArchiveService.requirePublicSchema(connection);
+                }
+                recordPlan(job, schemas.inspect(job.dumpFilePath, work, null));
+                String psql = pgDumpExecutableResolver.resolvePsqlExecutable();
+                BackupProcessRunner.run(List.of(psql, "--version"), null, Duration.ofMinutes(1));
+                Path sql = work.resolve("restore.sql");
+                BackupV2ArchiveService.requireSpace(work, 0);
+                long maxSqlBytes = Math.min(BackupV2ArchiveService.MAX_TOTAL_BYTES,
+                        Files.getFileStore(work).getUsableSpace() - 64L * 1024 * 1024);
+                BackupProcessRunner.run(List.of(pgRestoreExecutable, "--clean", "--if-exists", "--no-owner", "--no-privileges",
+                        "--file=-", job.dumpFilePath.toAbsolutePath().toString()),
+                        null, Duration.ofMinutes(15), sql, maxSqlBytes);
+                Path reset = work.resolve("reset.sql");
+                Files.writeString(reset, "SET lock_timeout = '30s';\nDROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n",
+                        StandardCharsets.UTF_8);
+                job.message = "Esperando el cierre de operaciones activas antes del reemplazo...";
+                lease.set(enterMaintenance(job));
+                dangerousOperationGuard.assertLocalOrStagingOnly(OPERATION_NAME);
                 job.status = JobStatus.RESTAURANDO;
-                job.message = "Restaurando backup total PostgreSQL. Esto puede tardar varios minutos...";
-
+                job.message = "Restaurando el esquema y los datos en una sola transaccion...";
                 JdbcConnectionInfo connectionInfo = extractConnectionInfo(datasourceUrl);
-                List<String> command = new ArrayList<>();
-                command.add(pgRestoreExecutable);
-                command.add("--verbose");
-                command.add("--no-password");
-                command.add("--clean");
-                command.add("--if-exists");
-                command.add("--no-owner");
-                command.add("--no-privileges");
-                command.add("--single-transaction");
-                command.add("--exit-on-error");
-                command.add("--host=" + connectionInfo.host());
-                command.add("--port=" + connectionInfo.port());
-                command.add("--username=" + datasourceUsername);
-                command.add("--dbname=" + connectionInfo.dbName());
-                command.add(job.dumpFilePath.toAbsolutePath().toString());
-
-                ProcessBuilder processBuilder = new ProcessBuilder(command);
-                processBuilder.redirectErrorStream(true);
-                if (datasourcePassword != null && !datasourcePassword.isBlank()) {
-                    processBuilder.environment().put("PGPASSWORD", datasourcePassword);
-                }
-
-                log.warn("Iniciando importacion total PostgreSQL. jobId={}, user={}, file={}",
-                        job.jobId, job.ownerUsername, job.dumpFilePath.toAbsolutePath());
-
-                Process process = processBuilder.start();
-                StreamCapture streamCapture = new StreamCapture(process.getInputStream());
-                Thread captureThread = new Thread(streamCapture, "pg-restore-output-" + job.jobId);
-                captureThread.setDaemon(true);
-                captureThread.start();
-
-                boolean finished = process.waitFor(PG_RESTORE_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-                captureThread.join(TimeUnit.SECONDS.toMillis(2));
-                String processOutput = streamCapture.output();
-
-                if (!finished) {
-                    process.destroyForcibly();
-                    markJobError(job, "PG_RESTORE_TIMEOUT", "La restauracion total tardo demasiado y fue cancelada.", processOutput);
-                    return;
-                }
-
-                int exitCode = process.exitValue();
-                if (exitCode != 0) {
-                    markJobError(job, "PG_RESTORE_FAILED", "No fue posible restaurar completamente la base de datos.", processOutput);
-                    return;
-                }
-
+                List<String> command = new ArrayList<>(List.of(psql, "--no-psqlrc", "--no-password", "--quiet",
+                        "--single-transaction", "--set=ON_ERROR_STOP=1", "--set=VERBOSITY=terse",
+                        "--host=" + connectionInfo.host(), "--port=" + connectionInfo.port(),
+                        "--username=" + datasourceUsername, "--dbname=" + connectionInfo.dbName(),
+                        "--file=" + reset.toAbsolutePath(), "--file=" + sql.toAbsolutePath()));
+                job.databaseMutationStarted = true;
+                lease.get().markDatabaseMutation();
+                BackupProcessRunner.run(command, datasourcePassword, Duration.ofMinutes(15));
             }
 
+            job.status = JobStatus.MIGRANDO;
+            job.message = "Aplicando las migraciones pendientes del backend instalado...";
+            job.migrationsApplied = schemas.migrate(job.schemaPlan);
+            job.status = JobStatus.VERIFICANDO;
+            job.message = "Verificando el historial Flyway y el esquema de las entidades actuales...";
+            schemas.validateSchema(job.schemaPlan);
+            job.finalSchemaVersion = job.targetSchemaVersion;
+            job.status = JobStatus.SANEANDO;
             job.message = "Saneando contrasenas importadas para entorno no productivo...";
             ImportedPasswordSanitizationService.PasswordSanitizationResult sanitizationResult;
             try {
@@ -310,17 +306,20 @@ public class BackupTotalImportService {
                 markJobError(
                         job,
                         "PASSWORD_SANITIZATION_FAILED",
-                        "La importacion finalizo, pero no fue posible sanear las credenciales importadas.",
-                        e.getMessage()
+                        "No fue posible sanear las credenciales importadas. Se requiere recuperacion manual.",
+                        null
                 );
                 return;
             }
 
+            // No request can enter until both validation and sanitization have finished.
+            lease.get().complete();
+            lease.get().close();
             job.finishedAt = AppTime.now();
             job.expiresAt = job.finishedAt.plus(JOB_TTL);
             job.message = job.v2
-                    ? "Importacion V2 completada: base de datos y " + poeCount + " versiones de POE. Otros archivos no fueron modificados."
-                    : "La importacion total de la base de datos finalizo correctamente.";
+                    ? "Importacion V2 completada y verificada: base de datos y " + poeCount + " versiones de POE. Vuelva a iniciar sesion."
+                    : "Importacion total completada y esquema verificado. Vuelva a iniciar sesion.";
             job.status = JobStatus.LISTO;
 
             log.warn("Importacion total PostgreSQL completada. jobId={}, user={}, durationSeconds={}, sanitizedUsers={}, privilegedUsersSkipped={}, invalidUsersSkipped={}",
@@ -337,25 +336,58 @@ public class BackupTotalImportService {
         } catch (IOException e) {
             markJobError(job, "PG_RESTORE_EXECUTION_ERROR", job.v2
                     ? "No se completo la importacion V2. Revise el paquete, el espacio disponible y las herramientas PostgreSQL. Los POE ya copiados pueden permanecer en disco."
-                    : "No fue posible ejecutar pg_restore en el servidor.", e.getMessage());
+                    : "No se completo la restauracion total. Revise las herramientas PostgreSQL y el espacio disponible.", null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            markJobError(job, "PG_RESTORE_INTERRUPTED", "La restauracion total fue interrumpida.", e.getMessage());
+            markJobError(job, "PG_RESTORE_INTERRUPTED", "La restauracion total fue interrumpida.", null);
         } catch (IllegalArgumentException e) {
-            markJobError(job, "IMPORT_CONFIGURATION_INVALID", e.getMessage(), null);
+            markJobError(job, "IMPORT_INCOMPATIBLE", "El respaldo no es compatible con la linea de migraciones activa o con el formato admitido.", null);
         } catch (Exception e) {
-            markJobError(job, "IMPORT_UNKNOWN_ERROR", "Ocurrio un error inesperado durante la importacion total.", e.getMessage());
+            String code = switch (job.status) {
+                case MIGRANDO -> "IMPORT_MIGRATION_FAILED";
+                case VERIFICANDO -> "IMPORT_SCHEMA_VALIDATION_FAILED";
+                default -> "IMPORT_UNKNOWN_ERROR";
+            };
+            markJobError(job, code, "No se completo la importacion y verificacion del esquema.", null);
         } finally {
+            if (lease.get() != null) {
+                try { lease.get().close(); }
+                catch (IOException exception) {
+                    job.requiresRecovery = true;
+                    markJobError(job, "IMPORT_MAINTENANCE_ERROR", "No fue posible cerrar el mantenimiento. Se requiere revision manual.", null);
+                }
+            }
+            if (work != null) {
+                try { BackupV2ArchiveService.deleteTree(work); }
+                catch (IOException exception) { log.warn("No fue posible limpiar el SQL temporal. jobId={}", job.jobId); }
+            }
             activeJobByUsername.remove(job.ownerUsername, job.jobId);
             activeGlobalJobId.compareAndSet(job.jobId, null);
             deleteFileQuietly(job.dumpFilePath);
         }
     }
 
-    private PgRestoreRuntimeValidation validatePgRestoreRuntime(String pgRestoreExecutable) {
+    private void recordPlan(ImportJob job, BackupSchemaCompatibilityService.SchemaPlan plan) {
+        job.schemaPlan = plan;
+        job.sourceSchemaVersion = plan.sourceVersion();
+        job.targetSchemaVersion = plan.targetVersion();
+    }
+
+    private DatabaseImportMaintenanceService.MaintenanceLease enterMaintenance(ImportJob job)
+            throws IOException, InterruptedException {
+        try {
+            return maintenance.begin(job.jobId);
+        } catch (IOException | InterruptedException | RuntimeException exception) {
+            // A failed admission can itself leave a persistent marker (for example an I/O error).
+            job.requiresRecovery = maintenance.isBlocked();
+            throw exception;
+        }
+    }
+
+    PgRestoreRuntimeValidation validatePgRestoreRuntime(String pgRestoreExecutable) {
         String versionOutput;
         try {
-            versionOutput = executeCommandAndCaptureOutput(List.of(pgRestoreExecutable, "--version"));
+            versionOutput = BackupProcessRunner.run(List.of(pgRestoreExecutable, "--version"), null, Duration.ofMinutes(1));
         } catch (IOException e) {
             log.error("pg_restore no esta disponible en el runtime: {}", e.getMessage());
             return new PgRestoreRuntimeValidation(false, "PG_RESTORE_NOT_FOUND_IN_RUNTIME",
@@ -373,6 +405,24 @@ public class BackupTotalImportService {
                     "No fue posible verificar la version de pg_restore instalada en el servidor.");
         }
 
+        String psqlVersion;
+        try {
+            psqlVersion = BackupProcessRunner.run(List.of(pgDumpExecutableResolver.resolvePsqlExecutable(), "--version"),
+                    null, Duration.ofMinutes(1));
+        } catch (IOException e) {
+            return new PgRestoreRuntimeValidation(false, "PSQL_NOT_FOUND_IN_RUNTIME",
+                    "El servidor no tiene disponible psql para la importacion total.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new PgRestoreRuntimeValidation(false, "PG_RESTORE_INTERRUPTED",
+                    "La validacion de las herramientas PostgreSQL fue interrumpida.");
+        }
+        Integer psqlMajorVersion = parsePgToolMajorVersion(psqlVersion);
+        if (psqlMajorVersion == null) {
+            return new PgRestoreRuntimeValidation(false, "PSQL_VERSION_UNKNOWN",
+                    "No fue posible verificar la version de psql instalada en el servidor.");
+        }
+
         int serverMajorVersion;
         try (var connection = dataSource.getConnection()) {
             serverMajorVersion = connection.getMetaData().getDatabaseMajorVersion();
@@ -382,36 +432,18 @@ public class BackupTotalImportService {
                     "No fue posible verificar la compatibilidad de la restauracion con la base de datos.");
         }
 
-        if (pgRestoreMajorVersion < serverMajorVersion) {
-            String message = "La version de pg_restore del servidor no es compatible con la version actual de PostgreSQL.";
+        if (pgRestoreMajorVersion != serverMajorVersion) {
+            String message = "La importacion requiere pg_restore de la misma version mayor que el servidor PostgreSQL.";
             log.error("Incompatibilidad pg_restore/server. pgRestoreMajorVersion={}, serverMajorVersion={}",
                     pgRestoreMajorVersion, serverMajorVersion);
             return new PgRestoreRuntimeValidation(false, "PG_RESTORE_VERSION_INCOMPATIBLE", message);
         }
+        if (psqlMajorVersion != serverMajorVersion) {
+            return new PgRestoreRuntimeValidation(false, "PSQL_VERSION_INCOMPATIBLE",
+                    "La importacion requiere psql de la misma version mayor que el servidor PostgreSQL.");
+        }
 
         return new PgRestoreRuntimeValidation(true, null, null);
-    }
-
-    private String executeCommandAndCaptureOutput(List<String> command) throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start();
-
-        String output;
-        try (InputStream processInput = process.getInputStream()) {
-            output = new String(processInput.readAllBytes(), StandardCharsets.UTF_8).trim();
-        }
-
-        boolean finished = process.waitFor(1, TimeUnit.MINUTES);
-        if (!finished) {
-            process.destroyForcibly();
-            throw new IOException("El comando tardo demasiado en responder: " + command.get(0));
-        }
-
-        if (process.exitValue() != 0) {
-            throw new IOException("El comando devolvio codigo " + process.exitValue() + ": " + output);
-        }
-        return output;
     }
 
     private Integer parsePgToolMajorVersion(String versionOutput) {
@@ -431,19 +463,18 @@ public class BackupTotalImportService {
     }
 
     private void markJobError(ImportJob job, String errorCode, String message, String technicalDetails) {
+        job.requiresRecovery = job.requiresRecovery || job.databaseMutationStarted;
         job.errorCode = errorCode;
-        job.message = message;
+        job.message = job.requiresRecovery
+                ? message + " La base permanece en mantenimiento; requiere recuperacion y revision manual."
+                : message;
         job.finishedAt = AppTime.now();
         job.expiresAt = job.finishedAt.plus(JOB_TTL);
         job.status = JobStatus.ERROR;
 
-        if (technicalDetails == null || technicalDetails.isBlank()) {
-            log.error("Importacion total PostgreSQL fallo. jobId={}, user={}, errorCode={}, message={}",
-                    job.jobId, job.ownerUsername, errorCode, message);
-        } else {
-            log.error("Importacion total PostgreSQL fallo. jobId={}, user={}, errorCode={}, message={}, details={}",
-                    job.jobId, job.ownerUsername, errorCode, message, technicalDetails);
-        }
+        // Subprocess/SQL exception text can contain restored data. Log only the diagnostic category.
+        log.error("Importacion total PostgreSQL fallo. jobId={}, errorCode={}, requiresRecovery={}",
+                job.jobId, errorCode, job.requiresRecovery);
     }
 
     private void cleanupExpiredJobsInternal(boolean forceDeleteAllTerminalJobs) {
@@ -500,7 +531,12 @@ public class BackupTotalImportService {
                 job.finishedAt,
                 job.expiresAt,
                 job.errorCode,
-                job.message
+                job.message,
+                job.sourceSchemaVersion,
+                job.targetSchemaVersion,
+                job.finalSchemaVersion,
+                job.migrationsApplied,
+                job.requiresRecovery
         );
     }
 
@@ -541,7 +577,7 @@ public class BackupTotalImportService {
     private record JdbcConnectionInfo(String host, int port, String dbName) {
     }
 
-    private record PgRestoreRuntimeValidation(boolean compatible, String errorCode, String message) {
+    record PgRestoreRuntimeValidation(boolean compatible, String errorCode, String message) {
     }
 
     private enum JobStatus {
@@ -549,6 +585,9 @@ public class BackupTotalImportService {
         VALIDANDO,
         PURGANDO,
         RESTAURANDO,
+        MIGRANDO,
+        VERIFICANDO,
+        SANEANDO,
         LISTO,
         ERROR,
         EXPIRADO
@@ -568,6 +607,13 @@ public class BackupTotalImportService {
         private volatile LocalDateTime expiresAt;
         private volatile String errorCode;
         private volatile String message;
+        private volatile String sourceSchemaVersion;
+        private volatile String targetSchemaVersion;
+        private volatile String finalSchemaVersion;
+        private volatile Integer migrationsApplied;
+        private volatile boolean requiresRecovery;
+        private boolean databaseMutationStarted;
+        private BackupSchemaCompatibilityService.SchemaPlan schemaPlan;
 
         private ImportJob(String jobId, String ownerUsername, String filename, Path dumpFilePath, LocalDateTime requestedAt, boolean v2) {
             this.jobId = jobId;
@@ -582,7 +628,10 @@ public class BackupTotalImportService {
             return status == JobStatus.PENDIENTE
                     || status == JobStatus.VALIDANDO
                     || status == JobStatus.PURGANDO
-                    || status == JobStatus.RESTAURANDO;
+                    || status == JobStatus.RESTAURANDO
+                    || status == JobStatus.MIGRANDO
+                    || status == JobStatus.VERIFICANDO
+                    || status == JobStatus.SANEANDO;
         }
     }
 
@@ -595,25 +644,4 @@ public class BackupTotalImportService {
         }
     }
 
-    private static final class StreamCapture implements Runnable {
-        private final InputStream inputStream;
-        private final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-        private StreamCapture(InputStream inputStream) {
-            this.inputStream = inputStream;
-        }
-
-        @Override
-        public void run() {
-            try (InputStream in = inputStream; ByteArrayOutputStream out = outputStream) {
-                in.transferTo(out);
-            } catch (IOException ignored) {
-                // Si el proceso termina abruptamente, el output parcial sigue siendo suficiente.
-            }
-        }
-
-        private String output() {
-            return outputStream.toString(StandardCharsets.UTF_8);
-        }
-    }
 }

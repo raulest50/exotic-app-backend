@@ -9,6 +9,7 @@ import exotic.app.planta.model.users.UserAccessEvaluator;
 import exotic.app.planta.repo.agentassistant.AgentAssistantQueryRepository;
 import exotic.app.planta.repo.agentassistant.AgentAssistantQueryRepository.QueryResult;
 import exotic.app.planta.service.commons.BackupTotalExportService;
+import exotic.app.planta.service.commons.DatabaseImportMaintenanceService;
 import exotic.app.planta.service.users.AgentAssistantAccessService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class AgentAssistantService {
     private final BackupTotalExportService backups;
     private final ObjectMapper mapper;
     private final AgentAssistantContext context;
+    private final DatabaseImportMaintenanceService maintenance;
     private final Map<String, Proposal> proposals = new ConcurrentHashMap<>();
     private final Map<String, RunningOperation> operations = new ConcurrentHashMap<>();
     private volatile long connectionEpoch;
@@ -195,7 +197,11 @@ public class AgentAssistantService {
     }
 
     private void run(Authentication authentication, Proposal proposal, RunningOperation operation) {
-        try {
+        try (var permit = maintenance.tryEnterWork()) {
+            if (permit == null) {
+                operation.fail("La base esta en mantenimiento por importacion total. Solicita una nueva consulta cuando finalice.");
+                return;
+            }
             if (!operation.pending() || proposal.epoch != connectionEpoch()) return;
             User actor = requireCatalog(authentication);
             requireEnabled();
