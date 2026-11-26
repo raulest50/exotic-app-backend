@@ -1,3 +1,4 @@
+# Successful pushes update only backend staging through the deployment repository.
 name: Verify backend
 on:
   push:
