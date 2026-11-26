@@ -1,4 +1,5 @@
 # Successful pushes update only backend staging through the deployment repository.
+# Production requires its own explicitly approved operation.
 name: Verify backend
 on:
   push:
